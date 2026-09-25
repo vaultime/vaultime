@@ -3,6 +3,7 @@
 
 import { Clock, Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { formatCompactDuration, formatDuration, formatSessionDate } from "@/lib/time";
 import { groupSessionsByDay } from "@/lib/session-stats";
 import type { Session } from "@/lib/types";
@@ -56,22 +57,17 @@ function SessionRow({
             Idle {formatCompactDuration(session.idle_ms)}
           </p>
         </div>
-        {isActive && (
-          <Badge
-            variant="outline"
-            className="border-green-500/50 text-green-500"
-          >
-            Live
-          </Badge>
-        )}
-        {!session.closed_cleanly && !isActive && (
-          <Badge
-            variant="outline"
-            className="border-yellow-500/50 text-yellow-500"
-          >
-            {session.integrity_status}
-          </Badge>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isActive && (
+            <Badge
+              variant="outline"
+              className="border-green-500/50 text-green-500"
+            >
+              Live
+            </Badge>
+          )}
+          <IntegrityBadge status={session.integrity_status} />
+        </div>
       </div>
     </div>
   );

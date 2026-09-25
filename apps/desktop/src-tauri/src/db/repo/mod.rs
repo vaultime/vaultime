@@ -6,5 +6,6 @@
 pub mod devices;
 pub mod game_assets;
 pub mod games;
+pub mod session_events;
 pub mod sessions;
 pub mod settings;

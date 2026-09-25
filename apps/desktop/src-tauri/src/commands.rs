@@ -10,8 +10,8 @@ use tauri::State;
 
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::db::connection::Database;
-use crate::db::models::{CreateGame, Game, Session, Setting, UpdateGame};
-use crate::db::repo::{games, sessions, settings};
+use crate::db::models::{CreateGame, Game, Session, SessionEvent, Setting, UpdateGame};
+use crate::db::repo::{games, session_events, sessions, settings};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::tracking::engine::TrackingEngine;
@@ -118,6 +118,14 @@ pub fn get_sessions_for_game(
 #[tauri::command]
 pub fn get_active_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
     sessions::get_active_sessions(&db)
+}
+
+#[tauri::command]
+pub fn get_session_events_for_game(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+) -> Result<Vec<SessionEvent>, VaultimeError> {
+    session_events::list_events_for_game(&db, &game_id)
 }
 
 // ---------------------------------------------------------------------------

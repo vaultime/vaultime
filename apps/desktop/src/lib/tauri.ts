@@ -7,6 +7,7 @@ import type {
   CreateGameInput,
   UpdateGameInput,
   Session,
+  SessionEvent,
   Setting,
   TrackingDiagnostics,
   GameAssetView,
@@ -89,6 +90,12 @@ export async function getSessionsForGame(gameId: string): Promise<Session[]> {
 
 export async function getActiveSessions(): Promise<Session[]> {
   return invoke<Session[]>("get_active_sessions");
+}
+
+export async function getSessionEventsForGame(
+  gameId: string,
+): Promise<SessionEvent[]> {
+  return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
 }
 
 // ---------------------------------------------------------------------------

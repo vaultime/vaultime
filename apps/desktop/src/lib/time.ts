@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 export function parseVaultimeDate(value: string): Date {
+  if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(value)) {
+    return new Date(value);
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00Z`);
+  }
+
   return new Date(`${value}Z`);
 }
 

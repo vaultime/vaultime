@@ -8,11 +8,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use sysinfo::System;
 
 use crate::db::connection::Database;
 use crate::db::repo::{games, sessions, settings};
+use crate::integrity;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{RunningProcess, matches_executable, refresh_running_processes};
 
@@ -22,30 +24,46 @@ const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
 const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// Minimum CPU usage considered meaningful activity for a process.
 const PROCESS_ACTIVITY_CPU_THRESHOLD: f32 = 0.5;
+/// Wall-clock step difference tolerated between ticks before a session is suspicious.
+const CLOCK_STEP_TOLERANCE_MS: i64 = 20_000;
+/// Total wall-clock vs monotonic drift tolerated across the whole session.
+const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
 
 /// Tracks a currently running game session.
 struct ActiveSession {
     session_id: String,
     game_id: String,
+    started_at_wall: DateTime<Utc>,
+    last_wall_at: DateTime<Utc>,
     last_tick_at: Instant,
     runtime_ms: i64,
     active_ms: i64,
     idle_ms: i64,
     last_signal_at: Instant,
     last_foreground_at: Option<Instant>,
+    integrity_status: String,
 }
 
 impl ActiveSession {
-    fn new(session_id: String, game_id: String, now: Instant) -> Self {
+    fn new(
+        session_id: String,
+        game_id: String,
+        now: Instant,
+        started_at_wall: DateTime<Utc>,
+        integrity_status: String,
+    ) -> Self {
         Self {
             session_id,
             game_id,
+            started_at_wall,
+            last_wall_at: started_at_wall,
             last_tick_at: now,
             runtime_ms: 0,
             active_ms: 0,
             idle_ms: 0,
             last_signal_at: now,
             last_foreground_at: None,
+            integrity_status,
         }
     }
 }
@@ -152,6 +170,7 @@ fn poll_loop(db: &Database, device_id: &str, running: &AtomicBool) {
             session.runtime_ms,
             session.active_ms,
             session.idle_ms,
+            &session.integrity_status,
         ) {
             error!(
                 "failed to close session {} on shutdown: {e}",
@@ -191,7 +210,13 @@ fn poll_tick(
             match sessions::create_session(db, game_id, device_id) {
                 Ok(session) => {
                     info!("session started for game {game_id}: {}", session.id);
-                    let mut active_session = ActiveSession::new(session.id, game_id.clone(), now);
+                    let mut active_session = ActiveSession::new(
+                        session.id,
+                        game_id.clone(),
+                        now,
+                        parse_wall_timestamp(&session.started_at_wall),
+                        session.integrity_status.clone(),
+                    );
                     if observation.has_foreground_window {
                         active_session.last_foreground_at = Some(now);
                     }
@@ -240,6 +265,7 @@ fn poll_tick(
                 session.runtime_ms,
                 session.active_ms,
                 session.idle_ms,
+                &session.integrity_status,
             ) {
                 Ok(ended) => {
                     info!(
@@ -312,6 +338,7 @@ fn apply_observation(
     activity_snapshot: &ActivitySnapshot,
     now: Instant,
 ) -> crate::error::Result<()> {
+    let current_wall = Utc::now();
     if observation.has_foreground_window {
         session.last_foreground_at = Some(now);
     }
@@ -329,6 +356,10 @@ fn apply_observation(
     }
 
     session.last_tick_at = now;
+    let wall_delta_ms = current_wall
+        .signed_duration_since(session.last_wall_at)
+        .num_milliseconds();
+    session.last_wall_at = current_wall;
     session.runtime_ms += delta_ms;
 
     if should_count_as_active(
@@ -343,12 +374,35 @@ fn apply_observation(
         session.idle_ms += delta_ms;
     }
 
+    let wall_elapsed_ms = current_wall
+        .signed_duration_since(session.started_at_wall)
+        .num_milliseconds()
+        .max(0);
+    let drift_ms = wall_elapsed_ms - session.runtime_ms;
+
+    if let Some(reason) = detect_integrity_reason(wall_delta_ms, delta_ms, drift_ms) {
+        if session.integrity_status != integrity::STATUS_SUSPICIOUS {
+            sessions::flag_session_suspicious(
+                db,
+                &session.session_id,
+                session.runtime_ms,
+                wall_elapsed_ms,
+                drift_ms,
+                &reason,
+            )?;
+            session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+        }
+    }
+
     sessions::update_session_timing(
         db,
         &session.session_id,
         session.runtime_ms,
         session.active_ms,
         session.idle_ms,
+        wall_elapsed_ms,
+        drift_ms,
+        &session.integrity_status,
     )
 }
 
@@ -391,6 +445,32 @@ fn should_count_as_active(
         || now.saturating_duration_since(session.last_signal_at) < tracking_settings.idle_threshold
 }
 
+fn detect_integrity_reason(
+    wall_delta_ms: i64,
+    monotonic_delta_ms: i64,
+    drift_ms: i64,
+) -> Option<String> {
+    if wall_delta_ms < -1_000 {
+        return Some("wall_clock_moved_backwards".into());
+    }
+
+    if (wall_delta_ms - monotonic_delta_ms).abs() > CLOCK_STEP_TOLERANCE_MS {
+        return Some("wall_clock_step_mismatch".into());
+    }
+
+    if drift_ms.abs() > CLOCK_TOTAL_DRIFT_TOLERANCE_MS {
+        return Some("wall_clock_drift_exceeded".into());
+    }
+
+    None
+}
+
+fn parse_wall_timestamp(value: &str) -> DateTime<Utc> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|timestamp| timestamp.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now())
+}
+
 /// Closes any sessions left open from a previous run (crash recovery).
 fn close_orphaned_sessions(db: &Database) {
     match sessions::get_active_sessions(db) {
@@ -400,18 +480,8 @@ fn close_orphaned_sessions(db: &Database) {
                 orphans.len()
             );
             for session in orphans {
-                if let Err(e) = db.with_conn(|conn| {
-                    conn.execute(
-                        "UPDATE sessions
-                         SET ended_at_wall = datetime('now'),
-                             integrity_status = 'recovered',
-                             closed_cleanly = 0
-                         WHERE id = ?1",
-                        [&session.id],
-                    )
-                    .map_err(|e| crate::error::VaultimeError::Database(format!("{e}")))?;
-                    Ok(())
-                }) {
+                if let Err(e) = sessions::recover_session(db, &session.id, "startup_orphan_cleanup")
+                {
                     error!("failed to close orphaned session {}: {e}", session.id);
                 }
             }

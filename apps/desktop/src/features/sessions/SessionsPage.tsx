@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { Activity, Clock, Loader2, TimerReset } from "lucide-react";
+import { Activity, Clock, Loader2, Shield, TimerReset } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Game } from "@/lib/types";
 import * as api from "@/lib/tauri";
@@ -14,6 +14,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ActivityChart } from "@/components/charts/ActivityChart";
+import { IntegrityBadge } from "@/components/status/IntegrityBadge";
+import { summarizeIntegrity } from "@/lib/integrity";
 import {
   buildDailyActivity,
   getSessionTotals,
@@ -32,6 +34,10 @@ export function SessionsPage() {
   }, [sessions]);
   const dailyActivity = useMemo(
     () => buildDailyActivity(sessions, 14),
+    [sessions],
+  );
+  const integritySummary = useMemo(
+    () => summarizeIntegrity(sessions),
     [sessions],
   );
   const topGames = useMemo(
@@ -117,6 +123,29 @@ export function SessionsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="relative overflow-hidden border border-border/70 bg-card/70">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(147,51,234,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.12),transparent_36%)]" />
+        <CardHeader className="relative">
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            Integrity Overview
+          </CardTitle>
+          <CardDescription>{integritySummary.note}</CardDescription>
+        </CardHeader>
+        <CardContent className="relative flex flex-wrap items-center gap-3">
+          <IntegrityBadge status={integritySummary.overallStatus} />
+          <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1 text-xs text-muted-foreground">
+            {integritySummary.localCount} local
+          </div>
+          <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1 text-xs text-muted-foreground">
+            {integritySummary.recoveredCount} recovered
+          </div>
+          <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1 text-xs text-muted-foreground">
+            {integritySummary.suspiciousCount} flagged
+          </div>
+        </CardContent>
+      </Card>
 
       {sessions.length > 0 && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">

@@ -46,6 +46,20 @@ export interface Session {
   closed_cleanly: boolean;
 }
 
+/** Mirrors the Rust `SessionEvent` struct. */
+export interface SessionEvent {
+  id: string;
+  session_id: string;
+  sequence: number;
+  event_type: string;
+  event_time_wall: string;
+  event_time_monotonic: number | null;
+  payload_json: string;
+  hash_prev: string | null;
+  hash_self: string | null;
+  signature: string | null;
+}
+
 /** Mirrors the Rust `Setting` struct. */
 export interface Setting {
   key: string;

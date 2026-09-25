@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   ArrowLeft,
   Clock3,
+  Shield,
   ImagePlus,
   Loader2,
   PaintBucket,
@@ -15,6 +16,7 @@ import {
 import { Link, useParams } from "react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GameArtwork } from "@/components/media/GameArtwork";
+import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,11 +33,17 @@ import {
   getSessionTotals,
 } from "@/lib/session-stats";
 import {
-  formatCalendarDay,
   formatCompactDuration,
   formatLongDate,
+  formatSessionDate,
+  formatCalendarDay,
 } from "@/lib/time";
-import type { Game, GameAssetView, Session } from "@/lib/types";
+import {
+  formatIntegrityEventType,
+  getIntegrityEventDetail,
+  summarizeIntegrity,
+} from "@/lib/integrity";
+import type { Game, GameAssetView, Session, SessionEvent } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useActiveSessions } from "@/features/sessions";
 
@@ -68,19 +76,23 @@ export function GameDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
   const [assetBusy, setAssetBusy] = useState(false);
 
   const loadGameBundle = useCallback(async (currentGameId: string) => {
-    const [fetchedGame, fetchedSessions, fetchedAssets] = await Promise.all([
+    const [fetchedGame, fetchedSessions, fetchedEvents, fetchedAssets] =
+      await Promise.all([
       api.getGame(currentGameId),
       api.getSessionsForGame(currentGameId),
+      api.getSessionEventsForGame(currentGameId),
       api.listGameAssets(currentGameId),
-    ]);
+      ]);
 
     return {
       game: fetchedGame,
       sessions: fetchedSessions,
+      events: fetchedEvents,
       assets: fetchedAssets,
     };
   }, []);
@@ -108,6 +120,7 @@ export function GameDetailsPage() {
 
         setGame(bundle.game);
         setSessions(bundle.sessions);
+        setEvents(bundle.events);
         setAssets(bundle.assets);
       } catch (loadError) {
         if (!cancelled) {
@@ -140,6 +153,7 @@ export function GameDetailsPage() {
       .then((bundle) => {
         setGame(bundle.game);
         setSessions(bundle.sessions);
+        setEvents(bundle.events);
         setAssets(bundle.assets);
       })
       .catch(() => {});
@@ -149,6 +163,21 @@ export function GameDetailsPage() {
   const dailyActivity = useMemo(
     () => buildDailyActivity(sessions, 14),
     [sessions],
+  );
+  const integritySummary = useMemo(
+    () => summarizeIntegrity(sessions),
+    [sessions],
+  );
+  const notableEvents = useMemo(
+    () =>
+      events
+        .filter((event) => event.event_type !== "heartbeat")
+        .slice(0, 8),
+    [events],
+  );
+  const heartbeatCount = useMemo(
+    () => events.filter((event) => event.event_type === "heartbeat").length,
+    [events],
   );
   const peakDay = useMemo(() => {
     return [...dailyActivity].sort((a, b) => b.activeMs - a.activeMs)[0] ?? null;
@@ -283,12 +312,20 @@ export function GameDetailsPage() {
                   {runningNow && (
                     <Badge className="bg-green-600 text-white">Running</Badge>
                   )}
+                  {integritySummary.totalCount > 0 && (
+                    <IntegrityBadge status={integritySummary.overallStatus} />
+                  )}
                 </div>
                 <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
                   {game.executable_path ??
                     game.install_folder ??
                     "Manual game entry without an executable path yet."}
                 </p>
+                {integritySummary.totalCount > 0 && (
+                  <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
+                    {integritySummary.note}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button
                     variant="outline"
@@ -464,10 +501,22 @@ export function GameDetailsPage() {
               Tracking Snapshot
             </CardTitle>
             <CardDescription>
-              Quick read on how this title has been tracked so far.
+              Quick read on active time, local trust, and recovery state.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Trust Status
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <IntegrityBadge status={integritySummary.overallStatus} />
+                <p className="text-xs text-muted-foreground">
+                  Local hash-linked audit log. No cloud verification or device signing yet.
+                </p>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                 Active Ratio
@@ -486,26 +535,26 @@ export function GameDetailsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Active Time
+                  Local Sessions
                 </p>
                 <p className="mt-2 text-xl font-semibold">
-                  {formatCompactDuration(totals.activeMs)}
+                  {integritySummary.localCount}
                 </p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Idle Time
+                  Recovered
                 </p>
                 <p className="mt-2 text-xl font-semibold">
-                  {formatCompactDuration(totals.idleMs)}
+                  {integritySummary.recoveredCount}
                 </p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Current Status
+                  Suspicious
                 </p>
                 <p className="mt-2 text-xl font-semibold">
-                  {runningNow ? "Running now" : "Not running"}
+                  {integritySummary.suspiciousCount}
                 </p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
@@ -523,23 +572,70 @@ export function GameDetailsPage() {
         <Card className="border border-border/70">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <PaintBucket className="h-4 w-4 text-primary" />
-              Asset Notes
+              <Shield className="h-4 w-4 text-primary" />
+              Integrity Audit
             </CardTitle>
             <CardDescription>
-              Current artwork preferences and fallback behavior.
+              Notable local audit events for this title, newest first.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              Vaultime currently scans local folders for named artwork candidates,
-              caches UI-sized copies, and lets you promote any cached image to
-              the preferred cover.
+              Session events are hash-linked locally. Heartbeat rows are stored
+              in the database but hidden here unless they carry a notable state
+              change.
             </div>
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              If no artwork is found, the UI falls back to the deep-purple cover
-              treatment until a scanned or manual asset is available.
-            </div>
+
+            {notableEvents.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4">
+                No session audit events recorded for this title yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {notableEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {formatIntegrityEventType(event.event_type)}
+                        </p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {getIntegrityEventDetail(event)}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          #{event.sequence}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatSessionDate(event.event_time_wall)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="rounded-full border border-border/70 bg-background/40 px-2.5 py-1 text-muted-foreground">
+                        {event.hash_self ? "Hash linked" : "Missing hash"}
+                      </span>
+                      <span className="rounded-full border border-border/70 bg-background/40 px-2.5 py-1 text-muted-foreground">
+                        {event.signature ? "Signed" : "Unsigned local event"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {heartbeatCount > 0 && (
+              <p className="text-xs leading-5 text-muted-foreground">
+                {heartbeatCount} heartbeat event
+                {heartbeatCount === 1 ? "" : "s"} omitted to keep the audit
+                trail readable.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GameArtwork } from "@/components/media/GameArtwork";
+import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import type { Game } from "@/lib/types";
 import { formatCalendarDay, formatCompactDuration } from "@/lib/time";
 
@@ -28,6 +29,9 @@ interface GameCardProps {
   sessionCount?: number;
   lastPlayedAt?: string | null;
   coverImageUrl?: string | null;
+  integrityStatus?: string;
+  suspiciousCount?: number;
+  recoveredCount?: number;
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }
@@ -41,11 +45,20 @@ export function GameCard({
   sessionCount = 0,
   lastPlayedAt = null,
   coverImageUrl = null,
+  integrityStatus = "local",
+  suspiciousCount = 0,
+  recoveredCount = 0,
   onEdit,
   onDelete,
 }: GameCardProps) {
   const hasTrackedTime = totalRuntimeMs > 0 || totalActiveMs > 0;
   const runtimeDiffers = totalRuntimeMs > totalActiveMs;
+  const integrityHint =
+    suspiciousCount > 0
+      ? `${suspiciousCount} flagged`
+      : recoveredCount > 0
+        ? `${recoveredCount} recovered`
+        : "Local history";
 
   return (
     <Card className="group relative overflow-hidden border border-border/70 bg-card/85 transition-colors hover:border-primary/40">
@@ -116,6 +129,14 @@ export function GameCard({
                   ? game.executable_path.split(/[\\/]/).pop()
                   : "Manual library entry"}
               </p>
+              {sessionCount > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <IntegrityBadge status={integrityStatus} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {integrityHint}
+                  </span>
+                </div>
+              )}
             </div>
 
             {hasTrackedTime ? (

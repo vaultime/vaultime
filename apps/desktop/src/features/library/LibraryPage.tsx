@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card";
 import type { Game, GameAssetView, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
+import { summarizeIntegrity } from "@/lib/integrity";
 import {
   buildDailyActivity,
   getSessionTotals,
@@ -69,6 +70,10 @@ export function LibraryPage() {
         idleMs: number;
         sessionsCount: number;
         lastPlayedAt: string | null;
+        integrityStatus: string;
+        suspiciousCount: number;
+        recoveredCount: number;
+        sessions: Session[];
       }
     > = {};
     for (const s of allSessions) {
@@ -78,16 +83,29 @@ export function LibraryPage() {
         idleMs: 0,
         sessionsCount: 0,
         lastPlayedAt: null,
+        integrityStatus: "local",
+        suspiciousCount: 0,
+        recoveredCount: 0,
+        sessions: [],
       };
       totals.runtimeMs += s.runtime_ms;
       totals.activeMs += s.active_ms;
       totals.idleMs += s.idle_ms;
       totals.sessionsCount += 1;
+      totals.sessions.push(s);
       if (!totals.lastPlayedAt || s.started_at_wall > totals.lastPlayedAt) {
         totals.lastPlayedAt = s.started_at_wall;
       }
       map[s.game_id] = totals;
     }
+
+    for (const totals of Object.values(map)) {
+      const integrity = summarizeIntegrity(totals.sessions);
+      totals.integrityStatus = integrity.overallStatus;
+      totals.suspiciousCount = integrity.suspiciousCount;
+      totals.recoveredCount = integrity.recoveredCount;
+    }
+
     return map;
   }, [allSessions]);
   const libraryTotals = useMemo(
@@ -259,6 +277,9 @@ export function LibraryPage() {
               coverImageUrl={
                 preferredAssets[game.id]?.preview_data_url ?? null
               }
+              integrityStatus={totalsByGame[game.id]?.integrityStatus ?? "local"}
+              suspiciousCount={totalsByGame[game.id]?.suspiciousCount ?? 0}
+              recoveredCount={totalsByGame[game.id]?.recoveredCount ?? 0}
               onEdit={setEditingGame}
               onDelete={setDeletingGame}
             />

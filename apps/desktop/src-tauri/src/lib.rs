@@ -74,6 +74,7 @@ pub fn run() {
             commands::list_sessions,
             commands::get_sessions_for_game,
             commands::get_active_sessions,
+            commands::get_session_events_for_game,
             commands::list_settings,
             commands::set_setting,
             commands::get_tracking_status,
