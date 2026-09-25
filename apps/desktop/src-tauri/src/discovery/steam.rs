@@ -77,12 +77,8 @@ fn steam_root_candidates() -> Vec<PathBuf> {
             candidates.push(home.join(".local/share/Steam"));
             candidates.push(home.join(".steam/debian-installation"));
             // Flatpak Steam
-            candidates.push(
-                home.join(".var/app/com.valvesoftware.Steam/.steam/steam"),
-            );
-            candidates.push(
-                home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"),
-            );
+            candidates.push(home.join(".var/app/com.valvesoftware.Steam/.steam/steam"));
+            candidates.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
         }
     }
 
@@ -458,7 +454,10 @@ mod tests {
 
     #[test]
     fn steam_tools_filtered() {
-        assert!(is_steam_tool("Steamworks Common Redistributables", "228980"));
+        assert!(is_steam_tool(
+            "Steamworks Common Redistributables",
+            "228980"
+        ));
         assert!(is_steam_tool("Proton 9.0-4", "2348590"));
         assert!(!is_steam_tool("Counter-Strike 2", "730"));
     }

@@ -97,10 +97,7 @@ async fn call_edge_function(auth: &AuthManager, function_name: &str) -> Result<S
         .access_token()
         .ok_or_else(|| VaultimeError::Cloud("not signed in".into()))?;
 
-    let url = format!(
-        "{}/functions/v1/{function_name}",
-        config::supabase_url(),
-    );
+    let url = format!("{}/functions/v1/{function_name}", config::supabase_url(),);
 
     let http = reqwest::Client::new();
     let resp = http
@@ -131,9 +128,8 @@ async fn call_edge_function(auth: &AuthManager, function_name: &str) -> Result<S
         return Err(VaultimeError::Cloud(error));
     }
 
-    body.url.ok_or_else(|| {
-        VaultimeError::Cloud(format!("{function_name} returned no URL"))
-    })
+    body.url
+        .ok_or_else(|| VaultimeError::Cloud(format!("{function_name} returned no URL")))
 }
 
 fn parse_tier(value: Option<&str>) -> SubscriptionTier {

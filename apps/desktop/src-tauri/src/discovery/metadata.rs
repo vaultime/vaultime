@@ -70,10 +70,7 @@ fn clean_title(raw: &str) -> String {
     }
 
     // Replace separators with spaces.
-    title = title
-        .replace('_', " ")
-        .replace('-', " ")
-        .replace('.', " ");
+    title = title.replace('_', " ").replace('-', " ").replace('.', " ");
 
     // Collapse multiple spaces and trim.
     let parts: Vec<&str> = title.split_whitespace().collect();
@@ -136,11 +133,11 @@ pub fn is_likely_game_executable(filename: &str) -> bool {
         "dotnet",
         "ue4prereq",
         "ue4-prereq",
-        "launcher",      // generic launcher helpers
+        "launcher", // generic launcher helpers
         "updater",
         "update",
         "helper",
-        "eac_",          // EasyAntiCheat
+        "eac_", // EasyAntiCheat
         "easyanticheat",
         "battleye",
         "beclient",
@@ -172,10 +169,7 @@ mod tests {
 
     #[test]
     fn title_from_exe_name() {
-        assert_eq!(
-            infer_title("/opt/games/bin/Factorio.x86_64"),
-            "Factorio"
-        );
+        assert_eq!(infer_title("/opt/games/bin/Factorio.x86_64"), "Factorio");
     }
 
     #[test]
@@ -188,10 +182,7 @@ mod tests {
 
     #[test]
     fn generic_folder_falls_back_to_exe() {
-        assert_eq!(
-            infer_title("/opt/games/bin/hollow_knight"),
-            "hollow knight"
-        );
+        assert_eq!(infer_title("/opt/games/bin/hollow_knight"), "hollow knight");
     }
 
     #[test]

@@ -13,8 +13,8 @@ use crate::db::connection::Database;
 use crate::db::repo::games;
 use crate::error::Result;
 
-use super::metadata;
 use super::DiscoveredGame;
+use super::metadata;
 
 /// Maximum directory depth when scanning for executables.
 const MAX_SCAN_DEPTH: usize = 4;
@@ -68,9 +68,7 @@ pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGam
                 continue;
             }
 
-            let install_folder = path
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned());
+            let install_folder = path.parent().map(|p| p.to_string_lossy().into_owned());
 
             let title = metadata::infer_title(&exe_path);
             let already_added = existing_exes.contains(&exe_path);
