@@ -13,10 +13,11 @@ use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::{self, LocalBackupSummary};
 use crate::cloud::auth::AuthManager;
 use crate::cloud::backup as cloud_backup;
+use crate::cloud::billing;
 use crate::cloud::sync::{self, SyncResult};
 use crate::cloud::types::{
     AuthCredentials, CloudBackupRecord, CloudBackupRestorePreview, CloudBackupRestoreResult,
-    CloudBackupUploadResult, CloudSession, SyncStatus,
+    CloudBackupUploadResult, CloudSession, Subscription, SyncStatus,
 };
 use crate::db::connection::Database;
 use crate::db::models::{
@@ -26,6 +27,17 @@ use crate::db::repo::{backup_snapshots, games, session_events, sessions, setting
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::tracking::engine::TrackingEngine;
+
+async fn ensure_premium_access(auth: &AuthManager) -> Result<(), VaultimeError> {
+    let sub = billing::get_subscription(auth).await?;
+    if sub.has_premium_access() {
+        Ok(())
+    } else {
+        Err(VaultimeError::Cloud(
+            "an active Pro subscription is required for cloud sync and backup".into(),
+        ))
+    }
+}
 
 async fn ensure_cloud_device_registered(
     auth: &AuthManager,
@@ -299,12 +311,14 @@ pub fn get_tracking_diagnostics(
 #[derive(Debug, Serialize)]
 pub struct CloudConfig {
     pub configured: bool,
+    pub billing_enabled: bool,
 }
 
 #[tauri::command]
 pub fn cloud_get_config(auth: State<'_, AuthManager>) -> Result<CloudConfig, VaultimeError> {
     Ok(CloudConfig {
         configured: auth.is_configured(),
+        billing_enabled: crate::cloud::config::is_billing_enabled(),
     })
 }
 
@@ -360,6 +374,31 @@ pub async fn cloud_register_device(
 }
 
 // ---------------------------------------------------------------------------
+// Billing commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn cloud_get_subscription(
+    auth: State<'_, AuthManager>,
+) -> Result<Subscription, VaultimeError> {
+    billing::get_subscription(&auth).await
+}
+
+#[tauri::command]
+pub async fn cloud_create_checkout_url(
+    auth: State<'_, AuthManager>,
+) -> Result<String, VaultimeError> {
+    billing::create_checkout_url(&auth).await
+}
+
+#[tauri::command]
+pub async fn cloud_create_portal_url(
+    auth: State<'_, AuthManager>,
+) -> Result<String, VaultimeError> {
+    billing::create_portal_url(&auth).await
+}
+
+// ---------------------------------------------------------------------------
 // Sync commands
 // ---------------------------------------------------------------------------
 
@@ -369,6 +408,7 @@ pub async fn cloud_sync_events(
     auth: State<'_, AuthManager>,
     app_context: State<'_, AppContext>,
 ) -> Result<SyncResult, VaultimeError> {
+    ensure_premium_access(&auth).await?;
     ensure_cloud_device_registered(&auth, &app_context).await?;
     sync::sync_events(&db, &auth, &app_context.device_id).await
 }
@@ -408,6 +448,7 @@ pub async fn cloud_create_backup(
     app_context: State<'_, AppContext>,
     auth: State<'_, AuthManager>,
 ) -> Result<CloudBackupUploadResult, VaultimeError> {
+    ensure_premium_access(&auth).await?;
     ensure_cloud_device_registered(&auth, &app_context).await?;
 
     let uploaded = cloud_backup::create_backup(

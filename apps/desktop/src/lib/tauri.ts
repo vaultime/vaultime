@@ -21,6 +21,7 @@ import type {
   CloudConfig,
   CloudSession,
   CloudSyncStatus,
+  Subscription,
   SyncResult,
 } from "@/lib/types";
 
@@ -192,6 +193,18 @@ export async function cloudRefreshToken(): Promise<CloudSession> {
 
 export async function cloudRegisterDevice(): Promise<boolean> {
   return invoke<boolean>("cloud_register_device");
+}
+
+export async function cloudGetSubscription(): Promise<Subscription> {
+  return invoke<Subscription>("cloud_get_subscription");
+}
+
+export async function cloudCreateCheckoutUrl(): Promise<string> {
+  return invoke<string>("cloud_create_checkout_url");
+}
+
+export async function cloudCreatePortalUrl(): Promise<string> {
+  return invoke<string>("cloud_create_portal_url");
 }
 
 export async function cloudSyncEvents(): Promise<SyncResult> {

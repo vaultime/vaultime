@@ -33,3 +33,12 @@ pub fn is_cloud_configured() -> bool {
     option_env!("VAULTIME_SUPABASE_URL").is_some()
         && option_env!("VAULTIME_SUPABASE_ANON_KEY").is_some()
 }
+
+/// Returns `true` when the Stripe billing integration is configured.
+///
+/// When this is `false` the app skips subscription checks and treats
+/// every authenticated user as having premium access — useful during
+/// development or before the Stripe product is set up.
+pub fn is_billing_enabled() -> bool {
+    option_env!("VAULTIME_BILLING_ENABLED").is_some_and(|v| v == "1" || v == "true")
+}

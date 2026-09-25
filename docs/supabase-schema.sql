@@ -78,3 +78,36 @@ CREATE POLICY "Users can manage their own backups"
     FOR ALL
     USING (user_id = auth.uid())
     WITH CHECK (user_id = auth.uid());
+
+-- ---------------------------------------------------------------------------
+-- subscriptions — Stripe-managed subscription state (Milestone 12)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE subscriptions (
+    id              TEXT PRIMARY KEY,
+    user_id         UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    tier            TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'pro')),
+    status          TEXT NOT NULL DEFAULT 'none' CHECK (status IN ('none', 'active', 'past_due', 'canceled', 'expired')),
+    stripe_customer_id     TEXT,
+    stripe_subscription_id TEXT,
+    current_period_start   TIMESTAMPTZ,
+    current_period_end     TIMESTAMPTZ,
+    cancel_at_period_end   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Users can read their own subscription but only the server (service role)
+-- can insert/update via Stripe webhook Edge Functions.
+CREATE POLICY "Users can read their own subscription"
+    ON subscriptions
+    FOR SELECT
+    USING (user_id = auth.uid());
+
+CREATE POLICY "Service role can manage subscriptions"
+    ON subscriptions
+    FOR ALL
+    USING (auth.role() = 'service_role')
+    WITH CHECK (auth.role() = 'service_role');

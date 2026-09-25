@@ -2,16 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-shell";
 import {
   ArchiveRestore,
   Cloud,
   CloudOff,
+  CreditCard,
+  Crown,
+  ExternalLink,
   HardDriveUpload,
   Loader2,
   LogIn,
   LogOut,
   Shield,
   ShieldAlert,
+  Sparkles,
   Upload,
   UserPlus,
 } from "lucide-react";
@@ -42,6 +47,7 @@ import type {
   CloudConfig,
   CloudSession,
   CloudSyncStatus,
+  Subscription,
 } from "@/lib/types";
 import * as api from "@/lib/tauri";
 
@@ -90,6 +96,8 @@ export function CloudPage() {
   const [backups, setBackups] = useState<CloudBackupRecord[]>([]);
   const [restorePreview, setRestorePreview] =
     useState<CloudBackupRestorePreview | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [billingBusy, setBillingBusy] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -99,12 +107,14 @@ export function CloudPage() {
   const [password, setPassword] = useState("");
 
   const loadSignedInData = useCallback(async () => {
-    const [status, backupRows] = await Promise.all([
+    const [status, backupRows, sub] = await Promise.all([
       api.cloudGetSyncStatus(),
       api.cloudListBackups().catch(() => []),
+      api.cloudGetSubscription().catch(() => null),
     ]);
     setSyncStatus(status);
     setBackups(backupRows);
+    setSubscription(sub);
   }, []);
 
   const load = useCallback(async () => {
@@ -207,7 +217,8 @@ export function CloudPage() {
 
       await api.cloudSignOut();
       setSession(null);
-      setBackups([]);
+      setSubscription(null);
+      setBackups([])
       setSyncStatus(await api.cloudGetSyncStatus());
       setMessage("Signed out.");
     } catch (signOutError) {
@@ -306,7 +317,58 @@ export function CloudPage() {
     }
   }
 
+  async function handleUpgrade() {
+    try {
+      setBillingBusy(true);
+      setError(null);
+      setMessage(null);
+      const url = await api.cloudCreateCheckoutUrl();
+      await open(url);
+      setMessage(
+        "Checkout opened in your browser. Return here after completing payment and refresh.",
+      );
+    } catch (upgradeError) {
+      setError(String(upgradeError));
+    } finally {
+      setBillingBusy(false);
+    }
+  }
+
+  async function handleManageSubscription() {
+    try {
+      setBillingBusy(true);
+      setError(null);
+      setMessage(null);
+      const url = await api.cloudCreatePortalUrl();
+      await open(url);
+    } catch (portalError) {
+      setError(String(portalError));
+    } finally {
+      setBillingBusy(false);
+    }
+  }
+
+  async function handleRefreshSubscription() {
+    try {
+      setBillingBusy(true);
+      setError(null);
+      const sub = await api.cloudGetSubscription();
+      setSubscription(sub);
+      setMessage("Subscription status refreshed.");
+    } catch (refreshError) {
+      setError(String(refreshError));
+    } finally {
+      setBillingBusy(false);
+    }
+  }
+
   const isSignedIn = Boolean(session?.user?.id);
+  const billingEnabled = config?.billing_enabled ?? false;
+  const hasPremium =
+    !billingEnabled ||
+    (subscription?.tier === "pro" &&
+      (subscription?.status === "active" ||
+        subscription?.status === "past_due"));
   const pendingEvents = syncStatus?.pending_events ?? 0;
 
   if (loading) {
@@ -489,10 +551,99 @@ export function CloudPage() {
                 </div>
               </div>
 
+              {billingEnabled && subscription && (
+                <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Plan
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    {hasPremium ? (
+                      <>
+                        <Badge
+                          variant="outline"
+                          className="border-violet-400/50 text-violet-200"
+                        >
+                          <Crown className="mr-1 h-3 w-3" />
+                          Pro
+                        </Badge>
+                        {subscription.cancel_at_period_end && (
+                          <span className="text-xs text-amber-200">
+                            Cancels at period end
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-muted-foreground/50 text-muted-foreground"
+                      >
+                        Free
+                      </Badge>
+                    )}
+                  </div>
+                  {subscription.current_period_end && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {subscription.status === "canceled" || subscription.status === "expired"
+                        ? "Expired"
+                        : subscription.cancel_at_period_end
+                          ? "Access until"
+                          : "Renews"}{" "}
+                      {formatCloudMoment(subscription.current_period_end)}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {hasPremium ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleManageSubscription}
+                        disabled={billingBusy}
+                      >
+                        {billingBusy ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-3.5 w-3.5" />
+                        )}
+                        Manage Subscription
+                        <ExternalLink className="h-3 w-3 opacity-50" />
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={handleUpgrade}
+                        disabled={billingBusy}
+                      >
+                        {billingBusy ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5" />
+                        )}
+                        Upgrade to Pro
+                        <ExternalLink className="h-3 w-3 opacity-50" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRefreshSubscription}
+                      disabled={billingBusy}
+                      title="Re-check subscription status after completing payment"
+                    >
+                      {billingBusy ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "Refresh"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs text-muted-foreground">
-                  Device registration is required for verified sessions and cloud
-                  snapshot metadata.
+                  {billingEnabled && !hasPremium
+                    ? "Upgrade to Pro to unlock cloud sync, remote backups, and verified trust."
+                    : "Device registration is required for verified sessions and cloud snapshot metadata."}
                 </div>
                 <Button variant="outline" onClick={handleSignOut} disabled={busy}>
                   {busy ? (
@@ -559,7 +710,12 @@ export function CloudPage() {
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 onClick={handleSync}
-                disabled={syncing || !config?.configured || !isSignedIn}
+                disabled={
+                  syncing ||
+                  !config?.configured ||
+                  !isSignedIn ||
+                  !hasPremium
+                }
               >
                 {syncing ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -571,7 +727,12 @@ export function CloudPage() {
               <Button
                 variant="outline"
                 onClick={handleCreateBackup}
-                disabled={backupBusy || !config?.configured || !isSignedIn}
+                disabled={
+                  backupBusy ||
+                  !config?.configured ||
+                  !isSignedIn ||
+                  !hasPremium
+                }
               >
                 {backupBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -582,13 +743,31 @@ export function CloudPage() {
               </Button>
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
-              Sync uploads hash-linked session events and promotes clean sessions
-              to <span className="font-medium text-foreground">Verified</span>{" "}
-              after the cloud acknowledges the full chain. Cloud backups are
-              stored in a private bucket over HTTPS and rely on provider-managed
-              encryption at rest for this v1 implementation.
-            </div>
+            {isSignedIn && billingEnabled && !hasPremium ? (
+              <div className="rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4 text-xs leading-6 text-violet-100">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+                  <div>
+                    <p className="font-medium text-violet-200">
+                      Upgrade to Pro to unlock sync and cloud backup
+                    </p>
+                    <p className="mt-1 text-violet-200/70">
+                      Pro subscribers can sync hash-linked session events for
+                      Verified trust, upload full backup snapshots, and restore
+                      from any device.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
+                Sync uploads hash-linked session events and promotes clean sessions
+                to <span className="font-medium text-foreground">Verified</span>{" "}
+                after the cloud acknowledges the full chain. Cloud backups are
+                stored in a private bucket over HTTPS and rely on provider-managed
+                encryption at rest for this v1 implementation.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

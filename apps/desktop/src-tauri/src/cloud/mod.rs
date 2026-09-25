@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod backup;
+pub mod billing;
 pub mod config;
 pub mod sync;
 pub mod types;

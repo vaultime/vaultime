@@ -77,7 +77,76 @@ pub struct SupabaseAuthError {
 }
 
 // ---------------------------------------------------------------------------
-// Sync contract (defined now, implemented in Milestone 11)
+// Billing / Subscription (Milestone 12)
+// ---------------------------------------------------------------------------
+
+/// The subscription tier a user is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubscriptionTier {
+    Free,
+    Pro,
+}
+
+/// Current status of the user's subscription.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubscriptionStatus {
+    None,
+    Active,
+    PastDue,
+    Canceled,
+    Expired,
+}
+
+/// Subscription state returned to the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Subscription {
+    pub tier: SubscriptionTier,
+    pub status: SubscriptionStatus,
+    pub current_period_end: Option<String>,
+    pub cancel_at_period_end: bool,
+}
+
+impl Subscription {
+    /// Returns a default free-tier subscription for users with no record.
+    pub fn free_default() -> Self {
+        Self {
+            tier: SubscriptionTier::Free,
+            status: SubscriptionStatus::None,
+            current_period_end: None,
+            cancel_at_period_end: false,
+        }
+    }
+
+    /// Whether the subscription grants access to premium features.
+    pub fn has_premium_access(&self) -> bool {
+        self.tier == SubscriptionTier::Pro
+            && matches!(
+                self.status,
+                SubscriptionStatus::Active | SubscriptionStatus::PastDue
+            )
+    }
+}
+
+/// Response from the checkout / portal Edge Functions.
+#[derive(Debug, Deserialize)]
+pub struct EdgeFunctionUrlResponse {
+    pub url: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Row shape returned by querying the Supabase `subscriptions` table.
+#[derive(Debug, Deserialize)]
+pub struct SupabaseSubscriptionRow {
+    pub tier: Option<String>,
+    pub status: Option<String>,
+    pub current_period_end: Option<String>,
+    pub cancel_at_period_end: Option<bool>,
+}
+
+// ---------------------------------------------------------------------------
+// Sync contract
 // ---------------------------------------------------------------------------
 
 /// Metadata about a cloud-registered device.

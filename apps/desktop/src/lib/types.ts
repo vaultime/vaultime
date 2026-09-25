@@ -129,6 +129,26 @@ export interface CloudSession {
 /** Mirrors the Rust `CloudConfig` struct. */
 export interface CloudConfig {
   configured: boolean;
+  billing_enabled: boolean;
+}
+
+/** Subscription tier. */
+export type SubscriptionTier = "free" | "pro";
+
+/** Subscription status. */
+export type SubscriptionStatus =
+  | "none"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "expired";
+
+/** Mirrors the Rust `Subscription` struct. */
+export interface Subscription {
+  tier: SubscriptionTier;
+  status: SubscriptionStatus;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
 }
 
 /** Result of a sync pass. */
