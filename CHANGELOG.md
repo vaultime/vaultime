@@ -7,10 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Self-hosted cloud API.** Invite-only accounts, device registration and encrypted backup storage in `apps/api`, replacing Supabase.
+- **Backup deletion and rotation.** Users can delete cloud backups, and a new upload replaces the oldest one at the account limit instead of failing.
+- **Windows support.** Registry based Steam detection, launcher folders on every fixed drive, case-insensitive path matching, and CI checks on Windows.
+- **Sleep handling.** Time while the machine sleeps is skipped and logged as a `tracking_gap` event instead of counted or flagged.
+- **Log files.** Logs are written to the app log folder, which matters on Windows where release builds have no console.
+- **Single instance.** Starting Vaultime twice focuses the running window instead of tracking every game twice.
+
 ### Changed
 
-- **Cloud access direction** - planning and public docs now point to invite-only access for remote backup instead of public subscription billing.
-- **Invite tooling** - added `scripts/generate-invite-key.mjs` plus architecture notes for server-side invite validation on a self-hosted VPS.
+- **Dependencies.** Upgraded to the current stable versions: Tauri 2.12, React 19.3, React Router 8, TypeScript 6, ESLint 10, rusqlite 0.40, sysinfo 0.39, sqlx 0.9 and more. The Rust toolchain is pinned in `rust-toolchain.toml`.
+- **Restores.** Older backups are migrated to the current schema before import, and backups from newer versions are rejected with a clear message.
+- **Slow commands.** Backup, restore, discovery and artwork commands run off the main thread, so the window stays responsive.
+- **CI and releases.** CI checks the frontend, the desktop core on Windows and Linux, and the API. Releases build Windows and Linux installers with signed updater manifests through `tauri-action`. macOS builds were dropped for now.
+
+### Fixed
+
+- **Secure storage.** The keychain crate was built without a native backend, so the cloud session and backup passphrase were lost on every restart. They now use Windows Credential Manager or the Secret Service.
+- **Windows idle time.** Idle time was wrong after about 49.7 days of uptime.
+- **Restored artwork.** Restored backups pointed cached artwork at files that did not exist.
+- **Tracking after a failed restore.** A failed restore used to stop tracking until the app restarted.
+- **Library polling.** The library no longer reloads all sessions and artwork every 5 seconds.
+- **Deploy scripts.** Fixed paths to `deploy/vps` and removed the default admin password.
+- **Legal pages.** The privacy policy and terms now describe the cloud backup that exists, including exactly what the server stores.
+
+### Removed
+
+- **Billing leftovers.** The Pro recolor of the sidebar branding, the unused event sync columns and code, and the unreachable `Verified` trust label.
 
 ## [0.1.0] - 2026-04-06
 

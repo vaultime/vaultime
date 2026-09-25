@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import getpass
 import hashlib
 import json
 import os
@@ -18,8 +19,6 @@ from urllib.parse import urlparse
 
 DEFAULT_ENV_FILE = "/etc/vaultime/api.env"
 DEFAULT_API_BASE_URL = "http://127.0.0.1:9005"
-DEFAULT_ADMIN_EMAIL = "admin@vaultime.com"
-DEFAULT_ADMIN_PASSWORD = "REDACTED"
 DEFAULT_PREFIX = "VTLINV"
 
 
@@ -27,8 +26,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Create or promote the first admin account for Vaultime.",
     )
-    parser.add_argument("--email", default=DEFAULT_ADMIN_EMAIL)
-    parser.add_argument("--password", default=DEFAULT_ADMIN_PASSWORD)
+    parser.add_argument("--email", required=True)
+    parser.add_argument(
+        "--password",
+        help="Admin password. Prompted for when omitted, so it stays out of shell history.",
+    )
     parser.add_argument("--api-base-url", default=DEFAULT_API_BASE_URL)
     parser.add_argument("--env-file", default=DEFAULT_ENV_FILE)
     parser.add_argument("--db-url", help="Override database URL instead of reading api.env")
@@ -207,7 +209,7 @@ def http_post_json(url: str, payload: dict[str, str]) -> dict[str, object]:
 def main() -> int:
     args = parse_args()
     email = normalize_email(args.email)
-    password = args.password
+    password = args.password or getpass.getpass("Admin password: ")
     if len(password) < 10:
         raise SystemExit("password must be at least 10 characters")
 

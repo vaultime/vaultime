@@ -8,110 +8,88 @@
 
 <p align="center">
   <strong>Universal game library and trustworthy playtime tracker.</strong><br />
-  Local-first. Cross-platform. Event-sourced.
+  Local-first. Windows and Linux. Event-sourced.
 </p>
 
 ---
 
-Vaultime is a cross-platform desktop application that tracks real play sessions across PC games and launchers. It distinguishes between **runtime**, **active playtime**, and **idle/background time**, stores everything locally by default, and presents your library in a premium, dark-themed UI with imported game artwork.
+Vaultime is a desktop app that tracks real play sessions across PC games and launchers. It separates **runtime**, **active playtime** and **idle time**, stores everything locally, and shows your library in a dark, image-rich UI built from your own game artwork.
 
-An invite-only cloud backup beta on your own VPS is the current direction for remote access. The design target is `codfishcloud.de` plus a custom backend with PostgreSQL, not public subscription billing.
+Remote backup is optional. It runs on a self-hosted, invite-only server (`api.codfishcloud.de`). There are no paid tiers or subscriptions.
 
 ## Features
 
-- **Automatic session detection** — polls for tracked game processes and records sessions in real time.
-- **Active vs idle playtime** — uses foreground-window and user-idle signals (X11, Win32, macOS) to separate active play from background/idle runtime.
-- **Event-sourced tracking** — all play events are stored as append-only, hash-chained records, not just a total counter.
-- **Integrity system** — sessions carry trust labels (Local, Suspicious, Recovered) derived from monotonic/wall-clock comparison, chain validation, and crash recovery state.
-- **Local game artwork** — scans game folders for cover art, caches optimized thumbnails, and lets you pick preferred artwork per game.
-- **Local backup & restore** — export self-contained snapshots with per-file checksums; restore with a full preview before overwriting.
-- **Cross-platform tracking** — native activity signals on Linux (X11), Windows (Win32), and macOS (HID/osascript), with heuristic fallbacks.
-- **Dark-first, deep-purple UI** — built with React, Tailwind CSS, and shadcn/ui for a premium game-library feel.
+- **Automatic session detection.** Polls for tracked game processes every 5 seconds and records sessions as they happen.
+- **Active vs idle time.** Uses the foreground window and user input idle time (Win32 on Windows, X11 tools on Linux) to split active play from background time.
+- **Event-sourced history.** Every session is an append-only, hash-chained event log. Totals are derived from it.
+- **Honest trust labels.** Sessions are marked `Local`, `Suspicious` or `Recovered` based on clock comparisons, chain validation and crash recovery.
+- **Sleep aware.** Time while the machine sleeps is skipped and logged instead of counted.
+- **Game discovery.** Finds Steam games (registry based on Windows) and scans common launcher folders (Epic, GOG, Xbox, EA, Ubisoft, Battle.net, `~/Games`).
+- **Local artwork.** Scans game folders for cover art, caches thumbnails and lets you pick the cover per game.
+- **Local backups.** Self-contained exports with per-file checksums. Restores show a preview first and migrate older backups automatically.
+- **Encrypted cloud backup.** Backups are encrypted on your device before upload. The passphrase never leaves the device.
 
-## Current Status
+## Platforms
 
-Milestones 1-14 cover the current prototype. The cloud access strategy is being revised away from public subscription billing toward invite-only access:
-
-| Milestone | Status |
+| Platform | Status |
 |---|---|
-| Foundation / repo setup | Done |
-| Local database and domain model | Done |
-| Manual game registration | Done |
-| Tracking engine v1 | Done |
-| Active playtime logic | Done |
-| Session history UI and stats | Done |
-| Image import and asset pipeline | Done |
-| Integrity system v1 | Done |
-| Local backups and cross-platform support | Done |
-| Cloud foundation prototype | Done |
-| Cloud backup and sync prototype | Done |
-| Invite-only cloud access design | In progress |
-| Auto-discovery and launcher support | Done |
-| Release engineering and publishing | Done* |
-
-\* Code signing for Windows and macOS notarization require external certificates/credentials to be configured as CI secrets.
+| Windows 10 and 11 | Supported, NSIS and MSI installers |
+| Linux (X11) | Supported, deb, rpm and AppImage. Install `xprop` and `xprintidle` for foreground and idle detection |
+| Linux (Wayland) | Partial. Detection goes through XWayland, which covers most Proton games but can misread native Wayland windows and idle time |
+| macOS | Not built or tested yet |
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Desktop shell | [Tauri 2](https://v2.tauri.app/) |
-| Backend / core logic | Rust |
-| Frontend | React 19 + TypeScript |
-| Styling | Tailwind CSS v4 + [shadcn/ui](https://ui.shadcn.com/) |
-| Local database | SQLite (rusqlite, bundled, WAL mode) |
-| Self-hosted cloud API | Rust + Axum + PostgreSQL + filesystem backup storage |
-| Process detection | [sysinfo](https://crates.io/crates/sysinfo) |
-| Image processing | [image](https://crates.io/crates/image) crate |
+| Core logic | Rust (edition 2024, toolchain pinned in `rust-toolchain.toml`) |
+| Frontend | React 19, TypeScript 6, React Router 8 |
+| Styling | Tailwind CSS 4 and [shadcn/ui](https://ui.shadcn.com/) on Base UI |
+| Local database | SQLite through rusqlite (bundled, WAL mode) |
+| Secrets | OS credential store (Windows Credential Manager, Secret Service on Linux) |
+| Cloud API | Rust, Axum, PostgreSQL, filesystem blob storage |
 
-## Invite Keys
+## Cloud Backup Server
 
-If you want to manually grant cloud-backup access, generate invite material with:
+The API lives in [`apps/api`](apps/api). Deploy notes and scripts for the VPS are in [`deploy/vps`](deploy/vps/README.md), the design in [`docs/architecture`](docs/architecture).
+
+Admins create invites in the app. To create one on the command line instead:
 
 ```bash
 node scripts/generate-invite-key.mjs --count 3
 ```
 
-The script prints the raw invite code plus the derived values you would store in
-your server database. The intended server-side model is documented in
-[`docs/architecture/invite-only-cloud.md`](docs/architecture/invite-only-cloud.md).
-
-The concrete VPS service layout and starter database schema are documented in:
-
-- [`docs/architecture/self-hosted-vps-stack.md`](docs/architecture/self-hosted-vps-stack.md)
-- [`docs/architecture/self-hosted-postgres-schema.sql`](docs/architecture/self-hosted-postgres-schema.sql)
-
-Tracked deploy templates for the VPS live in:
-
-- [`deploy/vps/README.md`](deploy/vps/README.md)
-- [`deploy/vps/Caddyfile`](deploy/vps/Caddyfile)
-- [`deploy/vps/api.env.example`](deploy/vps/api.env.example)
-- [`deploy/vps/vaultime-api.service`](deploy/vps/vaultime-api.service)
-
-The self-hosted API scaffold lives in [`apps/api`](apps/api).
-
 ## Getting Started
 
 ### Prerequisites
 
-- **Node.js** 20+
-- **Rust** 1.85+ (2024 edition)
-- **System dependencies** (Linux):
+- Node.js 22.22 or newer (24 LTS recommended)
+- Rust through [rustup](https://rustup.rs). The right version installs itself from `rust-toolchain.toml`.
+- Windows: Visual Studio Build Tools with the "Desktop development with C++" workload. WebView2 ships with Windows 10 and 11.
+- Linux:
+  ```bash
+  sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+    libayatana-appindicator3-dev librsvg2-dev
   ```
-  sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev \
-    libappindicator3-dev librsvg2-dev patchelf
-  ```
-- Optional for better tracking on Linux: `xprop`, `xprintidle`
+  Optional for better tracking on X11: `xprop` and `xprintidle`.
 
 ### Development
 
 ```bash
-# Install frontend dependencies
 cd apps/desktop
-npm install
-
-# Run the app in dev mode (starts Vite + Tauri together)
+npm ci
 npm run tauri dev
+```
+
+### Checks
+
+```bash
+# apps/desktop
+npm run typecheck && npm run lint && npm run build
+
+# apps/desktop/src-tauri and apps/api
+cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
 ### Production Build
@@ -121,42 +99,37 @@ cd apps/desktop
 npm run tauri build
 ```
 
-Build artifacts are placed in `apps/desktop/src-tauri/target/release/bundle/`.
+Installers land in `apps/desktop/src-tauri/target/release/bundle/`.
+
+### Releases
+
+Pushing a `v*` tag builds Windows and Linux installers in GitHub Actions, uploads them with a signed `latest.json` for the auto-updater, and publishes the release. The `TAURI_SIGNING_PRIVATE_KEY` secret must be set. A manual run of the Release workflow builds installers without publishing.
 
 ## Project Structure
 
 ```
 vaultime/
-  assets/                          # Brand assets (logos, icons)
   apps/
-    api/                           # Self-hosted invite-only cloud API
-      src/
+    api/                    Self-hosted cloud backup API
     desktop/
-      src/                         # React frontend
-        components/
-          charts/                  #   Activity charts
-          layout/                  #   App shell, sidebar
-          media/                   #   Game artwork display
-          status/                  #   Integrity badges
-          ui/                      #   shadcn/ui primitives
-        features/
-          library/                 #   Library page, game cards, add/edit/delete
-          game-details/            #   Per-game detail view with stats
-          sessions/                #   Session timeline and history
-          cloud/                   #   Self-hosted cloud roadmap UI
-          settings/                #   Tracking rules, detection status, backups
-        lib/                       #   API layer, types, time/stat utilities
-      src-tauri/                   # Rust backend
-        src/
-          assets/                  #   Folder scanning, thumbnail caching
-          backup/                  #   Export/import/restore logic
-          db/                      #   SQLite connection, migrations, repositories
-          integrity/               #   Hash chains, trust validation
-          platform/                #   OS-specific process/window/idle detection
-          tracking/                #   Session engine, poll loop
-          commands.rs              #   Tauri IPC command handlers
-          error.rs                 #   Structured error types
-          lib.rs                   #   App setup and state management
+      src/                  React frontend
+        components/         Layout, charts, artwork, integrity badges, ui primitives
+        features/           library, game-details, sessions, cloud, settings
+        lib/                IPC wrappers, types, time and stat helpers
+      src-tauri/src/        Rust core
+        assets/             Artwork scanning and caching
+        backup/             Local export and restore, encrypted cloud backup
+        db/                 SQLite connection, migrations, repositories
+        discovery/          Steam and folder discovery
+        integrity/          Hash chains and trust validation
+        platform/           Process list, foreground and idle detection per OS
+        tracking/           Session engine and poll loop
+        secure_storage.rs   OS credential store access
+        commands.rs         Tauri IPC commands
+  deploy/vps/               Caddy, systemd and setup scripts for the server
+  docs/                     Architecture, legal pages, landing page
+  scripts/                  Dev helpers
+  assets/                   Brand assets
 ```
 
 ## License

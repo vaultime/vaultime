@@ -10,7 +10,7 @@ fi
 
 REPO_ROOT="/root/vaultime"
 API_DIR="$REPO_ROOT/apps/api"
-DEPLOY_DIR="$REPO_ROOT/deploy"
+DEPLOY_DIR="$REPO_ROOT/deploy/vps"
 
 SERVICE_USER="vaultime"
 SERVICE_GROUP="vaultime"

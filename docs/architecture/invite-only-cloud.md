@@ -63,7 +63,7 @@ CREATE TABLE cloud_accounts (
     id UUID PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
     role TEXT NOT NULL DEFAULT 'user',
-    access_state TEXT NOT NULL DEFAULT 'pending',
+    access_state TEXT NOT NULL DEFAULT 'active',
     invited_by_invite_id UUID REFERENCES cloud_invites(id),
     access_granted_at TIMESTAMPTZ,
     access_revoked_at TIMESTAMPTZ,

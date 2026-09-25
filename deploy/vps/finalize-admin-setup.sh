@@ -10,7 +10,7 @@ REPO_ROOT="/root/vaultime"
 API_DIR="$REPO_ROOT/apps/api"
 API_BINARY="/srv/vaultime/api/current/vaultime-api"
 
-python3 "$REPO_ROOT/deploy/bootstrap-admin-account.py" "$@"
+python3 "$REPO_ROOT/deploy/vps/bootstrap-admin-account.py" "$@"
 
 source /root/.cargo/env
 cd "$API_DIR"

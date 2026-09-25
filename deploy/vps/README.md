@@ -46,12 +46,15 @@ self-hosted Vaultime cloud stack on your VPS.
   to `/srv/vaultime/api/current/`.
 - Backups should be encrypted on the client before upload.
 - PostgreSQL should stay bound to localhost, not exposed publicly.
-- Run `bootstrap-admin-account.py` once to promote
-  `admin@vaultime.com` or another chosen account to the admin role.
+- Run `bootstrap-admin-account.py --email you@example.com` once to create or
+  promote the admin account. It prompts for the password.
 - If your first schema import was done as `postgres`, run
   `finalize-admin-setup.sh` instead so table ownership is corrected before the
   admin bootstrap continues.
-- Run `generate-cloud-invite.py` on the VPS when you need a shareable invite
-  before the desktop admin UI exists.
-- Run `redeploy-api.sh` after API changes so you do not need to repeat the
-  manual build/install/restart steps.
+- Admins create invites in the desktop app. `generate-cloud-invite.py` does the
+  same directly on the VPS.
+- Run `redeploy-api.sh` after API changes to rebuild, install and restart the
+  service with health checks.
+- Backups rotate automatically. When an account reaches
+  `VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT`, a new upload removes the oldest
+  one. Users can also delete backups from the app.

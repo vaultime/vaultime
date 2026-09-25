@@ -75,7 +75,7 @@ Start with filesystem-backed storage on the same VPS:
 
 - root path: `/srv/vaultime/backups`
 - per-account prefixes:
-  `/srv/vaultime/backups/<account-id>/<backup-id>.tar.zst.enc`
+  `/srv/vaultime/backups/<account-id>/<backup-id>.vaultime.enc` (a zip archive encrypted on the client with ChaCha20-Poly1305)
 
 This is enough for an invite-only beta. Add MinIO later only if you need:
 - S3-compatible clients
