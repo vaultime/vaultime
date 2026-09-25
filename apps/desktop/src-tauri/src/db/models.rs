@@ -22,6 +22,11 @@ pub struct Game {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GameMetadata {
+    pub preferred_cover_asset_id: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateGame {
     pub title: String,

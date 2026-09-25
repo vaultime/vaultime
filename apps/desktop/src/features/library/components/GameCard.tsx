@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Link } from "react-router";
-import { Gamepad2, MoreVertical, Pencil, TimerReset, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, TimerReset, Trash2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { GameArtwork } from "@/components/media/GameArtwork";
 import type { Game } from "@/lib/types";
 import { formatCalendarDay, formatCompactDuration } from "@/lib/time";
 
@@ -26,6 +27,7 @@ interface GameCardProps {
   totalActiveMs?: number;
   sessionCount?: number;
   lastPlayedAt?: string | null;
+  coverImageUrl?: string | null;
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }
@@ -38,6 +40,7 @@ export function GameCard({
   totalActiveMs = 0,
   sessionCount = 0,
   lastPlayedAt = null,
+  coverImageUrl = null,
   onEdit,
   onDelete,
 }: GameCardProps) {
@@ -91,12 +94,18 @@ export function GameCard({
         to={detailTo}
         className="block transition-transform group-hover:-translate-y-0.5"
       >
-        <div className="relative flex h-44 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(119,91,255,0.24),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent)]">
+        <GameArtwork
+          src={coverImageUrl}
+          alt={`${game.title} artwork`}
+          className="h-48"
+          imageClassName="transition-transform duration-500 group-hover:scale-[1.03]"
+          iconClassName="h-14 w-14"
+        />
+        <div className="relative -mt-24 flex h-24 items-end justify-center overflow-hidden">
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background/65 to-transparent" />
-          <Gamepad2 className="h-14 w-14 text-primary/45" />
         </div>
 
-        <CardContent className="p-4">
+        <CardContent className="relative p-4 pt-0">
           <div className="space-y-3">
             <div className="min-w-0">
               <h3 className="truncate text-base font-semibold leading-tight">

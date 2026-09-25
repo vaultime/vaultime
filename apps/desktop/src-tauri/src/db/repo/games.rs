@@ -6,7 +6,7 @@
 use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
-use crate::db::models::{CreateGame, Game, UpdateGame};
+use crate::db::models::{CreateGame, Game, GameMetadata, UpdateGame};
 use crate::error::{Result, VaultimeError};
 
 fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
@@ -127,6 +127,25 @@ pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
             .execute("DELETE FROM games WHERE id = ?1", [id])
             .map_err(map_db)?;
         Ok(count > 0)
+    })
+}
+
+/// Updates the metadata JSON blob for a game.
+pub fn set_metadata(db: &Database, id: &str, metadata: &GameMetadata) -> Result<Game> {
+    let metadata_json = serde_json::to_string(metadata)
+        .map_err(|e| VaultimeError::Database(format!("invalid metadata json: {e}")))?;
+
+    db.with_conn(|conn| {
+        conn.execute(
+            "UPDATE games
+             SET metadata_json = ?1, updated_at = datetime('now')
+             WHERE id = ?2",
+            params![metadata_json, id],
+        )
+        .map_err(map_db)?;
+
+        conn.query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
+            .map_err(map_db)
     })
 }
 

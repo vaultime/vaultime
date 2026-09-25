@@ -71,11 +71,18 @@ export function EditGameDialog({ game, onClose, onSaved }: EditGameDialogProps) 
     if (!game || !title.trim()) return;
     setSaving(true);
     try {
+      const pathsChanged =
+        executablePath !== (game.executable_path ?? "") ||
+        installFolder !== (game.install_folder ?? "");
+
       await api.updateGame(game.id, {
         title: title.trim(),
         executable_path: executablePath || null,
         install_folder: installFolder || null,
       });
+      if (pathsChanged && (executablePath || installFolder)) {
+        await api.scanGameAssets(game.id).catch(() => {});
+      }
       onSaved();
       onClose();
     } catch (e) {

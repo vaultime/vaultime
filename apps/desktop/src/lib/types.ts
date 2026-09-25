@@ -60,3 +60,17 @@ export interface TrackingDiagnostics {
   idle_detection: string;
   poll_interval_seconds: number;
 }
+
+/** Artwork entry plus an inline preview payload returned by the backend. */
+export interface GameAssetView {
+  id: string;
+  game_id: string;
+  asset_type: string;
+  source: string;
+  file_path: string;
+  cache_path: string | null;
+  hash: string | null;
+  created_at: string;
+  preview_data_url: string | null;
+  is_preferred: boolean;
+}

@@ -85,11 +85,14 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
     if (!title.trim()) return;
     setSaving(true);
     try {
-      await api.createGame({
+      const game = await api.createGame({
         title: title.trim(),
         executable_path: executablePath || null,
         install_folder: installFolder || null,
       });
+      if (executablePath || installFolder) {
+        await api.scanGameAssets(game.id).catch(() => {});
+      }
       setIsOpen(false);
       reset();
       onAdded();

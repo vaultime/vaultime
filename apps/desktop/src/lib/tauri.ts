@@ -9,6 +9,7 @@ import type {
   Session,
   Setting,
   TrackingDiagnostics,
+  GameAssetView,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,42 @@ export async function updateGame(
 
 export async function deleteGame(id: string): Promise<boolean> {
   return invoke<boolean>("delete_game", { id });
+}
+
+// ---------------------------------------------------------------------------
+// Asset commands
+// ---------------------------------------------------------------------------
+
+export async function listGameAssets(gameId: string): Promise<GameAssetView[]> {
+  return invoke<GameAssetView[]>("list_game_assets", { gameId });
+}
+
+export async function listPreferredGameAssets(): Promise<GameAssetView[]> {
+  return invoke<GameAssetView[]>("list_preferred_game_assets");
+}
+
+export async function scanGameAssets(gameId: string): Promise<GameAssetView[]> {
+  return invoke<GameAssetView[]>("scan_game_assets", { gameId });
+}
+
+export async function importGameAsset(
+  gameId: string,
+  sourcePath: string,
+): Promise<GameAssetView[]> {
+  return invoke<GameAssetView[]>("import_game_asset", {
+    gameId,
+    sourcePath,
+  });
+}
+
+export async function setPreferredGameAsset(
+  gameId: string,
+  assetId: string,
+): Promise<boolean> {
+  return invoke<boolean>("set_preferred_game_asset", {
+    gameId,
+    assetId,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ use std::sync::Arc;
 use log::info;
 use tauri::Manager;
 
+use assets::AssetManager;
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -36,6 +37,8 @@ pub fn run() {
                 .expect("failed to resolve app data directory");
 
             fs::create_dir_all(&app_dir).expect("failed to create app data directory");
+            let asset_cache_dir = app_dir.join("asset-cache");
+            fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
 
             let db_path = app_dir.join("vaultime.db");
             let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
@@ -52,6 +55,7 @@ pub fn run() {
             let engine = TrackingEngine::start(Arc::clone(&database), device_id);
 
             app.manage(database);
+            app.manage(AssetManager::new(asset_cache_dir));
             app.manage(engine);
 
             Ok(())
@@ -62,6 +66,11 @@ pub fn run() {
             commands::create_game,
             commands::update_game,
             commands::delete_game,
+            commands::list_game_assets,
+            commands::list_preferred_game_assets,
+            commands::scan_game_assets,
+            commands::import_game_asset,
+            commands::set_preferred_game_asset,
             commands::list_sessions,
             commands::get_sessions_for_game,
             commands::get_active_sessions,

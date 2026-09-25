@@ -8,6 +8,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
+use crate::assets::{self, AssetManager, GameAssetView};
 use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game, Session, Setting, UpdateGame};
 use crate::db::repo::{games, sessions, settings};
@@ -46,6 +47,55 @@ pub fn update_game(
 #[tauri::command]
 pub fn delete_game(db: State<'_, Arc<Database>>, id: String) -> Result<bool, VaultimeError> {
     games::delete_game(&db, &id)
+}
+
+// ---------------------------------------------------------------------------
+// Asset commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_game_assets(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    game_id: String,
+) -> Result<Vec<GameAssetView>, VaultimeError> {
+    assets::list_game_assets(&db, &asset_manager, &game_id)
+}
+
+#[tauri::command]
+pub fn list_preferred_game_assets(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+) -> Result<Vec<GameAssetView>, VaultimeError> {
+    assets::list_preferred_game_assets(&db, &asset_manager)
+}
+
+#[tauri::command]
+pub fn scan_game_assets(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    game_id: String,
+) -> Result<Vec<GameAssetView>, VaultimeError> {
+    assets::scan_game_assets(&db, &asset_manager, &game_id)
+}
+
+#[tauri::command]
+pub fn import_game_asset(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    game_id: String,
+    source_path: String,
+) -> Result<Vec<GameAssetView>, VaultimeError> {
+    assets::import_game_asset(&db, &asset_manager, &game_id, &source_path)
+}
+
+#[tauri::command]
+pub fn set_preferred_game_asset(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+    asset_id: String,
+) -> Result<bool, VaultimeError> {
+    assets::set_preferred_game_asset(&db, &game_id, &asset_id)
 }
 
 // ---------------------------------------------------------------------------

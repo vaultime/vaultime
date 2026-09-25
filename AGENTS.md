@@ -74,6 +74,7 @@ vaultime/
 ## UX Guidance
 
 - The app should feel premium and image-rich, not like a background utility.
+- The visual direction should lean into a deep-purple, dark-first aesthetic with richer atmosphere rather than neutral default surfaces.
 - Prioritize the library view, game detail view, and session timeline early.
 - Keep integrity state legible in the UI without making exaggerated security claims.
 

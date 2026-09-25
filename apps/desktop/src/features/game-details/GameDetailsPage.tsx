@@ -1,9 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { ArrowLeft, Clock3, Gamepad2, Loader2, PlayCircle, Timer } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  ArrowLeft,
+  Clock3,
+  ImagePlus,
+  Loader2,
+  PaintBucket,
+  PlayCircle,
+  RefreshCw,
+  Timer,
+} from "lucide-react";
 import { Link, useParams } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { GameArtwork } from "@/components/media/GameArtwork";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -23,7 +35,7 @@ import {
   formatCompactDuration,
   formatLongDate,
 } from "@/lib/time";
-import type { Game, Session } from "@/lib/types";
+import type { Game, GameAssetView, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useActiveSessions } from "@/features/sessions";
 
@@ -56,6 +68,22 @@ export function GameDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [assets, setAssets] = useState<GameAssetView[]>([]);
+  const [assetBusy, setAssetBusy] = useState(false);
+
+  const loadGameBundle = useCallback(async (currentGameId: string) => {
+    const [fetchedGame, fetchedSessions, fetchedAssets] = await Promise.all([
+      api.getGame(currentGameId),
+      api.getSessionsForGame(currentGameId),
+      api.listGameAssets(currentGameId),
+    ]);
+
+    return {
+      game: fetchedGame,
+      sessions: fetchedSessions,
+      assets: fetchedAssets,
+    };
+  }, []);
 
   useEffect(() => {
     if (!gameId) {
@@ -72,17 +100,15 @@ export function GameDetailsPage() {
       try {
         setLoading(true);
         setError(null);
-        const [fetchedGame, fetchedSessions] = await Promise.all([
-          api.getGame(currentGameId),
-          api.getSessionsForGame(currentGameId),
-        ]);
+        const bundle = await loadGameBundle(currentGameId);
 
         if (cancelled) {
           return;
         }
 
-        setGame(fetchedGame);
-        setSessions(fetchedSessions);
+        setGame(bundle.game);
+        setSessions(bundle.sessions);
+        setAssets(bundle.assets);
       } catch (loadError) {
         if (!cancelled) {
           setError(String(loadError));
@@ -99,7 +125,7 @@ export function GameDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [gameId]);
+  }, [gameId, loadGameBundle]);
 
   useEffect(() => {
     if (!gameId) {
@@ -110,8 +136,14 @@ export function GameDetailsPage() {
       return;
     }
 
-    api.getSessionsForGame(gameId).then(setSessions).catch(() => {});
-  }, [activeSessions, gameId]);
+    loadGameBundle(gameId)
+      .then((bundle) => {
+        setGame(bundle.game);
+        setSessions(bundle.sessions);
+        setAssets(bundle.assets);
+      })
+      .catch(() => {});
+  }, [activeSessions, gameId, loadGameBundle]);
 
   const totals = useMemo(() => getSessionTotals(sessions), [sessions]);
   const dailyActivity = useMemo(
@@ -122,6 +154,69 @@ export function GameDetailsPage() {
     return [...dailyActivity].sort((a, b) => b.activeMs - a.activeMs)[0] ?? null;
   }, [dailyActivity]);
   const runningNow = activeSessions.some((session) => session.game_id === gameId);
+  const preferredAsset = useMemo(
+    () => assets.find((asset) => asset.is_preferred) ?? assets[0] ?? null,
+    [assets],
+  );
+
+  async function handleRescanArtwork() {
+    if (!gameId) {
+      return;
+    }
+
+    try {
+      setAssetBusy(true);
+      const nextAssets = await api.scanGameAssets(gameId);
+      setAssets(nextAssets);
+    } finally {
+      setAssetBusy(false);
+    }
+  }
+
+  async function handleImportArtwork() {
+    if (!gameId) {
+      return;
+    }
+
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title: "Choose artwork image",
+      filters: [
+        {
+          name: "Images",
+          extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"],
+        },
+      ],
+    });
+
+    if (!selected || typeof selected !== "string") {
+      return;
+    }
+
+    try {
+      setAssetBusy(true);
+      const nextAssets = await api.importGameAsset(gameId, selected);
+      setAssets(nextAssets);
+    } finally {
+      setAssetBusy(false);
+    }
+  }
+
+  async function handleSelectPreferred(assetId: string) {
+    if (!gameId) {
+      return;
+    }
+
+    try {
+      setAssetBusy(true);
+      await api.setPreferredGameAsset(gameId, assetId);
+      const nextAssets = await api.listGameAssets(gameId);
+      setAssets(nextAssets);
+    } finally {
+      setAssetBusy(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -159,11 +254,24 @@ export function GameDetailsPage() {
       </Link>
 
       <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/70">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(119,91,255,0.24),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(66,191,165,0.16),transparent_36%)]" />
-        <div className="relative grid gap-6 p-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:p-8">
-          <div className="flex h-56 items-center justify-center rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-primary/18 via-primary/8 to-transparent">
-            <Gamepad2 className="h-20 w-20 text-primary/70" />
+        {preferredAsset?.preview_data_url && (
+          <div className="absolute inset-0">
+            <img
+              src={preferredAsset.preview_data_url}
+              alt={`${game.title} background art`}
+              className="h-full w-full object-cover opacity-22 blur-[2px]"
+            />
           </div>
+        )}
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(10,6,18,0.94),rgba(10,6,18,0.68)_52%,rgba(10,6,18,0.88)),radial-gradient(circle_at_top_left,rgba(152,92,255,0.34),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(82,43,179,0.28),transparent_36%)]" />
+        <div className="relative grid gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:p-8">
+          <GameArtwork
+            src={preferredAsset?.preview_data_url ?? null}
+            alt={`${game.title} artwork`}
+            className="h-72 rounded-[1.75rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.35)]"
+            imageClassName="object-cover object-center"
+            iconClassName="h-20 w-20"
+          />
 
           <div className="space-y-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -181,6 +289,30 @@ export function GameDetailsPage() {
                     game.install_folder ??
                     "Manual game entry without an executable path yet."}
                 </p>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleRescanArtwork}
+                    disabled={assetBusy}
+                    className="bg-background/35 backdrop-blur-sm"
+                  >
+                    {assetBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    Rescan Artwork
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleImportArtwork}
+                    disabled={assetBusy}
+                    className="bg-background/35 backdrop-blur-sm"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    Add Override
+                  </Button>
+                </div>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-right">
                 <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
@@ -261,6 +393,73 @@ export function GameDetailsPage() {
         <Card className="border border-border/70">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <PaintBucket className="h-4 w-4 text-primary" />
+              Artwork Rack
+            </CardTitle>
+            <CardDescription>
+              Scanned folder art and manual overrides cached for this game.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {assets.length > 0 ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  {assets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => handleSelectPreferred(asset.id)}
+                      disabled={assetBusy}
+                      className="group text-left"
+                    >
+                      <div
+                        className={`overflow-hidden rounded-[1.4rem] border transition-all ${
+                          asset.is_preferred
+                            ? "border-primary shadow-[0_0_0_1px_rgba(193,151,255,0.3)]"
+                            : "border-border/70 hover:border-primary/40"
+                        }`}
+                      >
+                        <GameArtwork
+                          src={asset.preview_data_url}
+                          alt={`${game.title} asset`}
+                          className="aspect-[4/5]"
+                          imageClassName="transition-transform duration-500 group-hover:scale-[1.03]"
+                        />
+                      </div>
+                      <div className="mt-2 px-1">
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          {asset.asset_type}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {asset.source === "user_picked"
+                            ? "Manual override"
+                            : "Folder scan"}
+                          {asset.is_preferred ? " · preferred" : ""}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
+                  Click any cached image to make it the preferred cover used in
+                  the library and on this detail page.
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-5 text-sm text-muted-foreground">
+                No artwork has been cached for this game yet. Rescan the game
+                folder or add a manual image override.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Clock3 className="h-4 w-4 text-primary" />
               Tracking Snapshot
             </CardTitle>
@@ -284,7 +483,7 @@ export function GameDetailsPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                   Active Time
@@ -318,10 +517,28 @@ export function GameDetailsPage() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
-              Vaultime derives totals from append-only session records, so this
-              page reflects every tracked play session rather than a mutable counter.
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PaintBucket className="h-4 w-4 text-primary" />
+              Asset Notes
+            </CardTitle>
+            <CardDescription>
+              Current artwork preferences and fallback behavior.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+              Vaultime currently scans local folders for named artwork candidates,
+              caches UI-sized copies, and lets you promote any cached image to
+              the preferred cover.
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+              If no artwork is found, the UI falls back to the deep-purple cover
+              treatment until a scanned or manual asset is available.
             </div>
           </CardContent>
         </Card>

@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { Game, Session } from "@/lib/types";
+import type { Game, GameAssetView, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import {
   buildDailyActivity,
@@ -32,10 +32,22 @@ export function LibraryPage() {
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [deletingGame, setDeletingGame] = useState<Game | null>(null);
   const [allSessions, setAllSessions] = useState<Session[]>([]);
+  const [preferredAssets, setPreferredAssets] = useState<
+    Record<string, GameAssetView>
+  >({});
 
-  // Fetch all sessions for playtime totals.
+  // Fetch all sessions and preferred artwork for dashboard totals.
   useEffect(() => {
-    api.listSessions().then(setAllSessions).catch(() => {});
+    Promise.all([api.listSessions(), api.listPreferredGameAssets()])
+      .then(([sessions, assets]) => {
+        setAllSessions(sessions);
+        const nextAssets: Record<string, GameAssetView> = {};
+        for (const asset of assets) {
+          nextAssets[asset.game_id] = asset;
+        }
+        setPreferredAssets(nextAssets);
+      })
+      .catch(() => {});
   }, [games, activeSessions]);
 
   // Build a set of currently running game IDs.
@@ -244,6 +256,9 @@ export function LibraryPage() {
               totalActiveMs={totalsByGame[game.id]?.activeMs ?? 0}
               sessionCount={totalsByGame[game.id]?.sessionsCount ?? 0}
               lastPlayedAt={totalsByGame[game.id]?.lastPlayedAt ?? null}
+              coverImageUrl={
+                preferredAssets[game.id]?.preview_data_url ?? null
+              }
               onEdit={setEditingGame}
               onDelete={setDeletingGame}
             />
