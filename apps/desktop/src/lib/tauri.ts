@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Game, CreateGameInput, UpdateGameInput } from "@/lib/types";
+import type {
+  Game,
+  CreateGameInput,
+  UpdateGameInput,
+  Session,
+} from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Game commands
@@ -29,4 +34,28 @@ export async function updateGame(
 
 export async function deleteGame(id: string): Promise<boolean> {
   return invoke<boolean>("delete_game", { id });
+}
+
+// ---------------------------------------------------------------------------
+// Session commands
+// ---------------------------------------------------------------------------
+
+export async function listSessions(): Promise<Session[]> {
+  return invoke<Session[]>("list_sessions");
+}
+
+export async function getSessionsForGame(gameId: string): Promise<Session[]> {
+  return invoke<Session[]>("get_sessions_for_game", { gameId });
+}
+
+export async function getActiveSessions(): Promise<Session[]> {
+  return invoke<Session[]>("get_active_sessions");
+}
+
+// ---------------------------------------------------------------------------
+// Tracking commands
+// ---------------------------------------------------------------------------
+
+export async function getTrackingStatus(): Promise<boolean> {
+  return invoke<boolean>("get_tracking_status");
 }

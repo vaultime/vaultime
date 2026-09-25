@@ -1,19 +1,48 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Gamepad2, Loader2 } from "lucide-react";
 import { useGames } from "./useGames";
+import { useActiveSessions } from "../sessions/useSessions";
 import { AddGameDialog } from "./components/AddGameDialog";
 import { EditGameDialog } from "./components/EditGameDialog";
 import { DeleteGameDialog } from "./components/DeleteGameDialog";
 import { GameCard } from "./components/GameCard";
-import type { Game } from "@/lib/types";
+import type { Game, Session } from "@/lib/types";
+import * as api from "@/lib/tauri";
 
 export function LibraryPage() {
   const { games, loading, error, refresh } = useGames();
+  const { activeSessions } = useActiveSessions();
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [deletingGame, setDeletingGame] = useState<Game | null>(null);
+  const [allSessions, setAllSessions] = useState<Session[]>([]);
+
+  // Fetch all sessions for playtime totals.
+  useEffect(() => {
+    api.listSessions().then(setAllSessions).catch(() => {});
+  }, [games, activeSessions]);
+
+  // Build a set of currently running game IDs.
+  const runningGameIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const s of activeSessions) {
+      ids.add(s.game_id);
+    }
+    return ids;
+  }, [activeSessions]);
+
+  // Build total playtime per game from closed sessions.
+  const playtimeByGame = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of allSessions) {
+      if (s.ended_at_wall) {
+        map[s.game_id] = (map[s.game_id] ?? 0) + s.runtime_ms;
+      }
+    }
+    return map;
+  }, [allSessions]);
 
   return (
     <div className="space-y-6">
@@ -56,6 +85,8 @@ export function LibraryPage() {
             <GameCard
               key={game.id}
               game={game}
+              isRunning={runningGameIds.has(game.id)}
+              totalPlaytimeMs={playtimeByGame[game.id] ?? 0}
               onEdit={setEditingGame}
               onDelete={setDeletingGame}
             />

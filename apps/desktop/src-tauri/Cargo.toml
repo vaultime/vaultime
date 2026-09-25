@@ -24,6 +24,8 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 log = "0.4"
 env_logger = "0.11"
+sysinfo = "0.35"
+hostname = "0.4"
 
 [features]
 default = ["custom-protocol"]

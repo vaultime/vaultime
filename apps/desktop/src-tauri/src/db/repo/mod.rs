@@ -5,4 +5,5 @@
 
 pub mod devices;
 pub mod games;
+pub mod sessions;
 pub mod settings;

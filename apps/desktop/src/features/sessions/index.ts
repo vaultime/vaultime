@@ -2,3 +2,4 @@
 // SPDX-License-Identifier: MIT
 
 export { SessionsPage } from "./SessionsPage";
+export { useSessions, useActiveSessions } from "./useSessions";

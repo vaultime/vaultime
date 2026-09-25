@@ -2,3 +2,5 @@
 // SPDX-License-Identifier: MIT
 
 //! Tracking engine — process detection, session management, active/idle logic.
+
+pub mod engine;
