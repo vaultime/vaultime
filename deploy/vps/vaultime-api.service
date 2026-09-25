@@ -6,11 +6,18 @@ Wants=network-online.target
 [Service]
 User=vaultime
 Group=vaultime
-WorkingDirectory=/srv/vaultime/api/current
+WorkingDirectory=/srv/vaultime
 EnvironmentFile=/etc/vaultime/api.env
 ExecStart=/srv/vaultime/api/current/vaultime-api
 Restart=on-failure
 RestartSec=5
+
+# The service only needs its backup folders. Everything else is read-only.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/vaultime/backups /srv/vaultime/tmp
 
 [Install]
 WantedBy=multi-user.target
