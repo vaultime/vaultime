@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { Gamepad2, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Link } from "react-router";
+import { Gamepad2, MoreVertical, Pencil, TimerReset, Trash2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -15,32 +16,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Game } from "@/lib/types";
+import { formatCalendarDay, formatCompactDuration } from "@/lib/time";
 
 interface GameCardProps {
   game: Game;
+  detailTo: string;
   isRunning?: boolean;
   totalRuntimeMs?: number;
   totalActiveMs?: number;
+  sessionCount?: number;
+  lastPlayedAt?: string | null;
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }
 
-function formatPlaytime(ms: number): string {
-  const totalMinutes = Math.floor(ms / 60_000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
-}
-
 export function GameCard({
   game,
+  detailTo,
   isRunning = false,
   totalRuntimeMs = 0,
   totalActiveMs = 0,
+  sessionCount = 0,
+  lastPlayedAt = null,
   onEdit,
   onDelete,
 }: GameCardProps) {
@@ -48,10 +45,10 @@ export function GameCard({
   const runtimeDiffers = totalRuntimeMs > totalActiveMs;
 
   return (
-    <Card className="group relative overflow-hidden transition-colors hover:border-primary/40">
+    <Card className="group relative overflow-hidden border border-border/70 bg-card/85 transition-colors hover:border-primary/40">
       {/* Running indicator */}
       {isRunning && (
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-3 left-3 z-10">
           <Badge
             variant="default"
             className="bg-green-600 text-white"
@@ -61,65 +58,107 @@ export function GameCard({
         </div>
       )}
 
-      {/* Cover art placeholder */}
-      <div className="flex h-40 items-center justify-center bg-muted">
-        <Gamepad2 className="h-12 w-12 text-muted-foreground/30" />
+      <div className="absolute top-3 right-3 z-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 bg-background/70 backdrop-blur-sm opacity-0 group-hover:opacity-100"
+              />
+            }
+          >
+            <MoreVertical className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onEdit(game)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onDelete(game)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold leading-tight">
-              {game.title}
-            </h3>
-            {hasTrackedTime ? (
-              <div className="mt-1 space-y-0.5">
-                <p className="truncate text-xs text-muted-foreground">
-                  Active {formatPlaytime(totalActiveMs)}
-                </p>
-                {runtimeDiffers && (
-                  <p className="truncate text-[11px] text-muted-foreground/70">
-                    Runtime {formatPlaytime(totalRuntimeMs)}
-                  </p>
-                )}
-              </div>
-            ) : (
+      <Link
+        to={detailTo}
+        className="block transition-transform group-hover:-translate-y-0.5"
+      >
+        <div className="relative flex h-44 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(119,91,255,0.24),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent)]">
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background/65 to-transparent" />
+          <Gamepad2 className="h-14 w-14 text-primary/45" />
+        </div>
+
+        <CardContent className="p-4">
+          <div className="space-y-3">
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-semibold leading-tight">
+                {game.title}
+              </h3>
               <p className="mt-1 truncate text-xs text-muted-foreground">
                 {game.executable_path
                   ? game.executable_path.split(/[\\/]/).pop()
-                  : "No executable"}
+                  : "Manual library entry"}
               </p>
+            </div>
+
+            {hasTrackedTime ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-2xl border border-border/70 bg-muted/25 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Active
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {formatCompactDuration(totalActiveMs)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/25 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Runtime
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {formatCompactDuration(totalRuntimeMs)}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 p-3 text-xs text-muted-foreground">
+                No tracked sessions yet. Launch the game once to start building history.
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <TimerReset className="h-3.5 w-3.5" />
+                <span>
+                  {sessionCount} session{sessionCount === 1 ? "" : "s"}
+                </span>
+              </div>
+              <span>
+                {lastPlayedAt ? `Last played ${formatCalendarDay(lastPlayedAt)}` : "Never launched"}
+              </span>
+            </div>
+
+            {runtimeDiffers && hasTrackedTime && (
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-[color:var(--color-chart-1)]"
+                  style={{
+                    width: `${Math.max(4, (totalActiveMs / totalRuntimeMs) * 100)}%`,
+                  }}
+                />
+              </div>
             )}
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
-                />
-              }
-            >
-              <MoreVertical className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(game)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onDelete(game)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </CardContent>
+        </CardContent>
+      </Link>
     </Card>
   );
 }

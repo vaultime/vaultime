@@ -1,112 +1,43 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { Clock, Loader2, Play } from "lucide-react";
+import { Activity, Clock, Loader2, TimerReset } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { Game, Session } from "@/lib/types";
+import type { Game } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useSessions, useActiveSessions } from "./useSessions";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(iso + "Z");
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function SessionRow({
-  session,
-  gameName,
-}: {
-  session: Session;
-  gameName: string;
-}) {
-  const isActive = !session.ended_at_wall;
-
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-      <div className="flex items-center gap-3">
-        {isActive ? (
-          <Play className="h-4 w-4 text-green-500" />
-        ) : (
-          <Clock className="h-4 w-4 text-muted-foreground" />
-        )}
-        <div>
-          <p className="text-sm font-medium">{gameName}</p>
-          <p className="text-xs text-muted-foreground">
-            {formatDate(session.started_at_wall)}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="text-right">
-          <p className="text-sm tabular-nums text-foreground">
-            Runtime {formatDuration(session.runtime_ms)}
-          </p>
-          <p className="text-xs tabular-nums text-muted-foreground">
-            Active {formatDuration(session.active_ms)}
-            {" · "}
-            Idle {formatDuration(session.idle_ms)}
-          </p>
-        </div>
-        {isActive && (
-          <Badge
-            variant="outline"
-            className="border-green-500/50 text-green-500"
-          >
-            Live
-          </Badge>
-        )}
-        {!session.closed_cleanly && !isActive && (
-          <Badge
-            variant="outline"
-            className="border-yellow-500/50 text-yellow-500"
-          >
-            {session.integrity_status}
-          </Badge>
-        )}
-      </div>
-    </div>
-  );
-}
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ActivityChart } from "@/components/charts/ActivityChart";
+import {
+  buildDailyActivity,
+  getSessionTotals,
+  rankGamesByActiveTime,
+} from "@/lib/session-stats";
+import { formatCompactDuration, formatDuration } from "@/lib/time";
+import { SessionTimeline } from "./components/SessionTimeline";
 
 export function SessionsPage() {
   const { sessions, loading, error, refresh } = useSessions();
   const { activeSessions } = useActiveSessions();
   const [gameMap, setGameMap] = useState<Record<string, string>>({});
+  const [games, setGames] = useState<Game[]>([]);
   const summary = useMemo(() => {
-    return sessions.reduce(
-      (acc, session) => {
-        acc.runtime += session.runtime_ms;
-        acc.active += session.active_ms;
-        acc.idle += session.idle_ms;
-        return acc;
-      },
-      { runtime: 0, active: 0, idle: 0 },
-    );
+    return getSessionTotals(sessions);
   }, [sessions]);
+  const dailyActivity = useMemo(
+    () => buildDailyActivity(sessions, 14),
+    [sessions],
+  );
+  const topGames = useMemo(
+    () => rankGamesByActiveTime(games, sessions, 5),
+    [games, sessions],
+  );
 
   // Build a game name lookup from the game list.
   useEffect(() => {
@@ -115,6 +46,7 @@ export function SessionsPage() {
       for (const g of games) {
         map[g.id] = g.title;
       }
+      setGames(games);
       setGameMap(map);
     });
   }, [sessions]);
@@ -147,7 +79,7 @@ export function SessionsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Sessions</h1>
         <p className="text-muted-foreground">
-          Timeline of your play sessions across all games.
+          Timeline, pacing, and totals across your tracked play history.
         </p>
       </div>
 
@@ -157,7 +89,7 @@ export function SessionsPage() {
             <CardTitle>Runtime</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
-            {formatDuration(summary.runtime)}
+            {formatDuration(summary.runtimeMs)}
           </CardContent>
         </Card>
         <Card className="border border-border/70">
@@ -165,7 +97,7 @@ export function SessionsPage() {
             <CardTitle>Active</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
-            {formatDuration(summary.active)}
+            {formatDuration(summary.activeMs)}
           </CardContent>
         </Card>
         <Card className="border border-border/70">
@@ -173,7 +105,7 @@ export function SessionsPage() {
             <CardTitle>Idle</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
-            {formatDuration(summary.idle)}
+            {formatDuration(summary.idleMs)}
           </CardContent>
         </Card>
         <Card className="border border-border/70">
@@ -186,6 +118,76 @@ export function SessionsPage() {
         </Card>
       </div>
 
+      {sessions.length > 0 && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <Card className="border border-border/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                Recent Activity
+              </CardTitle>
+              <CardDescription>
+                Last 14 days of runtime with active play highlighted inside each bar.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ActivityChart points={dailyActivity} />
+              <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--color-chart-1)]" />
+                  Active time
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--color-chart-3)]/60" />
+                  Runtime envelope
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TimerReset className="h-4 w-4 text-primary" />
+                Most Played
+              </CardTitle>
+              <CardDescription>
+                Games with the highest active time in your current history.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {topGames.map((entry, index) => (
+                <div
+                  key={entry.game.id}
+                  className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      #{index + 1}
+                    </p>
+                    <p className="truncate text-sm font-medium">
+                      {entry.game.title}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {entry.sessionsCount} session
+                      {entry.sessionsCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold">
+                      {formatCompactDuration(entry.activeMs)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Runtime {formatCompactDuration(entry.runtimeMs)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {sessions.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed border-border">
           <Clock className="mb-3 h-10 w-10 text-muted-foreground/50" />
@@ -194,15 +196,21 @@ export function SessionsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {sessions.map((session) => (
-            <SessionRow
-              key={session.id}
-              session={session}
-              gameName={gameMap[session.game_id] ?? "Unknown Game"}
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle>Timeline</CardTitle>
+            <CardDescription>
+              Grouped by day so long play stretches and repeat launches are easy to read.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SessionTimeline
+              sessions={sessions}
+              gameMap={gameMap}
+              emptyMessage="No sessions recorded yet. Start playing a tracked game."
             />
-          ))}
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
