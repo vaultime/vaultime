@@ -44,13 +44,19 @@
           "libwebkit2gtk-4.1-0",
           "libgtk-3-0"
         ],
-        "section": "games"
+        "section": "games",
+        "files": {
+          "/usr/share/metainfo/com.vaultime.app.metainfo.xml": "../../../packaging/linux/com.vaultime.app.metainfo.xml"
+        }
       },
       "rpm": {
         "depends": [
           "webkit2gtk4.1",
           "gtk3"
-        ]
+        ],
+        "files": {
+          "/usr/share/metainfo/com.vaultime.app.metainfo.xml": "../../../packaging/linux/com.vaultime.app.metainfo.xml"
+        }
       }
     },
     "windows": {

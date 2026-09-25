@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.vaultime.app</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Vaultime</name>
+  <summary>Game library and playtime tracker</summary>
+  <description>
+    <p>
+      Vaultime tracks how long you play your PC games, across launchers and
+      standalone games. It keeps runtime, active playtime and idle time apart
+      and stores every session in a tamper-evident log on your computer.
+    </p>
+    <ul>
+      <li>Detects running games automatically and records sessions</li>
+      <li>Finds Steam games and scans common launcher folders</li>
+      <li>Shows your library with artwork from your game folders</li>
+      <li>Local backups, plus optional encrypted backup to an invite-only server</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">Vaultime.desktop</launchable>
+  <developer id="io.github.schwimmbeck">
+    <name>schwimmbeck</name>
+  </developer>
+  <categories>
+    <category>Game</category>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-04-06"/>
+  </releases>
+</component>

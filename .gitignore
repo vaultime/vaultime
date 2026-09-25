@@ -31,3 +31,7 @@ PLAN.md
 # Python
 __pycache__/
 *.pyc
+
+# Linux bundles built by scripts/linux-package.sh
+dist-linux/
+dist-api/
