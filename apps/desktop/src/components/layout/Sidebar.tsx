@@ -21,10 +21,20 @@ const navItems = [
 
 export function Sidebar() {
   const [cloudConnected, setCloudConnected] = useState(false);
+  const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
     api.cloudGetSession().then((session) => {
-      setCloudConnected(!!session?.user?.id);
+      const signedIn = !!session?.user;
+      setCloudConnected(signedIn);
+      if (signedIn) {
+        api.cloudGetSubscription().then((sub) => {
+          setIsPro(
+            sub.tier === "pro" &&
+            (sub.status === "active" || sub.status === "past_due"),
+          );
+        }).catch(() => {});
+      }
     }).catch(() => {});
   }, []);
 
@@ -35,12 +45,14 @@ export function Sidebar() {
         <img
           src="/icon.svg"
           alt=""
-          className="h-10 w-10 shrink-0"
+          className="h-10 w-10 shrink-0 transition-all duration-500"
+          style={isPro ? { filter: "brightness(0.5) sepia(1) hue-rotate(280deg) saturate(5) brightness(1.1)" } : undefined}
         />
         <img
           src="/wordmark.svg"
           alt="Vaultime"
-          className="h-5"
+          className="h-5 transition-all duration-500"
+          style={isPro ? { filter: "brightness(0.5) sepia(1) hue-rotate(280deg) saturate(5) brightness(1.1)" } : undefined}
         />
       </div>
 

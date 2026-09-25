@@ -4711,6 +4711,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "dirs",
  "env_logger",
  "hostname",
  "image",

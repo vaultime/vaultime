@@ -6,6 +6,7 @@ import { Flame, Gamepad2, Loader2, TimerReset } from "lucide-react";
 import { useGames } from "./useGames";
 import { useActiveSessions } from "../sessions/useSessions";
 import { AddGameDialog } from "./components/AddGameDialog";
+import { DiscoverGamesDialog } from "./components/DiscoverGamesDialog";
 import { EditGameDialog } from "./components/EditGameDialog";
 import { DeleteGameDialog } from "./components/DeleteGameDialog";
 import { GameCard } from "./components/GameCard";
@@ -136,7 +137,10 @@ export function LibraryPage() {
               : "Your game collection and playtime at a glance."}
           </p>
         </div>
-        <AddGameDialog onAdded={refresh} />
+        <div className="flex items-center gap-2">
+          <DiscoverGamesDialog onImported={refresh} />
+          <AddGameDialog onAdded={refresh} />
+        </div>
       </div>
 
       {!loading && !error && games.length > 0 && (

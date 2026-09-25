@@ -23,6 +23,7 @@ import type {
   CloudSyncStatus,
   Subscription,
   SyncResult,
+  DiscoveredGame,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -157,6 +158,30 @@ export async function getTrackingStatus(): Promise<boolean> {
 
 export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
   return invoke<TrackingDiagnostics>("get_tracking_diagnostics");
+}
+
+// ---------------------------------------------------------------------------
+// Discovery commands
+// ---------------------------------------------------------------------------
+
+export async function discoverGames(
+  paths: string[],
+): Promise<DiscoveredGame[]> {
+  return invoke<DiscoveredGame[]>("discover_games", { paths });
+}
+
+export async function discoverSteamGames(): Promise<DiscoveredGame[]> {
+  return invoke<DiscoveredGame[]>("discover_steam_games");
+}
+
+export async function getDefaultScanPaths(): Promise<string[]> {
+  return invoke<string[]>("get_default_scan_paths");
+}
+
+export async function importDiscoveredGames(
+  discoveries: DiscoveredGame[],
+): Promise<Game[]> {
+  return invoke<Game[]>("import_discovered_games", { discoveries });
 }
 
 // ---------------------------------------------------------------------------

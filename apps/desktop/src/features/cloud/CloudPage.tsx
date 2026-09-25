@@ -318,6 +318,10 @@ export function CloudPage() {
   }
 
   async function handleUpgrade() {
+    if (!billingEnabled) {
+      setError("Billing is not configured yet. Set up Stripe and enable VAULTIME_BILLING_ENABLED first.");
+      return;
+    }
     try {
       setBillingBusy(true);
       setError(null);
@@ -335,6 +339,10 @@ export function CloudPage() {
   }
 
   async function handleManageSubscription() {
+    if (!billingEnabled) {
+      setError("Billing is not configured yet. Set up Stripe and enable VAULTIME_BILLING_ENABLED first.");
+      return;
+    }
     try {
       setBillingBusy(true);
       setError(null);
@@ -551,46 +559,51 @@ export function CloudPage() {
                 </div>
               </div>
 
-              {billingEnabled && subscription && (
-                <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Plan
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    {hasPremium ? (
-                      <>
-                        <Badge
-                          variant="outline"
-                          className="border-violet-400/50 text-violet-200"
-                        >
-                          <Crown className="mr-1 h-3 w-3" />
-                          Pro
-                        </Badge>
-                        {subscription.cancel_at_period_end && (
-                          <span className="text-xs text-amber-200">
-                            Cancels at period end
-                          </span>
-                        )}
-                      </>
-                    ) : (
+              <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Plan
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  {hasPremium ? (
+                    <>
                       <Badge
                         variant="outline"
-                        className="border-muted-foreground/50 text-muted-foreground"
+                        className="border-violet-400/50 text-violet-200"
                       >
-                        Free
+                        <Crown className="mr-1 h-3 w-3" />
+                        Pro
                       </Badge>
-                    )}
-                  </div>
-                  {subscription.current_period_end && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {subscription.status === "canceled" || subscription.status === "expired"
-                        ? "Expired"
-                        : subscription.cancel_at_period_end
-                          ? "Access until"
-                          : "Renews"}{" "}
-                      {formatCloudMoment(subscription.current_period_end)}
-                    </p>
+                      {!billingEnabled && (
+                        <span className="text-xs text-muted-foreground">
+                          (billing not configured)
+                        </span>
+                      )}
+                      {subscription?.cancel_at_period_end && (
+                        <span className="text-xs text-amber-200">
+                          Cancels at period end
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="border-muted-foreground/50 text-muted-foreground"
+                    >
+                      Free
+                    </Badge>
                   )}
+                </div>
+                {subscription?.current_period_end && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {subscription.status === "canceled" || subscription.status === "expired"
+                      ? "Expired"
+                      : subscription.cancel_at_period_end
+                        ? "Access until"
+                        : "Renews"}{" "}
+                    {formatCloudMoment(subscription.current_period_end)}
+                  </p>
+                )}
+                {billingEnabled && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {hasPremium ? (
                       <Button
@@ -636,8 +649,8 @@ export function CloudPage() {
                       )}
                     </Button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs text-muted-foreground">

@@ -8,6 +8,7 @@ pub mod backup;
 pub mod cloud;
 pub mod commands;
 pub mod db;
+pub mod discovery;
 pub mod error;
 pub mod integrity;
 pub mod platform;
@@ -106,6 +107,10 @@ pub fn run() {
             commands::set_setting,
             commands::get_tracking_status,
             commands::get_tracking_diagnostics,
+            commands::discover_games,
+            commands::discover_steam_games,
+            commands::get_default_scan_paths,
+            commands::import_discovered_games,
             commands::cloud_sign_up,
             commands::cloud_sign_in,
             commands::cloud_sign_out,

@@ -24,6 +24,7 @@ use crate::db::models::{
     BackupSnapshot, CreateGame, Game, Session, SessionEvent, Setting, UpdateGame,
 };
 use crate::db::repo::{backup_snapshots, games, session_events, sessions, settings};
+use crate::discovery::{self, DiscoveredGame};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::tracking::engine::TrackingEngine;
@@ -302,6 +303,61 @@ pub fn get_tracking_diagnostics(
         idle_detection: idle_detection_strategy().into(),
         poll_interval_seconds: 5,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Discovery commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn discover_games(
+    db: State<'_, Arc<Database>>,
+    paths: Vec<String>,
+) -> Result<Vec<DiscoveredGame>, VaultimeError> {
+    discovery::scanner::scan_folders(&db, &paths)
+}
+
+#[tauri::command]
+pub fn discover_steam_games(
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<DiscoveredGame>, VaultimeError> {
+    discovery::steam::discover_steam_games(&db)
+}
+
+#[tauri::command]
+pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
+    Ok(discovery::scanner::default_scan_paths())
+}
+
+#[tauri::command]
+pub fn import_discovered_games(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    discoveries: Vec<DiscoveredGame>,
+) -> Result<Vec<Game>, VaultimeError> {
+    let mut imported = Vec::new();
+
+    for disc in &discoveries {
+        if disc.already_added {
+            continue;
+        }
+
+        let input = CreateGame {
+            title: disc.title.clone(),
+            executable_path: Some(disc.executable_path.clone()),
+            install_folder: disc.install_folder.clone(),
+            launcher_source: Some(disc.source.clone()),
+        };
+
+        let game = games::create_game(&db, &input)?;
+
+        // Trigger asset scanning for the newly imported game.
+        let _ = assets::scan_game_assets(&db, &asset_manager, &game.id);
+
+        imported.push(game);
+    }
+
+    Ok(imported)
 }
 
 // ---------------------------------------------------------------------------

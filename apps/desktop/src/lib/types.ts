@@ -224,6 +224,20 @@ export interface AuthCredentials {
 }
 
 // ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+/** A game candidate found during auto-discovery. */
+export interface DiscoveredGame {
+  title: string;
+  executable_path: string;
+  install_folder: string | null;
+  source: string;
+  source_id: string | null;
+  already_added: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Assets
 // ---------------------------------------------------------------------------
 

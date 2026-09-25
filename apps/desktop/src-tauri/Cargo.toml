@@ -32,6 +32,7 @@ sha2 = "0.10"
 walkdir = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+dirs = "6"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
