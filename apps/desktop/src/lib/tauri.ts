@@ -6,6 +6,8 @@ import type {
   Game,
   CreateGameInput,
   UpdateGameInput,
+  BackupSnapshot,
+  LocalBackupSummary,
   Session,
   SessionEvent,
   Setting,
@@ -96,6 +98,28 @@ export async function getSessionEventsForGame(
   gameId: string,
 ): Promise<SessionEvent[]> {
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
+}
+
+export async function listBackupSnapshots(): Promise<BackupSnapshot[]> {
+  return invoke<BackupSnapshot[]>("list_backup_snapshots");
+}
+
+export async function exportLocalBackup(
+  destinationDir: string,
+): Promise<LocalBackupSummary> {
+  return invoke<LocalBackupSummary>("export_local_backup", { destinationDir });
+}
+
+export async function inspectLocalBackup(
+  path: string,
+): Promise<LocalBackupSummary> {
+  return invoke<LocalBackupSummary>("inspect_local_backup", { path });
+}
+
+export async function importLocalBackup(
+  path: string,
+): Promise<LocalBackupSummary> {
+  return invoke<LocalBackupSummary>("import_local_backup", { path });
 }
 
 // ---------------------------------------------------------------------------

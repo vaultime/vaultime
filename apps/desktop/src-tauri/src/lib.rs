@@ -4,6 +4,7 @@
 //! Vaultime core library — Tauri application setup and command registration.
 
 pub mod assets;
+pub mod backup;
 pub mod cloud;
 pub mod commands;
 pub mod db;
@@ -13,6 +14,7 @@ pub mod platform;
 pub mod tracking;
 
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::info;
@@ -22,6 +24,15 @@ use assets::AssetManager;
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
+
+#[derive(Debug, Clone)]
+pub struct AppContext {
+    pub app_dir: PathBuf,
+    pub asset_cache_dir: PathBuf,
+    pub db_path: PathBuf,
+    pub device_id: String,
+    pub app_version: String,
+}
 
 /// Runs the Tauri application.
 pub fn run() {
@@ -52,8 +63,15 @@ pub fn run() {
             info!("device registered: {device_id} ({platform} v{version})");
 
             // Start tracking engine.
-            let engine = TrackingEngine::start(Arc::clone(&database), device_id);
+            let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
 
+            app.manage(AppContext {
+                app_dir,
+                asset_cache_dir: asset_cache_dir.clone(),
+                db_path,
+                device_id,
+                app_version: version,
+            });
             app.manage(database);
             app.manage(AssetManager::new(asset_cache_dir));
             app.manage(engine);
@@ -75,6 +93,10 @@ pub fn run() {
             commands::get_sessions_for_game,
             commands::get_active_sessions,
             commands::get_session_events_for_game,
+            commands::list_backup_snapshots,
+            commands::export_local_backup,
+            commands::inspect_local_backup,
+            commands::import_local_backup,
             commands::list_settings,
             commands::set_setting,
             commands::get_tracking_status,

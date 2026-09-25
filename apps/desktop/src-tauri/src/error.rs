@@ -10,6 +10,8 @@ use std::fmt;
 pub enum VaultimeError {
     /// Database-related errors.
     Database(String),
+    /// Local backup/export/import errors.
+    Backup(String),
     /// Tracking engine errors.
     Tracking(String),
     /// Integrity validation errors.
@@ -26,6 +28,7 @@ impl fmt::Display for VaultimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Database(msg) => write!(f, "database error: {msg}"),
+            Self::Backup(msg) => write!(f, "backup error: {msg}"),
             Self::Tracking(msg) => write!(f, "tracking error: {msg}"),
             Self::Integrity(msg) => write!(f, "integrity error: {msg}"),
             Self::Asset(msg) => write!(f, "asset error: {msg}"),

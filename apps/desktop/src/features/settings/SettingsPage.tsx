@@ -1,7 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { Loader2, Save, Settings, TimerReset } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  ArchiveRestore,
+  Download,
+  HardDriveDownload,
+  Laptop2,
+  Loader2,
+  Save,
+  Settings,
+  TimerReset,
+  Upload,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,7 +25,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Setting, TrackingDiagnostics } from "@/lib/types";
+import { formatLongDate, formatSessionDate } from "@/lib/time";
+import type {
+  BackupSnapshot,
+  LocalBackupSummary,
+  Setting,
+  TrackingDiagnostics,
+} from "@/lib/types";
 import * as api from "@/lib/tauri";
 
 function mapSettings(settings: Setting[]): Record<string, string> {
@@ -25,15 +42,100 @@ function mapSettings(settings: Setting[]): Record<string, string> {
   return values;
 }
 
+function describeForegroundDetection(
+  diagnostics: TrackingDiagnostics | null,
+): { title: string; description: string } {
+  switch (diagnostics?.foreground_detection) {
+    case "x11":
+      return {
+        title: "X11 window PID",
+        description:
+          "Vaultime can map the active X11 window back to a tracked game process.",
+      };
+    case "win32_api":
+      return {
+        title: "Win32 foreground window",
+        description:
+          "Vaultime is reading the active top-level window directly from the Windows API.",
+      };
+    case "macos_system":
+      return {
+        title: "macOS frontmost process",
+        description:
+          "Vaultime is asking the macOS windowing layer for the frontmost application process.",
+      };
+    default:
+      return {
+        title: "Process heuristic",
+        description:
+          "Vaultime is falling back to recent process activity instead of a direct active-window signal.",
+      };
+  }
+}
+
+function describeIdleDetection(
+  diagnostics: TrackingDiagnostics | null,
+): { title: string; description: string } {
+  switch (diagnostics?.idle_detection) {
+    case "x11":
+      return {
+        title: "X11 idle timer",
+        description:
+          "System idle time is available, so background sessions stop counting as active after the configured threshold.",
+      };
+    case "win32_api":
+      return {
+        title: "Win32 last-input timer",
+        description:
+          "Vaultime is reading the last keyboard or mouse input timestamp directly from Windows.",
+      };
+    case "macos_ioreg":
+      return {
+        title: "macOS HID idle timer",
+        description:
+          "Vaultime is using the macOS HID idle counter to tell active play from idle/background time.",
+      };
+    default:
+      return {
+        title: "Process heuristic",
+        description:
+          "Vaultime is using process activity gaps as a conservative fallback for idle/background time.",
+      };
+  }
+}
+
+function platformCoverageNote(platform: string | undefined): string {
+  switch (platform) {
+    case "linux":
+      return "Linux can use X11-specific tools when available, with heuristics as fallback.";
+    case "windows":
+      return "Windows now uses Win32 foreground and idle APIs for native tracking signals.";
+    case "macos":
+      return "macOS now uses frontmost-process and HID idle probes where the system allows them.";
+    default:
+      return "Vaultime prefers native platform signals and falls back to process heuristics when they are unavailable.";
+  }
+}
+
 export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [idleThresholdSeconds, setIdleThresholdSeconds] = useState("300");
   const [treatBackgroundAsActive, setTreatBackgroundAsActive] = useState(false);
   const [diagnostics, setDiagnostics] =
     useState<TrackingDiagnostics | null>(null);
+  const [backupSnapshots, setBackupSnapshots] = useState<BackupSnapshot[]>([]);
+  const [restorePreview, setRestorePreview] =
+    useState<LocalBackupSummary | null>(null);
+
+  async function refreshBackupSnapshots() {
+    const snapshots = await api.listBackupSnapshots();
+    setBackupSnapshots(snapshots);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -43,9 +145,10 @@ export function SettingsPage() {
         setLoading(true);
         setError(null);
 
-        const [settings, trackingDiagnostics] = await Promise.all([
+        const [settings, trackingDiagnostics, snapshots] = await Promise.all([
           api.listSettings(),
           api.getTrackingDiagnostics(),
+          api.listBackupSnapshots(),
         ]);
 
         if (cancelled) {
@@ -58,6 +161,7 @@ export function SettingsPage() {
           values.treat_background_as_active === "true",
         );
         setDiagnostics(trackingDiagnostics);
+        setBackupSnapshots(snapshots);
       } catch (loadError) {
         if (!cancelled) {
           setError(String(loadError));
@@ -69,7 +173,7 @@ export function SettingsPage() {
       }
     }
 
-    load();
+    void load();
 
     return () => {
       cancelled = true;
@@ -105,6 +209,83 @@ export function SettingsPage() {
     }
   }
 
+  async function handleExportBackup() {
+    const selected = await open({
+      multiple: false,
+      directory: true,
+      title: "Choose backup destination folder",
+    });
+
+    if (!selected || typeof selected !== "string") {
+      return;
+    }
+
+    try {
+      setBackupBusy(true);
+      setError(null);
+      setBackupMessage(null);
+
+      const summary = await api.exportLocalBackup(selected);
+      setBackupMessage(`Backup exported to ${summary.backup_path}.`);
+      setRestorePreview(null);
+      await refreshBackupSnapshots();
+    } catch (backupError) {
+      setError(String(backupError));
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  async function handleChooseRestoreBackup() {
+    const selected = await open({
+      multiple: false,
+      directory: true,
+      title: "Choose Vaultime backup folder",
+    });
+
+    if (!selected || typeof selected !== "string") {
+      return;
+    }
+
+    try {
+      setBackupBusy(true);
+      setError(null);
+      setBackupMessage(null);
+
+      const summary = await api.inspectLocalBackup(selected);
+      setRestorePreview(summary);
+    } catch (backupError) {
+      setError(String(backupError));
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  async function handleRestoreBackup() {
+    if (!restorePreview) {
+      return;
+    }
+
+    try {
+      setBackupBusy(true);
+      setError(null);
+      setBackupMessage(null);
+
+      const summary = await api.importLocalBackup(restorePreview.backup_path);
+      setRestorePreview(summary);
+      setBackupMessage(
+        summary.restart_required
+          ? "Backup restored. Restart Vaultime to resume live tracking on this machine."
+          : "Backup restored.",
+      );
+      await refreshBackupSnapshots();
+    } catch (backupError) {
+      setError(String(backupError));
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -113,12 +294,16 @@ export function SettingsPage() {
     );
   }
 
+  const foregroundDetails = describeForegroundDetection(diagnostics);
+  const idleDetails = describeIdleDetection(diagnostics);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Tune active playtime rules and inspect the current tracking signals.
+          Tune active playtime rules, inspect platform signals, and manage local
+          backup snapshots.
         </p>
       </div>
 
@@ -131,6 +316,12 @@ export function SettingsPage() {
       {savedMessage && (
         <div className="rounded-lg border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-500">
           {savedMessage}
+        </div>
+      )}
+
+      {backupMessage && (
+        <div className="rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm text-primary">
+          {backupMessage}
         </div>
       )}
 
@@ -223,6 +414,13 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+              <span className="text-sm text-muted-foreground">Platform</span>
+              <Badge variant="outline" className="border-primary/40 text-primary">
+                {diagnostics?.platform ?? "unknown"}
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
               <span className="text-sm text-muted-foreground">
                 Tracking engine
               </span>
@@ -243,14 +441,10 @@ export function SettingsPage() {
                 Foreground detection
               </p>
               <p className="mt-2 text-lg font-semibold">
-                {diagnostics?.foreground_detection === "x11"
-                  ? "X11 window PID"
-                  : "Process heuristic"}
+                {foregroundDetails.title}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {diagnostics?.foreground_detection === "x11"
-                  ? "Vaultime can map the active X11 window back to a tracked game process."
-                  : "Vaultime is falling back to recent process activity instead of a direct active-window signal."}
+                {foregroundDetails.description}
               </p>
             </div>
 
@@ -259,22 +453,175 @@ export function SettingsPage() {
                 Idle detection
               </p>
               <p className="mt-2 text-lg font-semibold">
-                {diagnostics?.idle_detection === "x11"
-                  ? "X11 idle timer"
-                  : "Process heuristic"}
+                {idleDetails.title}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {diagnostics?.idle_detection === "x11"
-                  ? "System idle time is available, so background sessions stop counting as active after the configured threshold."
-                  : "Vaultime is using process activity gaps as a conservative fallback for idle/background time."}
+                {idleDetails.description}
               </p>
             </div>
 
             <p className="text-xs leading-5 text-muted-foreground">
-              Linux note: `xprop` improves active-window detection on X11 and
-              `xprintidle` improves idle detection. Without them, the tracker
-              still works but relies more heavily on process heuristics.
+              {platformCoverageNote(diagnostics?.platform)}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <HardDriveDownload className="h-4 w-4 text-primary" />
+              Local Backups
+            </CardTitle>
+            <CardDescription>
+              Export a self-contained snapshot or inspect a backup before
+              restoring it over this device&apos;s current library and history.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={handleExportBackup} disabled={backupBusy}>
+                {backupBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Export Backup
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleChooseRestoreBackup}
+                disabled={backupBusy}
+              >
+                <Upload className="h-4 w-4" />
+                Choose Backup To Restore
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
+              Exports include a consistent SQLite snapshot, cached artwork, and
+              a manifest with per-file checksums. Restoring replaces the local
+              library, sessions, integrity history, and cached covers on this
+              machine.
+            </div>
+
+            {restorePreview && (
+              <div className="space-y-4 rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Restore Preview
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Backup from {formatLongDate(restorePreview.created_at)} on{" "}
+                      {restorePreview.source_device_id}.
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="border-amber-400/40 text-amber-200"
+                  >
+                    Destructive
+                  </Badge>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border/70 bg-background/35 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Games
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {restorePreview.games_count}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/35 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Sessions
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {restorePreview.sessions_count}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/35 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Cached Assets
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {restorePreview.asset_file_count}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-background/35 p-4 text-xs leading-6 text-muted-foreground">
+                  Restoring will overwrite this device&apos;s current local
+                  history. Close any live sessions first. Vaultime will require
+                  a restart after restore so tracking can resume cleanly.
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-muted-foreground">
+                    Manifest checksum: {restorePreview.overall_checksum.slice(0, 16)}...
+                  </div>
+                  <Button
+                    variant="destructive"
+                    onClick={handleRestoreBackup}
+                    disabled={backupBusy}
+                  >
+                    {backupBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArchiveRestore className="h-4 w-4" />
+                    )}
+                    Restore Backup
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Laptop2 className="h-4 w-4 text-primary" />
+              Recent Snapshots
+            </CardTitle>
+            <CardDescription>
+              Local export and restore checkpoints recorded in your local
+              history.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {backupSnapshots.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+                No local backup snapshots recorded yet.
+              </div>
+            ) : (
+              backupSnapshots.map((snapshot) => (
+                <div
+                  key={snapshot.id}
+                  className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {snapshot.restore_point_label ?? "Local snapshot"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatSessionDate(snapshot.created_at)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="border-border/70">
+                      {snapshot.source_device_id ?? "unknown device"}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 truncate text-xs text-muted-foreground">
+                    {snapshot.remote_path ?? "Path unavailable"}
+                  </p>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

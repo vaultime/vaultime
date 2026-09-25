@@ -3,6 +3,7 @@
 
 //! Repository implementations for each domain entity.
 
+pub mod backup_snapshots;
 pub mod devices;
 pub mod game_assets;
 pub mod games;

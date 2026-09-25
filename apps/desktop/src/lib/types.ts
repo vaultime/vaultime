@@ -60,6 +60,16 @@ export interface SessionEvent {
   signature: string | null;
 }
 
+/** Mirrors the Rust `BackupSnapshot` struct. */
+export interface BackupSnapshot {
+  id: string;
+  created_at: string;
+  source_device_id: string | null;
+  checksum: string;
+  remote_path: string | null;
+  restore_point_label: string | null;
+}
+
 /** Mirrors the Rust `Setting` struct. */
 export interface Setting {
   key: string;
@@ -69,10 +79,29 @@ export interface Setting {
 
 /** Runtime tracking capabilities reported by the backend. */
 export interface TrackingDiagnostics {
+  platform: string;
   running: boolean;
   foreground_detection: string;
   idle_detection: string;
   poll_interval_seconds: number;
+}
+
+/** Summary returned by local backup export/import/inspection commands. */
+export interface LocalBackupSummary {
+  backup_id: string;
+  backup_version: number;
+  created_at: string;
+  app_version: string;
+  source_device_id: string;
+  schema_migrations: string[];
+  overall_checksum: string;
+  games_count: number;
+  sessions_count: number;
+  assets_count: number;
+  asset_file_count: number;
+  backup_path: string;
+  manifest_path: string;
+  restart_required: boolean;
 }
 
 /** Artwork entry plus an inline preview payload returned by the backend. */

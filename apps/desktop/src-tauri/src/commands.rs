@@ -8,10 +8,14 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
+use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
+use crate::backup::{self, LocalBackupSummary};
 use crate::db::connection::Database;
-use crate::db::models::{CreateGame, Game, Session, SessionEvent, Setting, UpdateGame};
-use crate::db::repo::{games, session_events, sessions, settings};
+use crate::db::models::{
+    BackupSnapshot, CreateGame, Game, Session, SessionEvent, Setting, UpdateGame,
+};
+use crate::db::repo::{backup_snapshots, games, session_events, sessions, settings};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::tracking::engine::TrackingEngine;
@@ -129,6 +133,81 @@ pub fn get_session_events_for_game(
 }
 
 // ---------------------------------------------------------------------------
+// Backup commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_backup_snapshots(
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<BackupSnapshot>, VaultimeError> {
+    backup_snapshots::list_snapshots(&db, 8)
+}
+
+#[tauri::command]
+pub fn export_local_backup(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    app_context: State<'_, AppContext>,
+    destination_dir: String,
+) -> Result<LocalBackupSummary, VaultimeError> {
+    let summary = backup::export_local_backup(
+        &db,
+        &asset_manager,
+        &app_context,
+        std::path::Path::new(&destination_dir),
+    )?;
+
+    let _ = backup_snapshots::create_snapshot(
+        &db,
+        Some(&app_context.device_id),
+        &summary.overall_checksum,
+        Some(&summary.backup_path),
+        Some("Local export"),
+    );
+
+    Ok(summary)
+}
+
+#[tauri::command]
+pub fn inspect_local_backup(path: String) -> Result<LocalBackupSummary, VaultimeError> {
+    backup::inspect_local_backup(std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub fn import_local_backup(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    app_context: State<'_, AppContext>,
+    engine: State<'_, TrackingEngine>,
+    path: String,
+) -> Result<LocalBackupSummary, VaultimeError> {
+    if !sessions::get_active_sessions(&db)?.is_empty() {
+        return Err(VaultimeError::Backup(
+            "close all live sessions before restoring a local backup".into(),
+        ));
+    }
+
+    engine.stop();
+
+    let summary = backup::import_local_backup(
+        &db,
+        &asset_manager,
+        &app_context,
+        std::path::Path::new(&path),
+    )?;
+
+    let _ = backup_snapshots::create_snapshot(
+        &db,
+        Some(&summary.source_device_id),
+        &summary.overall_checksum,
+        Some(&summary.backup_path),
+        Some("Local restore"),
+    );
+
+    Ok(summary)
+}
+
+// ---------------------------------------------------------------------------
 // Settings commands
 // ---------------------------------------------------------------------------
 
@@ -153,6 +232,7 @@ pub fn set_setting(
 
 #[derive(Debug, Serialize)]
 pub struct TrackingDiagnostics {
+    pub platform: String,
     pub running: bool,
     pub foreground_detection: String,
     pub idle_detection: String,
@@ -169,6 +249,7 @@ pub fn get_tracking_diagnostics(
     engine: State<'_, TrackingEngine>,
 ) -> Result<TrackingDiagnostics, VaultimeError> {
     Ok(TrackingDiagnostics {
+        platform: std::env::consts::OS.into(),
         running: engine.is_running(),
         foreground_detection: foreground_detection_strategy().into(),
         idle_detection: idle_detection_strategy().into(),
