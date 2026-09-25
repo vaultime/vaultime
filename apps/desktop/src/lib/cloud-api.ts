@@ -6,7 +6,7 @@ const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim(
 export const CLOUD_API_BASE_URL = (
   configuredCloudApiBaseUrl && configuredCloudApiBaseUrl.length > 0
     ? configuredCloudApiBaseUrl
-    : "https://api.codfishcloud.de"
+    : "https://vaultime.codfishcloud.de"
 ).replace(/\/+$/, "");
 
 export class CloudApiError extends Error {
