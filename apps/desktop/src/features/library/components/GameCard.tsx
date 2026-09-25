@@ -41,8 +41,6 @@ export function GameCard({
   lastPlayedAt = null,
   coverImageUrl = null,
   integrityStatus = "local",
-  suspiciousCount = 0,
-  recoveredCount = 0,
   onEdit,
   onDelete,
 }: GameCardProps) {
