@@ -1,0 +1,35 @@
+version: 2
+
+# Monthly grouped update PRs keep dependencies current without daily noise.
+updates:
+  - package-ecosystem: npm
+    directory: /apps/desktop
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /apps/desktop/src-tauri
+    schedule:
+      interval: monthly
+    groups:
+      desktop-crates:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /apps/api
+    schedule:
+      interval: monthly
+    groups:
+      api-crates:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

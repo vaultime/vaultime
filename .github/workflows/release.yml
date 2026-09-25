@@ -1,143 +1,103 @@
 name: Release
 
+# A version tag builds installers for Windows and Linux into a draft release,
+# then publishes it once every platform uploaded. A manual run only builds and
+# keeps the installers as workflow artifacts.
+
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-release:
+  build:
     name: Build (${{ matrix.os }})
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: macos-latest
-            platform: macos
-          - os: windows-latest
-            platform: windows
+        os: [ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
 
-      - name: Install system dependencies (Linux)
-        if: matrix.platform == 'linux'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
 
-      - name: Import Apple certificate (macOS)
-        if: matrix.platform == 'macos'
+      # Updater artifacts need the signing key. Tagged releases require it so
+      # installed apps can verify updates. Manual runs build without it.
+      - name: Check updater signing key
+        id: signing
+        shell: bash
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          if [ -n "$APPLE_CERTIFICATE" ]; then
-            echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-            security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-            security default-keychain -s build.keychain
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-            security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-            rm certificate.p12
+          if [ -n "$KEY" ]; then
+            echo "args=--config src-tauri/tauri.updater.conf.json" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY secret before tagging a release."
+            exit 1
           fi
 
-      - name: Build Tauri app
-        working-directory: apps/desktop
-        run: npx tauri build
+      - uses: tauri-apps/tauri-action@v1
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS notarization
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-      - name: Upload release artifacts
-        uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          files: |
-            apps/desktop/src-tauri/target/release/bundle/**/*.deb
-            apps/desktop/src-tauri/target/release/bundle/**/*.rpm
-            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
-            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
-            apps/desktop/src-tauri/target/release/bundle/**/*.msi
-            apps/desktop/src-tauri/target/release/bundle/**/*.exe
-            apps/desktop/src-tauri/target/release/bundle/**/*.sig
-            apps/desktop/src-tauri/target/release/bundle/**/latest.json
+          projectPath: apps/desktop
+          args: ${{ steps.signing.outputs.args }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: Vaultime ${{ github.ref_name }}
+          releaseBody: See CHANGELOG.md for the changes in this version.
+          releaseDraft: true
+          updaterJsonPreferNsis: true
+
+      - name: Keep installers
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vaultime-${{ runner.os }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+            apps/desktop/src-tauri/target/release/bundle/deb/*.deb
+            apps/desktop/src-tauri/target/release/bundle/rpm/*.rpm
+            apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
 
   publish:
-    name: Merge update manifests and publish
-    needs: build-and-release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    name: Publish release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download draft release assets
+      - name: Publish the draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p release-assets
-          gh release download "${{ github.ref_name }}" --dir release-assets --pattern "*.json" || true
-
-      - name: Merge update manifests
-        run: |
-          # Collect all platform latest.json files and merge into a single manifest
-          python3 -c "
-          import json, glob, os
-
-          merged = {'version': '${GITHUB_REF_NAME#v}', 'notes': 'Release ${GITHUB_REF_NAME}', 'pub_date': '$(date -u +%Y-%m-%dT%H:%M:%SZ)', 'platforms': {}}
-
-          for f in glob.glob('release-assets/*.json'):
-              try:
-                  data = json.load(open(f))
-                  if 'platforms' in data:
-                      merged['platforms'].update(data['platforms'])
-              except Exception:
-                  pass
-
-          if merged['platforms']:
-              with open('release-assets/latest.json', 'w') as out:
-                  json.dump(merged, out, indent=2)
-              print('Merged update manifest written')
-          else:
-              print('No platform manifests found, skipping merge')
-          "
-
-      - name: Upload merged manifest
-        if: hashFiles('release-assets/latest.json') != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" release-assets/latest.json --clobber
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.ref_name }}" --draft=false
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false

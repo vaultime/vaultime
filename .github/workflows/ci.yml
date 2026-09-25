@@ -4,145 +4,87 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  lint-frontend:
-    name: Lint frontend
-    runs-on: ubuntu-latest
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx eslint .
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
 
-  lint-backend:
-    name: Lint backend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Create frontend dist stub
-        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
-      - name: Check formatting
-        working-directory: apps/desktop/src-tauri
-        run: cargo fmt --check
-      - name: Clippy
-        working-directory: apps/desktop/src-tauri
-        run: cargo clippy --locked -- -D warnings
-
-  lint-api:
-    name: Lint API
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/api
-      - run: cargo fmt --check
-      - run: cargo clippy --locked --all-targets -- -D warnings
-
-  test-backend:
-    name: Test backend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Create frontend dist stub
-        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
-      - name: Run tests
-        working-directory: apps/desktop/src-tauri
-        run: cargo test --locked
-
-  test-api:
-    name: Test API
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/api
-      - run: cargo test --locked
-
-  build:
-    name: Build (${{ matrix.os }})
-    needs: [lint-frontend, lint-backend, lint-api, test-backend, test-api]
+  desktop:
+    name: Desktop core (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: macos-latest
-            platform: macos
-          - os: windows-latest
-            platform: windows
+        os: [ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/desktop/src-tauri
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+      # Installs the version pinned in rust-toolchain.toml.
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
-
-      - name: Install system dependencies (Linux)
-        if: matrix.platform == 'linux'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+      # The Tauri build script needs the frontend folder to exist.
+      - run: mkdir -p ../dist
+      - name: Format
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked
 
-      - name: Install frontend dependencies
-        working-directory: apps/desktop
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: apps/desktop
-        run: npm run build
-
-      - name: Build desktop core
-        working-directory: apps/desktop/src-tauri
-        run: cargo build --locked
+  api:
+    name: Cloud API
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked

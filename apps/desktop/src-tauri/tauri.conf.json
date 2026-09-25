@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicorbtt/tauri-v2-nightly-schema/main/schema/2.0.0/tauri.conf.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Vaultime",
   "version": "0.1.0",
   "identifier": "com.vaultime.app",
@@ -32,33 +32,36 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.icns"
     ],
     "category": "Game",
     "shortDescription": "Universal game library and trustworthy playtime tracker",
-    "longDescription": "Vaultime is a local-first, cross-platform game playtime tracker that records active and runtime sessions with integrity verification. Remote backup is being redesigned as an invite-only self-hosted service.",
+    "longDescription": "Vaultime is a local-first game library and playtime tracker. It records runtime, active and idle time for every session in a hash-chained local log, and can back up to an optional invite-only server.",
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ],
         "section": "games"
       },
       "rpm": {
-        "depends": ["webkit2gtk4.1", "gtk3"]
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3"
+        ]
       }
-    },
-    "macOS": {
-      "minimumSystemVersion": "10.15"
     },
     "windows": {
       "nsis": {
-        "installMode": "both"
+        "installMode": "currentUser"
       }
     }
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI1NjE2NDAwNzE1QUYxRDYKUldUVzhWcHhBR1JoSlFBRjhJUUdsL0o0Zy90cGN0RjVsMEZTT0lHZDRWdDZxWENCME01Q0lUMWwK",
       "endpoints": [
         "https://github.com/schwimmbeck/vaultime/releases/latest/download/latest.json"
       ]
