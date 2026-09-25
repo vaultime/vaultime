@@ -70,7 +70,7 @@ fn clean_title(raw: &str) -> String {
     }
 
     // Replace separators with spaces.
-    title = title.replace('_', " ").replace('-', " ").replace('.', " ");
+    title = title.replace(['_', '-', '.'], " ");
 
     // Collapse multiple spaces and trim.
     let parts: Vec<&str> = title.split_whitespace().collect();

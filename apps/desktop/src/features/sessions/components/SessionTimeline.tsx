@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import { Clock, Play } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { getSessionTrustStatus } from "@/lib/integrity";
 import { formatCompactDuration, formatDuration, formatSessionDate } from "@/lib/time";
@@ -28,12 +27,26 @@ function SessionRow({
   const isActive = !session.ended_at_wall;
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/75 px-4 py-3">
+    <div
+      className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 transition-colors ${
+        isActive
+          ? "border-green-500/30 bg-green-500/[0.04]"
+          : "border-border/70 bg-card/75 hover:bg-card"
+      }`}
+    >
       <div className="flex min-w-0 items-center gap-3">
         {isActive ? (
-          <Play className="h-4 w-4 shrink-0 text-green-500" />
+          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-green-500/15">
+            <Play className="h-3.5 w-3.5 text-green-400" />
+            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400" />
+            </span>
+          </div>
         ) : (
-          <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.05]">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
         )}
         <div className="min-w-0">
           {showGameName && (
@@ -49,23 +62,18 @@ function SessionRow({
 
       <div className="flex shrink-0 items-center gap-3">
         <div className="text-right">
-          <p className="text-sm tabular-nums text-foreground">
-            Runtime {formatDuration(session.runtime_ms)}
+          <p className="text-sm font-semibold tabular-nums text-foreground">
+            {formatDuration(session.runtime_ms)}
           </p>
-          <p className="text-xs tabular-nums text-muted-foreground">
-            Active {formatCompactDuration(session.active_ms)}
-            {" · "}
-            Idle {formatCompactDuration(session.idle_ms)}
+          <p className="text-[11px] tabular-nums text-muted-foreground">
+            {formatCompactDuration(session.active_ms)} active
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {isActive && (
-            <Badge
-              variant="outline"
-              className="border-green-500/50 text-green-500"
-            >
+            <span className="rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-400">
               Live
-            </Badge>
+            </span>
           )}
           <IntegrityBadge status={getSessionTrustStatus(session)} />
         </div>
@@ -84,9 +92,11 @@ export function SessionTimeline({
 
   if (groups.length === 0) {
     return (
-      <div className="flex h-48 flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-card/30">
-        <Clock className="mb-3 h-10 w-10 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+      <div className="flex h-48 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02]">
+        <div className="rounded-2xl bg-white/[0.04] p-3">
+          <Clock className="h-8 w-8 text-muted-foreground/40" />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">{emptyMessage}</p>
       </div>
     );
   }
@@ -94,24 +104,22 @@ export function SessionTimeline({
   return (
     <div className="space-y-6">
       {groups.map((group) => (
-        <section key={group.key} className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">
-                {group.label}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {group.sessions.length} session
-                {group.sessions.length === 1 ? "" : "s"}
-                {" · "}
-                {formatCompactDuration(group.activeMs)} active
-                {" · "}
-                {formatCompactDuration(group.runtimeMs)} runtime
-              </p>
-            </div>
+        <section key={group.key} className="space-y-2">
+          <div className="flex items-center justify-between gap-4 px-1">
+            <h3 className="text-sm font-bold text-foreground">
+              {group.label}
+            </h3>
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              {group.sessions.length} session
+              {group.sessions.length === 1 ? "" : "s"}
+              {" · "}
+              {formatCompactDuration(group.activeMs)} active
+              {" · "}
+              {formatCompactDuration(group.runtimeMs)} runtime
+            </p>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {group.sessions.map((session) => (
               <SessionRow
                 key={session.id}

@@ -90,7 +90,7 @@ pub fn count_unsynced_events(db: &Database) -> Result<u64> {
             [],
             |row| row.get::<_, i64>(0),
         )
-        .map(|count| count.max(0) as u64)
+        .map(|count| u64::try_from(count.max(0)).unwrap_or(0))
         .map_err(map_db)
     })
 }

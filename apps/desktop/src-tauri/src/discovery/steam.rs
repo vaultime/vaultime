@@ -170,10 +170,13 @@ fn find_app_manifests(steamapps_dir: &Path) -> Vec<PathBuf> {
     };
 
     entries
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| {
             let name = e.file_name().to_string_lossy().to_lowercase();
-            name.starts_with("appmanifest_") && name.ends_with(".acf")
+            name.starts_with("appmanifest_")
+                && std::path::Path::new(&name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("acf"))
         })
         .map(|e| e.path())
         .collect()
@@ -240,7 +243,7 @@ fn find_main_executable(install_dir: &Path) -> Option<PathBuf> {
         .max_depth(3)
         .follow_links(false)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
     {
         if !entry.file_type().is_file() {
             continue;
@@ -346,7 +349,7 @@ fn is_steam_tool(name: &str, app_id: &str) -> bool {
 /// Handles lines like: `"key"    "value"`
 fn extract_vdf_value(line: &str, key: &str) -> Option<String> {
     let trimmed = line.trim();
-    let target = format!("\"{}\"", key);
+    let target = format!("\"{key}\"");
 
     if !trimmed.starts_with(&target) {
         return None;

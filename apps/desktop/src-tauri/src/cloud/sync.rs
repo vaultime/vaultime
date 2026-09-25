@@ -41,6 +41,7 @@ struct SyncResponseRow {
 /// Run one sync pass: query unsynced events, upload them, mark as synced.
 ///
 /// Returns the number of events uploaded and how many remain.
+#[allow(clippy::too_many_lines)]
 pub async fn sync_events(
     db: &Arc<Database>,
     auth: &AuthManager,
@@ -132,7 +133,7 @@ pub async fn sync_events(
         }
 
         if row.server_received_at > last_sync_at {
-            last_sync_at = row.server_received_at.clone();
+            last_sync_at.clone_from(&row.server_received_at);
         }
 
         acknowledgements.push(SyncAck {

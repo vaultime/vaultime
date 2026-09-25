@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useMemo, useState } from "react";
-import { Flame, Gamepad2, Loader2, TimerReset } from "lucide-react";
+import { Gamepad2, Loader2, Zap } from "lucide-react";
 import { useGames } from "./useGames";
 import { useActiveSessions } from "../sessions/useSessions";
 import { AddGameDialog } from "./components/AddGameDialog";
@@ -11,13 +11,6 @@ import { EditGameDialog } from "./components/EditGameDialog";
 import { DeleteGameDialog } from "./components/DeleteGameDialog";
 import { GameCard } from "./components/GameCard";
 import { ActivityChart } from "@/components/charts/ActivityChart";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import type { Game, GameAssetView, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { summarizeIntegrity } from "@/lib/integrity";
@@ -38,7 +31,6 @@ export function LibraryPage() {
     Record<string, GameAssetView>
   >({});
 
-  // Fetch all sessions and preferred artwork for dashboard totals.
   useEffect(() => {
     Promise.all([api.listSessions(), api.listPreferredGameAssets()])
       .then(([sessions, assets]) => {
@@ -52,7 +44,6 @@ export function LibraryPage() {
       .catch(() => {});
   }, [games, activeSessions]);
 
-  // Build a set of currently running game IDs.
   const runningGameIds = useMemo(() => {
     const ids = new Set<string>();
     for (const s of activeSessions) {
@@ -61,7 +52,6 @@ export function LibraryPage() {
     return ids;
   }, [activeSessions]);
 
-  // Build total timing stats per game.
   const totalsByGame = useMemo(() => {
     const map: Record<
       string,
@@ -109,6 +99,7 @@ export function LibraryPage() {
 
     return map;
   }, [allSessions]);
+
   const libraryTotals = useMemo(
     () => getSessionTotals(allSessions),
     [allSessions],
@@ -127,11 +118,12 @@ export function LibraryPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Library</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-extrabold tracking-tight">Library</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {games.length > 0
               ? `${games.length} game${games.length === 1 ? "" : "s"} tracked`
               : "Your game collection and playtime at a glance."}
@@ -143,131 +135,143 @@ export function LibraryPage() {
         </div>
       </div>
 
+      {/* Hero dashboard */}
       {!loading && !error && games.length > 0 && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <Card className="relative overflow-hidden border border-border/70 bg-card/70">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(119,91,255,0.2),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(61,179,160,0.14),transparent_35%)]" />
-            <CardHeader className="relative">
-              <CardTitle className="flex items-center gap-2">
-                <Flame className="h-4 w-4 text-primary" />
-                Library Snapshot
-              </CardTitle>
-              <CardDescription>
-                Your recent pace and the games carrying the most active time.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="relative space-y-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
+          {/* Left — stats + chart */}
+          <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/60 p-6">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(135,88,255,0.2),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(59,210,180,0.1),transparent_50%)]" />
+
+            <div className="relative space-y-6">
+              {/* Stat pills */}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                <div className="rounded-2xl border border-[color:var(--color-chart-1)]/20 bg-[color:var(--color-chart-1)]/[0.06] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-chart-1)]">
                     Active Time
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">
+                  <p className="mt-2 text-2xl font-bold tabular-nums">
                     {formatCompactDuration(libraryTotals.activeMs)}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                <div className="rounded-2xl border border-[color:var(--color-chart-2)]/20 bg-[color:var(--color-chart-2)]/[0.06] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-chart-2)]">
                     Runtime
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">
+                  <p className="mt-2 text-2xl font-bold tabular-nums">
                     {formatCompactDuration(libraryTotals.runtimeMs)}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                <div className="rounded-2xl border border-[color:var(--color-chart-4)]/20 bg-[color:var(--color-chart-4)]/[0.06] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-chart-4)]">
                     Sessions
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">
+                  <p className="mt-2 text-2xl font-bold tabular-nums">
                     {libraryTotals.sessionsCount}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                <div className="rounded-2xl border border-[color:var(--color-chart-3)]/20 bg-[color:var(--color-chart-3)]/[0.06] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-chart-3)]">
                     Active Days
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">{activeDays}/14</p>
+                  <p className="mt-2 text-2xl font-bold tabular-nums">
+                    {activeDays}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      /14
+                    </span>
+                  </p>
                 </div>
               </div>
 
               <ActivityChart points={recentActivity} compact />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card className="border border-border/70">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TimerReset className="h-4 w-4 text-primary" />
+          {/* Right — top titles */}
+          <div className="rounded-3xl border border-border/70 bg-card/60 p-6">
+            <div className="mb-5 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-[color:var(--color-chart-1)]" />
+              <h2 className="text-sm font-bold uppercase tracking-[0.18em]">
                 Top Titles
-              </CardTitle>
-              <CardDescription>
-                Highest active playtime across your tracked library.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {topGames.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                  Start a tracked session to populate library rankings.
-                </div>
-              ) : (
-                topGames.map((entry, index) => (
+              </h2>
+            </div>
+
+            {topGames.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
+                Play a tracked game to see rankings.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {topGames.map((entry, index) => (
                   <div
                     key={entry.game.id}
-                    className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
+                    className="group/rank flex items-center gap-3 rounded-2xl border border-border/70 bg-white/[0.03] px-4 py-3 transition-colors hover:bg-white/[0.06]"
                   >
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                        #{index + 1}
-                      </p>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-chart-1)]/15 text-xs font-bold text-[color:var(--color-chart-1)]">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {entry.game.title}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="truncate text-[11px] text-muted-foreground">
                         {entry.lastPlayedAt
-                          ? `Last played ${formatCalendarDay(entry.lastPlayedAt)}`
-                          : "No launch history yet"}
+                          ? `Last ${formatCalendarDay(entry.lastPlayedAt)}`
+                          : "No sessions yet"}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold">
+                      <p className="text-sm font-bold tabular-nums">
                         {formatCompactDuration(entry.activeMs)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[11px] tabular-nums text-muted-foreground">
                         {entry.sessionsCount} session
                         {entry.sessionsCount === 1 ? "" : "s"}
                       </p>
                     </div>
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
+      {/* Loading */}
       {loading && (
         <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       )}
 
+      {/* Error */}
       {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
 
+      {/* Empty state */}
       {!loading && !error && games.length === 0 && (
-        <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed border-border">
-          <Gamepad2 className="mb-3 h-10 w-10 text-muted-foreground/50" />
-          <p className="text-sm text-muted-foreground">
-            No games added yet. Click &quot;Add Game&quot; to get started.
+        <div className="flex h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02]">
+          <div className="rounded-2xl bg-[color:var(--color-chart-1)]/10 p-4">
+            <Gamepad2 className="h-10 w-10 text-[color:var(--color-chart-1)]/60" />
+          </div>
+          <p className="mt-4 text-sm font-medium text-foreground">
+            Your vault is empty
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Add a game manually or discover your Steam library to get started.
+          </p>
+          <div className="mt-5 flex items-center gap-2">
+            <DiscoverGamesDialog onImported={refresh} />
+            <AddGameDialog onAdded={refresh} />
+          </div>
         </div>
       )}
 
+      {/* Game grid */}
       {!loading && games.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="stagger-grid grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {games.map((game) => (
             <GameCard
               key={game.id}

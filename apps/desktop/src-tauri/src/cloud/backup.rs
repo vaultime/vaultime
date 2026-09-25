@@ -489,12 +489,11 @@ fn resolve_restore_path(root: &Path, relative_path: &str) -> Result<PathBuf> {
 }
 
 fn content_type_for_path(path: &str) -> &'static str {
-    if path.ends_with(".json") {
-        "application/json"
-    } else if path.ends_with(".png") {
-        "image/png"
-    } else {
-        "application/octet-stream"
+    let p = std::path::Path::new(path);
+    match p.extension().and_then(|e| e.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("json") => "application/json",
+        Some(ext) if ext.eq_ignore_ascii_case("png") => "image/png",
+        _ => "application/octet-stream",
     }
 }
 

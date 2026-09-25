@@ -152,6 +152,7 @@ pub fn end_session(
 }
 
 /// Persists the latest timing counters for an open session.
+#[allow(clippy::too_many_arguments)]
 pub fn update_session_timing(
     db: &Database,
     session_id: &str,
@@ -420,7 +421,7 @@ pub fn count_sessions_started_after(db: &Database, timestamp: &str) -> Result<u6
             [timestamp],
             |row| row.get::<_, i64>(0),
         )
-        .map(|count| count.max(0) as u64)
+        .map(|count| u64::try_from(count.max(0)).unwrap_or(0))
         .map_err(map_db)
     })
 }
