@@ -5,6 +5,8 @@
 
 use std::collections::HashSet;
 use std::path::Path;
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
 
 use log::info;
 use walkdir::WalkDir;

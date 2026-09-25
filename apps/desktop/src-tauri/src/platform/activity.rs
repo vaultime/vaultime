@@ -3,6 +3,7 @@
 
 //! Platform activity probing for active window and idle detection.
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::process::Command;
 use std::time::Duration;
 
