@@ -3,12 +3,12 @@
 #
 #   VAULTIME_DEPLOY_HOST=root@server scripts/deploy-api.sh [domain]
 #
-# domain defaults to api.codfishcloud.de. On Windows, set SSH and SCP to the
+# domain defaults to vaultime.codfishcloud.de. On Windows, set SSH and SCP to the
 # Windows OpenSSH binaries when the key lives in the Windows ssh-agent.
 set -euo pipefail
 
 host=${VAULTIME_DEPLOY_HOST:?set VAULTIME_DEPLOY_HOST, for example root@your-server}
-domain=${1:-api.codfishcloud.de}
+domain=${1:-vaultime.codfishcloud.de}
 ssh_cmd=${SSH:-ssh}
 scp_cmd=${SCP:-scp}
 
