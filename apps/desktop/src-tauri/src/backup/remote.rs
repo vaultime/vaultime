@@ -110,6 +110,7 @@ pub fn upload_remote_backup(
     app_context: &AppContext,
     api_base_url: &str,
     access_token: &str,
+    account_id: &str,
     client_device_id: Option<&str>,
     label: Option<&str>,
 ) -> Result<RemoteBackupUploadResult> {
@@ -124,7 +125,7 @@ pub fn upload_remote_backup(
         let archive_path = staging_dir.join(format!("{}.zip", local_summary.backup_id));
         create_archive(Path::new(&local_summary.backup_path), &archive_path)?;
         let encrypted_path = staging_dir.join(format!("{}.enc", local_summary.backup_id));
-        let backup_key = secure_storage::load_cloud_backup_key()?;
+        let backup_key = secure_storage::load_cloud_backup_key(account_id)?;
         encrypt_archive(&archive_path, &encrypted_path, &backup_key)?;
 
         let (archive_size_bytes, archive_checksum) = hash_file(&encrypted_path)?;
@@ -154,6 +155,7 @@ pub fn restore_remote_backup(
     app_context: &AppContext,
     api_base_url: &str,
     access_token: &str,
+    account_id: &str,
     backup_id: &str,
 ) -> Result<RemoteBackupRestoreResult> {
     let staging_dir = create_staging_dir(&app_context.app_dir, "restore")?;
@@ -190,7 +192,7 @@ pub fn restore_remote_backup(
         }
 
         let decrypted_archive_path = staging_dir.join(format!("{backup_id}.zip"));
-        let backup_key = secure_storage::load_cloud_backup_key()?;
+        let backup_key = secure_storage::load_cloud_backup_key(account_id)?;
         decrypt_archive(&archive_path, &decrypted_archive_path, &backup_key)?;
 
         let extracted_dir = staging_dir.join("extracted");
@@ -302,8 +304,7 @@ fn ensure_success(response: Response) -> Result<Response> {
     let status = response.status();
     let body = response.text().unwrap_or_default();
     let message = serde_json::from_str::<ApiErrorEnvelope>(&body)
-        .map(|payload| payload.error.message)
-        .unwrap_or_else(|_| body.trim().to_string())
+        .map_or_else(|_| body.trim().to_string(), |payload| payload.error.message)
         .trim()
         .to_string();
 
@@ -453,7 +454,7 @@ fn hash_file(path: &Path) -> Result<(u64, String)> {
     let mut file = File::open(path).map_err(map_backup_io)?;
     let mut hasher = Sha256::new();
     let mut bytes = 0_u64;
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
 
     loop {
         let read = file.read(&mut buffer).map_err(map_backup_io)?;

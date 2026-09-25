@@ -46,10 +46,10 @@ jobs:
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
       - name: Check formatting
         working-directory: apps/desktop/src-tauri
-        run: cargo fmt -- --check
+        run: cargo fmt --check
       - name: Clippy
         working-directory: apps/desktop/src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked -- -D warnings
 
   lint-api:
     name: Lint API
@@ -65,8 +65,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/api
-      - run: cargo fmt -- --check
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
 
   test-backend:
     name: Test backend
@@ -85,7 +85,7 @@ jobs:
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
       - name: Run tests
         working-directory: apps/desktop/src-tauri
-        run: cargo test
+        run: cargo test --locked
 
   test-api:
     name: Test API
@@ -99,7 +99,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/api
-      - run: cargo test
+      - run: cargo test --locked
 
   build:
     name: Build (${{ matrix.os }})
@@ -139,8 +139,10 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      - name: Build Tauri app
+      - name: Build frontend
         working-directory: apps/desktop
-        run: npx tauri build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
+        run: npm run build
+
+      - name: Build desktop core
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --locked

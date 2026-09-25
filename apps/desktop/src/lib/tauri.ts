@@ -30,6 +30,12 @@ export async function loadCloudSessionSecure(): Promise<string | null> {
   return invoke<string | null>("load_cloud_session_secure");
 }
 
+export async function hasCloudBackupKeySecure(
+  accountId: string,
+): Promise<boolean> {
+  return invoke<boolean>("has_cloud_backup_key_secure", { accountId });
+}
+
 export async function storeCloudSessionSecure(
   sessionJson: string,
 ): Promise<boolean> {
@@ -42,18 +48,18 @@ export async function clearCloudSessionSecure(): Promise<boolean> {
 
 export async function storeCloudBackupKeySecure(
   accountId: string,
-  email: string,
-  password: string,
+  passphrase: string,
 ): Promise<boolean> {
   return invoke<boolean>("store_cloud_backup_key_secure", {
     accountId,
-    email,
-    password,
+    passphrase,
   });
 }
 
-export async function clearCloudBackupKeySecure(): Promise<boolean> {
-  return invoke<boolean>("clear_cloud_backup_key_secure");
+export async function clearCloudBackupKeySecure(
+  accountId: string,
+): Promise<boolean> {
+  return invoke<boolean>("clear_cloud_backup_key_secure", { accountId });
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +172,14 @@ export async function importLocalBackup(
 export async function uploadRemoteBackup(
   apiBaseUrl: string,
   accessToken: string,
+  accountId: string,
   clientDeviceId?: string | null,
   label?: string | null,
 ): Promise<CloudBackupUploadResult> {
   return invoke<CloudBackupUploadResult>("upload_remote_backup", {
     apiBaseUrl,
     accessToken,
+    accountId,
     clientDeviceId,
     label,
   });
@@ -180,11 +188,13 @@ export async function uploadRemoteBackup(
 export async function restoreRemoteBackup(
   apiBaseUrl: string,
   accessToken: string,
+  accountId: string,
   backupId: string,
 ): Promise<CloudBackupRestoreResult> {
   return invoke<CloudBackupRestoreResult>("restore_remote_backup", {
     apiBaseUrl,
     accessToken,
+    accountId,
     backupId,
   });
 }

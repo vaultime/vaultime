@@ -84,9 +84,42 @@ function formatApiHostname(value: string) {
   }
 }
 
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function remoteBackupCacheKey(accountId: string) {
+  return `vaultime.cloud.backups.${accountId}`;
+}
+
+function loadCachedRemoteBackups(accountId: string): CloudBackupRecord[] | null {
+  try {
+    const raw = window.localStorage.getItem(remoteBackupCacheKey(accountId));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as CloudBackupRecord[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistCachedRemoteBackups(
+  accountId: string,
+  backups: CloudBackupRecord[],
+) {
+  window.localStorage.setItem(
+    remoteBackupCacheKey(accountId),
+    JSON.stringify(backups),
+  );
+}
+
 export function CloudPage() {
   const {
     apiBaseUrl,
+    backupKeyReady,
     createAdminInvite,
     device,
     deviceError,
@@ -98,6 +131,7 @@ export function CloudPage() {
     refreshSession,
     registerCurrentDevice,
     restoreRemoteBackup,
+    setBackupPassphrase,
     session,
     signUp,
     uploadRemoteBackup,
@@ -111,6 +145,7 @@ export function CloudPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [backupKeyBusy, setBackupKeyBusy] = useState(false);
   const [lastInvite, setLastInvite] = useState<CloudAdminInvite | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [remoteBackups, setRemoteBackups] = useState<CloudBackupRecord[]>([]);
@@ -119,19 +154,36 @@ export function CloudPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [signUpEmail, setSignUpEmail] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
+  const [signUpBackupPassphrase, setSignUpBackupPassphrase] = useState("");
+  const [signUpBackupPassphraseConfirm, setSignUpBackupPassphraseConfirm] =
+    useState("");
+  const [deviceBackupPassphrase, setDeviceBackupPassphrase] = useState("");
+  const [deviceBackupPassphraseConfirm, setDeviceBackupPassphraseConfirm] =
+    useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [invitePrefix, setInvitePrefix] = useState("VTLINV");
   const [inviteMaxRedemptions, setInviteMaxRedemptions] = useState("1");
   const [inviteExpiry, setInviteExpiry] = useState("");
   const [inviteNote, setInviteNote] = useState("");
 
-  const loadBackups = useEffectEvent(async () => {
+  const loadBackups = useEffectEvent(async (accountId: string) => {
     try {
       setBackupsLoading(true);
+      setErrorMessage(null);
       const backups = await listBackups();
       setRemoteBackups(backups);
+      persistCachedRemoteBackups(accountId, backups);
     } catch (error) {
-      setErrorMessage(String(error));
+      const cached = loadCachedRemoteBackups(accountId);
+      if (cached) {
+        setErrorMessage(null);
+        setRemoteBackups(cached);
+        setStatusMessage(
+          "Cloud API unavailable. Showing the last cached remote backup list.",
+        );
+      } else {
+        setErrorMessage(describeError(error));
+      }
     } finally {
       setBackupsLoading(false);
     }
@@ -143,7 +195,7 @@ export function CloudPage() {
       return;
     }
 
-    void loadBackups();
+    void loadBackups(session.user.id);
   }, [session]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -156,7 +208,7 @@ export function CloudPage() {
       const nextSession = await login(loginEmail, loginPassword);
       setStatusMessage(`Signed in as ${nextSession.user.email}.`);
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setAuthBusy(false);
     }
@@ -169,15 +221,24 @@ export function CloudPage() {
     setStatusMessage(null);
 
     try {
+      if (signUpBackupPassphrase.trim().length < 12) {
+        throw new Error("Backup passphrase must be at least 12 characters.");
+      }
+      if (signUpBackupPassphrase !== signUpBackupPassphraseConfirm) {
+        throw new Error("Backup passphrase confirmation does not match.");
+      }
       const nextSession = await signUp(
         signUpEmail,
         signUpPassword,
         inviteCode,
+        signUpBackupPassphrase,
       );
       setStatusMessage(`Cloud account created for ${nextSession.user.email}.`);
       setInviteCode("");
+      setSignUpBackupPassphrase("");
+      setSignUpBackupPassphraseConfirm("");
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setAuthBusy(false);
     }
@@ -196,7 +257,7 @@ export function CloudPage() {
       }
       setStatusMessage("Cloud session refreshed.");
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setAuthBusy(false);
     }
@@ -213,7 +274,7 @@ export function CloudPage() {
         setStatusMessage(`Device registered as ${registered.device_name}.`);
       }
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setDeviceBusy(false);
     }
@@ -228,9 +289,34 @@ export function CloudPage() {
       await logout();
       setStatusMessage("Signed out of cloud backup.");
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setAuthBusy(false);
+    }
+  }
+
+  async function handleSetBackupPassphrase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBackupKeyBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      if (deviceBackupPassphrase.trim().length < 12) {
+        throw new Error("Backup passphrase must be at least 12 characters.");
+      }
+      if (deviceBackupPassphrase !== deviceBackupPassphraseConfirm) {
+        throw new Error("Backup passphrase confirmation does not match.");
+      }
+
+      await setBackupPassphrase(deviceBackupPassphrase);
+      setDeviceBackupPassphrase("");
+      setDeviceBackupPassphraseConfirm("");
+      setStatusMessage("Backup passphrase unlocked for this device.");
+    } catch (error) {
+      setErrorMessage(describeError(error));
+    } finally {
+      setBackupKeyBusy(false);
     }
   }
 
@@ -257,7 +343,7 @@ export function CloudPage() {
       setLastInvite(generated);
       setStatusMessage("New invite key generated.");
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setInviteBusy(false);
     }
@@ -273,18 +359,31 @@ export function CloudPage() {
       setCopiedInvite(true);
       setStatusMessage("Invite code copied.");
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     }
   }
 
   async function handleReloadBackups() {
+    if (!session) {
+      return;
+    }
+
     setErrorMessage(null);
     try {
       setBackupsLoading(true);
       const backups = await listBackups();
       setRemoteBackups(backups);
+      persistCachedRemoteBackups(session.user.id, backups);
     } catch (error) {
-      setErrorMessage(String(error));
+      const cached = loadCachedRemoteBackups(session.user.id);
+      if (cached) {
+        setRemoteBackups(cached);
+        setStatusMessage(
+          "Cloud API unavailable. Showing the last cached remote backup list.",
+        );
+      } else {
+        setErrorMessage(describeError(error));
+      }
     } finally {
       setBackupsLoading(false);
     }
@@ -297,15 +396,21 @@ export function CloudPage() {
 
     try {
       const result = await uploadRemoteBackup();
-      setRemoteBackups((current) => [
-        result.backup,
-        ...current.filter((backup) => backup.id !== result.backup.id),
-      ]);
+      setRemoteBackups((current) => {
+        const next = [
+          result.backup,
+          ...current.filter((backup) => backup.id !== result.backup.id),
+        ];
+        if (session) {
+          persistCachedRemoteBackups(session.user.id, next);
+        }
+        return next;
+      });
       setStatusMessage(
         `Remote backup uploaded with ${result.payload_summary.games_count} games and ${result.payload_summary.sessions_count} sessions.`,
       );
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setRemoteBackupBusy(false);
     }
@@ -330,7 +435,7 @@ export function CloudPage() {
           : "Remote backup restored.",
       );
     } catch (error) {
-      setErrorMessage(String(error));
+      setErrorMessage(describeError(error));
     } finally {
       setRemoteBackupBusy(false);
     }
@@ -399,11 +504,8 @@ export function CloudPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 API host
               </p>
-              <p className="mt-2 text-sm font-semibold tracking-tight">
+              <p className="mt-2 break-all text-sm font-semibold tracking-tight">
                 {formatApiHostname(apiBaseUrl)}
-              </p>
-              <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
-                {apiBaseUrl}
               </p>
             </div>
             <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
@@ -473,10 +575,10 @@ export function CloudPage() {
             <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
               <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
               <p>
-                The current backup key is derived locally from the login
-                credentials and retained in OS secure storage, which protects
-                backup blobs at rest on the VPS. A separate zero-knowledge
-                backup passphrase is still future hardening.
+                Remote backups are encrypted from a separate backup passphrase
+                that stays on this device and is never sent to the VPS. You
+                need the same passphrase on every device that should create or
+                restore cloud backups.
               </p>
             </div>
           </CardContent>
@@ -489,8 +591,7 @@ export function CloudPage() {
             <CardHeader>
               <CardTitle>Sign In</CardTitle>
               <CardDescription>
-                Use an existing cloud account. The admin bootstrap account can
-                sign in here too.
+                Use an existing cloud account.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -570,6 +671,34 @@ export function CloudPage() {
                     onChange={(event) => setInviteCode(event.target.value)}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-signup-backup-passphrase">
+                    Backup passphrase
+                  </Label>
+                  <Input
+                    id="cloud-signup-backup-passphrase"
+                    type="password"
+                    autoComplete="new-password"
+                    value={signUpBackupPassphrase}
+                    onChange={(event) =>
+                      setSignUpBackupPassphrase(event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-signup-backup-passphrase-confirm">
+                    Confirm backup passphrase
+                  </Label>
+                  <Input
+                    id="cloud-signup-backup-passphrase-confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    value={signUpBackupPassphraseConfirm}
+                    onChange={(event) =>
+                      setSignUpBackupPassphraseConfirm(event.target.value)
+                    }
+                  />
+                </div>
                 <Button
                   type="submit"
                   className="w-full"
@@ -577,7 +706,9 @@ export function CloudPage() {
                     authBusy ||
                     !signUpEmail.trim() ||
                     !signUpPassword ||
-                    !inviteCode.trim()
+                    !inviteCode.trim() ||
+                    !signUpBackupPassphrase ||
+                    !signUpBackupPassphraseConfirm
                   }
                 >
                   {authBusy ? (
@@ -656,6 +787,82 @@ export function CloudPage() {
                     Sign out
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border/70 bg-card/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-primary" />
+                  Backup passphrase
+                </CardTitle>
+                <CardDescription>
+                  This device needs your separate backup passphrase before it
+                  can create or restore encrypted remote backups.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {backupKeyReady ? (
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                    Backup passphrase is unlocked on this device. It stays in
+                    OS secure storage and is not sent to the VPS.
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 text-sm text-muted-foreground">
+                      If this is a new cloud account, choose a new backup
+                      passphrase now. If this account already has remote
+                      backups, enter the same passphrase that was used before.
+                    </div>
+                    <form className="space-y-4" onSubmit={handleSetBackupPassphrase}>
+                      <div className="space-y-2">
+                        <Label htmlFor="device-backup-passphrase">
+                          Backup passphrase
+                        </Label>
+                        <Input
+                          id="device-backup-passphrase"
+                          type="password"
+                          autoComplete="new-password"
+                          value={deviceBackupPassphrase}
+                          onChange={(event) =>
+                            setDeviceBackupPassphrase(event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="device-backup-passphrase-confirm">
+                          Confirm backup passphrase
+                        </Label>
+                        <Input
+                          id="device-backup-passphrase-confirm"
+                          type="password"
+                          autoComplete="new-password"
+                          value={deviceBackupPassphraseConfirm}
+                          onChange={(event) =>
+                            setDeviceBackupPassphraseConfirm(event.target.value)
+                          }
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={
+                          backupKeyBusy ||
+                          !deviceBackupPassphrase ||
+                          !deviceBackupPassphraseConfirm
+                        }
+                      >
+                        {backupKeyBusy ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Unlocking
+                          </>
+                        ) : (
+                          "Unlock backups on this device"
+                        )}
+                      </Button>
+                    </form>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -744,7 +951,7 @@ export function CloudPage() {
                 <div className="flex flex-wrap gap-3">
                   <Button
                     onClick={() => void handleCreateRemoteBackup()}
-                    disabled={remoteBackupBusy}
+                    disabled={remoteBackupBusy || !backupKeyReady}
                   >
                     {remoteBackupBusy ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -765,6 +972,12 @@ export function CloudPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              {!backupKeyReady && (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 text-sm text-muted-foreground">
+                  Unlock the backup passphrase on this device before creating
+                  or restoring encrypted remote backups.
+                </div>
+              )}
               {backupsLoading ? (
                 <div className="flex h-24 items-center justify-center rounded-2xl border border-border/70 bg-muted/20">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -863,9 +1076,13 @@ export function CloudPage() {
                     )}
                     <div className="mt-4 flex justify-end">
                       <Button
-                        variant="outline"
-                        onClick={() => openRestoreDialog(backup)}
-                        disabled={remoteBackupBusy || backup.status !== "complete"}
+                      variant="outline"
+                      onClick={() => openRestoreDialog(backup)}
+                        disabled={
+                          remoteBackupBusy ||
+                          backup.status !== "complete" ||
+                          !backupKeyReady
+                        }
                       >
                         <ArchiveRestore className="h-4 w-4" />
                         Restore to this device

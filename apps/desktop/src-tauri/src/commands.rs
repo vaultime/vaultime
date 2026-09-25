@@ -50,18 +50,22 @@ pub fn clear_cloud_session_secure() -> Result<bool, VaultimeError> {
 }
 
 #[tauri::command]
+pub fn has_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
+    secure_storage::has_cloud_backup_key(&account_id)
+}
+
+#[tauri::command]
 pub fn store_cloud_backup_key_secure(
     account_id: String,
-    email: String,
-    password: String,
+    passphrase: String,
 ) -> Result<bool, VaultimeError> {
-    secure_storage::store_cloud_backup_key(&account_id, &email, &password)?;
+    secure_storage::store_cloud_backup_key(&account_id, &passphrase)?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn clear_cloud_backup_key_secure() -> Result<bool, VaultimeError> {
-    secure_storage::clear_cloud_backup_key()?;
+pub fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
+    secure_storage::clear_cloud_backup_key(&account_id)?;
     Ok(true)
 }
 
@@ -258,6 +262,7 @@ pub fn upload_remote_backup(
     app_context: State<'_, AppContext>,
     api_base_url: String,
     access_token: String,
+    account_id: String,
     client_device_id: Option<String>,
     label: Option<String>,
 ) -> Result<RemoteBackupUploadResult, VaultimeError> {
@@ -266,6 +271,7 @@ pub fn upload_remote_backup(
         &app_context,
         &api_base_url,
         &access_token,
+        &account_id,
         client_device_id.as_deref(),
         label.as_deref(),
     )?;
@@ -288,6 +294,7 @@ pub fn restore_remote_backup(
     engine: State<'_, TrackingEngine>,
     api_base_url: String,
     access_token: String,
+    account_id: String,
     backup_id: String,
 ) -> Result<RemoteBackupRestoreResult, VaultimeError> {
     if !sessions::get_active_sessions(&db)?.is_empty() {
@@ -303,6 +310,7 @@ pub fn restore_remote_backup(
         &app_context,
         &api_base_url,
         &access_token,
+        &account_id,
         &backup_id,
     )?;
 

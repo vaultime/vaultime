@@ -97,6 +97,12 @@ impl From<sqlx::Error> for AppError {
     }
 }
 
+impl From<sqlx::migrate::MigrateError> for AppError {
+    fn from(error: sqlx::migrate::MigrateError) -> Self {
+        Self::internal(format!("database migration error: {error}"))
+    }
+}
+
 impl From<std::io::Error> for AppError {
     fn from(error: std::io::Error) -> Self {
         Self::internal(format!("i/o error: {error}"))

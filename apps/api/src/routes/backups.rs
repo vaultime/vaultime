@@ -21,12 +21,6 @@ use crate::auth::AuthenticatedAccount;
 use crate::error::{AppError, AppResult};
 use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
 
-const MAX_BACKUP_BYTES: i64 = 512 * 1024 * 1024;
-const MAX_PENDING_BACKUPS_PER_ACCOUNT: i64 = 1;
-const MAX_COMPLETE_BACKUPS_PER_ACCOUNT: i64 = 30;
-const MIN_BACKUP_INTERVAL_SECONDS: i64 = 15 * 60;
-const STALE_PENDING_BACKUP_SECONDS: i64 = 60 * 60;
-
 pub async fn list_backups(
     auth: AuthenticatedAccount,
     State(state): State<AppState>,
@@ -182,16 +176,17 @@ pub async fn upload_backup_content(
         .map_err(std::io::Error::other);
     let mut hasher = Sha256::new();
     let mut size_bytes = 0_i64;
+    let max_backup_bytes = state.config.max_backup_bytes;
 
     while let Some(chunk) = body_stream.try_next().await? {
         size_bytes += i64::try_from(chunk.len())
             .map_err(|_| AppError::internal("backup payload length overflow"))?;
-        if size_bytes > MAX_BACKUP_BYTES {
+        if size_bytes > max_backup_bytes {
             let _ = fs::remove_file(&temp_path).await;
             delete_backup(&state, auth.account_id, backup_id).await?;
             return Err(AppError::bad_request(format!(
                 "backup exceeds the current {} MiB size limit",
-                MAX_BACKUP_BYTES / (1024 * 1024)
+                max_backup_bytes / (1024 * 1024)
             )));
         }
         hasher.update(&chunk);
@@ -347,7 +342,7 @@ async fn prune_stale_pending_backups(state: &AppState, account_id: Uuid) -> AppR
         "#,
     )
     .bind(account_id)
-    .bind(STALE_PENDING_BACKUP_SECONDS)
+    .bind(state.config.stale_pending_backup_seconds)
     .execute(&state.db)
     .await?;
 
@@ -355,6 +350,10 @@ async fn prune_stale_pending_backups(state: &AppState, account_id: Uuid) -> AppR
 }
 
 async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<()> {
+    let max_pending_backups = state.config.max_pending_backups_per_account;
+    let max_complete_backups = state.config.max_complete_backups_per_account;
+    let min_backup_interval_seconds = state.config.min_backup_interval_seconds;
+
     let pending_backups = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COUNT(*)
@@ -366,7 +365,7 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
     .fetch_one(&state.db)
     .await?;
 
-    if pending_backups >= MAX_PENDING_BACKUPS_PER_ACCOUNT {
+    if pending_backups >= max_pending_backups {
         return Err(AppError::conflict(
             "a backup upload is already pending for this account",
         ));
@@ -383,10 +382,10 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
     .fetch_one(&state.db)
     .await?;
 
-    if complete_backups >= MAX_COMPLETE_BACKUPS_PER_ACCOUNT {
+    if complete_backups >= max_complete_backups {
         return Err(AppError::conflict(format!(
             "backup quota reached; keep at most {} remote backups per account for now",
-            MAX_COMPLETE_BACKUPS_PER_ACCOUNT
+            max_complete_backups
         )));
     }
 
@@ -405,11 +404,11 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
 
     if let Some(last_uploaded_at) = last_uploaded_at {
         let earliest_next_backup =
-            last_uploaded_at + chrono::Duration::seconds(MIN_BACKUP_INTERVAL_SECONDS);
+            last_uploaded_at + chrono::Duration::seconds(min_backup_interval_seconds);
         if earliest_next_backup > chrono::Utc::now() {
             return Err(AppError::conflict(format!(
                 "wait at least {} minutes between remote backups",
-                MIN_BACKUP_INTERVAL_SECONDS / 60
+                min_backup_interval_seconds / 60
             )));
         }
     }

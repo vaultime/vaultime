@@ -39,6 +39,8 @@ async fn main() -> Result<(), error::AppError> {
         .connect(&config.database_url)
         .await?;
 
+    sqlx::migrate!().run(&db).await?;
+
     let state = AppState {
         config: Arc::clone(&config),
         db,

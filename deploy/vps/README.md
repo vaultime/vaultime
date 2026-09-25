@@ -24,6 +24,7 @@ self-hosted Vaultime cloud stack on your VPS.
 - PostgreSQL on the VPS
 - encrypted backup files stored under `/srv/vaultime/backups`
 - source for the API lives in `apps/api` in this repo
+- pending PostgreSQL migrations are applied automatically by the API on startup
 
 ## Suggested install paths
 

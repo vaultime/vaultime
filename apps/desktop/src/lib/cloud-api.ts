@@ -78,13 +78,21 @@ async function cloudRequest<T>(
     headers.set("Authorization", `Bearer ${options.accessToken}`);
   }
 
-  const response = await fetch(new URL(path, CLOUD_API_BASE_URL), {
-    method: options.method ?? "GET",
-    headers,
-    body:
-      options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: options.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(new URL(path, CLOUD_API_BASE_URL), {
+      method: options.method ?? "GET",
+      headers,
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: options.signal,
+    });
+  } catch {
+    throw new CloudApiError(
+      "Cloud API unavailable. Check your connection or VPS status.",
+      0,
+    );
+  }
 
   if (response.status === 204) {
     return undefined as T;

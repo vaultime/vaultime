@@ -20,6 +20,7 @@ import {
   clearCloudBackupKeySecure,
   clearCloudSessionSecure,
   getAppVersion,
+  hasCloudBackupKeySecure,
   loadCloudSessionSecure,
   restoreRemoteBackup as restoreRemoteBackupCommand,
   storeCloudBackupKeySecure,
@@ -45,13 +46,20 @@ interface CloudSessionContextValue {
   session: CloudAuthSession | null;
   device: CloudDevice | null;
   deviceError: string | null;
+  backupKeyReady: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<CloudAuthSession>;
+  login: (
+    email: string,
+    password: string,
+    backupPassphrase?: string | null,
+  ) => Promise<CloudAuthSession>;
   signUp: (
     email: string,
     password: string,
     inviteCode: string,
+    backupPassphrase: string,
   ) => Promise<CloudAuthSession>;
+  setBackupPassphrase: (passphrase: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<CloudAuthSession | null>;
   registerCurrentDevice: () => Promise<CloudDevice | null>;
@@ -70,6 +78,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [backupKeyReady, setBackupKeyReady] = useState(false);
   const sessionRef = useRef<CloudAuthSession | null>(null);
   const bootstrappedRef = useRef(false);
   const appVersionRef = useRef<string | null>(null);
@@ -101,10 +110,11 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       }
 
       applySession(stored);
+      await syncBackupKeyState(stored);
 
       if (isExpired(stored.refresh_expires_at, 0)) {
         applyClearedSession();
-        void clearPersistedSessionStorage();
+        void clearPersistedSessionStorage(stored.user.id);
         if (!cancelled) {
           setInitializing(false);
         }
@@ -118,14 +128,15 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         }
         applySession(refreshed);
         await persistCloudSession(refreshed);
+        await syncBackupKeyState(refreshed);
         void restoreDeviceRegistration(refreshed);
       } catch (error) {
         if (!cancelled) {
           if (shouldClearPersistedSession(error)) {
             applyClearedSession();
-            void clearPersistedSessionStorage();
+            void clearPersistedSessionStorage(stored.user.id);
           } else {
-            setDeviceError(`Cloud API unavailable: ${String(error)}`);
+            setDeviceError(`Cloud API unavailable: ${describeError(error)}`);
           }
         }
       } finally {
@@ -152,35 +163,68 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setDevice(null);
     setDeviceError(null);
+    setBackupKeyReady(false);
   }
 
-  async function login(email: string, password: string) {
+  async function login(
+    email: string,
+    password: string,
+    backupPassphrase?: string | null,
+  ) {
     const next = await cloudPostJson<CloudAuthSession>("/v1/auth/login", {
       email,
       password,
     });
-    await persistCloudAuthState(next, password);
+    await persistCloudAuthState(next);
+    if (backupPassphrase?.trim()) {
+      await persistBackupPassphrase(next, backupPassphrase);
+      setBackupKeyReady(true);
+    } else {
+      await syncBackupKeyState(next);
+    }
     applySession(next);
     void tryRegisterDeviceForSession(next);
     return next;
   }
 
-  async function signUp(email: string, password: string, inviteCode: string) {
+  async function signUp(
+    email: string,
+    password: string,
+    inviteCode: string,
+    backupPassphrase: string,
+  ) {
     const next = await cloudPostJson<CloudAuthSession>("/v1/auth/signup", {
       email,
       password,
       invite_code: inviteCode,
     });
-    await persistCloudAuthState(next, password);
+    await persistCloudAuthState(next);
+    await persistBackupPassphrase(next, backupPassphrase);
+    setBackupKeyReady(true);
     applySession(next);
     void tryRegisterDeviceForSession(next);
     return next;
   }
 
+  async function setBackupPassphrase(passphrase: string) {
+    const current = sessionRef.current;
+    if (!current) {
+      throw new Error("Sign in before configuring a backup passphrase.");
+    }
+
+    const normalized = passphrase.trim();
+    if (normalized.length < 12) {
+      throw new Error("Backup passphrase must be at least 12 characters.");
+    }
+
+    await persistBackupPassphrase(current, normalized);
+    setBackupKeyReady(true);
+  }
+
   async function logout() {
     const current = sessionRef.current;
     applyClearedSession();
-    await clearPersistedSessionStorage();
+    await clearPersistedSessionStorage(current?.user.id);
 
     if (!current) {
       return;
@@ -203,7 +247,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     if (isExpired(current.refresh_expires_at, 0)) {
       applyClearedSession();
-      await clearPersistedSessionStorage();
+      await clearPersistedSessionStorage(current.user.id);
       return null;
     }
 
@@ -211,15 +255,16 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       const refreshed = await refreshWithToken(current.refresh_token);
       applySession(refreshed);
       await persistCloudSession(refreshed);
+      await syncBackupKeyState(refreshed);
       return refreshed;
     } catch (error) {
       if (shouldClearPersistedSession(error)) {
         applyClearedSession();
-        await clearPersistedSessionStorage();
+        await clearPersistedSessionStorage(current.user.id);
         return null;
       }
 
-      setDeviceError(`Cloud API unavailable: ${String(error)}`);
+      setDeviceError(`Cloud API unavailable: ${describeError(error)}`);
       return current;
     }
   }
@@ -236,25 +281,29 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function uploadRemoteBackup(label?: string | null) {
-    const activeDeviceId = await ensureRemoteBackupDeviceId();
-    return withAuthenticatedSession((current) =>
-      uploadRemoteBackupCommand(
+    return withAuthenticatedSession(async (current) => {
+      await ensureBackupKeyForSession(current);
+      const activeDeviceId = await ensureRemoteBackupDeviceId();
+      return uploadRemoteBackupCommand(
         CLOUD_API_BASE_URL,
         current.access_token,
+        current.user.id,
         activeDeviceId,
         label ?? null,
-      ),
-    );
+      );
+    });
   }
 
   async function restoreRemoteBackup(backupId: string) {
-    return withAuthenticatedSession((current) =>
-      restoreRemoteBackupCommand(
+    return withAuthenticatedSession(async (current) => {
+      await ensureBackupKeyForSession(current);
+      return restoreRemoteBackupCommand(
         CLOUD_API_BASE_URL,
         current.access_token,
+        current.user.id,
         backupId,
-      ),
-    );
+      );
+    });
   }
 
   async function createAdminInvite(input: CloudCreateAdminInviteInput) {
@@ -285,7 +334,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     if (isExpired(current.refresh_expires_at, 0)) {
       applyClearedSession();
-      void clearPersistedSessionStorage();
+      void clearPersistedSessionStorage(current.user.id);
       throw new Error("Your cloud session expired. Sign in again.");
     }
 
@@ -298,11 +347,11 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         if (shouldClearPersistedSession(error)) {
           applyClearedSession();
-          void clearPersistedSessionStorage();
+          void clearPersistedSessionStorage(current.user.id);
           throw new Error("Your cloud session expired. Sign in again.");
         }
 
-        throw new Error(`Cloud API unavailable: ${String(error)}`);
+        throw new Error(`Cloud API unavailable: ${describeError(error)}`);
       }
     }
 
@@ -321,6 +370,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         const refreshed = await refreshWithToken(current.refresh_token);
         applySession(refreshed);
         await persistCloudSession(refreshed);
+        await syncBackupKeyState(refreshed);
         current = refreshed;
         return action(current);
       }
@@ -355,7 +405,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       setDeviceError(null);
       return registered;
     } catch (error) {
-      const message = String(error);
+      const message = describeError(error);
       setDeviceError(message);
       throw error;
     }
@@ -396,15 +446,28 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     return appVersionRef.current;
   }
 
+  async function syncBackupKeyState(activeSession: CloudAuthSession) {
+    try {
+      const ready = await hasCloudBackupKeySecure(activeSession.user.id);
+      setBackupKeyReady(ready);
+      return ready;
+    } catch {
+      setBackupKeyReady(false);
+      return false;
+    }
+  }
+
   const value: CloudSessionContextValue = {
     apiBaseUrl: CLOUD_API_BASE_URL,
     initializing,
     session,
     device,
     deviceError,
+    backupKeyReady,
     isAdmin: session?.user.role === "admin",
     login,
     signUp,
+    setBackupPassphrase,
     logout,
     refreshSession,
     registerCurrentDevice,
@@ -450,9 +513,7 @@ async function loadPersistedSession(): Promise<CloudAuthSession | null> {
 
 async function persistCloudAuthState(
   session: CloudAuthSession,
-  password: string,
 ): Promise<void> {
-  await storeCloudBackupKeySecure(session.user.id, session.user.email, password);
   await persistCloudSession(session);
 }
 
@@ -461,12 +522,34 @@ async function persistCloudSession(session: CloudAuthSession): Promise<void> {
   window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
 }
 
-async function clearPersistedSessionStorage(): Promise<void> {
+async function clearPersistedSessionStorage(accountId?: string): Promise<void> {
   await Promise.all([
     clearCloudSessionSecure(),
-    clearCloudBackupKeySecure(),
+    accountId ? clearCloudBackupKeySecure(accountId) : Promise.resolve(true),
   ]);
   window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
+}
+
+async function persistBackupPassphrase(
+  session: CloudAuthSession,
+  backupPassphrase: string,
+): Promise<void> {
+  await storeCloudBackupKeySecure(session.user.id, backupPassphrase.trim());
+}
+
+async function ensureBackupKeyForSession(
+  session: CloudAuthSession,
+): Promise<void> {
+  const ready = await hasCloudBackupKeySecure(session.user.id);
+  if (!ready) {
+    throw new Error(
+      "Set or unlock your backup passphrase on this device before using remote backups.",
+    );
+  }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function parseStoredSession(raw: string): CloudAuthSession | null {
