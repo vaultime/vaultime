@@ -228,8 +228,7 @@ fn build_asset_views(
             preview_data_url: build_preview_data_url(asset, asset_manager).ok(),
             is_preferred: resolved_preferred
                 .as_deref()
-                .map(|preferred_id| preferred_id == asset.id)
-                .unwrap_or(false),
+                .is_some_and(|preferred_id| preferred_id == asset.id),
         });
     }
 
@@ -240,8 +239,7 @@ fn build_preview_data_url(asset: &GameAsset, asset_manager: &AssetManager) -> Re
     let data_path = asset
         .cache_path
         .as_deref()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(&asset.file_path));
+        .map_or_else(|| PathBuf::from(&asset.file_path), PathBuf::from);
 
     let bytes = fs::read(&data_path).map_err(|e| {
         VaultimeError::Asset(format!(
@@ -335,12 +333,11 @@ fn scan_roots(game: &Game) -> Vec<PathBuf> {
 fn is_supported_image(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
-        .map(|extension| {
+        .is_some_and(|extension| {
             SUPPORTED_IMAGE_EXTENSIONS
                 .iter()
                 .any(|allowed| allowed.eq_ignore_ascii_case(extension))
         })
-        .unwrap_or(false)
 }
 
 fn classify_asset_type(path: &Path) -> String {

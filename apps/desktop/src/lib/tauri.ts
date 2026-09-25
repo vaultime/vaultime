@@ -13,6 +13,9 @@ import type {
   Setting,
   TrackingDiagnostics,
   GameAssetView,
+  AuthCredentials,
+  CloudConfig,
+  CloudSession,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -147,4 +150,36 @@ export async function getTrackingStatus(): Promise<boolean> {
 
 export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
   return invoke<TrackingDiagnostics>("get_tracking_diagnostics");
+}
+
+// ---------------------------------------------------------------------------
+// Cloud commands
+// ---------------------------------------------------------------------------
+
+export async function cloudGetConfig(): Promise<CloudConfig> {
+  return invoke<CloudConfig>("cloud_get_config");
+}
+
+export async function cloudGetSession(): Promise<CloudSession | null> {
+  return invoke<CloudSession | null>("cloud_get_session");
+}
+
+export async function cloudSignUp(
+  input: AuthCredentials,
+): Promise<CloudSession> {
+  return invoke<CloudSession>("cloud_sign_up", { input });
+}
+
+export async function cloudSignIn(
+  input: AuthCredentials,
+): Promise<CloudSession> {
+  return invoke<CloudSession>("cloud_sign_in", { input });
+}
+
+export async function cloudSignOut(): Promise<boolean> {
+  return invoke<boolean>("cloud_sign_out");
+}
+
+export async function cloudRefreshToken(): Promise<CloudSession> {
+  return invoke<CloudSession>("cloud_refresh_token");
 }

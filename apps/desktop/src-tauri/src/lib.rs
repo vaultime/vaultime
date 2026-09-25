@@ -21,6 +21,7 @@ use log::info;
 use tauri::Manager;
 
 use assets::AssetManager;
+use cloud::auth::AuthManager;
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -65,6 +66,9 @@ pub fn run() {
             // Start tracking engine.
             let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
 
+            // Initialize cloud auth manager.
+            let auth_manager = AuthManager::new(app_dir.clone());
+
             app.manage(AppContext {
                 app_dir,
                 asset_cache_dir: asset_cache_dir.clone(),
@@ -75,6 +79,7 @@ pub fn run() {
             app.manage(database);
             app.manage(AssetManager::new(asset_cache_dir));
             app.manage(engine);
+            app.manage(auth_manager);
 
             Ok(())
         })
@@ -101,6 +106,12 @@ pub fn run() {
             commands::set_setting,
             commands::get_tracking_status,
             commands::get_tracking_diagnostics,
+            commands::cloud_sign_up,
+            commands::cloud_sign_in,
+            commands::cloud_sign_out,
+            commands::cloud_refresh_token,
+            commands::cloud_get_session,
+            commands::cloud_get_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vaultime");
@@ -111,7 +122,8 @@ pub fn run() {
 /// Uses the hostname as a simple device identifier. A more robust approach
 /// would use a persisted UUID, but this is sufficient for the local-first MVP.
 fn machine_id() -> String {
-    hostname::get()
-        .map(|h| h.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string())
+    hostname::get().map_or_else(
+        |_| uuid::Uuid::new_v4().to_string(),
+        |h| h.to_string_lossy().into_owned(),
+    )
 }

@@ -104,6 +104,39 @@ export interface LocalBackupSummary {
   restart_required: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Cloud
+// ---------------------------------------------------------------------------
+
+/** Mirrors the Rust `CloudUser` struct. */
+export interface CloudUser {
+  id: string;
+  email: string;
+  created_at: string | null;
+}
+
+/** Mirrors the Rust `CloudSession` struct. */
+export interface CloudSession {
+  user: CloudUser;
+  device_registered: boolean;
+  expires_at: number;
+}
+
+/** Mirrors the Rust `CloudConfig` struct. */
+export interface CloudConfig {
+  configured: boolean;
+}
+
+/** Input for sign-up / sign-in commands. */
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+
 /** Artwork entry plus an inline preview payload returned by the backend. */
 export interface GameAssetView {
   id: string;

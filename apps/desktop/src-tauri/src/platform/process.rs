@@ -44,9 +44,9 @@ pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
 /// Checks whether a running process matches a game's registered executable path.
 ///
 /// Matching strategy (in priority order):
-/// 1. Full path match — the process exe_path equals the game's executable_path.
+/// 1. Full path match — the process `exe_path` equals the game's `executable_path`.
 /// 2. File-name match — the process name matches the file name component of the
-///    game's executable_path (handles cases where the OS reports a short name).
+///    game's `executable_path` (handles cases where the OS reports a short name).
 pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bool {
     // Full path comparison (case-sensitive on Linux, case-insensitive on Windows).
     if let Some(ref exe) = process.exe_path {

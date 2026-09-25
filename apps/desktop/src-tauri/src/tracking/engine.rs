@@ -86,8 +86,7 @@ impl TrackingSettings {
         let treat_background_as_active = settings::get_setting(db, "treat_background_as_active")
             .ok()
             .flatten()
-            .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
-            .unwrap_or(false);
+            .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"));
 
         Self {
             idle_threshold: Duration::from_secs(idle_threshold_seconds),
@@ -251,8 +250,7 @@ fn poll_tick(
         .filter(|game_id| {
             !observed_games
                 .get(*game_id)
-                .map(|observation| observation.is_running)
-                .unwrap_or(false)
+                .is_some_and(|observation| observation.is_running)
         })
         .cloned()
         .collect();
@@ -312,12 +310,11 @@ fn observe_game_processes(
 
     let has_foreground_window = activity_snapshot
         .foreground_pid
-        .map(|foreground_pid| {
+        .is_some_and(|foreground_pid| {
             matched_processes
                 .iter()
                 .any(|process| process.pid == foreground_pid)
-        })
-        .unwrap_or(false);
+        });
 
     let has_process_activity = matched_processes
         .iter()
@@ -467,8 +464,7 @@ fn detect_integrity_reason(
 
 fn parse_wall_timestamp(value: &str) -> DateTime<Utc> {
     chrono::DateTime::parse_from_rfc3339(value)
-        .map(|timestamp| timestamp.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now())
+        .map_or_else(|_| Utc::now(), |timestamp| timestamp.with_timezone(&Utc))
 }
 
 /// Closes any sessions left open from a previous run (crash recovery).

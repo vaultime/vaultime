@@ -198,7 +198,7 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
         })?;
 
         let restore_result = conn.execute_batch(
-            r#"
+            r"
             PRAGMA foreign_keys=OFF;
             BEGIN IMMEDIATE;
             DELETE FROM session_events;
@@ -218,7 +218,7 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
             INSERT INTO backup_snapshots SELECT * FROM backup_restore.backup_snapshots;
             COMMIT;
             PRAGMA foreign_keys=ON;
-            "#,
+            ",
         );
 
         let detach_result = conn.execute_batch("DETACH DATABASE backup_restore;");

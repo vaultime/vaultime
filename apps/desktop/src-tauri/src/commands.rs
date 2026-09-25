@@ -11,6 +11,8 @@ use tauri::State;
 use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::{self, LocalBackupSummary};
+use crate::cloud::auth::AuthManager;
+use crate::cloud::types::{AuthCredentials, CloudSession};
 use crate::db::connection::Database;
 use crate::db::models::{
     BackupSnapshot, CreateGame, Game, Session, SessionEvent, Setting, UpdateGame,
@@ -255,4 +257,56 @@ pub fn get_tracking_diagnostics(
         idle_detection: idle_detection_strategy().into(),
         poll_interval_seconds: 5,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Cloud commands
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct CloudConfig {
+    pub configured: bool,
+}
+
+#[tauri::command]
+pub fn cloud_get_config(auth: State<'_, AuthManager>) -> Result<CloudConfig, VaultimeError> {
+    Ok(CloudConfig {
+        configured: auth.is_configured(),
+    })
+}
+
+#[tauri::command]
+pub fn cloud_get_session(
+    auth: State<'_, AuthManager>,
+) -> Result<Option<CloudSession>, VaultimeError> {
+    Ok(auth.current_session())
+}
+
+#[tauri::command]
+pub async fn cloud_sign_up(
+    auth: State<'_, AuthManager>,
+    input: AuthCredentials,
+) -> Result<CloudSession, VaultimeError> {
+    auth.sign_up(&input.email, &input.password).await
+}
+
+#[tauri::command]
+pub async fn cloud_sign_in(
+    auth: State<'_, AuthManager>,
+    input: AuthCredentials,
+) -> Result<CloudSession, VaultimeError> {
+    auth.sign_in(&input.email, &input.password).await
+}
+
+#[tauri::command]
+pub async fn cloud_sign_out(auth: State<'_, AuthManager>) -> Result<bool, VaultimeError> {
+    auth.sign_out().await?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn cloud_refresh_token(
+    auth: State<'_, AuthManager>,
+) -> Result<CloudSession, VaultimeError> {
+    auth.refresh_token().await
 }

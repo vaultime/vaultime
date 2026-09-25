@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! SQLite connection management.
+//! `SQLite` connection management.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -12,7 +12,7 @@ use crate::error::{Result, VaultimeError};
 
 use super::migrate;
 
-/// Thread-safe wrapper around a SQLite connection.
+/// Thread-safe wrapper around a `SQLite` connection.
 pub struct Database {
     conn: Mutex<Connection>,
 }
