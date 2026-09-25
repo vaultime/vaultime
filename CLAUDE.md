@@ -120,7 +120,13 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 
 - Never add `Co-Authored-By` trailers or any other AI attribution to commits
   or pull requests.
-- Commit messages have a short imperative subject and an optional plain body.
+- Commit subjects use `<file or module>: <message>`, for example
+  `desktop/tracking: skip time while the machine sleeps` or
+  `CLAUDE.md: add commit rules`. The message is lowercase and imperative. A
+  plain body is optional.
+- Author and committer are the global git identity (the outlook.de address).
+  Merge pull requests by fast-forwarding `main` locally and pushing. The
+  GitHub merge buttons replace the committer.
 - Never commit generated files such as `__pycache__`, build output or `.env`.
 - Never commit anything private: passwords, keys, tokens, server IPs or
   personal data. Secrets go into GitHub Actions secrets or local files outside
