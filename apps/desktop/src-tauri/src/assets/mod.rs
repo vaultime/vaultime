@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Asset pipeline — folder scanning, icon extraction, thumbnail generation.
+//! Artwork scanning, thumbnail caching and cover selection.
 
 use std::collections::HashSet;
 use std::fs;
@@ -403,7 +403,7 @@ fn cache_candidate(
         ))
     })?;
 
-    let source_hash = format!("{:x}", Sha256::digest(&source_bytes));
+    let source_hash = crate::hex::encode(&Sha256::digest(&source_bytes));
     let mut reader = ImageReader::open(&candidate.path).map_err(|e| {
         VaultimeError::Asset(format!(
             "failed to open image {}: {e}",

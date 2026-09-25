@@ -1,87 +1,61 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Folder scanner — finds game executables in common install locations.
+//! Folder scanner that finds game executables in common install locations.
 
 use std::collections::HashSet;
-use std::path::Path;
-#[cfg(target_os = "windows")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use log::info;
 use walkdir::WalkDir;
 
 use crate::db::connection::Database;
-use crate::db::repo::games;
 use crate::error::Result;
+use crate::platform::process::path_key;
 
-use super::DiscoveredGame;
-use super::metadata;
+use super::{DiscoveredGame, is_executable, library_executables, metadata};
 
-/// Maximum directory depth when scanning for executables.
 const MAX_SCAN_DEPTH: usize = 4;
 
-/// Scan the given directories for game executables.
+/// Scans the given folders for game executables.
 ///
-/// Returns a list of discovered game candidates. Games already in the
-/// library are marked with `already_added = true` so the UI can
-/// distinguish new finds from duplicates.
+/// Games already in the library come back with `already_added` set so the UI
+/// can tell new finds from duplicates.
 pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGame>> {
-    let existing_exes = collect_existing_executables(db)?;
-    let mut results: Vec<DiscoveredGame> = Vec::new();
-    let mut seen_paths: HashSet<String> = HashSet::new();
+    let existing = library_executables(db)?;
+    let mut seen = HashSet::new();
+    let mut results = Vec::new();
 
-    for scan_root in paths {
-        let root = Path::new(scan_root);
-        if !root.is_dir() {
-            continue;
-        }
-
+    for root in paths.iter().map(Path::new).filter(|root| root.is_dir()) {
         info!("scanning folder for games: {}", root.display());
 
-        for entry in WalkDir::new(root)
+        let entries = WalkDir::new(root)
             .max_depth(MAX_SCAN_DEPTH)
             .follow_links(false)
             .into_iter()
             .filter_map(std::result::Result::ok)
-        {
-            if !entry.file_type().is_file() {
+            .filter(|entry| entry.file_type().is_file() && is_executable(entry.path()))
+            .filter(|entry| {
+                metadata::is_likely_game_executable(&entry.file_name().to_string_lossy())
+            });
+
+        for entry in entries {
+            let exe_path = entry.path().to_string_lossy().into_owned();
+            let key = path_key(&exe_path);
+            if !seen.insert(key.clone()) {
                 continue;
             }
-
-            let path = entry.path();
-            if !is_executable(path) {
-                continue;
-            }
-
-            let filename = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-
-            if !metadata::is_likely_game_executable(&filename) {
-                continue;
-            }
-
-            let exe_path = path.to_string_lossy().into_owned();
-
-            // Deduplicate within this scan.
-            if !seen_paths.insert(exe_path.clone()) {
-                continue;
-            }
-
-            let install_folder = path.parent().map(|p| p.to_string_lossy().into_owned());
-
-            let title = metadata::infer_title(&exe_path);
-            let already_added = existing_exes.contains(&exe_path);
 
             results.push(DiscoveredGame {
-                title,
+                title: metadata::infer_title(&exe_path),
+                install_folder: entry
+                    .path()
+                    .parent()
+                    .map(|parent| parent.to_string_lossy().into_owned()),
+                already_added: existing.contains(&key),
                 executable_path: exe_path,
-                install_folder,
                 source: "folder_scan".into(),
                 source_id: None,
-                already_added,
             });
         }
     }
@@ -90,110 +64,85 @@ pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGam
     Ok(results)
 }
 
-/// Returns the default set of directories to scan on the current platform.
+/// Default folders to scan on this platform. Only existing folders are returned.
+///
+/// Steam libraries are left out because Steam discovery covers them.
 pub fn default_scan_paths() -> Vec<String> {
+    candidate_paths()
+        .into_iter()
+        .filter(|path| path.is_dir())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
+#[cfg(windows)]
+fn candidate_paths() -> Vec<PathBuf> {
+    // Default library folders of the common launchers, relative to a drive root.
+    const LIBRARY_FOLDERS: &[&str] = &[
+        "Games",
+        "Epic Games",
+        "GOG Games",
+        "XboxGames",
+        r"Program Files\Epic Games",
+        r"Program Files (x86)\GOG Galaxy\Games",
+        r"Program Files\EA Games",
+        r"Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games",
+        r"Program Files (x86)\Battle.net\Games",
+    ];
+
+    fixed_drives()
+        .into_iter()
+        .flat_map(|drive| LIBRARY_FOLDERS.iter().map(move |folder| drive.join(folder)))
+        .collect()
+}
+
+/// Roots of the local fixed drives, skipping removable and network drives.
+#[cfg(windows)]
+fn fixed_drives() -> Vec<PathBuf> {
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+
+    const DRIVE_FIXED: u32 = 3;
+
+    // SAFETY: GetLogicalDrives has no preconditions.
+    let mask = unsafe { GetLogicalDrives() };
+
+    (0..26_u8)
+        .filter(|index| mask & (1 << index) != 0)
+        .map(|index| char::from(b'A' + index))
+        .filter(|letter| {
+            let root: Vec<u16> = format!("{letter}:\\").encode_utf16().chain([0]).collect();
+            // SAFETY: `root` is a null-terminated UTF-16 string that outlives the call.
+            unsafe { GetDriveTypeW(root.as_ptr()) == DRIVE_FIXED }
+        })
+        .map(|letter| PathBuf::from(format!("{letter}:\\")))
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn candidate_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-
-    #[cfg(target_os = "linux")]
-    {
-        if let Some(home) = dirs::home_dir() {
-            // Common Linux game locations.
-            let candidates = [
-                home.join("Games"),
-                home.join("games"),
-                home.join(".local/share/applications"),
-            ];
-            for p in &candidates {
-                if p.is_dir() {
-                    paths.push(p.to_string_lossy().into_owned());
-                }
-            }
-        }
-        // Flatpak and system locations.
-        for p in &["/opt/games", "/usr/games"] {
-            if Path::new(p).is_dir() {
-                paths.push((*p).to_string());
-            }
-        }
+    if let Some(home) = dirs::home_dir() {
+        // Heroic and Lutris both default to ~/Games.
+        paths.push(home.join("Games"));
+        paths.push(home.join("games"));
     }
-
-    #[cfg(target_os = "windows")]
-    {
-        let candidates: Vec<PathBuf> = vec![
-            PathBuf::from(r"C:\Program Files"),
-            PathBuf::from(r"C:\Program Files (x86)"),
-            PathBuf::from(r"D:\Games"),
-            PathBuf::from(r"E:\Games"),
-        ];
-        for p in &candidates {
-            if p.is_dir() {
-                paths.push(p.to_string_lossy().into_owned());
-            }
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        paths.push("/Applications".into());
-        if let Some(home) = dirs::home_dir() {
-            let app_support = home.join("Applications");
-            if app_support.is_dir() {
-                paths.push(app_support.to_string_lossy().into_owned());
-            }
-        }
-    }
-
+    paths.push(PathBuf::from("/opt/games"));
+    paths.push(PathBuf::from("/usr/games"));
     paths
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Check if a file is likely an executable based on extension / permissions.
-fn is_executable(path: &Path) -> bool {
-    let ext = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-
-    #[cfg(target_os = "windows")]
-    {
-        matches!(ext.as_str(), "exe" | "bat" | "cmd")
+#[cfg(target_os = "macos")]
+fn candidate_paths() -> Vec<PathBuf> {
+    let mut paths = vec![PathBuf::from("/Applications")];
+    if let Some(home) = dirs::home_dir() {
+        paths.push(home.join("Applications"));
     }
-
-    #[cfg(target_os = "macos")]
-    {
-        if ext == "app" {
-            return true;
-        }
-        has_execute_permission(path)
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if matches!(ext.as_str(), "sh" | "x86_64" | "x86") {
-            return true;
-        }
-        has_execute_permission(path)
-    }
+    paths
 }
 
-#[cfg(unix)]
-fn has_execute_permission(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    path.metadata()
-        .map(|m| m.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-/// Collect the set of executable paths already registered in the library.
-fn collect_existing_executables(db: &Database) -> Result<HashSet<String>> {
-    let all_games = games::list_all_games(db)?;
-    Ok(all_games
-        .into_iter()
-        .filter_map(|g| g.executable_path)
-        .collect())
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn candidate_paths() -> Vec<PathBuf> {
+    Vec::new()
 }
 
 #[cfg(test)]
@@ -201,8 +150,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_paths_returns_list() {
-        let paths = default_scan_paths();
-        assert!(paths.iter().all(|path| !path.is_empty()));
+    fn default_paths_exist() {
+        assert!(
+            default_scan_paths()
+                .iter()
+                .all(|path| Path::new(path).is_dir())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn system_drive_is_fixed() {
+        assert!(
+            fixed_drives()
+                .iter()
+                .any(|drive| drive.join("Windows").is_dir())
+        );
     }
 }

@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Tracking engine — polls running processes and manages game sessions.
+//! Polls running processes and turns them into game sessions.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -18,16 +18,19 @@ use crate::integrity;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{RunningProcess, matches_executable, refresh_running_processes};
 
-/// Default polling interval for process detection.
-const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
-/// Short grace period for brief alt-tab transitions.
+pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
+/// Grace period so a quick alt-tab does not count as idle.
 const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
-/// Minimum CPU usage considered meaningful activity for a process.
+/// CPU usage above this counts as process activity.
 const PROCESS_ACTIVITY_CPU_THRESHOLD: f32 = 0.5;
-/// Wall-clock step difference tolerated between ticks before a session is suspicious.
+/// Allowed difference between wall and monotonic time within one tick.
 const CLOCK_STEP_TOLERANCE_MS: i64 = 20_000;
-/// Total wall-clock vs monotonic drift tolerated across the whole session.
+/// Allowed drift between wall and monotonic time over a whole session.
 const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
+/// A longer pause between ticks means the machine slept or the tracker stalled.
+/// That time is not counted. On Windows the monotonic clock keeps running
+/// during sleep and on Linux it stops, so both clocks are checked.
+const MAX_TICK_GAP_MS: i64 = 60_000;
 
 /// Tracks a currently running game session.
 struct ActiveSession {
@@ -41,6 +44,8 @@ struct ActiveSession {
     idle_ms: i64,
     last_signal_at: Instant,
     last_foreground_at: Option<Instant>,
+    /// Wall time skipped by tracking gaps, left out of the drift check.
+    skipped_wall_ms: i64,
     integrity_status: String,
 }
 
@@ -63,6 +68,7 @@ impl ActiveSession {
             idle_ms: 0,
             last_signal_at: now,
             last_foreground_at: None,
+            skipped_wall_ms: 0,
             integrity_status,
         }
     }
@@ -102,67 +108,90 @@ struct GameObservation {
     has_process_activity: bool,
 }
 
-/// The tracking engine state, shared between the polling thread and commands.
+/// Handle to the background tracker thread.
 pub struct TrackingEngine {
     running: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
+    /// Held for the duration of every tick, so `pause` can wait for one to finish.
+    tick_lock: Arc<Mutex<()>>,
 }
 
 impl TrackingEngine {
-    /// Spawns the tracking engine on a background thread.
+    /// Spawns the tracker on a background thread.
     pub fn start(db: Arc<Database>, device_id: String) -> Self {
-        let running = Arc::new(AtomicBool::new(true));
-        let running_flag = running.clone();
+        let engine = Self {
+            running: Arc::new(AtomicBool::new(true)),
+            paused: Arc::new(AtomicBool::new(false)),
+            tick_lock: Arc::new(Mutex::new(())),
+        };
 
+        let running = Arc::clone(&engine.running);
+        let paused = Arc::clone(&engine.paused);
+        let tick_lock = Arc::clone(&engine.tick_lock);
         std::thread::Builder::new()
             .name("vaultime-tracker".into())
-            .spawn(move || {
-                poll_loop(&db, &device_id, &running_flag);
-            })
+            .spawn(move || poll_loop(&db, &device_id, &running, &paused, &tick_lock))
             .expect("failed to spawn tracking thread");
 
         info!("tracking engine started");
-
-        Self { running }
+        engine
     }
 
-    /// Signals the engine to stop at its next poll cycle.
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::Relaxed);
-        info!("tracking engine stop requested");
+    /// Stops tracking and returns once no tick is in progress.
+    pub fn pause(&self) {
+        self.paused.store(true, Ordering::SeqCst);
+        drop(
+            self.tick_lock
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        info!("tracking paused");
     }
 
-    /// Returns whether the engine is running.
+    pub fn resume(&self) {
+        self.paused.store(false, Ordering::SeqCst);
+        info!("tracking resumed");
+    }
+
+    /// True while the tracker thread runs and is not paused.
     pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
+        self.running.load(Ordering::SeqCst) && !self.paused.load(Ordering::SeqCst)
     }
 }
 
 impl Drop for TrackingEngine {
     fn drop(&mut self) {
-        self.stop();
+        self.running.store(false, Ordering::SeqCst);
     }
 }
 
-/// Main polling loop that runs on the background thread.
-fn poll_loop(db: &Database, device_id: &str, running: &AtomicBool) {
+fn poll_loop(
+    db: &Database,
+    device_id: &str,
+    running: &AtomicBool,
+    paused: &AtomicBool,
+    tick_lock: &Mutex<()>,
+) {
     let mut active: HashMap<String, ActiveSession> = HashMap::new();
     let mut system = System::new_all();
 
     close_orphaned_sessions(db);
 
-    while running.load(Ordering::Relaxed) {
-        if let Err(e) = poll_tick(db, device_id, &mut system, &mut active) {
-            error!("tracking poll error: {e}");
+    while running.load(Ordering::SeqCst) {
+        if !paused.load(Ordering::SeqCst) {
+            let _tick = tick_lock.lock().unwrap_or_else(PoisonError::into_inner);
+            // Checked again because `pause` may have won the race for the lock.
+            if !paused.load(Ordering::SeqCst)
+                && let Err(e) = poll_tick(db, device_id, &mut system, &mut active)
+            {
+                error!("tracking poll error: {e}");
+            }
         }
 
-        std::thread::sleep(DEFAULT_POLL_INTERVAL);
+        std::thread::sleep(POLL_INTERVAL);
     }
 
-    if let Err(e) = poll_tick(db, device_id, &mut system, &mut active) {
-        error!("tracking final poll error: {e}");
-    }
-
-    for (_game_id, session) in active.drain() {
+    for session in active.into_values() {
         if let Err(e) = sessions::end_session(
             db,
             &session.session_id,
@@ -357,6 +386,18 @@ fn apply_observation(
         .signed_duration_since(session.last_wall_at)
         .num_milliseconds();
     session.last_wall_at = current_wall;
+
+    if delta_ms.max(wall_delta_ms) > MAX_TICK_GAP_MS {
+        session.skipped_wall_ms += wall_delta_ms.max(0);
+        return sessions::record_tracking_gap(
+            db,
+            &session.session_id,
+            session.runtime_ms,
+            wall_delta_ms,
+            delta_ms,
+        );
+    }
+
     session.runtime_ms += delta_ms;
 
     if should_count_as_active(
@@ -375,20 +416,20 @@ fn apply_observation(
         .signed_duration_since(session.started_at_wall)
         .num_milliseconds()
         .max(0);
-    let drift_ms = wall_elapsed_ms - session.runtime_ms;
+    let drift_ms = wall_elapsed_ms - session.skipped_wall_ms - session.runtime_ms;
 
-    if let Some(reason) = detect_integrity_reason(wall_delta_ms, delta_ms, drift_ms) {
-        if session.integrity_status != integrity::STATUS_SUSPICIOUS {
-            sessions::flag_session_suspicious(
-                db,
-                &session.session_id,
-                session.runtime_ms,
-                wall_elapsed_ms,
-                drift_ms,
-                &reason,
-            )?;
-            session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
-        }
+    if let Some(reason) = detect_integrity_reason(wall_delta_ms, delta_ms, drift_ms)
+        && session.integrity_status != integrity::STATUS_SUSPICIOUS
+    {
+        sessions::flag_session_suspicious(
+            db,
+            &session.session_id,
+            session.runtime_ms,
+            wall_elapsed_ms,
+            drift_ms,
+            &reason,
+        )?;
+        session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
     }
 
     sessions::update_session_timing(
@@ -411,10 +452,11 @@ fn should_count_as_active(
     now: Instant,
 ) -> bool {
     if activity_snapshot.idle_supported {
-        if let Some(idle_for) = activity_snapshot.idle_for {
-            if idle_for >= tracking_settings.idle_threshold {
-                return false;
-            }
+        if activity_snapshot
+            .idle_for
+            .is_some_and(|idle_for| idle_for >= tracking_settings.idle_threshold)
+        {
+            return false;
         }
     } else if !observation.has_process_activity
         && now.saturating_duration_since(session.last_signal_at) >= tracking_settings.idle_threshold
@@ -486,5 +528,128 @@ fn close_orphaned_sessions(db: &Database) {
         Err(e) => {
             error!("failed to check for orphaned sessions: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::models::CreateGame;
+    use crate::db::repo::{devices, session_events};
+
+    struct Fixture {
+        db: Database,
+        game_id: String,
+        session_id: String,
+    }
+
+    fn fixture() -> Fixture {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Gap Game".into(),
+                executable_path: Some("game.exe".into()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        let session = sessions::create_session(&db, &game.id, "device").unwrap();
+        Fixture {
+            db,
+            game_id: game.id,
+            session_id: session.id,
+        }
+    }
+
+    /// An open session whose previous tick was `mono` ago on the monotonic
+    /// clock and `wall` ago on the wall clock.
+    fn session_after(f: &Fixture, mono: Duration, wall: chrono::Duration) -> ActiveSession {
+        ActiveSession::new(
+            f.session_id.clone(),
+            f.game_id.clone(),
+            Instant::now().checked_sub(mono).unwrap(),
+            Utc::now() - wall,
+            integrity::STATUS_LOCAL.into(),
+        )
+    }
+
+    fn tick(f: &Fixture, session: &mut ActiveSession) {
+        let observation = GameObservation {
+            is_running: true,
+            has_foreground_window: true,
+            has_process_activity: true,
+        };
+        let snapshot = ActivitySnapshot {
+            foreground_pid: None,
+            foreground_supported: true,
+            idle_for: Some(Duration::ZERO),
+            idle_supported: true,
+        };
+        let settings = TrackingSettings {
+            idle_threshold: Duration::from_secs(300),
+            treat_background_as_active: false,
+        };
+        apply_observation(
+            &f.db,
+            session,
+            observation,
+            &settings,
+            &snapshot,
+            Instant::now(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn regular_tick_counts_active_time() {
+        let f = fixture();
+        let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(5));
+        tick(&f, &mut session);
+
+        assert!(session.runtime_ms >= 5_000);
+        assert_eq!(session.active_ms, session.runtime_ms);
+        assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn sleep_gap_is_skipped_without_flagging() {
+        let f = fixture();
+        // Linux suspend: the wall clock moved two hours, the monotonic clock did not.
+        let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::hours(2));
+        tick(&f, &mut session);
+
+        assert_eq!(session.runtime_ms, 0);
+        assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+        let events = session_events::list_events_for_game(&f.db, &f.game_id).unwrap();
+        assert!(events.iter().any(|e| e.event_type == "tracking_gap"));
+
+        // The skipped time must not trip the drift check on the next tick.
+        session.last_tick_at = Instant::now().checked_sub(Duration::from_secs(5)).unwrap();
+        session.last_wall_at = Utc::now() - chrono::Duration::seconds(5);
+        tick(&f, &mut session);
+        assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn windows_style_sleep_gap_is_skipped() {
+        let f = fixture();
+        // Both clocks kept running through sleep.
+        let mut session = session_after(&f, Duration::from_secs(3_600), chrono::Duration::hours(1));
+        tick(&f, &mut session);
+
+        assert_eq!(session.runtime_ms, 0);
+        assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn clock_moved_backwards_is_flagged() {
+        let f = fixture();
+        let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::minutes(-10));
+        tick(&f, &mut session);
+
+        assert_eq!(session.integrity_status, integrity::STATUS_SUSPICIOUS);
     }
 }

@@ -1,13 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Domain model types that map to database rows.
+//! Row types shared by the repositories and the IPC layer.
 
 use serde::{Deserialize, Serialize};
-
-// ---------------------------------------------------------------------------
-// Game
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Game {
@@ -44,10 +40,6 @@ pub struct UpdateGame {
     pub is_hidden: Option<bool>,
 }
 
-// ---------------------------------------------------------------------------
-// GameAsset
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameAsset {
     pub id: String,
@@ -59,10 +51,6 @@ pub struct GameAsset {
     pub hash: Option<String>,
     pub created_at: String,
 }
-
-// ---------------------------------------------------------------------------
-// Session
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -76,14 +64,8 @@ pub struct Session {
     pub idle_ms: i64,
     pub runtime_ms: i64,
     pub integrity_status: String,
-    pub cloud_verified: bool,
-    pub cloud_verified_at: Option<String>,
     pub closed_cleanly: bool,
 }
-
-// ---------------------------------------------------------------------------
-// SessionEvent
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionEvent {
@@ -97,13 +79,7 @@ pub struct SessionEvent {
     pub hash_prev: Option<String>,
     pub hash_self: Option<String>,
     pub signature: Option<String>,
-    pub synced_at: Option<String>,
-    pub server_ack_at: Option<String>,
 }
-
-// ---------------------------------------------------------------------------
-// Device
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
@@ -114,20 +90,12 @@ pub struct Device {
     pub registered_at: String,
 }
 
-// ---------------------------------------------------------------------------
-// Setting
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Setting {
     pub key: String,
     pub value: String,
     pub updated_at: String,
 }
-
-// ---------------------------------------------------------------------------
-// BackupSnapshot
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupSnapshot {

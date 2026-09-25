@@ -124,3 +124,35 @@ fn clear_keyring_entry(entry: Entry) -> Result<()> {
 fn map_keyring_error(error: keyring::Error) -> VaultimeError {
     VaultimeError::Cloud(format!("secure storage error: {error}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{derive_cloud_backup_key, load_password};
+    use keyring::Entry;
+
+    // Writes to the real OS credential store, so it only runs on request:
+    // cargo test -- --ignored os_credential_store
+    #[test]
+    #[ignore = "touches the OS credential store"]
+    fn os_credential_store_round_trip() {
+        let entry = Entry::new("de.codfish.vaultime.test", "round-trip").unwrap();
+        entry.set_password("secret-value").unwrap();
+
+        let reopened = Entry::new("de.codfish.vaultime.test", "round-trip").unwrap();
+        assert_eq!(reopened.get_password().unwrap(), "secret-value");
+
+        reopened.delete_credential().unwrap();
+        let gone = Entry::new("de.codfish.vaultime.test", "round-trip").unwrap();
+        assert_eq!(load_password(gone).unwrap(), None);
+    }
+
+    // Existing cloud backups must stay decryptable across crate upgrades.
+    #[test]
+    fn backup_key_derivation_is_stable() {
+        let key = derive_cloud_backup_key("account-1", "correct horse battery staple").unwrap();
+        assert_eq!(
+            crate::hex::encode(&key),
+            "b1b95eb48a327cdd6aeb2d20d560f2798763232685640fbe390ccbf5d8ecdcc9"
+        );
+    }
+}

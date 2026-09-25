@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Tracking engine — process detection, session management, active/idle logic.
+//! Session tracking: process detection, session lifecycle and active or idle time.
 
 pub mod engine;

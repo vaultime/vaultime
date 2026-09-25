@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Device repository — register and query devices.
+//! Device registration.
 
 use rusqlite::{Row, params};
 

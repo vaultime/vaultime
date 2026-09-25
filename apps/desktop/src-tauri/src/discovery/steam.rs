@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Steam launcher adapter.
+//! Steam library discovery.
 //!
-//! Discovers installed Steam games by reading `libraryfolders.vdf` to find
-//! library directories, then parsing `appmanifest_*.acf` files in each
-//! library's `steamapps/` folder.
-//!
-//! The VDF and ACF formats are simple key-value text files — this module
-//! includes a lightweight parser rather than pulling in a full VDF crate.
+//! Reads `libraryfolders.vdf` for the library folders, then every
+//! `appmanifest_*.acf` inside them. Both are simple key-value text files, so a
+//! small parser is enough.
 
 use std::collections::HashSet;
 use std::fs;
@@ -17,38 +14,26 @@ use std::path::{Path, PathBuf};
 use log::info;
 
 use crate::db::connection::Database;
-use crate::db::repo::games;
 use crate::error::Result;
+use crate::platform::process::path_key;
 
-use super::DiscoveredGame;
+use super::{DiscoveredGame, is_executable, library_executables, metadata};
 
-/// Discover all installed Steam games.
-///
-/// Returns one `DiscoveredGame` per installed app with its executable path,
-/// install folder, title from the manifest, and the Steam app ID.
+/// Finds every installed Steam game with a launchable executable.
 pub fn discover_steam_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
-    let existing_exes = collect_existing_executables(db)?;
-    let steam_root = find_steam_root();
-
-    let Some(root) = steam_root else {
+    let Some(root) = find_steam_root() else {
         info!("Steam installation not found");
         return Ok(Vec::new());
     };
-
     info!("found Steam root: {}", root.display());
 
-    let library_folders = find_library_folders(&root);
+    let existing = library_executables(db)?;
     let mut results = Vec::new();
 
-    for library_dir in &library_folders {
-        let steamapps = library_dir.join("steamapps");
-        if !steamapps.is_dir() {
-            continue;
-        }
-
-        let manifests = find_app_manifests(&steamapps);
-        for manifest_path in &manifests {
-            if let Some(game) = parse_app_manifest(manifest_path, &steamapps, &existing_exes) {
+    for library in find_library_folders(&root) {
+        let steamapps = library.join("steamapps");
+        for manifest in find_app_manifests(&steamapps) {
+            if let Some(game) = parse_app_manifest(&manifest, &steamapps, &existing) {
                 results.push(game);
             }
         }
@@ -58,68 +43,70 @@ pub fn discover_steam_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     Ok(results)
 }
 
-// ---------------------------------------------------------------------------
-// Steam root detection
-// ---------------------------------------------------------------------------
-
 fn find_steam_root() -> Option<PathBuf> {
-    let candidates = steam_root_candidates();
-    candidates.into_iter().find(|p| p.is_dir())
+    steam_root_candidates()
+        .into_iter()
+        .find(|path| path.is_dir())
 }
 
 fn steam_root_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(windows)]
     {
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join(".steam/steam"));
-            candidates.push(home.join(".local/share/Steam"));
-            candidates.push(home.join(".steam/debian-installation"));
-            // Flatpak Steam
-            candidates.push(home.join(".var/app/com.valvesoftware.Steam/.steam/steam"));
-            candidates.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
+        candidates.extend(registry_steam_root());
         candidates.push(PathBuf::from(r"C:\Program Files (x86)\Steam"));
         candidates.push(PathBuf::from(r"C:\Program Files\Steam"));
-        candidates.push(PathBuf::from(r"D:\Steam"));
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".steam/steam"));
+        candidates.push(home.join(".local/share/Steam"));
+        candidates.push(home.join(".steam/debian-installation"));
+        candidates.push(home.join(".var/app/com.valvesoftware.Steam/.steam/steam"));
+        candidates.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+        candidates.push(home.join("snap/steam/common/.local/share/Steam"));
     }
 
     #[cfg(target_os = "macos")]
-    {
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join("Library/Application Support/Steam"));
-        }
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join("Library/Application Support/Steam"));
     }
 
     candidates
 }
 
-// ---------------------------------------------------------------------------
-// Library folder discovery
-// ---------------------------------------------------------------------------
+/// Steam writes its install location to the registry, which also covers
+/// installs outside Program Files.
+#[cfg(windows)]
+fn registry_steam_root() -> Option<PathBuf> {
+    use windows_registry::{CURRENT_USER, LOCAL_MACHINE};
 
-/// Parse `libraryfolders.vdf` to find all Steam library directories.
-///
-/// Falls back to just the Steam root if the VDF file is missing or
-/// unparseable.
+    CURRENT_USER
+        .open(r"Software\Valve\Steam")
+        .and_then(|key| key.get_string("SteamPath"))
+        .or_else(|_| {
+            LOCAL_MACHINE
+                .open(r"SOFTWARE\WOW6432Node\Valve\Steam")
+                .and_then(|key| key.get_string("InstallPath"))
+        })
+        .ok()
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+}
+
+/// The Steam root plus every extra library listed in `libraryfolders.vdf`.
 fn find_library_folders(steam_root: &Path) -> Vec<PathBuf> {
-    let vdf_path = steam_root.join("steamapps/libraryfolders.vdf");
+    let mut folders = vec![steam_root.to_path_buf()];
+    let mut seen: HashSet<String> = HashSet::from([path_key(&steam_root.to_string_lossy())]);
 
-    let mut folders = Vec::new();
-
-    // The Steam root itself is always a library folder.
-    folders.push(steam_root.to_path_buf());
-
-    if let Ok(content) = fs::read_to_string(&vdf_path) {
+    let vdf = steam_root.join("steamapps/libraryfolders.vdf");
+    if let Ok(content) = fs::read_to_string(vdf) {
         for path in parse_library_paths(&content) {
-            let p = PathBuf::from(&path);
-            if p.is_dir() && p != steam_root {
-                folders.push(p);
+            let folder = PathBuf::from(&path);
+            if folder.is_dir() && seen.insert(path_key(&path)) {
+                folders.push(folder);
             }
         }
     }
@@ -127,43 +114,13 @@ fn find_library_folders(steam_root: &Path) -> Vec<PathBuf> {
     folders
 }
 
-/// Extract library directory paths from `libraryfolders.vdf` content.
-///
-/// The file format looks like:
-/// ```text
-/// "libraryfolders"
-/// {
-///   "0"
-///   {
-///     "path"    "/home/user/.steam/steam"
-///     ...
-///   }
-///   "1"
-///   {
-///     "path"    "/mnt/games/SteamLibrary"
-///     ...
-///   }
-/// }
-/// ```
 fn parse_library_paths(content: &str) -> Vec<String> {
-    let mut paths = Vec::new();
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        // Look for "path" key-value pairs.
-        if let Some(value) = extract_vdf_value(trimmed, "path") {
-            paths.push(value);
-        }
-    }
-
-    paths
+    content
+        .lines()
+        .filter_map(|line| extract_vdf_value(line, "path"))
+        .collect()
 }
 
-// ---------------------------------------------------------------------------
-// App manifest parsing
-// ---------------------------------------------------------------------------
-
-/// Find all `appmanifest_*.acf` files in a steamapps directory.
 fn find_app_manifests(steamapps_dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(steamapps_dir) else {
         return Vec::new();
@@ -171,33 +128,24 @@ fn find_app_manifests(steamapps_dir: &Path) -> Vec<PathBuf> {
 
     entries
         .filter_map(std::result::Result::ok)
-        .filter(|e| {
-            let name = e.file_name().to_string_lossy().to_lowercase();
+        .map(|entry| entry.path())
+        .filter(|path| {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
             name.starts_with("appmanifest_")
-                && std::path::Path::new(&name)
+                && path
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("acf"))
         })
-        .map(|e| e.path())
         .collect()
 }
 
-/// Parse a single `appmanifest_*.acf` file into a `DiscoveredGame`.
-///
-/// ACF format is similar to VDF:
-/// ```text
-/// "AppState"
-/// {
-///   "appid"        "730"
-///   "name"         "Counter-Strike 2"
-///   "installdir"   "Counter-Strike Global Offensive"
-///   ...
-/// }
-/// ```
 fn parse_app_manifest(
     manifest_path: &Path,
     steamapps_dir: &Path,
-    existing_exes: &HashSet<String>,
+    existing: &HashSet<String>,
 ) -> Option<DiscoveredGame> {
     let content = fs::read_to_string(manifest_path).ok()?;
 
@@ -205,7 +153,6 @@ fn parse_app_manifest(
     let name = extract_acf_field(&content, "name")?;
     let install_dir_name = extract_acf_field(&content, "installdir")?;
 
-    // Skip Steamworks redistributables, Proton, tools, etc.
     if is_steam_tool(&name, &app_id) {
         return None;
     }
@@ -215,14 +162,13 @@ fn parse_app_manifest(
         return None;
     }
 
-    // Try to find the main executable in the install folder.
-    let executable_path = find_main_executable(&install_folder)?;
-    let exe_str = executable_path.to_string_lossy().into_owned();
-    let already_added = existing_exes.contains(&exe_str);
+    let executable = find_main_executable(&install_folder)?;
+    let executable_path = executable.to_string_lossy().into_owned();
+    let already_added = existing.contains(&path_key(&executable_path));
 
     Some(DiscoveredGame {
         title: name,
-        executable_path: exe_str,
+        executable_path,
         install_folder: Some(install_folder.to_string_lossy().into_owned()),
         source: "steam".into(),
         source_id: Some(app_id),
@@ -230,93 +176,35 @@ fn parse_app_manifest(
     })
 }
 
-/// Attempt to find the main game executable in an install directory.
+/// Picks the most likely game binary in an install folder.
 ///
-/// Heuristics:
-/// 1. Look for executables at the top level first (most common).
-/// 2. Look one level deeper (e.g. `Binaries/Win64/Game.exe`).
-/// 3. Prefer larger executables (the game binary is usually the biggest).
+/// The largest executable wins since the game binary is usually bigger than
+/// helpers and tools. Files in the top folder get a 100 MB head start.
 fn find_main_executable(install_dir: &Path) -> Option<PathBuf> {
-    let mut candidates: Vec<(PathBuf, u64)> = Vec::new();
+    const TOP_LEVEL_BONUS: u64 = 100_000_000;
 
-    for entry in walkdir::WalkDir::new(install_dir)
+    walkdir::WalkDir::new(install_dir)
         .max_depth(3)
         .follow_links(false)
         .into_iter()
         .filter_map(std::result::Result::ok)
-    {
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let path = entry.path();
-        if !is_executable_file(path) {
-            continue;
-        }
-
-        let filename = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-
-        if !super::metadata::is_likely_game_executable(&filename) {
-            continue;
-        }
-
-        let size = path.metadata().map(|m| m.len()).unwrap_or(0);
-
-        // Boost top-level executables.
-        let depth = entry.depth();
-        let effective_size = if depth <= 1 { size + 100_000_000 } else { size };
-
-        candidates.push((path.to_path_buf(), effective_size));
-    }
-
-    // Pick the candidate with the highest effective size.
-    candidates.sort_by(|a, b| b.1.cmp(&a.1));
-    candidates.into_iter().next().map(|(p, _)| p)
+        .filter(|entry| entry.file_type().is_file() && is_executable(entry.path()))
+        .filter(|entry| metadata::is_likely_game_executable(&entry.file_name().to_string_lossy()))
+        .max_by_key(|entry| {
+            let size = entry.metadata().map_or(0, |meta| meta.len());
+            if entry.depth() <= 1 {
+                size + TOP_LEVEL_BONUS
+            } else {
+                size
+            }
+        })
+        .map(walkdir::DirEntry::into_path)
 }
 
-/// Check if a path is an executable file (platform-aware).
-fn is_executable_file(path: &Path) -> bool {
-    let ext = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-
-    #[cfg(target_os = "windows")]
-    {
-        ext == "exe"
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        ext == "app" || has_unix_execute(path)
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if matches!(ext.as_str(), "sh" | "x86_64" | "x86") {
-            return true;
-        }
-        has_unix_execute(path)
-    }
-}
-
-#[cfg(unix)]
-fn has_unix_execute(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    path.metadata()
-        .map(|m| m.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-/// Returns `true` for Steam tools, redistributables, and Proton versions
-/// that should be excluded from game discovery.
+/// True for redistributables, Proton builds and other Steam tools.
 fn is_steam_tool(name: &str, app_id: &str) -> bool {
     let lower = name.to_lowercase();
 
-    // Common Steam tool patterns.
     if lower.contains("redistributable")
         || lower.contains("redist")
         || lower.contains("proton")
@@ -329,7 +217,6 @@ fn is_steam_tool(name: &str, app_id: &str) -> bool {
         return true;
     }
 
-    // Known tool app IDs.
     matches!(
         app_id,
         "228980"  // Steamworks Common Redistributables
@@ -340,53 +227,28 @@ fn is_steam_tool(name: &str, app_id: &str) -> bool {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Simple VDF/ACF parser helpers
-// ---------------------------------------------------------------------------
-
-/// Extract the value for a key from a VDF/ACF line.
-///
-/// Handles lines like: `"key"    "value"`
+/// Reads the value of a `"key"  "value"` line.
 fn extract_vdf_value(line: &str, key: &str) -> Option<String> {
-    let trimmed = line.trim();
-    let target = format!("\"{key}\"");
+    let rest = line.trim().strip_prefix(&format!("\"{key}\""))?;
+    let inner = rest.trim().strip_prefix('"')?;
 
-    if !trimmed.starts_with(&target) {
-        return None;
-    }
-
-    // Find the value after the key.
-    let rest = trimmed[target.len()..].trim();
-    extract_quoted_string(rest)
-}
-
-/// Extract a field from ACF content (searches all lines).
-fn extract_acf_field(content: &str, key: &str) -> Option<String> {
-    for line in content.lines() {
-        if let Some(value) = extract_vdf_value(line, key) {
-            return Some(value);
+    // Values escape backslashes and quotes, which matters for Windows paths.
+    let mut value = String::new();
+    let mut chars = inner.chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => return Some(value),
+            '\\' => value.push(chars.next()?),
+            _ => value.push(ch),
         }
     }
     None
 }
 
-/// Extract a double-quoted string value.
-fn extract_quoted_string(s: &str) -> Option<String> {
-    let s = s.trim();
-    if !s.starts_with('"') {
-        return None;
-    }
-    let inner = &s[1..];
-    let end = inner.find('"')?;
-    Some(inner[..end].to_string())
-}
-
-fn collect_existing_executables(db: &Database) -> Result<HashSet<String>> {
-    let all_games = games::list_all_games(db)?;
-    Ok(all_games
-        .into_iter()
-        .filter_map(|g| g.executable_path)
-        .collect())
+fn extract_acf_field(content: &str, key: &str) -> Option<String> {
+    content
+        .lines()
+        .find_map(|line| extract_vdf_value(line, key))
 }
 
 #[cfg(test)]
@@ -398,6 +260,14 @@ mod tests {
         assert_eq!(
             extract_vdf_value(r#"		"path"		"/mnt/games/SteamLibrary""#, "path"),
             Some("/mnt/games/SteamLibrary".into())
+        );
+    }
+
+    #[test]
+    fn parse_vdf_value_unescapes_windows_paths() {
+        assert_eq!(
+            extract_vdf_value(r#"		"path"		"D:\\SteamLibrary""#, "path"),
+            Some(r"D:\SteamLibrary".into())
         );
     }
 
@@ -427,9 +297,10 @@ mod tests {
 }
 "#;
         let paths = parse_library_paths(content);
-        assert_eq!(paths.len(), 2);
-        assert_eq!(paths[0], "/home/user/.steam/steam");
-        assert_eq!(paths[1], "/mnt/games/SteamLibrary");
+        assert_eq!(
+            paths,
+            ["/home/user/.steam/steam", "/mnt/games/SteamLibrary"]
+        );
     }
 
     #[test]
@@ -467,8 +338,6 @@ mod tests {
 
     #[test]
     fn steam_roots_returns_list() {
-        let candidates = steam_root_candidates();
-        // Should return at least one candidate on any platform.
-        assert!(!candidates.is_empty());
+        assert!(!steam_root_candidates().is_empty());
     }
 }

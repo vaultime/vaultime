@@ -1,14 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Platform activity probing for active window and idle detection.
+//! Foreground window and user idle detection.
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use std::process::Command;
 use std::time::Duration;
-
-#[cfg(target_os = "windows")]
-use std::ffi::c_void;
 
 /// Snapshot of activity-related platform signals.
 #[derive(Debug, Clone, Copy)]
@@ -22,266 +17,249 @@ pub struct ActivitySnapshot {
 /// Returns the best-effort activity snapshot for the current platform.
 pub fn capture_activity_snapshot() -> ActivitySnapshot {
     ActivitySnapshot {
-        foreground_pid: detect_foreground_pid(),
-        foreground_supported: foreground_detection_strategy() != "heuristic",
-        idle_for: detect_idle_duration(),
-        idle_supported: idle_detection_strategy() != "heuristic",
+        foreground_pid: imp::foreground_pid(),
+        foreground_supported: foreground_detection_strategy() != HEURISTIC,
+        idle_for: imp::idle_duration(),
+        idle_supported: idle_detection_strategy() != HEURISTIC,
     }
 }
 
-/// Returns a short label describing the current foreground detection strategy.
+/// Short label for the foreground detection strategy, shown in diagnostics.
 pub fn foreground_detection_strategy() -> &'static str {
-    #[cfg(target_os = "linux")]
-    {
-        if can_use_x11_tools() && command_available("xprop") {
-            "x11"
-        } else {
-            "heuristic"
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        "win32_api"
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        if command_available("osascript") {
-            "macos_system"
-        } else {
-            "heuristic"
-        }
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    #[cfg(not(target_os = "windows"))]
-    #[cfg(not(target_os = "macos"))]
-    {
-        "heuristic"
-    }
+    imp::foreground_strategy()
 }
 
-/// Returns a short label describing the current idle detection strategy.
+/// Short label for the idle detection strategy, shown in diagnostics.
 pub fn idle_detection_strategy() -> &'static str {
-    #[cfg(target_os = "linux")]
-    {
-        if can_use_x11_tools() && command_available("xprintidle") {
-            "x11"
-        } else {
-            "heuristic"
-        }
-    }
+    imp::idle_strategy()
+}
 
-    #[cfg(target_os = "windows")]
-    {
+const HEURISTIC: &str = "heuristic";
+
+#[cfg(windows)]
+mod imp {
+    use std::time::Duration;
+
+    use windows_sys::Win32::System::SystemInformation::GetTickCount;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId,
+    };
+
+    pub fn foreground_strategy() -> &'static str {
         "win32_api"
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        if command_available("ioreg") {
-            "macos_ioreg"
-        } else {
-            "heuristic"
+    pub fn idle_strategy() -> &'static str {
+        "win32_api"
+    }
+
+    pub fn foreground_pid() -> Option<u32> {
+        // SAFETY: both calls only read window manager state and `pid` outlives the call.
+        unsafe {
+            let window = GetForegroundWindow();
+            if window.is_null() {
+                return None;
+            }
+
+            let mut pid = 0_u32;
+            GetWindowThreadProcessId(window, &raw mut pid);
+            (pid != 0).then_some(pid)
         }
     }
 
-    #[cfg(not(target_os = "linux"))]
-    #[cfg(not(target_os = "windows"))]
-    #[cfg(not(target_os = "macos"))]
-    {
-        "heuristic"
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn detect_foreground_pid() -> Option<u32> {
-    if !can_use_x11_tools() || !command_available("xprop") {
-        return None;
-    }
-
-    let root_output = run_command("xprop", &["-root", "_NET_ACTIVE_WINDOW"])?;
-    let window_id = parse_window_id(&root_output)?;
-
-    let pid_output = run_command("xprop", &["-id", &window_id, "_NET_WM_PID"])?;
-    parse_pid(&pid_output)
-}
-
-#[cfg(target_os = "windows")]
-fn detect_foreground_pid() -> Option<u32> {
-    unsafe {
-        let window = GetForegroundWindow();
-        if window.is_null() {
-            return None;
-        }
-
-        let mut pid = 0u32;
-        let _thread_id = GetWindowThreadProcessId(window, &mut pid);
-        if pid == 0 { None } else { Some(pid) }
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn detect_foreground_pid() -> Option<u32> {
-    if !command_available("osascript") {
-        return None;
-    }
-
-    let output = run_command(
-        "osascript",
-        &[
-            "-e",
-            "tell application \"System Events\" to unix id of first application process whose frontmost is true",
-        ],
-    )?;
-
-    output.trim().parse::<u32>().ok()
-}
-
-#[cfg(not(target_os = "linux"))]
-#[cfg(not(target_os = "windows"))]
-#[cfg(not(target_os = "macos"))]
-fn detect_foreground_pid() -> Option<u32> {
-    None
-}
-
-#[cfg(target_os = "linux")]
-fn detect_idle_duration() -> Option<Duration> {
-    if !can_use_x11_tools() || !command_available("xprintidle") {
-        return None;
-    }
-
-    let output = run_command("xprintidle", &[])?;
-    let idle_ms = output.trim().parse::<u64>().ok()?;
-    Some(Duration::from_millis(idle_ms))
-}
-
-#[cfg(target_os = "windows")]
-fn detect_idle_duration() -> Option<Duration> {
-    unsafe {
+    pub fn idle_duration() -> Option<Duration> {
         let mut info = LASTINPUTINFO {
-            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            cbSize: size_of::<LASTINPUTINFO>() as u32,
             dwTime: 0,
         };
 
-        if GetLastInputInfo(&mut info) == 0 {
+        // SAFETY: `info` is a valid LASTINPUTINFO with `cbSize` set.
+        if unsafe { GetLastInputInfo(&raw mut info) } == 0 {
             return None;
         }
 
-        let now_ms = GetTickCount64();
-        let idle_ms = now_ms.saturating_sub(info.dwTime as u64);
-        Some(Duration::from_millis(idle_ms))
+        // `dwTime` is a 32-bit tick count. Subtracting from the 32-bit clock with
+        // wrapping keeps the result correct after the 49.7 day rollover.
+        // SAFETY: GetTickCount has no preconditions.
+        let now = unsafe { GetTickCount() };
+        Some(Duration::from_millis(u64::from(
+            now.wrapping_sub(info.dwTime),
+        )))
     }
-}
-
-#[cfg(target_os = "macos")]
-fn detect_idle_duration() -> Option<Duration> {
-    if !command_available("ioreg") {
-        return None;
-    }
-
-    let output = run_command("ioreg", &["-c", "IOHIDSystem"])?;
-    let idle_nanos = parse_macos_idle_nanos(&output)?;
-    Some(Duration::from_nanos(idle_nanos))
-}
-
-#[cfg(not(target_os = "linux"))]
-#[cfg(not(target_os = "windows"))]
-#[cfg(not(target_os = "macos"))]
-fn detect_idle_duration() -> Option<Duration> {
-    None
 }
 
 #[cfg(target_os = "linux")]
-fn can_use_x11_tools() -> bool {
-    std::env::var_os("DISPLAY").is_some()
-}
+mod imp {
+    use std::process::Command;
+    use std::sync::OnceLock;
+    use std::time::Duration;
 
-#[cfg(not(target_os = "linux"))]
-fn can_use_x11_tools() -> bool {
-    false
-}
+    use super::HEURISTIC;
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn run_command(program: &str, args: &[&str]) -> Option<String> {
-    let output = Command::new(program).args(args).output().ok()?;
-    if !output.status.success() {
-        return None;
+    pub fn foreground_strategy() -> &'static str {
+        if xprop_available() { "x11" } else { HEURISTIC }
     }
 
-    String::from_utf8(output.stdout).ok()
-}
+    pub fn idle_strategy() -> &'static str {
+        if xprintidle_available() {
+            "x11"
+        } else {
+            HEURISTIC
+        }
+    }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn run_command(_program: &str, _args: &[&str]) -> Option<String> {
-    None
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn command_available(program: &str) -> bool {
-    Command::new("sh")
-        .args(["-c", &format!("command -v {program} >/dev/null 2>&1")])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn command_available(_program: &str) -> bool {
-    false
-}
-
-fn parse_window_id(output: &str) -> Option<String> {
-    output
-        .split('#')
-        .nth(1)
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && *value != "0x0")
-        .map(ToOwned::to_owned)
-}
-
-fn parse_pid(output: &str) -> Option<u32> {
-    output
-        .split('=')
-        .nth(1)
-        .map(str::trim)
-        .and_then(|value| value.parse::<u32>().ok())
-}
-
-#[cfg(target_os = "macos")]
-fn parse_macos_idle_nanos(output: &str) -> Option<u64> {
-    output.lines().find_map(|line| {
-        if !line.contains("HIDIdleTime") {
+    pub fn foreground_pid() -> Option<u32> {
+        if !xprop_available() {
             return None;
         }
 
-        line.split('=')
+        let root = run("xprop", &["-root", "_NET_ACTIVE_WINDOW"])?;
+        let window_id = parse_window_id(&root)?;
+        let pid = run("xprop", &["-id", &window_id, "_NET_WM_PID"])?;
+        parse_pid(&pid)
+    }
+
+    pub fn idle_duration() -> Option<Duration> {
+        if !xprintidle_available() {
+            return None;
+        }
+
+        let idle_ms = run("xprintidle", &[])?.trim().parse::<u64>().ok()?;
+        Some(Duration::from_millis(idle_ms))
+    }
+
+    // Tool availability does not change while the app runs, so check it once.
+    fn xprop_available() -> bool {
+        static AVAILABLE: OnceLock<bool> = OnceLock::new();
+        *AVAILABLE.get_or_init(|| x11_session() && on_path("xprop"))
+    }
+
+    fn xprintidle_available() -> bool {
+        static AVAILABLE: OnceLock<bool> = OnceLock::new();
+        *AVAILABLE.get_or_init(|| x11_session() && on_path("xprintidle"))
+    }
+
+    fn x11_session() -> bool {
+        std::env::var_os("DISPLAY").is_some()
+    }
+
+    fn on_path(program: &str) -> bool {
+        std::env::var_os("PATH").is_some_and(|paths| {
+            std::env::split_paths(&paths).any(|dir| dir.join(program).is_file())
+        })
+    }
+
+    fn run(program: &str, args: &[&str]) -> Option<String> {
+        let output = Command::new(program).args(args).output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout).ok()
+    }
+
+    fn parse_window_id(output: &str) -> Option<String> {
+        output
+            .split('#')
             .nth(1)
             .map(str::trim)
-            .and_then(|value| value.parse::<u64>().ok())
-    })
+            .filter(|value| !value.is_empty() && *value != "0x0")
+            .map(ToOwned::to_owned)
+    }
+
+    fn parse_pid(output: &str) -> Option<u32> {
+        output
+            .split('=')
+            .nth(1)
+            .map(str::trim)
+            .and_then(|value| value.parse::<u32>().ok())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn parses_window_id_from_xprop_output() {
+            let output = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4c00007";
+            assert_eq!(parse_window_id(output).as_deref(), Some("0x4c00007"));
+        }
+
+        #[test]
+        fn ignores_empty_window_id() {
+            let output = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0";
+            assert_eq!(parse_window_id(output), None);
+        }
+
+        #[test]
+        fn parses_pid_from_xprop_output() {
+            let output = "_NET_WM_PID(CARDINAL) = 4242";
+            assert_eq!(parse_pid(output), Some(4242));
+        }
+    }
 }
 
-#[cfg(target_os = "windows")]
-#[repr(C)]
-struct LASTINPUTINFO {
-    cbSize: u32,
-    dwTime: u32,
+#[cfg(target_os = "macos")]
+mod imp {
+    use std::process::Command;
+    use std::time::Duration;
+
+    pub fn foreground_strategy() -> &'static str {
+        "macos_system"
+    }
+
+    pub fn idle_strategy() -> &'static str {
+        "macos_ioreg"
+    }
+
+    pub fn foreground_pid() -> Option<u32> {
+        let script = "tell application \"System Events\" to unix id of first application process whose frontmost is true";
+        run("osascript", &["-e", script])?.trim().parse().ok()
+    }
+
+    pub fn idle_duration() -> Option<Duration> {
+        let output = run("ioreg", &["-c", "IOHIDSystem"])?;
+        output.lines().find_map(|line| {
+            if !line.contains("HIDIdleTime") {
+                return None;
+            }
+            line.split('=')
+                .nth(1)
+                .and_then(|value| value.trim().parse().ok())
+                .map(Duration::from_nanos)
+        })
+    }
+
+    fn run(program: &str, args: &[&str]) -> Option<String> {
+        let output = Command::new(program).args(args).output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout).ok()
+    }
 }
 
-#[cfg(target_os = "windows")]
-#[link(name = "user32")]
-unsafe extern "system" {
-    fn GetForegroundWindow() -> *mut c_void;
-    fn GetWindowThreadProcessId(window: *mut c_void, process_id: *mut u32) -> u32;
-    fn GetLastInputInfo(info: *mut LASTINPUTINFO) -> i32;
-}
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+mod imp {
+    use std::time::Duration;
 
-#[cfg(target_os = "windows")]
-#[link(name = "kernel32")]
-unsafe extern "system" {
-    fn GetTickCount64() -> u64;
+    use super::HEURISTIC;
+
+    pub fn foreground_strategy() -> &'static str {
+        HEURISTIC
+    }
+
+    pub fn idle_strategy() -> &'static str {
+        HEURISTIC
+    }
+
+    pub fn foreground_pid() -> Option<u32> {
+        None
+    }
+
+    pub fn idle_duration() -> Option<Duration> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -289,27 +267,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_window_id_from_xprop_output() {
-        let output = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4c00007";
-        assert_eq!(parse_window_id(output).as_deref(), Some("0x4c00007"));
-    }
-
-    #[test]
-    fn parses_pid_from_xprop_output() {
-        let output = "_NET_WM_PID(CARDINAL) = 4242";
-        assert_eq!(parse_pid(output), Some(4242));
-    }
-
-    #[test]
-    fn ignores_empty_window_id() {
-        let output = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0";
-        assert_eq!(parse_window_id(output), None);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn parses_macos_idle_time() {
-        let output = "\"HIDIdleTime\" = 123456789";
-        assert_eq!(parse_macos_idle_nanos(output), Some(123456789));
+    fn snapshot_flags_match_strategies() {
+        let snapshot = capture_activity_snapshot();
+        assert_eq!(
+            snapshot.foreground_supported,
+            foreground_detection_strategy() != HEURISTIC
+        );
+        assert_eq!(
+            snapshot.idle_supported,
+            idle_detection_strategy() != HEURISTIC
+        );
     }
 }

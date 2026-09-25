@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 //! Tauri IPC command handlers.
+//!
+//! Commands that touch the disk, the network or many rows use
+//! `#[tauri::command(async)]` so they run off the main thread and never freeze
+//! the window.
 
 use std::sync::Arc;
 
+use log::warn;
 use serde::Serialize;
 use tauri::State;
 
@@ -21,11 +26,7 @@ use crate::discovery::{self, DiscoveredGame};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::secure_storage;
-use crate::tracking::engine::TrackingEngine;
-
-// ---------------------------------------------------------------------------
-// App commands
-// ---------------------------------------------------------------------------
+use crate::tracking::engine::{POLL_INTERVAL, TrackingEngine};
 
 #[tauri::command]
 pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
@@ -69,10 +70,6 @@ pub fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, Vaultim
     Ok(true)
 }
 
-// ---------------------------------------------------------------------------
-// Game commands
-// ---------------------------------------------------------------------------
-
 #[tauri::command]
 pub fn list_games(db: State<'_, Arc<Database>>) -> Result<Vec<Game>, VaultimeError> {
     games::list_games(&db)
@@ -102,11 +99,7 @@ pub fn delete_game(db: State<'_, Arc<Database>>, id: String) -> Result<bool, Vau
     games::delete_game(&db, &id)
 }
 
-// ---------------------------------------------------------------------------
-// Asset commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_game_assets(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -115,7 +108,7 @@ pub fn list_game_assets(
     assets::list_game_assets(&db, &asset_manager, &game_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_preferred_game_assets(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -123,7 +116,7 @@ pub fn list_preferred_game_assets(
     assets::list_preferred_game_assets(&db, &asset_manager)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_game_assets(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -132,7 +125,7 @@ pub fn scan_game_assets(
     assets::scan_game_assets(&db, &asset_manager, &game_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_game_asset(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -151,16 +144,12 @@ pub fn set_preferred_game_asset(
     assets::set_preferred_game_asset(&db, &game_id, &asset_id)
 }
 
-// ---------------------------------------------------------------------------
-// Session commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
     sessions::list_all_sessions(&db)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_sessions_for_game(
     db: State<'_, Arc<Database>>,
     game_id: String,
@@ -173,17 +162,13 @@ pub fn get_active_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>,
     sessions::get_active_sessions(&db)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_session_events_for_game(
     db: State<'_, Arc<Database>>,
     game_id: String,
 ) -> Result<Vec<SessionEvent>, VaultimeError> {
     session_events::list_events_for_game(&db, &game_id)
 }
-
-// ---------------------------------------------------------------------------
-// Backup commands
-// ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn list_backup_snapshots(
@@ -192,7 +177,7 @@ pub fn list_backup_snapshots(
     backup_snapshots::list_snapshots(&db, 8)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_local_backup(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -206,23 +191,23 @@ pub fn export_local_backup(
         std::path::Path::new(&destination_dir),
     )?;
 
-    let _ = backup_snapshots::create_snapshot(
+    record_snapshot(
         &db,
-        Some(&app_context.device_id),
+        &app_context.device_id,
         &summary.overall_checksum,
-        Some(&summary.backup_path),
-        Some("Local export"),
+        &summary.backup_path,
+        "Local export",
     );
 
     Ok(summary)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn inspect_local_backup(path: String) -> Result<LocalBackupSummary, VaultimeError> {
     backup::inspect_local_backup(std::path::Path::new(&path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_local_backup(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -230,33 +215,27 @@ pub fn import_local_backup(
     engine: State<'_, TrackingEngine>,
     path: String,
 ) -> Result<LocalBackupSummary, VaultimeError> {
-    if !sessions::get_active_sessions(&db)?.is_empty() {
-        return Err(VaultimeError::Backup(
-            "close all live sessions before restoring a local backup".into(),
-        ));
-    }
+    let summary = with_tracking_paused(&db, &engine, || {
+        backup::import_local_backup(
+            &db,
+            &asset_manager,
+            &app_context,
+            std::path::Path::new(&path),
+        )
+    })?;
 
-    engine.stop();
-
-    let summary = backup::import_local_backup(
+    record_snapshot(
         &db,
-        &asset_manager,
-        &app_context,
-        std::path::Path::new(&path),
-    )?;
-
-    let _ = backup_snapshots::create_snapshot(
-        &db,
-        Some(&summary.source_device_id),
+        &summary.source_device_id,
         &summary.overall_checksum,
-        Some(&summary.backup_path),
-        Some("Local restore"),
+        &summary.backup_path,
+        "Local restore",
     );
 
     Ok(summary)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn upload_remote_backup(
     db: State<'_, Arc<Database>>,
     app_context: State<'_, AppContext>,
@@ -276,18 +255,18 @@ pub fn upload_remote_backup(
         label.as_deref(),
     )?;
 
-    let _ = backup_snapshots::create_snapshot(
+    record_snapshot(
         &db,
-        Some(&result.payload_summary.source_device_id),
+        &result.payload_summary.source_device_id,
         &result.payload_summary.overall_checksum,
-        Some(&result.backup.storage_key),
-        Some("Remote backup"),
+        &result.backup.storage_key,
+        "Remote backup",
     );
 
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn restore_remote_backup(
     db: State<'_, Arc<Database>>,
     app_context: State<'_, AppContext>,
@@ -297,37 +276,59 @@ pub fn restore_remote_backup(
     account_id: String,
     backup_id: String,
 ) -> Result<RemoteBackupRestoreResult, VaultimeError> {
-    if !sessions::get_active_sessions(&db)?.is_empty() {
-        return Err(VaultimeError::Backup(
-            "close all live sessions before restoring a remote backup".into(),
-        ));
-    }
+    let result = with_tracking_paused(&db, &engine, || {
+        backup::remote::restore_remote_backup(
+            &db,
+            &app_context,
+            &api_base_url,
+            &access_token,
+            &account_id,
+            &backup_id,
+        )
+    })?;
 
-    engine.stop();
-
-    let result = backup::remote::restore_remote_backup(
+    record_snapshot(
         &db,
-        &app_context,
-        &api_base_url,
-        &access_token,
-        &account_id,
-        &backup_id,
-    )?;
-
-    let _ = backup_snapshots::create_snapshot(
-        &db,
-        Some(&result.restored_summary.source_device_id),
+        &result.restored_summary.source_device_id,
         &result.restored_summary.overall_checksum,
-        Some(&result.backup.storage_key),
-        Some("Remote restore"),
+        &result.backup.storage_key,
+        "Remote restore",
     );
 
     Ok(result)
 }
 
-// ---------------------------------------------------------------------------
-// Settings commands
-// ---------------------------------------------------------------------------
+/// Runs a restore with tracking paused. Refuses while a game is being tracked,
+/// because the restore replaces the session tables.
+fn with_tracking_paused<T>(
+    db: &Database,
+    engine: &TrackingEngine,
+    restore: impl FnOnce() -> Result<T, VaultimeError>,
+) -> Result<T, VaultimeError> {
+    engine.pause();
+    let result = match sessions::get_active_sessions(db) {
+        Ok(active) if !active.is_empty() => Err(VaultimeError::Backup(
+            "close all running games before restoring a backup".into(),
+        )),
+        Ok(_) => restore(),
+        Err(error) => Err(error),
+    };
+    engine.resume();
+    result
+}
+
+/// Records a backup in the local history. A failure here must not fail the backup.
+fn record_snapshot(db: &Database, device_id: &str, checksum: &str, location: &str, label: &str) {
+    if let Err(error) = backup_snapshots::create_snapshot(
+        db,
+        Some(device_id),
+        checksum,
+        Some(location),
+        Some(label),
+    ) {
+        warn!("failed to record backup snapshot: {error}");
+    }
+}
 
 #[tauri::command]
 pub fn list_settings(db: State<'_, Arc<Database>>) -> Result<Vec<Setting>, VaultimeError> {
@@ -344,10 +345,6 @@ pub fn set_setting(
     Ok(true)
 }
 
-// ---------------------------------------------------------------------------
-// Tracking commands
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Serialize)]
 pub struct TrackingDiagnostics {
     pub platform: String,
@@ -355,11 +352,6 @@ pub struct TrackingDiagnostics {
     pub foreground_detection: String,
     pub idle_detection: String,
     pub poll_interval_seconds: u64,
-}
-
-#[tauri::command]
-pub fn get_tracking_status(engine: State<'_, TrackingEngine>) -> Result<bool, VaultimeError> {
-    Ok(engine.is_running())
 }
 
 #[tauri::command]
@@ -371,15 +363,11 @@ pub fn get_tracking_diagnostics(
         running: engine.is_running(),
         foreground_detection: foreground_detection_strategy().into(),
         idle_detection: idle_detection_strategy().into(),
-        poll_interval_seconds: 5,
+        poll_interval_seconds: POLL_INTERVAL.as_secs(),
     })
 }
 
-// ---------------------------------------------------------------------------
-// Discovery commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn discover_games(
     db: State<'_, Arc<Database>>,
     paths: Vec<String>,
@@ -387,7 +375,7 @@ pub fn discover_games(
     discovery::scanner::scan_folders(&db, &paths)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn discover_steam_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
@@ -399,7 +387,7 @@ pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
     Ok(discovery::scanner::default_scan_paths())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_discovered_games(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
@@ -420,9 +408,9 @@ pub fn import_discovered_games(
         };
 
         let game = games::create_game(&db, &input)?;
-
-        // Trigger asset scanning for the newly imported game.
-        let _ = assets::scan_game_assets(&db, &asset_manager, &game.id);
+        if let Err(error) = assets::scan_game_assets(&db, &asset_manager, &game.id) {
+            warn!("artwork scan failed for {}: {error}", game.title);
+        }
 
         imported.push(game);
     }

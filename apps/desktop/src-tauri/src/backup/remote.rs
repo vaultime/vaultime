@@ -467,7 +467,7 @@ fn hash_file(path: &Path) -> Result<(u64, String)> {
         hasher.update(&buffer[..read]);
     }
 
-    Ok((bytes, format!("{:x}", hasher.finalize())))
+    Ok((bytes, crate::hex::encode(&hasher.finalize())))
 }
 
 fn encrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Result<()> {
@@ -575,7 +575,7 @@ fn encrypt_chunk(
 ) -> Result<Vec<u8>> {
     cipher
         .encrypt(
-            Nonce::from_slice(&chunk_nonce(nonce_prefix, chunk_index)),
+            &Nonce::from(chunk_nonce(nonce_prefix, chunk_index)),
             Payload {
                 msg: plaintext,
                 aad: ENCRYPTED_AAD,
@@ -592,7 +592,7 @@ fn decrypt_chunk(
 ) -> Result<Vec<u8>> {
     cipher
         .decrypt(
-            Nonce::from_slice(&chunk_nonce(nonce_prefix, chunk_index)),
+            &Nonce::from(chunk_nonce(nonce_prefix, chunk_index)),
             Payload {
                 msg: ciphertext,
                 aad: ENCRYPTED_AAD,
@@ -655,13 +655,25 @@ fn map_cloud_http(error: reqwest::Error) -> VaultimeError {
 
 #[cfg(test)]
 mod tests {
-    use super::{decrypt_archive, encrypt_archive};
+    use super::{decrypt_archive, encrypt_archive, encrypt_chunk};
+    use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
     use std::fs;
     use std::path::PathBuf;
     use uuid::Uuid;
 
     fn test_dir() -> PathBuf {
         std::env::temp_dir().join(format!("vaultime-remote-backup-test-{}", Uuid::new_v4()))
+    }
+
+    // Existing cloud backups must stay decryptable across crate upgrades.
+    #[test]
+    fn chunk_encryption_output_is_stable() {
+        let cipher = ChaCha20Poly1305::new_from_slice(&[7_u8; 32]).expect("key");
+        let ciphertext = encrypt_chunk(&cipher, &[1, 2, 3, 4], 3, b"vaultime").expect("encrypt");
+        assert_eq!(
+            crate::hex::encode(&ciphertext),
+            "8b520c0a28beb3c892b7e36e387f57ca4d0da19da09e9629"
+        );
     }
 
     #[test]

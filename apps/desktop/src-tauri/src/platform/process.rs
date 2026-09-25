@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Cross-platform process enumeration and matching.
-
-use std::path::Path;
+//! Process enumeration and game executable matching.
 
 use sysinfo::System;
 
@@ -41,47 +39,52 @@ pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
         .collect()
 }
 
-/// Checks whether a running process matches a game's registered executable path.
+/// Checks whether a running process matches a game's registered executable.
 ///
-/// Matching strategy (in priority order):
-/// 1. Full path match — the process `exe_path` equals the game's `executable_path`.
-/// 2. File-name match — the process name matches the file name component of the
-///    game's `executable_path` (handles cases where the OS reports a short name).
+/// The full path is compared first. The file name is the fallback because some
+/// processes, for example elevated ones on Windows, hide their full path.
 pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bool {
-    // Full path comparison (case-sensitive on Linux, case-insensitive on Windows).
-    if let Some(ref exe) = process.exe_path {
-        if paths_equal(exe, game_executable) {
-            return true;
-        }
+    if let Some(exe) = &process.exe_path
+        && paths_equal(exe, game_executable)
+    {
+        return true;
     }
 
-    // File-name-only comparison.
-    if let Some(game_filename) = Path::new(game_executable).file_name() {
-        let game_name = game_filename.to_string_lossy();
-        if names_equal(&process.name, &game_name) {
-            return true;
-        }
-    }
-
-    false
+    file_name(game_executable).is_some_and(|game_name| names_equal(&process.name, game_name))
 }
 
-#[cfg(target_os = "windows")]
+/// Last path segment, splitting on both separators so Windows paths parse on any OS.
+fn file_name(path: &str) -> Option<&str> {
+    path.rsplit(['/', '\\']).find(|segment| !segment.is_empty())
+}
+
 fn paths_equal(a: &str, b: &str) -> bool {
-    a.eq_ignore_ascii_case(b)
+    path_key(a) == path_key(b)
 }
 
-#[cfg(not(target_os = "windows"))]
-fn paths_equal(a: &str, b: &str) -> bool {
-    a == b
+/// Comparison key for executable paths. On Windows it ignores case and
+/// collapses separators, so `C:/Games//x.exe` equals `c:\games\X.EXE`.
+#[cfg(windows)]
+pub fn path_key(path: &str) -> String {
+    path.split(['/', '\\'])
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("\\")
+        .to_lowercase()
 }
 
-#[cfg(target_os = "windows")]
+/// Comparison key for executable paths. Unix paths are compared as is.
+#[cfg(not(windows))]
+pub fn path_key(path: &str) -> String {
+    path.to_owned()
+}
+
+#[cfg(windows)]
 fn names_equal(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn names_equal(a: &str, b: &str) -> bool {
     a == b
 }
@@ -121,6 +124,26 @@ mod tests {
             cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, "/opt/games/cool-game/game"));
+    }
+
+    #[test]
+    fn windows_style_path_matches_by_file_name() {
+        let proc = RunningProcess {
+            pid: 4,
+            name: "game.exe".into(),
+            exe_path: None,
+            cpu_usage: 0.0,
+        };
+        assert!(matches_executable(&proc, r"C:\Games\Cool\game.exe"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_paths_ignore_case_and_separators() {
+        assert!(paths_equal(
+            r"C:\Games\Cool\Game.exe",
+            "c:/games//cool/game.EXE"
+        ));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Backup snapshot repository — records local export/import checkpoints.
+//! History of local and remote backup operations.
 
 use rusqlite::{Row, params};
 

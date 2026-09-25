@@ -7,20 +7,18 @@ use std::path::Path;
 
 /// Infer a human-readable game title from an executable path.
 ///
-/// Tries the parent folder name first (more likely to be a game name like
-/// "Counter-Strike 2") and falls back to the executable filename.  Strips
-/// common suffixes, separators, and launcher noise.
+/// Prefers the parent folder name, for example "Counter-Strike 2", and falls
+/// back to the file name. Strips build suffixes and separators.
 pub fn infer_title(executable_path: &str) -> String {
     let path = Path::new(executable_path);
 
-    // Try the parent folder name — usually the game's install directory.
+    // The parent folder is usually the install directory and the best title.
     let from_parent = path
         .parent()
         .and_then(|p| p.file_name())
         .map(|n| n.to_string_lossy().into_owned())
         .and_then(|name| {
             let cleaned = clean_title(&name);
-            // Skip generic folder names that aren't useful titles.
             if is_generic_folder(&cleaned) {
                 None
             } else {
@@ -32,7 +30,6 @@ pub fn infer_title(executable_path: &str) -> String {
         return title;
     }
 
-    // Fall back to the executable filename.
     let filename = path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -133,11 +130,11 @@ pub fn is_likely_game_executable(filename: &str) -> bool {
         "dotnet",
         "ue4prereq",
         "ue4-prereq",
-        "launcher", // generic launcher helpers
+        "launcher",
         "updater",
         "update",
         "helper",
-        "eac_", // EasyAntiCheat
+        "eac_",
         "easyanticheat",
         "battleye",
         "beclient",

@@ -1,21 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Session event repository — read access for the append-only event log.
+//! Read access to the append-only session event log.
 
-use rusqlite::{Row, params};
+use rusqlite::Row;
 
 use crate::db::connection::Database;
 use crate::db::models::SessionEvent;
 use crate::error::{Result, VaultimeError};
 
-#[derive(Debug, Clone)]
-pub struct SyncAck {
-    pub event_id: String,
-    pub server_ack_at: Option<String>,
-}
-
-fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
+pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
     Ok(SessionEvent {
         id: row.get("id")?,
         session_id: row.get("session_id")?,
@@ -27,72 +21,11 @@ fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
         hash_prev: row.get("hash_prev")?,
         hash_self: row.get("hash_self")?,
         signature: row.get("signature")?,
-        synced_at: row.get("synced_at")?,
-        server_ack_at: row.get("server_ack_at")?,
     })
 }
 
 fn map_db(error: rusqlite::Error) -> VaultimeError {
     VaultimeError::Database(format!("{error}"))
-}
-
-/// Returns events that have not been synced to the cloud yet, oldest first.
-/// Limited to `batch_size` to keep upload payloads manageable.
-pub fn list_unsynced_events(db: &Database, batch_size: u32) -> Result<Vec<SessionEvent>> {
-    db.with_conn(|conn| {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, session_id, sequence, event_type, event_time_wall,
-                        event_time_monotonic, payload_json, hash_prev, hash_self, signature,
-                        synced_at, server_ack_at
-                 FROM session_events
-                 WHERE synced_at IS NULL
-                 ORDER BY event_time_wall ASC, sequence ASC
-                 LIMIT ?1",
-            )
-            .map_err(map_db)?;
-
-        let rows = stmt
-            .query_map([batch_size], row_to_session_event)
-            .map_err(map_db)?;
-
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
-    })
-}
-
-/// Marks the given event IDs as synced with the current timestamp.
-pub fn mark_events_synced(db: &Database, acknowledgements: &[SyncAck]) -> Result<()> {
-    if acknowledgements.is_empty() {
-        return Ok(());
-    }
-
-    db.with_conn(|conn| {
-        for acknowledgement in acknowledgements {
-            conn.execute(
-                "UPDATE session_events
-                 SET synced_at = datetime('now'),
-                     server_ack_at = COALESCE(?2, server_ack_at)
-                 WHERE id = ?1",
-                params![acknowledgement.event_id, acknowledgement.server_ack_at],
-            )
-            .map_err(map_db)?;
-        }
-
-        Ok(())
-    })
-}
-
-/// Counts the number of events that still need a cloud acknowledgement.
-pub fn count_unsynced_events(db: &Database) -> Result<u64> {
-    db.with_conn(|conn| {
-        conn.query_row(
-            "SELECT COUNT(*) FROM session_events WHERE synced_at IS NULL",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|count| u64::try_from(count.max(0)).unwrap_or(0))
-        .map_err(map_db)
-    })
 }
 
 /// Returns all events for a game, newest first.

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Settings repository — key/value store for app configuration.
+//! Key value store for app settings.
 
 use rusqlite::{Row, params};
 

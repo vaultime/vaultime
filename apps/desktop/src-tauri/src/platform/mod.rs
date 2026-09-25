@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Platform abstraction — OS-specific process, window, and idle APIs.
+//! OS specific process, window and idle detection.
 
 pub mod activity;
 pub mod process;

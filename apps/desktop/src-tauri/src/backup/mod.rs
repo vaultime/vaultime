@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Local backup/export/import pipeline.
+//! Local backup export, inspection and restore.
 
 pub mod remote;
 
+use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +17,8 @@ use walkdir::WalkDir;
 use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::db::connection::Database;
+use crate::db::migrate::known_migrations;
+use crate::db::repo::devices;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
@@ -142,28 +145,82 @@ pub fn import_local_backup(
 ) -> Result<LocalBackupSummary> {
     let backup_dir = resolve_backup_dir(backup_path)?;
     let manifest = load_and_validate_manifest(&backup_dir)?;
-    let backup_db_path = backup_dir.join(BACKUP_DB_FILE);
+    ensure_schema_supported(&manifest.schema_migrations)?;
 
-    let staged_assets_dir = app_context
+    let staging_dir = app_context
         .app_dir
-        .join(format!(".restore-assets-{}", manifest.backup_id));
-    if staged_assets_dir.exists() {
-        fs::remove_dir_all(&staged_assets_dir).map_err(|error| {
+        .join(format!(".restore-{}", manifest.backup_id));
+    if staging_dir.exists() {
+        fs::remove_dir_all(&staging_dir).map_err(|error| {
             VaultimeError::Backup(format!(
-                "failed to clear staged restore directory {}: {error}",
-                staged_assets_dir.display()
+                "failed to clear staging directory {}: {error}",
+                staging_dir.display()
             ))
         })?;
     }
 
-    copy_directory_contents(&backup_dir.join(BACKUP_ASSET_DIR), &staged_assets_dir)?;
-
-    restore_database_snapshot(db, &backup_db_path)?;
-    replace_directory(&staged_assets_dir, asset_manager.cache_dir())?;
-    rewrite_asset_cache_paths(db, asset_manager.cache_dir())?;
+    let result = restore_from_staging(db, asset_manager, app_context, &backup_dir, &staging_dir);
+    let _ = fs::remove_dir_all(&staging_dir);
+    result?;
 
     Ok(summary_from_manifest(&manifest, &backup_dir, true))
 }
+
+fn restore_from_staging(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    backup_dir: &Path,
+    staging_dir: &Path,
+) -> Result<()> {
+    let staged_assets = staging_dir.join(BACKUP_ASSET_DIR);
+    copy_directory_contents(&backup_dir.join(BACKUP_ASSET_DIR), &staged_assets)?;
+
+    // Older backups are migrated on a copy first so their columns match ours.
+    let staged_db = staging_dir.join(BACKUP_DB_FILE);
+    fs::copy(backup_dir.join(BACKUP_DB_FILE), &staged_db).map_err(|error| {
+        VaultimeError::Backup(format!("failed to stage backup database: {error}"))
+    })?;
+    drop(Database::open(&staged_db)?);
+
+    restore_database_snapshot(db, &staged_db)?;
+    replace_directory(&staged_assets, asset_manager.cache_dir())?;
+    rewrite_asset_cache_paths(db, asset_manager.cache_dir())?;
+
+    // The restored device list may not contain this machine yet.
+    devices::ensure_device(
+        db,
+        &app_context.device_id,
+        std::env::consts::OS,
+        &app_context.app_version,
+    )?;
+    Ok(())
+}
+
+/// Rejects backups made by a newer app version with migrations we do not know.
+fn ensure_schema_supported(backup_migrations: &[String]) -> Result<()> {
+    let known: Vec<&str> = known_migrations().collect();
+    match backup_migrations
+        .iter()
+        .find(|name| !known.contains(&name.as_str()))
+    {
+        Some(unknown) => Err(VaultimeError::Backup(format!(
+            "this backup was made by a newer Vaultime version (unknown migration {unknown}). Update Vaultime and try again."
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// Tables in foreign key order, parents first.
+const RESTORE_TABLES: &[&str] = &[
+    "devices",
+    "games",
+    "game_assets",
+    "sessions",
+    "session_events",
+    "settings",
+    "backup_snapshots",
+];
 
 fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()> {
     let destination = destination_path.to_string_lossy().to_string();
@@ -188,6 +245,19 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
     let backup_db = backup_db_path.to_string_lossy().to_string();
 
     db.with_conn(|conn| {
+        let mut statements = String::from("PRAGMA foreign_keys=OFF;\nBEGIN IMMEDIATE;\n");
+        for table in RESTORE_TABLES.iter().rev() {
+            let _ = writeln!(statements, "DELETE FROM {table};");
+        }
+        for table in RESTORE_TABLES {
+            let columns = table_columns(conn, table)?.join(", ");
+            let _ = writeln!(
+                statements,
+                "INSERT INTO {table} ({columns}) SELECT {columns} FROM backup_restore.{table};"
+            );
+        }
+        statements.push_str("COMMIT;\nPRAGMA foreign_keys=ON;");
+
         conn.execute_batch(&format!(
             "ATTACH DATABASE '{}' AS backup_restore;",
             sqlite_string_literal(&backup_db)
@@ -199,30 +269,10 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
             ))
         })?;
 
-        let restore_result = conn.execute_batch(
-            r"
-            PRAGMA foreign_keys=OFF;
-            BEGIN IMMEDIATE;
-            DELETE FROM session_events;
-            DELETE FROM sessions;
-            DELETE FROM game_assets;
-            DELETE FROM games;
-            DELETE FROM backup_snapshots;
-            DELETE FROM devices;
-            DELETE FROM settings;
-
-            INSERT INTO devices SELECT * FROM backup_restore.devices;
-            INSERT INTO games SELECT * FROM backup_restore.games;
-            INSERT INTO game_assets SELECT * FROM backup_restore.game_assets;
-            INSERT INTO sessions SELECT * FROM backup_restore.sessions;
-            INSERT INTO session_events SELECT * FROM backup_restore.session_events;
-            INSERT INTO settings SELECT * FROM backup_restore.settings;
-            INSERT INTO backup_snapshots SELECT * FROM backup_restore.backup_snapshots;
-            COMMIT;
-            PRAGMA foreign_keys=ON;
-            ",
-        );
-
+        let restore_result = conn.execute_batch(&statements);
+        if restore_result.is_err() {
+            let _ = conn.execute_batch("ROLLBACK; PRAGMA foreign_keys=ON;");
+        }
         let detach_result = conn.execute_batch("DETACH DATABASE backup_restore;");
 
         restore_result.map_err(|error| {
@@ -230,49 +280,52 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
                 "failed to restore database tables from backup: {error}"
             ))
         })?;
-
         detach_result.map_err(|error| {
             VaultimeError::Backup(format!("failed to detach backup database: {error}"))
-        })?;
-
-        Ok(())
+        })
     })
 }
 
+fn table_columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
+    let mut stmt = conn
+        .prepare("SELECT name FROM pragma_table_info(?1)")
+        .map_err(|error| VaultimeError::Backup(format!("failed to read columns: {error}")))?;
+    let columns = stmt
+        .query_map([table], |row| row.get::<_, String>(0))
+        .and_then(Iterator::collect::<rusqlite::Result<Vec<_>>>)
+        .map_err(|error| VaultimeError::Backup(format!("failed to read columns: {error}")))?;
+    Ok(columns)
+}
+
+/// Points cached artwork at the restored cache folder, keeping each file name.
 fn rewrite_asset_cache_paths(db: &Database, cache_dir: &Path) -> Result<()> {
     db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare(
-                "SELECT id, game_id
-                 FROM game_assets
-                 WHERE cache_path IS NOT NULL",
-            )
+            .prepare("SELECT id, game_id, cache_path FROM game_assets WHERE cache_path IS NOT NULL")
             .map_err(|error| {
-                VaultimeError::Backup(format!(
-                    "failed to prepare cache-path rewrite query: {error}"
-                ))
+                VaultimeError::Backup(format!("failed to query cached assets: {error}"))
             })?;
-
-        let rows = stmt
+        let assets = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|error| {
-                VaultimeError::Backup(format!("failed to query cache-path rewrite rows: {error}"))
-            })?;
-
-        let assets = rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|error| {
-                VaultimeError::Backup(format!(
-                    "failed to collect cache-path rewrite rows: {error}"
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
                 ))
+            })
+            .and_then(Iterator::collect::<rusqlite::Result<Vec<_>>>)
+            .map_err(|error| {
+                VaultimeError::Backup(format!("failed to query cached assets: {error}"))
             })?;
 
-        for (asset_id, game_id) in assets {
+        for (asset_id, game_id, old_path) in assets {
+            // The backup may come from another OS, so split on both separators.
+            let Some(file_name) = old_path.rsplit(['/', '\\']).find(|part| !part.is_empty()) else {
+                continue;
+            };
             let next_path = cache_dir
                 .join(&game_id)
-                .join(format!("{asset_id}.png"))
+                .join(file_name)
                 .to_string_lossy()
                 .to_string();
 
@@ -601,7 +654,7 @@ fn compute_overall_checksum(
         hasher.update(b"\n");
     }
 
-    format!("{:x}", hasher.finalize())
+    crate::hex::encode(&hasher.finalize())
 }
 
 fn hash_file(path: &Path) -> Result<(u64, String)> {
@@ -610,7 +663,7 @@ fn hash_file(path: &Path) -> Result<(u64, String)> {
     })?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
-    Ok((bytes.len() as u64, format!("{:x}", hasher.finalize())))
+    Ok((bytes.len() as u64, crate::hex::encode(&hasher.finalize())))
 }
 
 fn summary_from_manifest(
@@ -704,6 +757,12 @@ mod tests {
     }
 
     #[test]
+    fn schema_check_rejects_unknown_migrations() {
+        assert!(ensure_schema_supported(&["0001_initial_schema".into()]).is_ok());
+        assert!(ensure_schema_supported(&["9999_from_the_future".into()]).is_err());
+    }
+
+    #[test]
     fn export_and_import_roundtrip_restores_data() {
         let context = test_paths();
         let db = Database::open(&context.db_path).unwrap();
@@ -764,14 +823,16 @@ mod tests {
         assert_eq!(restored_games.len(), 1);
         let restored_assets = game_assets::list_assets_for_game(&db, &game.id).unwrap();
         assert_eq!(restored_assets.len(), 1);
-        assert!(
-            restored_assets[0]
-                .cache_path
-                .as_deref()
-                .unwrap()
-                .starts_with(&context.asset_cache_dir.to_string_lossy().to_string())
-        );
+        let restored_path = restored_assets[0].cache_path.as_deref().unwrap();
+        assert!(restored_path.starts_with(&*context.asset_cache_dir.to_string_lossy()));
+        assert!(Path::new(restored_path).is_file());
+        let staging_dir = context
+            .app_dir
+            .join(format!(".restore-{}", backup.backup_id));
+        assert!(!staging_dir.exists());
 
+        // Windows cannot delete the folder while the database is open.
+        drop(db);
         fs::remove_dir_all(&context.app_dir).unwrap();
     }
 }

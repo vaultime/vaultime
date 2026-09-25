@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Vaultime core library — Tauri application setup and command registration.
+//! Tauri application setup and command registration.
 
 pub mod assets;
 pub mod backup;
@@ -9,6 +9,7 @@ pub mod commands;
 pub mod db;
 pub mod discovery;
 pub mod error;
+pub mod hex;
 pub mod integrity;
 pub mod platform;
 pub mod secure_storage;
@@ -18,8 +19,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use log::info;
+use log::{LevelFilter, info};
 use tauri::Manager;
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
 use db::connection::Database;
@@ -37,9 +39,25 @@ pub struct AppContext {
 
 /// Runs the Tauri application.
 pub fn run() {
-    env_logger::init();
-
     tauri::Builder::default()
+        // Must be registered first. A second instance would track every game twice.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(LevelFilter::Info)
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
+                .max_file_size(2_000_000)
+                .rotation_strategy(RotationStrategy::KeepSome(3))
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -57,7 +75,6 @@ pub fn run() {
             let db_path = app_dir.join("vaultime.db");
             let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
 
-            // Register this device.
             let device_id = machine_id();
             let platform = std::env::consts::OS.to_string();
             let version = env!("CARGO_PKG_VERSION").to_string();
@@ -65,7 +82,6 @@ pub fn run() {
                 .expect("failed to register device");
             info!("device registered: {device_id} ({platform} v{version})");
 
-            // Start tracking engine.
             let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
 
             app.manage(AppContext {
@@ -111,7 +127,6 @@ pub fn run() {
             commands::restore_remote_backup,
             commands::list_settings,
             commands::set_setting,
-            commands::get_tracking_status,
             commands::get_tracking_diagnostics,
             commands::discover_games,
             commands::discover_steam_games,
@@ -122,10 +137,8 @@ pub fn run() {
         .expect("error while running Vaultime");
 }
 
-/// Returns a stable identifier for this machine.
-///
-/// Uses the hostname as a simple device identifier. A more robust approach
-/// would use a persisted UUID, but this is sufficient for the local-first MVP.
+/// Identifier for this machine. The hostname is used so existing session rows
+/// keep matching, with a random id as the fallback.
 fn machine_id() -> String {
     hostname::get().map_or_else(
         |_| uuid::Uuid::new_v4().to_string(),

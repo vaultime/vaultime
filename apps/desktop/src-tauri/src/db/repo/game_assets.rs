@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Game asset repository — CRUD operations for the `game_assets` table.
+//! Queries for the `game_assets` table.
 
 use rusqlite::{Row, params};
 

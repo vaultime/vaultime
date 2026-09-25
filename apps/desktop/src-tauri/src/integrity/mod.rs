@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Integrity system — event hashing, chain validation, trust scoring.
+//! Session event hashing, chain validation and trust scoring.
 
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::db::models::{Session, SessionEvent};
+use crate::db::repo::session_events::row_to_session_event;
 use crate::error::{Result, VaultimeError};
 
 pub const STATUS_LOCAL: &str = "local";
@@ -180,7 +181,7 @@ fn compute_event_hash(
     hasher.update(payload_json.as_bytes());
     hasher.update(b"\n");
     hasher.update(previous_hash.unwrap_or_default().as_bytes());
-    format!("{:x}", hasher.finalize())
+    crate::hex::encode(&hasher.finalize())
 }
 
 fn validate_event_chain(events: &[SessionEvent]) -> Option<String> {
@@ -281,23 +282,6 @@ fn load_session_events(conn: &Connection, session_id: &str) -> Result<Vec<Sessio
         .map_err(|e| VaultimeError::Integrity(format!("failed to collect session events: {e}")))
 }
 
-fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
-    Ok(SessionEvent {
-        id: row.get("id")?,
-        session_id: row.get("session_id")?,
-        sequence: row.get("sequence")?,
-        event_type: row.get("event_type")?,
-        event_time_wall: row.get("event_time_wall")?,
-        event_time_monotonic: row.get("event_time_monotonic")?,
-        payload_json: row.get("payload_json")?,
-        hash_prev: row.get("hash_prev")?,
-        hash_self: row.get("hash_self")?,
-        signature: row.get("signature")?,
-        synced_at: row.get("synced_at")?,
-        server_ack_at: row.get("server_ack_at")?,
-    })
-}
-
 fn parse_payload(payload_json: &str) -> Option<Value> {
     serde_json::from_str(payload_json).ok()
 }
@@ -360,8 +344,6 @@ mod tests {
             idle_ms: 60_000,
             runtime_ms: 300_000,
             integrity_status: STATUS_LOCAL.into(),
-            cloud_verified: false,
-            cloud_verified_at: None,
             closed_cleanly: true,
         };
         let mut events = vec![SessionEvent {
@@ -375,13 +357,9 @@ mod tests {
             hash_prev: None,
             hash_self: Some("bad-hash".into()),
             signature: None,
-            synced_at: None,
-            server_ack_at: None,
         }];
 
-        let end_payload = format!(
-            "{{\"runtime_ms\":300000,\"active_ms\":240000,\"idle_ms\":60000,\"integrity_status\":\"local\",\"closed_cleanly\":true}}"
-        );
+        let end_payload = r#"{"runtime_ms":300000,"active_ms":240000,"idle_ms":60000,"integrity_status":"local","closed_cleanly":true}"#.to_string();
         let end_hash = compute_event_hash(
             &session.id,
             2,
@@ -402,8 +380,6 @@ mod tests {
             hash_prev: Some("bad-hash".into()),
             hash_self: Some(end_hash),
             signature: None,
-            synced_at: None,
-            server_ack_at: None,
         });
 
         assert_eq!(
