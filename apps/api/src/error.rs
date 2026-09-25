@@ -23,6 +23,7 @@ pub enum AppError {
     Conflict(String),
     #[error("{0}")]
     Configuration(String),
+    /// The message is only logged. Clients get a generic one.
     #[error("{0}")]
     Internal(String),
 }
@@ -59,32 +60,26 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let status = match self {
-            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
-            Self::Unauthorized(_) => StatusCode::UNAUTHORIZED,
-            Self::Forbidden(_) => StatusCode::FORBIDDEN,
-            Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::Configuration(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-
-        let message = self.to_string();
-        let code = match status {
-            StatusCode::BAD_REQUEST => "bad_request",
-            StatusCode::UNAUTHORIZED => "unauthorized",
-            StatusCode::FORBIDDEN => "forbidden",
-            StatusCode::NOT_FOUND => "not_found",
-            StatusCode::CONFLICT => "conflict",
-            _ => "internal_error",
+        let (status, code, message) = match self {
+            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_request", message),
+            Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, "unauthorized", message),
+            Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
+            Self::NotFound(message) => (StatusCode::NOT_FOUND, "not_found", message),
+            Self::Conflict(message) => (StatusCode::CONFLICT, "conflict", message),
+            Self::Configuration(detail) | Self::Internal(detail) => {
+                tracing::error!(error = %detail, "request failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "internal server error".to_string(),
+                )
+            }
         };
 
         (
             status,
             Json(ErrorBody {
-                error: ErrorDetails {
-                    code: code.to_string(),
-                    message,
-                },
+                error: ErrorDetails { code, message },
             }),
         )
             .into_response()
@@ -93,6 +88,13 @@ impl IntoResponse for AppError {
 
 impl From<sqlx::Error> for AppError {
     fn from(error: sqlx::Error) -> Self {
+        if let sqlx::Error::Database(database_error) = &error
+            && database_error.is_unique_violation()
+        {
+            tracing::warn!(error = %error, "unique constraint violation");
+            return Self::conflict("resource already exists");
+        }
+
         Self::internal(format!("database error: {error}"))
     }
 }
@@ -111,13 +113,13 @@ impl From<std::io::Error> for AppError {
 
 impl From<argon2::password_hash::Error> for AppError {
     fn from(error: argon2::password_hash::Error) -> Self {
-        Self::internal(format!("password-hash error: {error}"))
+        Self::internal(format!("password hash error: {error}"))
     }
 }
 
-impl From<jsonwebtoken::errors::Error> for AppError {
-    fn from(error: jsonwebtoken::errors::Error) -> Self {
-        Self::unauthorized(format!("invalid token: {error}"))
+impl From<getrandom::Error> for AppError {
+    fn from(error: getrandom::Error) -> Self {
+        Self::internal(format!("system random source failed: {error}"))
     }
 }
 
@@ -128,6 +130,40 @@ struct ErrorBody {
 
 #[derive(Debug, Serialize)]
 struct ErrorDetails {
-    code: String,
+    code: &'static str,
     message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::to_bytes;
+
+    use super::*;
+
+    async fn body_of(error: AppError) -> (StatusCode, serde_json::Value) {
+        let response = error.into_response();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn internal_errors_hide_details() {
+        let (status, body) = body_of(AppError::internal("database error: secret detail")).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body["error"]["code"], "internal_error");
+        assert_eq!(body["error"]["message"], "internal server error");
+    }
+
+    #[tokio::test]
+    async fn client_errors_keep_their_message() {
+        let (status, body) =
+            body_of(AppError::conflict("a backup upload is already pending")).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"]["code"], "conflict");
+        assert_eq!(
+            body["error"]["message"],
+            "a backup upload is already pending"
+        );
+    }
 }

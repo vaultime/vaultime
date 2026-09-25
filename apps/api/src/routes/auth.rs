@@ -4,8 +4,8 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
-use chrono::Utc;
-use sqlx::Row;
+use chrono::{DateTime, Utc};
+use sqlx::PgExecutor;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -27,16 +27,16 @@ pub async fn sign_up(
     let email = normalize_email(&payload.email)?;
     let parsed_invite = ParsedInviteCode::parse(&payload.invite_code)?;
     let password_hash = hash_password(&payload.password)?;
-    let user_agent = user_agent(&headers);
 
     let mut tx = state.db.begin().await?;
 
-    let existing =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cloud_accounts WHERE email = $1")
-            .bind(&email)
-            .fetch_one(&mut *tx)
-            .await?;
-    if existing > 0 {
+    let email_taken = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE email = $1)",
+    )
+    .bind(&email)
+    .fetch_one(&mut *tx)
+    .await?;
+    if email_taken {
         return Err(AppError::conflict(
             "an account with that email already exists",
         ));
@@ -75,7 +75,7 @@ pub async fn sign_up(
         return Err(AppError::bad_request("invite code is invalid"));
     }
 
-    let account_row = sqlx::query(
+    let (account_id, account_email, account_role) = sqlx::query_as::<_, (Uuid, String, String)>(
         r#"
         INSERT INTO cloud_accounts (email, invited_by_invite_id, access_granted_at, last_login_at)
         VALUES ($1, $2, NOW(), NOW())
@@ -86,42 +86,23 @@ pub async fn sign_up(
     .bind(invite.id)
     .fetch_one(&mut *tx)
     .await?;
-    let account_id: Uuid = account_row.get("id");
-    let account_email: String = account_row.get("email");
-    let account_role: String = account_row.get("role");
 
-    sqlx::query(
-        r#"
-        INSERT INTO cloud_account_passwords (account_id, password_hash)
-        VALUES ($1, $2)
-        "#,
-    )
-    .bind(account_id)
-    .bind(password_hash)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("INSERT INTO cloud_account_passwords (account_id, password_hash) VALUES ($1, $2)")
+        .bind(account_id)
+        .bind(password_hash)
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query(
-        r#"
-        INSERT INTO cloud_invite_redemptions (invite_id, account_id)
-        VALUES ($1, $2)
-        "#,
-    )
-    .bind(invite.id)
-    .bind(account_id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("INSERT INTO cloud_invite_redemptions (invite_id, account_id) VALUES ($1, $2)")
+        .bind(invite.id)
+        .bind(account_id)
+        .execute(&mut *tx)
+        .await?;
 
-    sqlx::query(
-        r#"
-        UPDATE cloud_invites
-        SET redeemed_count = redeemed_count + 1
-        WHERE id = $1
-        "#,
-    )
-    .bind(invite.id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("UPDATE cloud_invites SET redeemed_count = redeemed_count + 1 WHERE id = $1")
+        .bind(invite.id)
+        .execute(&mut *tx)
+        .await?;
 
     tx.commit().await?;
 
@@ -130,7 +111,7 @@ pub async fn sign_up(
         account_id,
         &account_email,
         &account_role,
-        user_agent.as_deref(),
+        user_agent(&headers),
     )
     .await?;
 
@@ -143,7 +124,7 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> AppResult<Json<AuthResponse>> {
     let email = normalize_email(&payload.email)?;
-    let user_agent = user_agent(&headers);
+    let invalid_credentials = || AppError::unauthorized("invalid email or password");
 
     let row = sqlx::query_as::<_, AccountPasswordRow>(
         r#"
@@ -156,13 +137,14 @@ pub async fn login(
     .bind(&email)
     .fetch_optional(&state.db)
     .await?
-    .ok_or_else(|| AppError::unauthorized("invalid email or password"))?;
+    .ok_or_else(invalid_credentials)?;
 
+    // The password is checked first so the access state is only revealed to the owner.
+    if !verify_password(&payload.password, &row.password_hash)? {
+        return Err(invalid_credentials());
+    }
     if row.access_state != "active" {
         return Err(AppError::forbidden("account does not have cloud access"));
-    }
-    if !verify_password(&payload.password, &row.password_hash)? {
-        return Err(AppError::unauthorized("invalid email or password"));
     }
 
     sqlx::query("UPDATE cloud_accounts SET last_login_at = NOW() WHERE id = $1")
@@ -170,9 +152,10 @@ pub async fn login(
         .execute(&state.db)
         .await?;
 
-    Ok(Json(
-        issue_session(&state, row.id, &row.email, &row.role, user_agent.as_deref()).await?,
-    ))
+    let session =
+        issue_session(&state, row.id, &row.email, &row.role, user_agent(&headers)).await?;
+
+    Ok(Json(session))
 }
 
 pub async fn refresh(
@@ -180,10 +163,9 @@ pub async fn refresh(
     headers: HeaderMap,
     Json(payload): Json<RefreshRequest>,
 ) -> AppResult<Json<AuthResponse>> {
-    let hashed = hash_refresh_token(&payload.refresh_token, &state.config.refresh_token_pepper);
-    let user_agent = user_agent(&headers);
-    let next_refresh_token = generate_refresh_token();
-    let next_hash = hash_refresh_token(&next_refresh_token, &state.config.refresh_token_pepper);
+    let pepper = &state.config.refresh_token_pepper;
+    let presented_hash = hash_refresh_token(&payload.refresh_token, pepper);
+    let refresh_token = generate_refresh_token()?;
     let refresh_expires_at = refresh_token_expiry();
 
     let mut tx = state.db.begin().await?;
@@ -199,7 +181,7 @@ pub async fn refresh(
         FOR UPDATE
         "#,
     )
-    .bind(&hashed)
+    .bind(&presented_hash)
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| AppError::unauthorized("refresh token is invalid or expired"))?;
@@ -209,38 +191,30 @@ pub async fn refresh(
     }
 
     sqlx::query(
-        r#"
-        UPDATE cloud_refresh_tokens
-        SET revoked_at = NOW(), last_used_at = NOW()
-        WHERE id = $1
-        "#,
+        "UPDATE cloud_refresh_tokens SET revoked_at = NOW(), last_used_at = NOW() WHERE id = $1",
     )
     .bind(row.id)
     .execute(&mut *tx)
     .await?;
 
-    sqlx::query(
-        r#"
-        INSERT INTO cloud_refresh_tokens (account_id, token_hash, user_agent, expires_at)
-        VALUES ($1, $2, $3, $4)
-        "#,
+    insert_refresh_token(
+        &mut *tx,
+        row.account_id,
+        &hash_refresh_token(&refresh_token, pepper),
+        user_agent(&headers),
+        refresh_expires_at,
     )
-    .bind(row.account_id)
-    .bind(next_hash)
-    .bind(user_agent)
-    .bind(refresh_expires_at)
-    .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
 
-    let (access_token, access_expires_at) =
+    let (access_token, expires_at) =
         create_access_token(&state.config, row.account_id, &row.email, &row.role)?;
 
     Ok(Json(AuthResponse {
         access_token,
-        refresh_token: next_refresh_token,
-        expires_at: access_expires_at,
+        refresh_token,
+        expires_at,
         refresh_expires_at,
         user: AuthUserResponse {
             id: row.account_id,
@@ -277,21 +251,16 @@ async fn issue_session(
     role: &str,
     user_agent: Option<&str>,
 ) -> AppResult<AuthResponse> {
-    let refresh_token = generate_refresh_token();
-    let refresh_hash = hash_refresh_token(&refresh_token, &state.config.refresh_token_pepper);
+    let refresh_token = generate_refresh_token()?;
     let refresh_expires_at = refresh_token_expiry();
 
-    sqlx::query(
-        r#"
-        INSERT INTO cloud_refresh_tokens (account_id, token_hash, user_agent, expires_at)
-        VALUES ($1, $2, $3, $4)
-        "#,
+    insert_refresh_token(
+        &state.db,
+        account_id,
+        &hash_refresh_token(&refresh_token, &state.config.refresh_token_pepper),
+        user_agent,
+        refresh_expires_at,
     )
-    .bind(account_id)
-    .bind(refresh_hash)
-    .bind(user_agent)
-    .bind(refresh_expires_at)
-    .execute(&state.db)
     .await?;
 
     let (access_token, expires_at) = create_access_token(&state.config, account_id, email, role)?;
@@ -309,9 +278,31 @@ async fn issue_session(
     })
 }
 
-fn user_agent(headers: &HeaderMap) -> Option<String> {
+async fn insert_refresh_token<'e>(
+    executor: impl PgExecutor<'e>,
+    account_id: Uuid,
+    token_hash: &str,
+    user_agent: Option<&str>,
+    expires_at: DateTime<Utc>,
+) -> AppResult<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO cloud_refresh_tokens (account_id, token_hash, user_agent, expires_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(account_id)
+    .bind(token_hash)
+    .bind(user_agent)
+    .bind(expires_at)
+    .execute(executor)
+    .await?;
+
+    Ok(())
+}
+
+fn user_agent(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok())
-        .map(ToOwned::to_owned)
 }

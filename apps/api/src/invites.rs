@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-use argon2::password_hash::rand_core::{OsRng, RngCore};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 
-use crate::auth::hash_invite_code;
+use crate::auth::{chunk_code, hash_invite_code, random_bytes};
 use crate::error::{AppError, AppResult};
 
 const DEFAULT_PREFIX: &str = "VTLINV";
+const BODY_LENGTH: usize = 24;
 
 #[derive(Debug, Clone)]
 pub struct GeneratedInvite {
@@ -36,19 +36,16 @@ pub fn generate_invite(
     }
 
     let prefix = normalize_prefix(prefix)?;
-    let body = generate_body_token();
-    let code = format!("{prefix}-{}", chunk_token(&body));
+    let body = generate_body_token()?;
+    let code = format!("{prefix}-{}", chunk_code(&body));
     let lookup_key = body[..12].to_string();
-    let salt = random_hex(16);
+    let salt = hex::encode(random_bytes::<16>()?);
     let code_hash = hash_invite_code(&code, &salt)?;
-    let note = note.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    });
+    let note = note
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
 
     Ok(GeneratedInvite {
         code,
@@ -76,41 +73,27 @@ fn normalize_prefix(raw: Option<&str>) -> AppResult<String> {
     Ok(value)
 }
 
-fn generate_body_token() -> String {
+/// Same scheme as the invite generator scripts: base64url of 18 random bytes, alphanumerics only,
+/// uppercased and cut to 24 characters.
+fn generate_body_token() -> AppResult<String> {
     loop {
-        let mut bytes = [0_u8; 18];
-        OsRng.fill_bytes(&mut bytes);
         let token = URL_SAFE_NO_PAD
-            .encode(bytes)
+            .encode(random_bytes::<18>()?)
             .chars()
-            .filter(|ch| ch.is_ascii_alphanumeric())
+            .filter(char::is_ascii_alphanumeric)
             .map(|ch| ch.to_ascii_uppercase())
             .collect::<String>();
 
-        if token.len() >= 24 {
-            return token[..24].to_string();
+        if token.len() >= BODY_LENGTH {
+            return Ok(token[..BODY_LENGTH].to_string());
         }
     }
-}
-
-fn chunk_token(token: &str) -> String {
-    token
-        .as_bytes()
-        .chunks(4)
-        .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
-fn random_hex(len: usize) -> String {
-    let mut bytes = vec![0_u8; len];
-    OsRng.fill_bytes(&mut bytes);
-    hex::encode(bytes)
 }
 
 #[cfg(test)]
 mod tests {
     use super::generate_invite;
+    use crate::auth::{ParsedInviteCode, verify_invite_hash};
 
     #[test]
     fn generates_default_invites() {
@@ -119,5 +102,24 @@ mod tests {
         assert_eq!(invite.lookup_key.len(), 12);
         assert_eq!(invite.salt.len(), 32);
         assert_eq!(invite.code_hash.len(), 128);
+    }
+
+    #[test]
+    fn generated_invites_redeem() {
+        let invite = generate_invite(Some("beta"), 2, None, Some("  ".into())).unwrap();
+        assert!(invite.note.is_none());
+
+        let parsed = ParsedInviteCode::parse(&invite.code.to_lowercase()).unwrap();
+        assert_eq!(parsed.normalized_code, invite.code);
+        assert_eq!(parsed.lookup_key, invite.lookup_key);
+        assert!(
+            verify_invite_hash(&parsed.normalized_code, &invite.salt, &invite.code_hash).unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_invite_settings() {
+        assert!(generate_invite(None, 0, None, None).is_err());
+        assert!(generate_invite(Some("bad-prefix"), 1, None, None).is_err());
     }
 }

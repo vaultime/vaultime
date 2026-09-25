@@ -2,28 +2,27 @@
 name = "vaultime-api"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.98"
 description = "Self-hosted invite-only API for Vaultime cloud backup"
 
 [dependencies]
-argon2 = "0.5"
+argon2 = "0.6"
 axum = { version = "0.8", features = ["macros"] }
-base64 = "0.22"
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
+getrandom = "0.4"
 hex = "0.4"
-http-body-util = "0.1"
-jsonwebtoken = "9"
-password-hash = "0.5"
-scrypt = "0.11"
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
+scrypt = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "macros", "migrate"] }
+sha2 = { version = "0.11", default-features = false }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "uuid", "chrono", "json", "macros", "migrate"] }
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal"] }
 tokio-util = { version = "0.7", features = ["io"] }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1", features = ["serde", "v4"] }

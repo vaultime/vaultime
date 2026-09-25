@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-pub mod admin;
-pub mod auth;
-pub mod backups;
-pub mod devices;
+mod admin;
+mod auth;
+mod backups;
+mod devices;
 
 use axum::http::{Method, header};
 use axum::routing::{get, post, put};
@@ -18,7 +18,7 @@ use crate::models::HealthResponse;
 pub fn router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PUT])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
 
     Router::new()
@@ -33,7 +33,10 @@ pub fn router(state: AppState) -> Router {
             "/v1/backups",
             get(backups::list_backups).post(backups::create_backup),
         )
-        .route("/v1/backups/{backup_id}", get(backups::get_backup))
+        .route(
+            "/v1/backups/{backup_id}",
+            get(backups::get_backup).delete(backups::delete_backup),
+        )
         .route(
             "/v1/backups/{backup_id}/content",
             put(backups::upload_backup_content),
