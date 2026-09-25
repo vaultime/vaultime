@@ -27,3 +27,7 @@ apps/desktop/src-tauri/.cargo/config.toml
 
 # Local planning scratchpad
 PLAN.md
+
+# Python
+__pycache__/
+*.pyc
