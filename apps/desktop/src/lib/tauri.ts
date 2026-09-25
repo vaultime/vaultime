@@ -14,8 +14,13 @@ import type {
   TrackingDiagnostics,
   GameAssetView,
   AuthCredentials,
+  CloudBackupRecord,
+  CloudBackupRestorePreview,
+  CloudBackupRestoreResult,
+  CloudBackupUploadResult,
   CloudConfig,
   CloudSession,
+  CloudSyncStatus,
   SyncResult,
 } from "@/lib/types";
 
@@ -195,4 +200,34 @@ export async function cloudSyncEvents(): Promise<SyncResult> {
 
 export async function cloudGetUnsyncedCount(): Promise<number> {
   return invoke<number>("cloud_get_unsynced_count");
+}
+
+export async function cloudGetSyncStatus(): Promise<CloudSyncStatus> {
+  return invoke<CloudSyncStatus>("cloud_get_sync_status");
+}
+
+export async function cloudListBackups(): Promise<CloudBackupRecord[]> {
+  return invoke<CloudBackupRecord[]>("cloud_list_backups");
+}
+
+export async function cloudCreateBackup(): Promise<CloudBackupUploadResult> {
+  return invoke<CloudBackupUploadResult>("cloud_create_backup");
+}
+
+export async function cloudGetRestorePreview(
+  backupId: string,
+): Promise<CloudBackupRestorePreview> {
+  return invoke<CloudBackupRestorePreview>("cloud_get_restore_preview", {
+    backupId,
+  });
+}
+
+export async function cloudRestoreBackup(
+  backupId: string,
+  force = false,
+): Promise<CloudBackupRestoreResult> {
+  return invoke<CloudBackupRestoreResult>("cloud_restore_backup", {
+    backupId,
+    force,
+  });
 }

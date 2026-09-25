@@ -43,6 +43,8 @@ export interface Session {
   idle_ms: number;
   runtime_ms: number;
   integrity_status: string;
+  cloud_verified: boolean;
+  cloud_verified_at: string | null;
   closed_cleanly: boolean;
 }
 
@@ -58,6 +60,8 @@ export interface SessionEvent {
   hash_prev: string | null;
   hash_self: string | null;
   signature: string | null;
+  synced_at: string | null;
+  server_ack_at: string | null;
 }
 
 /** Mirrors the Rust `BackupSnapshot` struct. */
@@ -131,6 +135,66 @@ export interface CloudConfig {
 export interface SyncResult {
   uploaded: number;
   remaining: number;
+  verified_sessions: number;
+  conflicted_events: number;
+  last_sync_at: string | null;
+}
+
+/** Snapshot of current cloud sync status. */
+export interface CloudSyncStatus {
+  connected: boolean;
+  last_sync_at: string | null;
+  last_backup_at: string | null;
+  pending_events: number;
+}
+
+/** Metadata row returned for a cloud backup snapshot. */
+export interface CloudBackupRecord {
+  id: string;
+  device_id: string;
+  created_at: string;
+  checksum: string;
+  storage_path: string;
+  size_bytes: number | null;
+  label: string | null;
+}
+
+/** Summary of a cloud backup payload. */
+export interface CloudBackupSummary {
+  backup_id: string;
+  backup_version: number;
+  created_at: string;
+  app_version: string;
+  source_device_id: string;
+  schema_migrations: string[];
+  overall_checksum: string;
+  games_count: number;
+  sessions_count: number;
+  assets_count: number;
+  asset_file_count: number;
+}
+
+/** Result returned after creating and uploading a cloud backup. */
+export interface CloudBackupUploadResult {
+  backup: CloudBackupRecord;
+  summary: CloudBackupSummary;
+  uploaded_files: number;
+}
+
+/** Preflight details shown before a cloud restore. */
+export interface CloudBackupRestorePreview {
+  backup: CloudBackupRecord;
+  summary: CloudBackupSummary;
+  has_active_sessions: boolean;
+  unsynced_events: number;
+  newer_local_sessions: number;
+  requires_force: boolean;
+}
+
+/** Result returned after restoring a cloud backup locally. */
+export interface CloudBackupRestoreResult {
+  backup: CloudBackupRecord;
+  restart_required: boolean;
 }
 
 /** Input for sign-up / sign-in commands. */

@@ -16,9 +16,7 @@ use log::{info, warn};
 use crate::error::{Result, VaultimeError};
 
 use super::config;
-use super::types::{
-    AuthTokens, CloudSession, CloudUser, SupabaseAuthError, SupabaseAuthResponse,
-};
+use super::types::{AuthTokens, CloudSession, CloudUser, SupabaseAuthError, SupabaseAuthResponse};
 
 // ---------------------------------------------------------------------------
 // Token file helpers
@@ -64,7 +62,11 @@ impl AuthManager {
     pub fn new(app_dir: PathBuf) -> Self {
         let http = reqwest::Client::new();
         let session = Mutex::new(None);
-        let manager = Self { app_dir, http, session };
+        let manager = Self {
+            app_dir,
+            http,
+            session,
+        };
 
         // Try to restore from disk.
         if let Some(tokens) = read_stored_tokens(&manager.app_dir) {
@@ -244,10 +246,7 @@ impl AuthManager {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    async fn handle_auth_response(
-        &self,
-        resp: reqwest::Response,
-    ) -> Result<CloudSession> {
+    async fn handle_auth_response(&self, resp: reqwest::Response) -> Result<CloudSession> {
         let status = resp.status();
         let body = resp
             .text()

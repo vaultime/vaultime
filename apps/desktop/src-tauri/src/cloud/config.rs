@@ -21,6 +21,13 @@ pub fn supabase_anon_key() -> String {
         .to_string()
 }
 
+/// Supabase Storage bucket used for private cloud backups.
+pub fn supabase_backup_bucket() -> String {
+    option_env!("VAULTIME_SUPABASE_BACKUP_BUCKET")
+        .unwrap_or("vaultime-backups")
+        .to_string()
+}
+
 /// Returns `true` when the cloud layer has real credentials configured.
 pub fn is_cloud_configured() -> bool {
     option_env!("VAULTIME_SUPABASE_URL").is_some()

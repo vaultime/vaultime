@@ -13,6 +13,7 @@ export interface IntegritySummary {
   overallStatus: string;
   totalCount: number;
   localCount: number;
+  verifiedCount: number;
   suspiciousCount: number;
   recoveredCount: number;
   openCount: number;
@@ -21,8 +22,9 @@ export interface IntegritySummary {
 
 const STATUS_PRIORITY: Record<string, number> = {
   local: 1,
-  recovered: 2,
-  suspicious: 3,
+  verified: 2,
+  recovered: 3,
+  suspicious: 4,
 };
 
 export function normalizeIntegrityStatus(
@@ -34,6 +36,15 @@ export function normalizeIntegrityStatus(
   }
 
   return normalized in STATUS_PRIORITY ? normalized : "local";
+}
+
+export function getSessionTrustStatus(session: Session): string {
+  const normalized = normalizeIntegrityStatus(session.integrity_status);
+  if (normalized === "local" && session.cloud_verified) {
+    return "verified";
+  }
+
+  return normalized;
 }
 
 export function getIntegrityMeta(status: string): IntegrityMeta {
@@ -54,6 +65,14 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
         className:
           "border-sky-400/35 bg-sky-500/10 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
       };
+    case "verified":
+      return {
+        label: "Verified",
+        description:
+          "The full session event chain was acknowledged by the cloud and still matches local integrity checks.",
+        className:
+          "border-violet-400/35 bg-violet-500/12 text-violet-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+      };
     case "local":
     default:
       return {
@@ -69,17 +88,20 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
 export function summarizeIntegrity(sessions: Session[]): IntegritySummary {
   let overallStatus = "local";
   let localCount = 0;
+  let verifiedCount = 0;
   let suspiciousCount = 0;
   let recoveredCount = 0;
   let openCount = 0;
 
   for (const session of sessions) {
-    const normalized = normalizeIntegrityStatus(session.integrity_status);
+    const normalized = getSessionTrustStatus(session);
 
     if (normalized === "suspicious") {
       suspiciousCount += 1;
     } else if (normalized === "recovered") {
       recoveredCount += 1;
+    } else if (normalized === "verified") {
+      verifiedCount += 1;
     } else {
       localCount += 1;
     }
@@ -99,11 +121,13 @@ export function summarizeIntegrity(sessions: Session[]): IntegritySummary {
     overallStatus,
     totalCount: sessions.length,
     localCount,
+    verifiedCount,
     suspiciousCount,
     recoveredCount,
     openCount,
     note: buildIntegrityNote({
       totalCount: sessions.length,
+      verifiedCount,
       suspiciousCount,
       recoveredCount,
       openCount,
@@ -119,6 +143,8 @@ export function formatIntegrityReason(reason: string | null | undefined): string
       return "Wall clock jumped away from monotonic time";
     case "wall_clock_drift_exceeded":
       return "Wall-clock drift exceeded tolerance";
+    case "cloud_sync_conflict":
+      return "Cloud copy disagreed with the local event chain";
     case "startup_orphan_cleanup":
       return "Recovered after restart";
     default:
@@ -191,11 +217,13 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
 
 function buildIntegrityNote({
   totalCount,
+  verifiedCount,
   suspiciousCount,
   recoveredCount,
   openCount,
 }: {
   totalCount: number;
+  verifiedCount: number;
   suspiciousCount: number;
   recoveredCount: number;
   openCount: number;
@@ -210,6 +238,10 @@ function buildIntegrityNote({
 
   if (recoveredCount > 0) {
     return `${recoveredCount} session${recoveredCount === 1 ? "" : "s"} reconstructed after a restart or interrupted shutdown.`;
+  }
+
+  if (verifiedCount > 0) {
+    return `${verifiedCount} session${verifiedCount === 1 ? "" : "s"} acknowledged by the cloud and still matching the local event chain.`;
   }
 
   if (openCount > 0) {

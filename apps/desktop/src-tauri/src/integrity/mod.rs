@@ -293,6 +293,8 @@ fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
         hash_prev: row.get("hash_prev")?,
         hash_self: row.get("hash_self")?,
         signature: row.get("signature")?,
+        synced_at: row.get("synced_at")?,
+        server_ack_at: row.get("server_ack_at")?,
     })
 }
 
@@ -358,6 +360,8 @@ mod tests {
             idle_ms: 60_000,
             runtime_ms: 300_000,
             integrity_status: STATUS_LOCAL.into(),
+            cloud_verified: false,
+            cloud_verified_at: None,
             closed_cleanly: true,
         };
         let mut events = vec![SessionEvent {
@@ -371,6 +375,8 @@ mod tests {
             hash_prev: None,
             hash_self: Some("bad-hash".into()),
             signature: None,
+            synced_at: None,
+            server_ack_at: None,
         }];
 
         let end_payload = format!(
@@ -396,6 +402,8 @@ mod tests {
             hash_prev: Some("bad-hash".into()),
             hash_self: Some(end_hash),
             signature: None,
+            synced_at: None,
+            server_ack_at: None,
         });
 
         assert_eq!(

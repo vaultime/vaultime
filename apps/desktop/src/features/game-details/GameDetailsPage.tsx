@@ -512,7 +512,7 @@ export function GameDetailsPage() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <IntegrityBadge status={integritySummary.overallStatus} />
                 <p className="text-xs text-muted-foreground">
-                  Local hash-linked audit log. No cloud verification or device signing yet.
+                  Local hash-linked audit log with optional cloud acknowledgement. Device signing is still pending.
                 </p>
               </div>
             </div>
@@ -535,7 +535,15 @@ export function GameDetailsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Local Sessions
+                  Verified
+                </p>
+                <p className="mt-2 text-xl font-semibold">
+                  {integritySummary.verifiedCount}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Local Only
                 </p>
                 <p className="mt-2 text-xl font-semibold">
                   {integritySummary.localCount}
@@ -557,14 +565,14 @@ export function GameDetailsPage() {
                   {integritySummary.suspiciousCount}
                 </p>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Session Average
-                </p>
-                <p className="mt-2 text-xl font-semibold">
-                  {formatCompactDuration(totals.averageActiveMs)}
-                </p>
-              </div>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Session Average
+              </p>
+              <p className="mt-2 text-xl font-semibold">
+                {formatCompactDuration(totals.averageActiveMs)}
+              </p>
             </div>
           </CardContent>
         </Card>

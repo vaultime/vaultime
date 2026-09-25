@@ -12,8 +12,12 @@ use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::{self, LocalBackupSummary};
 use crate::cloud::auth::AuthManager;
+use crate::cloud::backup as cloud_backup;
 use crate::cloud::sync::{self, SyncResult};
-use crate::cloud::types::{AuthCredentials, CloudSession};
+use crate::cloud::types::{
+    AuthCredentials, CloudBackupRecord, CloudBackupRestorePreview, CloudBackupRestoreResult,
+    CloudBackupUploadResult, CloudSession, SyncStatus,
+};
 use crate::db::connection::Database;
 use crate::db::models::{
     BackupSnapshot, CreateGame, Game, Session, SessionEvent, Setting, UpdateGame,
@@ -22,6 +26,34 @@ use crate::db::repo::{backup_snapshots, games, session_events, sessions, setting
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::tracking::engine::TrackingEngine;
+
+async fn ensure_cloud_device_registered(
+    auth: &AuthManager,
+    app_context: &AppContext,
+) -> Result<(), VaultimeError> {
+    if auth
+        .current_session()
+        .as_ref()
+        .is_some_and(|session| session.device_registered)
+    {
+        return Ok(());
+    }
+
+    auth.register_device(
+        &app_context.device_id,
+        &app_context.device_id,
+        std::env::consts::OS,
+        &app_context.app_version,
+    )
+    .await
+}
+
+fn normalize_optional_setting(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    })
+}
 
 // ---------------------------------------------------------------------------
 // Game commands
@@ -337,15 +369,108 @@ pub async fn cloud_sync_events(
     auth: State<'_, AuthManager>,
     app_context: State<'_, AppContext>,
 ) -> Result<SyncResult, VaultimeError> {
+    ensure_cloud_device_registered(&auth, &app_context).await?;
     sync::sync_events(&db, &auth, &app_context.device_id).await
 }
 
 #[tauri::command]
-pub fn cloud_get_unsynced_count(
+pub fn cloud_get_unsynced_count(db: State<'_, Arc<Database>>) -> Result<u64, VaultimeError> {
+    session_events::count_unsynced_events(&db)
+}
+
+#[tauri::command]
+pub fn cloud_get_sync_status(
     db: State<'_, Arc<Database>>,
-) -> Result<usize, VaultimeError> {
-    let events = session_events::list_unsynced_events(&db, 1)?;
-    // Return 0 or 1+ as a cheap "has unsynced" indicator.
-    // A full count would be wasteful; the UI just needs to know if sync is needed.
-    Ok(events.len())
+    auth: State<'_, AuthManager>,
+) -> Result<SyncStatus, VaultimeError> {
+    Ok(SyncStatus {
+        connected: auth.current_session().is_some(),
+        last_sync_at: normalize_optional_setting(settings::get_setting(&db, "cloud_last_sync_at")?),
+        last_backup_at: normalize_optional_setting(settings::get_setting(
+            &db,
+            "cloud_last_backup_at",
+        )?),
+        pending_events: session_events::count_unsynced_events(&db)?,
+    })
+}
+
+#[tauri::command]
+pub async fn cloud_list_backups(
+    auth: State<'_, AuthManager>,
+) -> Result<Vec<CloudBackupRecord>, VaultimeError> {
+    cloud_backup::list_backups(&auth).await
+}
+
+#[tauri::command]
+pub async fn cloud_create_backup(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    app_context: State<'_, AppContext>,
+    auth: State<'_, AuthManager>,
+) -> Result<CloudBackupUploadResult, VaultimeError> {
+    ensure_cloud_device_registered(&auth, &app_context).await?;
+
+    let uploaded = cloud_backup::create_backup(
+        &db,
+        &asset_manager,
+        &app_context,
+        &auth,
+        Some("Cloud snapshot"),
+    )
+    .await?;
+
+    let _ = backup_snapshots::create_snapshot(
+        &db,
+        Some(&app_context.device_id),
+        &uploaded.summary.overall_checksum,
+        Some(&uploaded.backup.storage_path),
+        Some("Cloud snapshot"),
+    );
+
+    Ok(uploaded)
+}
+
+#[tauri::command]
+pub async fn cloud_get_restore_preview(
+    db: State<'_, Arc<Database>>,
+    auth: State<'_, AuthManager>,
+    backup_id: String,
+) -> Result<CloudBackupRestorePreview, VaultimeError> {
+    cloud_backup::get_restore_preview(&db, &auth, &backup_id).await
+}
+
+#[tauri::command]
+pub async fn cloud_restore_backup(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    app_context: State<'_, AppContext>,
+    engine: State<'_, TrackingEngine>,
+    auth: State<'_, AuthManager>,
+    backup_id: String,
+    force: bool,
+) -> Result<CloudBackupRestoreResult, VaultimeError> {
+    if !sessions::get_active_sessions(&db)?.is_empty() {
+        return Err(VaultimeError::Cloud(
+            "close all live sessions before restoring a cloud backup".into(),
+        ));
+    }
+
+    engine.stop();
+
+    let (backup, summary) =
+        cloud_backup::restore_backup(&db, &asset_manager, &app_context, &auth, &backup_id, force)
+            .await?;
+
+    let _ = backup_snapshots::create_snapshot(
+        &db,
+        Some(&summary.source_device_id),
+        &summary.overall_checksum,
+        Some(&backup.storage_path),
+        Some("Cloud restore"),
+    );
+
+    Ok(CloudBackupRestoreResult {
+        backup,
+        restart_required: summary.restart_required,
+    })
 }

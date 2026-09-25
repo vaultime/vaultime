@@ -3,11 +3,17 @@
 
 //! Session event repository — read access for the append-only event log.
 
-use rusqlite::Row;
+use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::SessionEvent;
 use crate::error::{Result, VaultimeError};
+
+#[derive(Debug, Clone)]
+pub struct SyncAck {
+    pub event_id: String,
+    pub server_ack_at: Option<String>,
+}
 
 fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
     Ok(SessionEvent {
@@ -21,6 +27,8 @@ fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
         hash_prev: row.get("hash_prev")?,
         hash_self: row.get("hash_self")?,
         signature: row.get("signature")?,
+        synced_at: row.get("synced_at")?,
+        server_ack_at: row.get("server_ack_at")?,
     })
 }
 
@@ -35,7 +43,8 @@ pub fn list_unsynced_events(db: &Database, batch_size: u32) -> Result<Vec<Sessio
         let mut stmt = conn
             .prepare(
                 "SELECT id, session_id, sequence, event_type, event_time_wall,
-                        event_time_monotonic, payload_json, hash_prev, hash_self, signature
+                        event_time_monotonic, payload_json, hash_prev, hash_self, signature,
+                        synced_at, server_ack_at
                  FROM session_events
                  WHERE synced_at IS NULL
                  ORDER BY event_time_wall ASC, sequence ASC
@@ -52,20 +61,37 @@ pub fn list_unsynced_events(db: &Database, batch_size: u32) -> Result<Vec<Sessio
 }
 
 /// Marks the given event IDs as synced with the current timestamp.
-pub fn mark_events_synced(db: &Database, event_ids: &[String]) -> Result<()> {
-    if event_ids.is_empty() {
+pub fn mark_events_synced(db: &Database, acknowledgements: &[SyncAck]) -> Result<()> {
+    if acknowledgements.is_empty() {
         return Ok(());
     }
+
     db.with_conn(|conn| {
-        let placeholders: Vec<String> = (1..=event_ids.len()).map(|i| format!("?{i}")).collect();
-        let sql = format!(
-            "UPDATE session_events SET synced_at = datetime('now') WHERE id IN ({})",
-            placeholders.join(",")
-        );
-        let params: Vec<&dyn rusqlite::types::ToSql> =
-            event_ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
-        conn.execute(&sql, params.as_slice()).map_err(map_db)?;
+        for acknowledgement in acknowledgements {
+            conn.execute(
+                "UPDATE session_events
+                 SET synced_at = datetime('now'),
+                     server_ack_at = COALESCE(?2, server_ack_at)
+                 WHERE id = ?1",
+                params![acknowledgement.event_id, acknowledgement.server_ack_at],
+            )
+            .map_err(map_db)?;
+        }
+
         Ok(())
+    })
+}
+
+/// Counts the number of events that still need a cloud acknowledgement.
+pub fn count_unsynced_events(db: &Database) -> Result<u64> {
+    db.with_conn(|conn| {
+        conn.query_row(
+            "SELECT COUNT(*) FROM session_events WHERE synced_at IS NULL",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|count| count.max(0) as u64)
+        .map_err(map_db)
     })
 }
 

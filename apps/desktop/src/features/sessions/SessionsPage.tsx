@@ -136,7 +136,10 @@ export function SessionsPage() {
         <CardContent className="relative flex flex-wrap items-center gap-3">
           <IntegrityBadge status={integritySummary.overallStatus} />
           <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1 text-xs text-muted-foreground">
-            {integritySummary.localCount} local
+            {integritySummary.verifiedCount} verified
+          </div>
+          <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1 text-xs text-muted-foreground">
+            {integritySummary.localCount} local-only
           </div>
           <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1 text-xs text-muted-foreground">
             {integritySummary.recoveredCount} recovered

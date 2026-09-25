@@ -115,6 +115,11 @@ pub fn run() {
             commands::cloud_register_device,
             commands::cloud_sync_events,
             commands::cloud_get_unsynced_count,
+            commands::cloud_get_sync_status,
+            commands::cloud_list_backups,
+            commands::cloud_create_backup,
+            commands::cloud_get_restore_preview,
+            commands::cloud_restore_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vaultime");

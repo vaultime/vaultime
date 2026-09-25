@@ -23,6 +23,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0002_cloud_sync",
         include_str!("../../migrations/0002_cloud_sync.sql"),
     ),
+    (
+        "0003_cloud_backup_state",
+        include_str!("../../migrations/0003_cloud_backup_state.sql"),
+    ),
 ];
 
 /// Creates the migration tracking table if it doesn't exist, then applies

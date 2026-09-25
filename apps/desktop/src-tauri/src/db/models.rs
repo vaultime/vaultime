@@ -76,6 +76,8 @@ pub struct Session {
     pub idle_ms: i64,
     pub runtime_ms: i64,
     pub integrity_status: String,
+    pub cloud_verified: bool,
+    pub cloud_verified_at: Option<String>,
     pub closed_cleanly: bool,
 }
 
@@ -95,6 +97,8 @@ pub struct SessionEvent {
     pub hash_prev: Option<String>,
     pub hash_self: Option<String>,
     pub signature: Option<String>,
+    pub synced_at: Option<String>,
+    pub server_ack_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,8 @@ fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         idle_ms: row.get("idle_ms")?,
         runtime_ms: row.get("runtime_ms")?,
         integrity_status: row.get("integrity_status")?,
+        cloud_verified: row.get("cloud_verified")?,
+        cloud_verified_at: row.get("cloud_verified_at")?,
         closed_cleanly: row.get("closed_cleanly")?,
     })
 }
@@ -218,7 +220,9 @@ pub fn flag_session_suspicious(
         let updated = conn
             .execute(
                 "UPDATE sessions
-                 SET integrity_status = ?1
+                 SET integrity_status = ?1,
+                     cloud_verified = 0,
+                     cloud_verified_at = NULL
                  WHERE id = ?2 AND integrity_status != ?1",
                 params![integrity::STATUS_SUSPICIOUS, session_id],
             )
@@ -263,6 +267,8 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
                 "UPDATE sessions
                  SET ended_at_wall = ?1,
                      integrity_status = ?2,
+                     cloud_verified = 0,
+                     cloud_verified_at = NULL,
                      closed_cleanly = 0
                  WHERE id = ?3 AND ended_at_wall IS NULL",
                 params![ended_at_wall, integrity::STATUS_RECOVERED, session_id],
@@ -364,6 +370,58 @@ pub fn get_session(db: &Database, id: &str) -> Result<Session> {
             .query_row("SELECT * FROM sessions WHERE id = ?1", [id], row_to_session)
             .map_err(map_db)?;
         attach_validated_status(conn, session)
+    })
+}
+
+/// Marks completed, locally clean sessions as cloud-verified once every event
+/// in the session has a server acknowledgement timestamp.
+pub fn refresh_cloud_verified_sessions(db: &Database, session_ids: &[String]) -> Result<usize> {
+    if session_ids.is_empty() {
+        return Ok(0);
+    }
+
+    db.with_conn(|conn| {
+        let mut updated = 0;
+
+        for session_id in session_ids {
+            updated += conn
+                .execute(
+                    "UPDATE sessions
+                     SET cloud_verified = 1,
+                         cloud_verified_at = (
+                             SELECT MAX(server_ack_at)
+                             FROM session_events
+                             WHERE session_id = ?1
+                         )
+                     WHERE id = ?1
+                       AND integrity_status = ?2
+                       AND ended_at_wall IS NOT NULL
+                       AND NOT EXISTS (
+                           SELECT 1
+                           FROM session_events
+                           WHERE session_id = ?1 AND server_ack_at IS NULL
+                       )",
+                    params![session_id, integrity::STATUS_LOCAL],
+                )
+                .map_err(map_db)?;
+        }
+
+        Ok(updated)
+    })
+}
+
+/// Counts how many local sessions are newer than a given cloud backup.
+pub fn count_sessions_started_after(db: &Database, timestamp: &str) -> Result<u64> {
+    db.with_conn(|conn| {
+        conn.query_row(
+            "SELECT COUNT(*)
+             FROM sessions
+             WHERE started_at_wall > ?1",
+            [timestamp],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|count| count.max(0) as u64)
+        .map_err(map_db)
     })
 }
 

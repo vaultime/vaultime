@@ -56,6 +56,8 @@ export function GameCard({
   const integrityHint =
     suspiciousCount > 0
       ? `${suspiciousCount} flagged`
+      : integrityStatus === "verified"
+        ? "Cloud acknowledged"
       : recoveredCount > 0
         ? `${recoveredCount} recovered`
         : "Local history";

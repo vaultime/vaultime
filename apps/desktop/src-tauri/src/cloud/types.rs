@@ -97,5 +97,60 @@ pub struct CloudDevice {
 pub struct SyncStatus {
     pub connected: bool,
     pub last_sync_at: Option<String>,
+    pub last_backup_at: Option<String>,
     pub pending_events: u64,
+}
+
+/// Metadata recorded for a cloud backup snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudBackupRecord {
+    pub id: String,
+    pub device_id: String,
+    pub created_at: String,
+    pub checksum: String,
+    pub storage_path: String,
+    pub size_bytes: Option<i64>,
+    pub label: Option<String>,
+}
+
+/// Summary of a backup payload without any local filesystem paths.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudBackupSummary {
+    pub backup_id: String,
+    pub backup_version: u32,
+    pub created_at: String,
+    pub app_version: String,
+    pub source_device_id: String,
+    pub schema_migrations: Vec<String>,
+    pub overall_checksum: String,
+    pub games_count: i64,
+    pub sessions_count: i64,
+    pub assets_count: i64,
+    pub asset_file_count: usize,
+}
+
+/// Result of creating and uploading a cloud backup snapshot.
+#[derive(Debug, Clone, Serialize)]
+pub struct CloudBackupUploadResult {
+    pub backup: CloudBackupRecord,
+    pub summary: CloudBackupSummary,
+    pub uploaded_files: usize,
+}
+
+/// Preflight information shown before restoring a cloud backup.
+#[derive(Debug, Clone, Serialize)]
+pub struct CloudBackupRestorePreview {
+    pub backup: CloudBackupRecord,
+    pub summary: CloudBackupSummary,
+    pub has_active_sessions: bool,
+    pub unsynced_events: u64,
+    pub newer_local_sessions: u64,
+    pub requires_force: bool,
+}
+
+/// Result returned after a cloud backup restore completes locally.
+#[derive(Debug, Clone, Serialize)]
+pub struct CloudBackupRestoreResult {
+    pub backup: CloudBackupRecord,
+    pub restart_required: bool,
 }
