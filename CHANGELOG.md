@@ -9,33 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Self-hosted cloud API.** Invite-only accounts, device registration and encrypted backup storage in `apps/api`, replacing Supabase.
-- **Backup deletion and rotation.** Users can delete cloud backups, and a new upload replaces the oldest one at the account limit instead of failing.
-- **Windows support.** Registry based Steam detection, launcher folders on every fixed drive, case-insensitive path matching, and CI checks on Windows.
-- **Sleep handling.** Time while the machine sleeps is skipped and logged as a `tracking_gap` event instead of counted or flagged.
-- **Log files.** Logs are written to the app log folder, which matters on Windows where release builds have no console.
-- **Single instance.** Starting Vaultime twice focuses the running window instead of tracking every game twice.
+- **Invite-only cloud backup on our own server.** Free, with the same limits for every account. Backups are encrypted on your computer before upload.
+- **Delete cloud backups** from the Cloud page. At the backup limit a new upload replaces your oldest backup instead of failing.
+- **Windows support.** Steam games are found wherever Steam is installed, and games in Epic, GOG, Xbox, EA, Ubisoft and Battle.net folders on every drive.
+- **Linux packages for more distributions.** Debian, Ubuntu, Fedora, Arch, openSUSE and others. Every release is installed and started on these before it is published.
+- **Sleep handling.** Time while your computer sleeps is no longer counted.
+- **Restart button** after restoring a backup.
+- **Log files** in the app's log folder for troubleshooting.
 
 ### Changed
 
-- **Dependencies.** Upgraded to the current stable versions: Tauri 2.12, React 19.3, React Router 8, TypeScript 6, ESLint 10, rusqlite 0.40, sysinfo 0.39, sqlx 0.9 and more. The Rust toolchain is pinned in `rust-toolchain.toml`.
-- **Restores.** Older backups are migrated to the current schema before import, and backups from newer versions are rejected with a clear message.
-- **Slow commands.** Backup, restore, discovery and artwork commands run off the main thread, so the window stays responsive.
-- **CI and releases.** CI checks the frontend, the desktop core on Windows and Linux, and the API. Releases build Windows and Linux installers with signed updater manifests through `tauri-action`. macOS builds were dropped for now.
+- **Restores** of backups from older versions now work, and backups from newer versions show a clear message instead of failing.
+- **The window stays responsive** during backups, restores, discovery and artwork scans.
+- **Starting Vaultime twice** brings the open window to the front instead of tracking every game twice.
+- **Errors are shown** in dialogs and discovery instead of disappearing silently.
+- **macOS builds** are not offered for now.
 
 ### Fixed
 
-- **Secure storage.** The keychain crate was built without a native backend, so the cloud session and backup passphrase were lost on every restart. They now use Windows Credential Manager or the Secret Service.
-- **Windows idle time.** Idle time was wrong after about 49.7 days of uptime.
-- **Restored artwork.** Restored backups pointed cached artwork at files that did not exist.
-- **Tracking after a failed restore.** A failed restore used to stop tracking until the app restarted.
-- **Library polling.** The library no longer reloads all sessions and artwork every 5 seconds.
-- **Deploy scripts.** Fixed paths to `deploy/vps` and removed the default admin password.
-- **Legal pages.** The privacy policy and terms now describe the cloud backup that exists, including exactly what the server stores.
+- **Cloud sign-in and backup passphrase** were forgotten on every restart.
+- **Idle time on Windows** was wrong after about 49.7 days of uptime.
+- **Artwork after a restore** pointed at missing files.
+- **Tracking stopped** after a failed restore until Vaultime was restarted.
+- **The library** reloaded all sessions and artwork every 5 seconds.
 
 ### Removed
 
-- **Billing leftovers.** The Pro recolor of the sidebar branding, the unused event sync columns and code, and the unreachable `Verified` trust label.
+- **Subscription leftovers.** The Pro branding recolor and the `Verified` trust label, which could never be earned.
 
 ## [0.1.0] - 2026-04-06
 
@@ -43,18 +43,18 @@ Initial release covering milestones 1 through 13.
 
 ### Added
 
-- **Foundation** — Tauri 2 + React + TypeScript scaffold with sidebar navigation, Rust module structure, and IPC bridge.
-- **Local database** — SQLite with WAL mode, forward-only migrations, and CRUD for games, sessions, settings, and devices.
-- **Manual game registration** — add, edit, and delete games via native file-picker dialogs with title inference.
-- **Tracking engine** — process detection, session start/end, runtime tracking with 5-second polling, and crash recovery for orphaned sessions.
-- **Active playtime** — foreground window and idle detection on Linux (X11), Windows (Win32), and macOS (HID/osascript) with configurable thresholds.
-- **Session history UI** — timeline views, recent-activity charts, totals, per-game detail pages, and cross-game rankings.
-- **Image import** — local game folder scanning for artwork, thumbnail caching, manual asset override, and preferred-artwork selection.
-- **Integrity system** — append-only session event log with hash chains, monotonic time comparison, and Local/Suspicious/Recovered trust badges.
-- **Local backups** — self-contained folder exports with per-file checksums, restore with preview and overwrite warnings, and restart-after-restore flow.
-- **Cloud foundation** — Supabase auth (sign-up, sign-in, token refresh, sign-out), device registration, and cloud configuration with compile-time env vars.
-- **Cloud sync and backup** — event sync in batches to Supabase, cloud backup upload/restore via private Storage bucket, and Verified trust level from server acknowledgements.
-- **Billing and subscription** — Stripe integration via Supabase Edge Functions (checkout, portal, webhook), Pro subscription gating on sync/backup, tier badge and renewal info in UI.
-- **Auto-discovery** — Steam library detection (VDF/ACF parsing), common install folder scanning, bulk import dialog with source badges and duplicate detection.
-- **Pro visual indicator** — sidebar logo and wordmark recolor for active Pro subscribers.
-- **Cross-platform support** — native activity signals on Linux, Windows, and macOS with heuristic fallbacks.
+- **Foundation.** Tauri 2 + React + TypeScript scaffold with sidebar navigation, Rust module structure, and IPC bridge.
+- **Local database.** SQLite with WAL mode, forward-only migrations, and CRUD for games, sessions, settings, and devices.
+- **Manual game registration.** Add, edit, and delete games via native file-picker dialogs with title inference.
+- **Tracking engine.** Process detection, session start/end, runtime tracking with 5-second polling, and crash recovery for orphaned sessions.
+- **Active playtime.** Foreground window and idle detection on Linux (X11), Windows (Win32), and macOS (HID/osascript) with configurable thresholds.
+- **Session history UI.** Timeline views, recent-activity charts, totals, per-game detail pages, and cross-game rankings.
+- **Image import.** Local game folder scanning for artwork, thumbnail caching, manual asset override, and preferred-artwork selection.
+- **Integrity system.** Append-only session event log with hash chains, monotonic time comparison, and Local/Suspicious/Recovered trust badges.
+- **Local backups.** Self-contained folder exports with per-file checksums, restore with preview and overwrite warnings, and restart-after-restore flow.
+- **Cloud foundation.** Supabase auth (sign-up, sign-in, token refresh, sign-out), device registration, and cloud configuration with compile-time env vars.
+- **Cloud sync and backup.** Event sync in batches to Supabase, cloud backup upload/restore via private Storage bucket, and Verified trust level from server acknowledgements.
+- **Billing and subscription.** Stripe integration via Supabase Edge Functions (checkout, portal, webhook), Pro subscription gating on sync/backup, tier badge and renewal info in UI.
+- **Auto-discovery.** Steam library detection (VDF/ACF parsing), common install folder scanning, bulk import dialog with source badges and duplicate detection.
+- **Pro visual indicator.** Sidebar logo and wordmark recolor for active Pro subscribers.
+- **Cross-platform support.** Native activity signals on Linux, Windows, and macOS with heuristic fallbacks.
