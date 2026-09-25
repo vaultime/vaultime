@@ -127,6 +127,12 @@ export interface CloudConfig {
   configured: boolean;
 }
 
+/** Result of a sync pass. */
+export interface SyncResult {
+  uploaded: number;
+  remaining: number;
+}
+
 /** Input for sign-up / sign-in commands. */
 export interface AuthCredentials {
   email: string;

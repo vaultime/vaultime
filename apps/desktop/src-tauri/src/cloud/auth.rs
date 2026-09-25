@@ -187,6 +187,59 @@ impl AuthManager {
         read_stored_tokens(&self.app_dir).map(|t| t.access_token)
     }
 
+    /// Register (upsert) this device in the cloud `cloud_devices` table.
+    ///
+    /// Requires an active access token. Updates the session's
+    /// `device_registered` flag on success.
+    pub async fn register_device(
+        &self,
+        device_id: &str,
+        device_name: &str,
+        platform: &str,
+        app_version: &str,
+    ) -> Result<()> {
+        let tokens = read_stored_tokens(&self.app_dir)
+            .ok_or_else(|| VaultimeError::Cloud("not signed in".into()))?;
+
+        let url = format!("{}/rest/v1/cloud_devices", config::supabase_url());
+
+        let body = serde_json::json!({
+            "id": device_id,
+            "device_name": device_name,
+            "platform": platform,
+            "app_version": app_version,
+        });
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("apikey", config::supabase_anon_key())
+            .header("Authorization", format!("Bearer {}", tokens.access_token))
+            .header("Content-Type", "application/json")
+            .header("Prefer", "resolution=merge-duplicates")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| VaultimeError::Cloud(format!("device registration failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            warn!("cloud device registration error: {status} {text}");
+            return Err(VaultimeError::Cloud(format!(
+                "device registration failed: HTTP {status}"
+            )));
+        }
+
+        // Update in-memory session flag.
+        if let Some(session) = self.session.lock().unwrap().as_mut() {
+            session.device_registered = true;
+        }
+
+        info!("cloud device registered: {device_id}");
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
@@ -213,27 +266,50 @@ impl AuthManager {
         let auth: SupabaseAuthResponse = serde_json::from_str(&body)
             .map_err(|e| VaultimeError::Cloud(format!("invalid auth response: {e}")))?;
 
+        // When email confirmation is enabled, sign-up returns a user object
+        // without tokens. Detect this and return a helpful message.
+        let Some(access_token) = auth.access_token else {
+            let email = auth
+                .user
+                .as_ref()
+                .and_then(|u| u.email.clone())
+                .or(auth.email)
+                .unwrap_or_default();
+            return Err(VaultimeError::Cloud(format!(
+                "Check your inbox ({email}) to confirm your account, then sign in."
+            )));
+        };
+        let refresh_token = auth.refresh_token.unwrap_or_default();
+
         let expires_at = auth
             .expires_at
             .or_else(|| {
-                auth.expires_in.map(|secs| {
-                    chrono::Utc::now().timestamp() + secs
-                })
+                auth.expires_in
+                    .map(|secs| chrono::Utc::now().timestamp() + secs)
             })
             .unwrap_or(0);
 
         let tokens = AuthTokens {
-            access_token: auth.access_token,
-            refresh_token: auth.refresh_token,
+            access_token,
+            refresh_token,
             expires_at,
         };
 
         write_stored_tokens(&self.app_dir, &tokens)?;
 
-        let user = CloudUser {
-            id: auth.user.id,
-            email: auth.user.email.unwrap_or_default(),
-            created_at: auth.user.created_at,
+        // Extract user from either the nested `user` field or top-level fields.
+        let user = if let Some(u) = auth.user {
+            CloudUser {
+                id: u.id,
+                email: u.email.unwrap_or_default(),
+                created_at: u.created_at,
+            }
+        } else {
+            CloudUser {
+                id: auth.id.unwrap_or_default(),
+                email: auth.email.unwrap_or_default(),
+                created_at: None,
+            }
         };
 
         let session = CloudSession {

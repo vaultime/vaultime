@@ -45,13 +45,20 @@ pub struct CloudSession {
 // ---------------------------------------------------------------------------
 
 /// Shape of the Supabase `/auth/v1/token` and `/auth/v1/signup` response.
+///
+/// When email confirmation is enabled, sign-up returns a user object
+/// without tokens — `access_token` and `refresh_token` will be `None`.
 #[derive(Debug, Deserialize)]
 pub struct SupabaseAuthResponse {
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
     pub expires_at: Option<i64>,
     pub expires_in: Option<i64>,
-    pub user: SupabaseUser,
+    pub user: Option<SupabaseUser>,
+    /// Present on sign-up when the user object is at the top level
+    /// (no wrapping token response).
+    pub id: Option<String>,
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

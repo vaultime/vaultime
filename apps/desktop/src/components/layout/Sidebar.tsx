@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import {
   Clock,
@@ -9,6 +10,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import * as api from "@/lib/tauri";
 
 const navItems = [
   { to: "/library", label: "Library", icon: Gamepad2 },
@@ -18,6 +20,14 @@ const navItems = [
 ] as const;
 
 export function Sidebar() {
+  const [cloudConnected, setCloudConnected] = useState(false);
+
+  useEffect(() => {
+    api.cloudGetSession().then((session) => {
+      setCloudConnected(!!session?.user?.id);
+    }).catch(() => {});
+  }, []);
+
   return (
     <aside className="relative m-4 flex h-[calc(100%-2rem)] w-64 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(31,20,53,0.92),rgba(16,10,29,0.94))] shadow-[0_24px_80px_rgba(7,3,18,0.45)] backdrop-blur-xl">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(150,104,255,0.2),transparent_32%),radial-gradient(circle_at_bottom,rgba(87,41,174,0.24),transparent_40%)]" />
@@ -50,6 +60,9 @@ export function Sidebar() {
           >
             <Icon className="h-4 w-4" />
             {label}
+            {to === "/cloud" && cloudConnected && (
+              <span className="ml-auto h-2 w-2 rounded-full bg-green-500" />
+            )}
           </NavLink>
         ))}
       </nav>

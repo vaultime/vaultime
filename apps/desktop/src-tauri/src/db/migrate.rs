@@ -14,10 +14,16 @@ use crate::error::{Result, VaultimeError};
 use super::connection::Database;
 
 /// Embedded migration files, sorted by name at compile time.
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "0001_initial_schema",
-    include_str!("../../migrations/0001_initial_schema.sql"),
-)];
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "0001_initial_schema",
+        include_str!("../../migrations/0001_initial_schema.sql"),
+    ),
+    (
+        "0002_cloud_sync",
+        include_str!("../../migrations/0002_cloud_sync.sql"),
+    ),
+];
 
 /// Creates the migration tracking table if it doesn't exist, then applies
 /// any migrations that haven't been run yet.

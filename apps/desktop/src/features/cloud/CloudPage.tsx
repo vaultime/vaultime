@@ -8,7 +8,9 @@ import {
   Loader2,
   LogIn,
   LogOut,
+  RefreshCw,
   Shield,
+  Upload,
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,10 +32,12 @@ type AuthMode = "sign-in" | "sign-up";
 export function CloudPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [config, setConfig] = useState<CloudConfig | null>(null);
   const [session, setSession] = useState<CloudSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [unsyncedCount, setUnsyncedCount] = useState(0);
 
   const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
@@ -59,6 +63,14 @@ export function CloudPage() {
           setSession(null);
         }
       }
+
+      // Check unsynced event count.
+      try {
+        const count = await api.cloudGetUnsyncedCount();
+        setUnsyncedCount(count);
+      } catch {
+        // Non-fatal.
+      }
     } catch (loadError) {
       setError(String(loadError));
     } finally {
@@ -82,9 +94,20 @@ export function CloudPage() {
           ? await api.cloudSignUp(input)
           : await api.cloudSignIn(input);
 
-      setSession(result);
       setEmail("");
       setPassword("");
+
+      // Auto-register this device after sign-in.
+      if (result.user.id) {
+        try {
+          await api.cloudRegisterDevice();
+          result.device_registered = true;
+        } catch {
+          // Device registration is non-fatal — user can retry later.
+        }
+      }
+
+      setSession(result);
       setMessage(
         authMode === "sign-up"
           ? "Account created. Check your email if confirmation is required."
@@ -110,6 +133,26 @@ export function CloudPage() {
       setError(String(signOutError));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleSync() {
+    try {
+      setSyncing(true);
+      setError(null);
+      setMessage(null);
+
+      const result = await api.cloudSyncEvents();
+      setUnsyncedCount(result.remaining);
+      setMessage(
+        result.uploaded > 0
+          ? `Synced ${result.uploaded} event${result.uploaded === 1 ? "" : "s"}.${result.remaining > 0 ? ` ${result.remaining} remaining.` : ""}`
+          : "Already up to date.",
+      );
+    } catch (syncError) {
+      setError(String(syncError));
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -280,7 +323,7 @@ export function CloudPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="flex items-center justify-between pt-2">
                 <Button variant="outline" onClick={handleSignOut} disabled={busy}>
                   {busy ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -294,51 +337,108 @@ export function CloudPage() {
           </Card>
         )}
 
-        <Card className="border border-border/70">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              Cloud Benefits
-            </CardTitle>
-            <CardDescription>
-              What the paid cloud tier adds on top of local-first tracking.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              {
-                title: "Encrypted Cloud Backup",
-                description:
-                  "Your library, sessions, and artwork are encrypted and stored securely. Restore from any point.",
-              },
-              {
-                title: "Multi-Device Sync",
-                description:
-                  "Track games across multiple machines and keep a unified session history.",
-              },
-              {
-                title: "Verified Trust Level",
-                description:
-                  "Server-acknowledged sessions earn a Verified integrity badge instead of Local-only.",
-              },
-              {
-                title: "Backup History",
-                description:
-                  "Roll back to any previous snapshot. Cloud-stored restore points never expire.",
-              },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
-              >
-                <p className="text-sm font-medium">{item.title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {item.description}
-                </p>
+        {isSignedIn ? (
+          <Card className="border border-border/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-primary" />
+                Sync
+              </CardTitle>
+              <CardDescription>
+                Upload local session events to the cloud for verified trust and
+                multi-device continuity.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Pending Events
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold">
+                    {unsyncedCount > 0 ? `${unsyncedCount}+` : "0"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Status
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className={
+                      unsyncedCount > 0
+                        ? "mt-2 border-yellow-500/50 text-yellow-500"
+                        : "mt-2 border-green-500/50 text-green-500"
+                    }
+                  >
+                    {unsyncedCount > 0 ? "Pending" : "Up to date"}
+                  </Badge>
+                </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+
+              <Button onClick={handleSync} disabled={syncing || !config?.configured}>
+                {syncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Sync Now
+              </Button>
+
+              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
+                Sync uploads session events in batches. Server-acknowledged
+                events will earn a Verified trust level instead of Local-only.
+                Your local data is never deleted during sync.
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border border-border/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                Cloud Benefits
+              </CardTitle>
+              <CardDescription>
+                What the paid cloud tier adds on top of local-first tracking.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                {
+                  title: "Encrypted Cloud Backup",
+                  description:
+                    "Your library, sessions, and artwork are encrypted and stored securely. Restore from any point.",
+                },
+                {
+                  title: "Multi-Device Sync",
+                  description:
+                    "Track games across multiple machines and keep a unified session history.",
+                },
+                {
+                  title: "Verified Trust Level",
+                  description:
+                    "Server-acknowledged sessions earn a Verified integrity badge instead of Local-only.",
+                },
+                {
+                  title: "Backup History",
+                  description:
+                    "Roll back to any previous snapshot. Cloud-stored restore points never expire.",
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
+                >
+                  <p className="text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {item.description}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

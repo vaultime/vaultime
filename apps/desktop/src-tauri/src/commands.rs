@@ -12,6 +12,7 @@ use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::{self, LocalBackupSummary};
 use crate::cloud::auth::AuthManager;
+use crate::cloud::sync::{self, SyncResult};
 use crate::cloud::types::{AuthCredentials, CloudSession};
 use crate::db::connection::Database;
 use crate::db::models::{
@@ -309,4 +310,42 @@ pub async fn cloud_refresh_token(
     auth: State<'_, AuthManager>,
 ) -> Result<CloudSession, VaultimeError> {
     auth.refresh_token().await
+}
+
+#[tauri::command]
+pub async fn cloud_register_device(
+    auth: State<'_, AuthManager>,
+    app_context: State<'_, AppContext>,
+) -> Result<bool, VaultimeError> {
+    auth.register_device(
+        &app_context.device_id,
+        &app_context.device_id, // device_name = hostname for now
+        std::env::consts::OS,
+        &app_context.app_version,
+    )
+    .await?;
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// Sync commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn cloud_sync_events(
+    db: State<'_, Arc<Database>>,
+    auth: State<'_, AuthManager>,
+    app_context: State<'_, AppContext>,
+) -> Result<SyncResult, VaultimeError> {
+    sync::sync_events(&db, &auth, &app_context.device_id).await
+}
+
+#[tauri::command]
+pub fn cloud_get_unsynced_count(
+    db: State<'_, Arc<Database>>,
+) -> Result<usize, VaultimeError> {
+    let events = session_events::list_unsynced_events(&db, 1)?;
+    // Return 0 or 1+ as a cheap "has unsynced" indicator.
+    // A full count would be wasteful; the UI just needs to know if sync is needed.
+    Ok(events.len())
 }

@@ -23,6 +23,7 @@ Thumbs.db
 # Tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/.cargo/config.toml
 
 # Local planning scratchpad
 PLAN.md

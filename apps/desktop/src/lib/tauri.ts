@@ -16,6 +16,7 @@ import type {
   AuthCredentials,
   CloudConfig,
   CloudSession,
+  SyncResult,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -182,4 +183,16 @@ export async function cloudSignOut(): Promise<boolean> {
 
 export async function cloudRefreshToken(): Promise<CloudSession> {
   return invoke<CloudSession>("cloud_refresh_token");
+}
+
+export async function cloudRegisterDevice(): Promise<boolean> {
+  return invoke<boolean>("cloud_register_device");
+}
+
+export async function cloudSyncEvents(): Promise<SyncResult> {
+  return invoke<SyncResult>("cloud_sync_events");
+}
+
+export async function cloudGetUnsyncedCount(): Promise<number> {
+  return invoke<number>("cloud_get_unsynced_count");
 }

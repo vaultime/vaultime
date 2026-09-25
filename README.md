@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/timesafe_styled.svg" alt="Vaultime icon" width="120" />
+  <img src="assets/timesafe.svg" alt="Vaultime icon" width="120" />
 </p>
 
 <p align="center">
-  <img src="assets/vaultime_styled.svg" alt="Vaultime" width="360" />
+  <img src="assets/vaultime.svg" alt="Vaultime" width="360" />
 </p>
 
 <p align="center">
@@ -43,7 +43,7 @@ Milestones 1–9 are complete. The app is fully functional as a local-first play
 | Image import and asset pipeline | Done |
 | Integrity system v1 | Done |
 | Local backups and cross-platform support | Done |
-| Cloud foundation | Next |
+| Cloud foundation | In progress |
 
 ## Tech Stack
 
@@ -108,14 +108,14 @@ vaultime/
           library/                 #   Library page, game cards, add/edit/delete
           game-details/            #   Per-game detail view with stats
           sessions/                #   Session timeline and history
-          cloud/                   #   Cloud status (placeholder)
+          cloud/                   #   Cloud auth, account, sync status
           settings/                #   Tracking rules, detection status, backups
         lib/                       #   API layer, types, time/stat utilities
       src-tauri/                   # Rust backend
         src/
           assets/                  #   Folder scanning, thumbnail caching
           backup/                  #   Export/import/restore logic
-          cloud/                   #   Cloud module (placeholder)
+          cloud/                   #   Supabase auth, config, sync types
           db/                      #   SQLite connection, migrations, repositories
           integrity/               #   Hash chains, trust validation
           platform/                #   OS-specific process/window/idle detection

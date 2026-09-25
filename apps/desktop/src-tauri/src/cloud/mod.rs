@@ -5,4 +5,5 @@
 
 pub mod auth;
 pub mod config;
+pub mod sync;
 pub mod types;
