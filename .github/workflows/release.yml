@@ -185,7 +185,8 @@ jobs:
           path: pkg
 
       - name: Install and start the app
-        run: bash packaging/linux/smoke-test.sh pkg/*.${{ matrix.package }}
+        # The artifact keeps the deb, rpm and appimage folders.
+        run: bash packaging/linux/smoke-test.sh "$(find pkg -name '*.${{ matrix.package }}' | head -n 1)"
 
   publish:
     name: Publish release
