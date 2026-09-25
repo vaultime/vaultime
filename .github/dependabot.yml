@@ -1,11 +1,18 @@
 version: 2
 
 # Monthly grouped update PRs keep dependencies current without daily noise.
+# Prefixes keep the `module: message` commit format.
 updates:
   - package-ecosystem: npm
     directory: /apps/desktop
     schedule:
       interval: monthly
+    commit-message:
+      prefix: desktop/ui
+    ignore:
+      # Types follow the Node LTS used in CI, not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       npm:
         patterns: ["*"]
@@ -14,6 +21,8 @@ updates:
     directory: /apps/desktop/src-tauri
     schedule:
       interval: monthly
+    commit-message:
+      prefix: desktop
     groups:
       desktop-crates:
         patterns: ["*"]
@@ -22,6 +31,8 @@ updates:
     directory: /apps/api
     schedule:
       interval: monthly
+    commit-message:
+      prefix: api
     groups:
       api-crates:
         patterns: ["*"]
@@ -30,6 +41,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    commit-message:
+      prefix: ci
     groups:
       actions:
         patterns: ["*"]
