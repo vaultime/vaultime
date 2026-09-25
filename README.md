@@ -7,131 +7,108 @@
 </p>
 
 <p align="center">
-  <strong>Universal game library and trustworthy playtime tracker.</strong><br />
-  Local-first. Windows and Linux. Event-sourced.
+  <strong>Your game library and a playtime tracker you can trust.</strong><br />
+  Local-first. Windows and Linux. Free.
+</p>
+
+<p align="center">
+  <a href="https://github.com/schwimmbeck/vaultime/actions/workflows/ci.yml"><img src="https://github.com/schwimmbeck/vaultime/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/schwimmbeck/vaultime/actions/workflows/release.yml"><img src="https://github.com/schwimmbeck/vaultime/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7a5ea6" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/Tauri-2-24c8db" alt="Tauri 2">
+  <img src="https://img.shields.io/badge/Rust-1.98-b7410e" alt="Rust 1.98">
+  <img src="https://img.shields.io/badge/React-19-61dafb" alt="React 19">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-555" alt="Windows and Linux">
 </p>
 
 ---
 
-Vaultime is a desktop app that tracks real play sessions across PC games and launchers. It separates **runtime**, **active playtime** and **idle time**, stores everything locally, and shows your library in a dark, image-rich UI built from your own game artwork.
-
-Remote backup is optional. It runs on a self-hosted, invite-only server (`api.codfishcloud.de`). There are no paid tiers or subscriptions.
+Vaultime keeps track of how long you really play your PC games, no matter which launcher they come from. It tells apart the time a game was open, the time you actually played and the time it sat idle in the background. Everything stays on your computer, and your library looks like a library, with the artwork from your own game folders.
 
 ## Features
 
-- **Automatic session detection.** Polls for tracked game processes every 5 seconds and records sessions as they happen.
-- **Active vs idle time.** Uses the foreground window and user input idle time (Win32 on Windows, X11 tools on Linux) to split active play from background time.
-- **Event-sourced history.** Every session is an append-only, hash-chained event log. Totals are derived from it.
-- **Honest trust labels.** Sessions are marked `Local`, `Suspicious` or `Recovered` based on clock comparisons, chain validation and crash recovery.
-- **Sleep aware.** Time while the machine sleeps is skipped and logged instead of counted.
-- **Game discovery.** Finds Steam games (registry based on Windows) and scans common launcher folders (Epic, GOG, Xbox, EA, Ubisoft, Battle.net, `~/Games`).
-- **Local artwork.** Scans game folders for cover art, caches thumbnails and lets you pick the cover per game.
-- **Local backups.** Self-contained exports with per-file checksums. Restores show a preview first and migrate older backups automatically.
-- **Encrypted cloud backup.** Backups are encrypted on your device before upload. The passphrase never leaves the device.
+- **Automatic tracking.** Start a game and Vaultime records the session. No launcher integration needed.
+- **Real playtime.** Runtime, active playtime and idle time are counted separately.
+- **Sleep aware.** Time while your computer sleeps is never counted.
+- **Game discovery.** Finds your Steam games and scans common folders of Epic, GOG, Xbox, EA, Ubisoft and Battle.net games.
+- **Your artwork.** Picks up cover art from your game folders, and you choose the cover per game.
+- **Session history.** A timeline and stats for every game, with an honest trust label per session.
+- **Backups.** Export and restore your whole library locally, or use the optional encrypted cloud backup.
 
-## Platforms
+## Download
+
+Get the latest version from the [Releases page](https://github.com/schwimmbeck/vaultime/releases/latest). Vaultime updates itself when a new version is out.
+
+### Windows
+
+Windows 10 and 11 are supported. Download `Vaultime_x.y.z_x64-setup.exe` and run it. No admin rights are needed. The `.msi` package is there for managed installs.
+
+### Linux
+
+| Distribution | Package |
+|---|---|
+| Debian, Ubuntu, Linux Mint, Pop!_OS | `.deb` |
+| Fedora | `.rpm` |
+| Arch, openSUSE and any other | `.AppImage` |
+
+For the AppImage, make it executable (`chmod +x Vaultime_*.AppImage`) and start it.
+
+On X11, install `xprop` and `xprintidle` so Vaultime can see which window is in front and how long you have been away:
+
+| Distribution | Command |
+|---|---|
+| Debian, Ubuntu | `sudo apt install x11-utils xprintidle` |
+| Arch | `sudo pacman -S xorg-xprop xprintidle` |
+| openSUSE | `sudo zypper install xprop xprintidle` |
+| Fedora | `sudo dnf install xprop` |
+
+Fedora does not package `xprintidle`. Without it Vaultime estimates idle time from the game's CPU usage.
+
+Signing in to cloud backup needs a keyring service such as GNOME Keyring or KWallet. Most desktops ship one.
+
+## How playtime is counted
+
+| Time | Meaning |
+|---|---|
+| Runtime | How long the game was running |
+| Active | Runtime while the game was in front and you were at your computer |
+| Idle | Runtime while the game sat in the background or you were away |
+
+You count as away after 5 minutes without keyboard or mouse input. You can change this in Settings, and you can also choose to count background time as active.
+
+## Trust labels
+
+Every session carries a label that tells how much its record can be trusted:
+
+- **Local.** Recorded normally and unchanged since.
+- **Suspicious.** The system clock jumped or the record was edited afterwards.
+- **Recovered.** Vaultime was closed while the game ran, for example after a crash, and the session was closed on the next start.
+
+These labels detect changes, they cannot prevent them. They are hints, not proof.
+
+## Backups
+
+- **Local backups** are folders you can keep anywhere. Create one with Export Backup under Settings, Local Backups. Choose Backup To Restore shows what is inside before anything is replaced.
+- **Cloud backup** is free and invite-only. Backups are encrypted on your computer with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe, without it a backup cannot be restored. When you reach the backup limit, a new upload replaces your oldest one. You can also delete backups yourself.
+
+## Your data
+
+| | Windows | Linux |
+|---|---|---|
+| Library and history | `%APPDATA%\com.vaultime.app` | `~/.local/share/com.vaultime.app` |
+| Log files | `%LOCALAPPDATA%\com.vaultime.app\logs` | `~/.local/share/com.vaultime.app/logs` |
+
+Vaultime has no analytics and no telemetry. Details are in the [privacy policy](docs/legal/privacy-policy.md) and the [terms](docs/legal/terms-of-service.md).
+
+## Platform support
 
 | Platform | Status |
 |---|---|
-| Windows 10 and 11 | Supported, NSIS and MSI installers |
-| Linux (X11) | Supported, deb, rpm and AppImage. Install `xprop` and `xprintidle` for foreground and idle detection |
-| Linux (Wayland) | Partial. Detection goes through XWayland, which covers most Proton games but can misread native Wayland windows and idle time |
-| macOS | Not built or tested yet |
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Desktop shell | [Tauri 2](https://v2.tauri.app/) |
-| Core logic | Rust (edition 2024, toolchain pinned in `rust-toolchain.toml`) |
-| Frontend | React 19, TypeScript 6, React Router 8 |
-| Styling | Tailwind CSS 4 and [shadcn/ui](https://ui.shadcn.com/) on Base UI |
-| Local database | SQLite through rusqlite (bundled, WAL mode) |
-| Secrets | OS credential store (Windows Credential Manager, Secret Service on Linux) |
-| Cloud API | Rust, Axum, PostgreSQL, filesystem blob storage |
-
-## Cloud Backup Server
-
-The API lives in [`apps/api`](apps/api). Deploy notes and scripts for the VPS are in [`deploy/vps`](deploy/vps/README.md), the design in [`docs/architecture`](docs/architecture).
-
-Admins create invites in the app. To create one on the command line instead:
-
-```bash
-node scripts/generate-invite-key.mjs --count 3
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 22.22 or newer (24 LTS recommended)
-- Rust through [rustup](https://rustup.rs). The right version installs itself from `rust-toolchain.toml`.
-- Windows: Visual Studio Build Tools with the "Desktop development with C++" workload. WebView2 ships with Windows 10 and 11.
-- Linux:
-  ```bash
-  sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
-    libayatana-appindicator3-dev librsvg2-dev
-  ```
-  Optional for better tracking on X11: `xprop` and `xprintidle`.
-
-### Development
-
-```bash
-cd apps/desktop
-npm ci
-npm run tauri dev
-```
-
-### Checks
-
-```bash
-# apps/desktop
-npm run typecheck && npm run lint && npm run build
-
-# apps/desktop/src-tauri and apps/api
-cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-```
-
-### Production Build
-
-```bash
-cd apps/desktop
-npm run tauri build
-```
-
-Installers land in `apps/desktop/src-tauri/target/release/bundle/`.
-
-### Releases
-
-Pushing a `v*` tag builds Windows and Linux installers in GitHub Actions, uploads them with a signed `latest.json` for the auto-updater, and publishes the release. The `TAURI_SIGNING_PRIVATE_KEY` secret must be set. A manual run of the Release workflow builds installers without publishing.
-
-## Project Structure
-
-```
-vaultime/
-  apps/
-    api/                    Self-hosted cloud backup API
-    desktop/
-      src/                  React frontend
-        components/         Layout, charts, artwork, integrity badges, ui primitives
-        features/           library, game-details, sessions, cloud, settings
-        lib/                IPC wrappers, types, time and stat helpers
-      src-tauri/src/        Rust core
-        assets/             Artwork scanning and caching
-        backup/             Local export and restore, encrypted cloud backup
-        db/                 SQLite connection, migrations, repositories
-        discovery/          Steam and folder discovery
-        integrity/          Hash chains and trust validation
-        platform/           Process list, foreground and idle detection per OS
-        tracking/           Session engine and poll loop
-        secure_storage.rs   OS credential store access
-        commands.rs         Tauri IPC commands
-  deploy/vps/               Caddy, systemd and setup scripts for the server
-  docs/                     Architecture, legal pages, landing page
-  scripts/                  Dev helpers
-  assets/                   Brand assets
-```
+| Windows 10 and 11 | Supported |
+| Linux on X11 | Supported |
+| Linux on Wayland | Works for games that run through XWayland, which covers most Proton games. Native Wayland windows and idle time can be misread. |
+| macOS | Not available yet |
 
 ## License
 
-MIT
+[MIT](LICENSE)
