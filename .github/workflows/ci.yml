@@ -51,6 +51,23 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: cargo clippy -- -D warnings
 
+  lint-api:
+    name: Lint API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+      - run: cargo fmt -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+
   test-backend:
     name: Test backend
     runs-on: ubuntu-latest
@@ -70,9 +87,23 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: cargo test
 
+  test-api:
+    name: Test API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+      - run: cargo test
+
   build:
     name: Build (${{ matrix.os }})
-    needs: [lint-frontend, lint-backend, test-backend]
+    needs: [lint-frontend, lint-backend, lint-api, test-backend, test-api]
     strategy:
       fail-fast: false
       matrix:

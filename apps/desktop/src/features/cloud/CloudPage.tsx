@@ -1,24 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-shell";
+import { useEffect, useEffectEvent, useState, type FormEvent } from "react";
 import {
   ArchiveRestore,
   Cloud,
-  CloudOff,
-  CreditCard,
-  Crown,
-  ExternalLink,
+  Copy,
   HardDriveUpload,
+  KeyRound,
   Loader2,
-  LogIn,
   LogOut,
+  RefreshCw,
+  Server,
   Shield,
-  ShieldAlert,
-  Sparkles,
-  Upload,
-  UserPlus,
+  UserRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +26,6 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -40,966 +34,1043 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatSessionDate } from "@/lib/time";
-import type {
-  CloudBackupRecord,
-  CloudBackupRestorePreview,
-  CloudConfig,
-  CloudSession,
-  CloudSyncStatus,
-  Subscription,
-} from "@/lib/types";
-import * as api from "@/lib/tauri";
+import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
+import { formatLongDate } from "@/lib/time";
+import type { CloudAdminInvite, CloudBackupRecord } from "@/lib/types";
 
-type AuthMode = "sign-in" | "sign-up";
-
-function formatBytes(bytes: number | null): string {
-  if (!bytes || bytes <= 0) {
-    return "Unknown size";
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return "Not set";
   }
-
-  if (bytes >= 1_000_000_000) {
-    return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  try {
+    return formatLongDate(value);
+  } catch {
+    return value;
   }
-
-  if (bytes >= 1_000_000) {
-    return `${(bytes / 1_000_000).toFixed(1)} MB`;
-  }
-
-  if (bytes >= 1_000) {
-    return `${(bytes / 1_000).toFixed(1)} KB`;
-  }
-
-  return `${bytes} B`;
 }
 
-function formatCloudMoment(value: string | null | undefined): string {
-  if (!value) {
-    return "Not yet";
+function formatByteSize(bytes: number) {
+  if (bytes <= 0) {
+    return "0 B";
   }
 
-  return formatSessionDate(value);
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** exponent;
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+}
+
+function toIsoTimestamp(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
 }
 
 export function CloudPage() {
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [backupBusy, setBackupBusy] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [previewingBackupId, setPreviewingBackupId] = useState<string | null>(
-    null,
-  );
-  const [config, setConfig] = useState<CloudConfig | null>(null);
-  const [session, setSession] = useState<CloudSession | null>(null);
-  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus | null>(null);
-  const [backups, setBackups] = useState<CloudBackupRecord[]>([]);
-  const [restorePreview, setRestorePreview] =
-    useState<CloudBackupRestorePreview | null>(null);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [billingBusy, setBillingBusy] = useState(false);
+  const {
+    apiBaseUrl,
+    createAdminInvite,
+    device,
+    deviceError,
+    initializing,
+    isAdmin,
+    listBackups,
+    login,
+    logout,
+    refreshSession,
+    registerCurrentDevice,
+    restoreRemoteBackup,
+    session,
+    signUp,
+    uploadRemoteBackup,
+  } = useCloudSession();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [remoteBackupBusy, setRemoteBackupBusy] = useState(false);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [lastInvite, setLastInvite] = useState<CloudAdminInvite | null>(null);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [remoteBackups, setRemoteBackups] = useState<CloudBackupRecord[]>([]);
+  const [restoreTarget, setRestoreTarget] = useState<CloudBackupRecord | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signUpEmail, setSignUpEmail] = useState("");
+  const [signUpPassword, setSignUpPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [invitePrefix, setInvitePrefix] = useState("VTLINV");
+  const [inviteMaxRedemptions, setInviteMaxRedemptions] = useState("1");
+  const [inviteExpiry, setInviteExpiry] = useState("");
+  const [inviteNote, setInviteNote] = useState("");
 
-  const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const loadSignedInData = useCallback(async () => {
-    const [status, backupRows, sub] = await Promise.all([
-      api.cloudGetSyncStatus(),
-      api.cloudListBackups().catch(() => []),
-      api.cloudGetSubscription().catch(() => null),
-    ]);
-    setSyncStatus(status);
-    setBackups(backupRows);
-    setSubscription(sub);
-  }, []);
-
-  const load = useCallback(async () => {
+  const loadBackups = useEffectEvent(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      const [cloudConfig, storedSession] = await Promise.all([
-        api.cloudGetConfig(),
-        api.cloudGetSession(),
-      ]);
-
-      let nextSession = storedSession;
-      if (nextSession && !nextSession.user.id && cloudConfig.configured) {
-        try {
-          nextSession = await api.cloudRefreshToken();
-        } catch {
-          nextSession = null;
-        }
-      }
-
-      if (nextSession?.user.id && !nextSession.device_registered) {
-        try {
-          await api.cloudRegisterDevice();
-          nextSession = {
-            ...nextSession,
-            device_registered: true,
-          };
-        } catch {
-          // Surface the pending state in the UI, but keep the rest of the page usable.
-        }
-      }
-
-      setConfig(cloudConfig);
-      setSession(nextSession);
-
-      if (nextSession?.user.id) {
-        await loadSignedInData();
-      } else {
-        setSyncStatus(await api.cloudGetSyncStatus());
-        setBackups([]);
-      }
-    } catch (loadError) {
-      setError(String(loadError));
+      setBackupsLoading(true);
+      const backups = await listBackups();
+      setRemoteBackups(backups);
+    } catch (error) {
+      setErrorMessage(String(error));
     } finally {
-      setLoading(false);
+      setBackupsLoading(false);
     }
-  }, [loadSignedInData]);
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!session) {
+      setRemoteBackups([]);
+      return;
+    }
 
-  async function handleAuth() {
+    void loadBackups();
+  }, [session]);
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
     try {
-      setBusy(true);
-      setError(null);
-      setMessage(null);
+      const nextSession = await login(loginEmail, loginPassword);
+      setStatusMessage(`Signed in as ${nextSession.user.email}.`);
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setAuthBusy(false);
+    }
+  }
 
-      const input = { email, password };
-      let result =
-        authMode === "sign-up"
-          ? await api.cloudSignUp(input)
-          : await api.cloudSignIn(input);
+  async function handleSignUp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
 
-      if (result.user.id) {
-        try {
-          await api.cloudRegisterDevice();
-          result = { ...result, device_registered: true };
-        } catch {
-          // Keep the session, but show the pending device-registration state.
-        }
+    try {
+      const nextSession = await signUp(
+        signUpEmail,
+        signUpPassword,
+        inviteCode,
+      );
+      setStatusMessage(`Cloud account created for ${nextSession.user.email}.`);
+      setInviteCode("");
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleRefreshSession() {
+    setAuthBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        setStatusMessage("Cloud session expired. Sign in again.");
+        return;
+      }
+      setStatusMessage("Cloud session refreshed.");
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleRegisterDevice() {
+    setDeviceBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      const registered = await registerCurrentDevice();
+      if (registered) {
+        setStatusMessage(`Device registered as ${registered.device_name}.`);
+      }
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setDeviceBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    setAuthBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      await logout();
+      setStatusMessage("Signed out of cloud backup.");
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleGenerateInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setInviteBusy(true);
+    setCopiedInvite(false);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      const maxRedemptions = Number.parseInt(inviteMaxRedemptions, 10);
+      if (!Number.isFinite(maxRedemptions) || maxRedemptions < 1) {
+        throw new Error("Max redemptions must be at least 1.");
       }
 
-      setEmail("");
-      setPassword("");
-      setSession(result);
+      const generated = await createAdminInvite({
+        prefix: invitePrefix.trim() || null,
+        max_redemptions: maxRedemptions,
+        expires_at: toIsoTimestamp(inviteExpiry),
+        note: inviteNote.trim() || null,
+      });
 
-      if (result.user.id) {
-        await loadSignedInData();
-      }
-
-      window.dispatchEvent(new CustomEvent("vaultime:auth-changed"));
-
-      setMessage(
-        authMode === "sign-up"
-          ? "Account created. Cloud sync and backup are ready after device registration finishes."
-          : "Signed in successfully.",
-      );
-    } catch (authError) {
-      setError(String(authError));
+      setLastInvite(generated);
+      setStatusMessage("New invite key generated.");
+    } catch (error) {
+      setErrorMessage(String(error));
     } finally {
-      setBusy(false);
+      setInviteBusy(false);
     }
   }
 
-  async function handleSignOut() {
-    try {
-      setBusy(true);
-      setError(null);
-      setMessage(null);
+  async function handleCopyInvite() {
+    if (!lastInvite?.code) {
+      return;
+    }
 
-      await api.cloudSignOut();
-      setSession(null);
-      setSubscription(null);
-      setBackups([])
-      setSyncStatus(await api.cloudGetSyncStatus());
-      window.dispatchEvent(new CustomEvent("vaultime:auth-changed"));
-      setMessage("Signed out.");
-    } catch (signOutError) {
-      setError(String(signOutError));
-    } finally {
-      setBusy(false);
+    try {
+      await navigator.clipboard.writeText(lastInvite.code);
+      setCopiedInvite(true);
+      setStatusMessage("Invite code copied.");
+    } catch (error) {
+      setErrorMessage(String(error));
     }
   }
 
-  async function handleSync() {
+  async function handleReloadBackups() {
+    setErrorMessage(null);
     try {
-      setSyncing(true);
-      setError(null);
-      setMessage(null);
-
-      const result = await api.cloudSyncEvents();
-      const nextStatus = await api.cloudGetSyncStatus();
-      setSyncStatus(nextStatus);
-      setMessage(
-        result.uploaded > 0
-          ? `Synced ${result.uploaded} event${result.uploaded === 1 ? "" : "s"}, verified ${result.verified_sessions} session${result.verified_sessions === 1 ? "" : "s"}${result.conflicted_events > 0 ? `, ${result.conflicted_events} conflict${result.conflicted_events === 1 ? "" : "s"} still need review` : ""}.`
-          : "Already up to date.",
-      );
-    } catch (syncError) {
-      setError(String(syncError));
+      setBackupsLoading(true);
+      const backups = await listBackups();
+      setRemoteBackups(backups);
+    } catch (error) {
+      setErrorMessage(String(error));
     } finally {
-      setSyncing(false);
+      setBackupsLoading(false);
     }
   }
 
-  async function handleCreateBackup() {
-    try {
-      setBackupBusy(true);
-      setError(null);
-      setMessage(null);
+  async function handleCreateRemoteBackup() {
+    setRemoteBackupBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
 
-      const result = await api.cloudCreateBackup();
-      const [nextStatus, nextBackups] = await Promise.all([
-        api.cloudGetSyncStatus(),
-        api.cloudListBackups(),
+    try {
+      const result = await uploadRemoteBackup();
+      setRemoteBackups((current) => [
+        result.backup,
+        ...current.filter((backup) => backup.id !== result.backup.id),
       ]);
-      setSyncStatus(nextStatus);
-      setBackups(nextBackups);
-      setMessage(
-        `Cloud backup uploaded: ${result.summary.games_count} games, ${result.summary.sessions_count} sessions, ${result.uploaded_files} files.`,
+      setStatusMessage(
+        `Remote backup uploaded with ${result.payload_summary.games_count} games and ${result.payload_summary.sessions_count} sessions.`,
       );
-    } catch (backupError) {
-      setError(String(backupError));
+    } catch (error) {
+      setErrorMessage(String(error));
     } finally {
-      setBackupBusy(false);
+      setRemoteBackupBusy(false);
     }
   }
 
-  async function handleOpenRestoreDialog(backupId: string) {
-    try {
-      setPreviewingBackupId(backupId);
-      setError(null);
-      setMessage(null);
-
-      const preview = await api.cloudGetRestorePreview(backupId);
-      setRestorePreview(preview);
-      setRestoreDialogOpen(true);
-    } catch (previewError) {
-      setError(String(previewError));
-    } finally {
-      setPreviewingBackupId(null);
-    }
-  }
-
-  async function handleRestoreBackup() {
-    if (!restorePreview) {
+  async function handleRestoreRemoteBackup() {
+    if (!restoreTarget) {
       return;
     }
 
-    try {
-      setRestoring(true);
-      setError(null);
-      setMessage(null);
+    setRemoteBackupBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
 
-      const result = await api.cloudRestoreBackup(
-        restorePreview.backup.id,
-        restorePreview.requires_force,
-      );
+    try {
+      const result = await restoreRemoteBackup(restoreTarget.id);
       setRestoreDialogOpen(false);
-      setRestorePreview(null);
-      await load();
-      setMessage(
-        result.restart_required
-          ? "Cloud backup restored. Restart the app before resuming live tracking."
-          : "Cloud backup restored.",
+      setRestoreTarget(null);
+      setStatusMessage(
+        result.restored_summary.restart_required
+          ? "Remote backup restored. Restart Vaultime to resume live tracking on this machine."
+          : "Remote backup restored.",
       );
-    } catch (restoreError) {
-      setError(String(restoreError));
+    } catch (error) {
+      setErrorMessage(String(error));
     } finally {
-      setRestoring(false);
+      setRemoteBackupBusy(false);
     }
   }
 
-  async function handleUpgrade() {
-    if (!billingEnabled) {
-      setError("Billing is not configured yet. Set up Stripe and enable VAULTIME_BILLING_ENABLED first.");
-      return;
-    }
-    try {
-      setBillingBusy(true);
-      setError(null);
-      setMessage(null);
-      const url = await api.cloudCreateCheckoutUrl();
-      await open(url);
-      setMessage(
-        "Checkout opened in your browser. Return here after completing payment and refresh.",
-      );
-    } catch (upgradeError) {
-      setError(String(upgradeError));
-    } finally {
-      setBillingBusy(false);
-    }
-  }
-
-  async function handleManageSubscription() {
-    if (!billingEnabled) {
-      setError("Billing is not configured yet. Set up Stripe and enable VAULTIME_BILLING_ENABLED first.");
-      return;
-    }
-    try {
-      setBillingBusy(true);
-      setError(null);
-      setMessage(null);
-      const url = await api.cloudCreatePortalUrl();
-      await open(url);
-    } catch (portalError) {
-      setError(String(portalError));
-    } finally {
-      setBillingBusy(false);
-    }
-  }
-
-  async function handleRefreshSubscription() {
-    try {
-      setBillingBusy(true);
-      setError(null);
-      const sub = await api.cloudGetSubscription();
-      setSubscription(sub);
-      setMessage("Subscription status refreshed.");
-    } catch (refreshError) {
-      setError(String(refreshError));
-    } finally {
-      setBillingBusy(false);
-    }
-  }
-
-  const isSignedIn = Boolean(session?.user?.id);
-  const billingEnabled = config?.billing_enabled ?? false;
-  const hasPremium =
-    !billingEnabled ||
-    (subscription?.tier === "pro" &&
-      (subscription?.status === "active" ||
-        subscription?.status === "past_due"));
-  const pendingEvents = syncStatus?.pending_events ?? 0;
-
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+  function openRestoreDialog(backup: CloudBackupRecord) {
+    setRestoreTarget(backup);
+    setRestoreDialogOpen(true);
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Cloud</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">Cloud</h1>
+          <Badge
+            variant="outline"
+            className={
+              session
+                ? "border-emerald-500/40 text-emerald-300"
+                : "border-border/60 text-muted-foreground"
+            }
+          >
+            {session ? "Connected" : "Offline"}
+          </Badge>
+          {isAdmin && (
+            <Badge variant="outline" className="border-amber-400/40 text-amber-200">
+              Admin
+            </Badge>
+          )}
+        </div>
         <p className="text-muted-foreground">
-          Sync status, remote backups, and recovery controls for the paid tier.
+          Remote backup now talks to your self-hosted API on `codfishcloud.de`.
+          Auth, device registration, remote backup upload/restore, and admin
+          invite generation are live.
         </p>
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
+      {errorMessage && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {errorMessage}
         </div>
       )}
 
-      {message && (
-        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-300">
-          {message}
+      {statusMessage && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+          {statusMessage}
         </div>
       )}
 
-      {!config?.configured && (
-        <Card className="border border-amber-400/30 bg-amber-500/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-200">
-              <CloudOff className="h-4 w-4" />
-              Cloud Not Configured
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <Card className="relative overflow-hidden border border-border/70 bg-card/80">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.1),transparent_38%)]" />
+          <CardHeader className="relative">
+            <CardTitle className="flex items-center gap-2">
+              <Cloud className="h-4 w-4 text-primary" />
+              Remote connection
             </CardTitle>
             <CardDescription>
-              Set the{" "}
-              <code className="rounded bg-muted/30 px-1.5 py-0.5 text-xs">
-                VAULTIME_SUPABASE_URL
-              </code>{" "}
-              and{" "}
-              <code className="rounded bg-muted/30 px-1.5 py-0.5 text-xs">
-                VAULTIME_SUPABASE_ANON_KEY
-              </code>{" "}
-              build-time variables. Cloud backups use a private Supabase Storage
-              bucket named{" "}
-              <code className="rounded bg-muted/30 px-1.5 py-0.5 text-xs">
-                VAULTIME_SUPABASE_BACKUP_BUCKET
-              </code>{" "}
-              and default to{" "}
-              <code className="rounded bg-muted/30 px-1.5 py-0.5 text-xs">
-                vaultime-backups
-              </code>
-              .
+              The desktop app now talks to your VPS API directly for auth and
+              invite-only cloud access.
             </CardDescription>
           </CardHeader>
+          <CardContent className="relative grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                API host
+              </p>
+              <p className="mt-2 text-sm font-medium">{apiBaseUrl}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Access model
+              </p>
+              <p className="mt-2 text-sm font-medium">
+                Invite-only signup and admin-generated keys
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Session state
+              </p>
+              <p className="mt-2 text-sm font-medium">
+                {initializing
+                  ? "Checking cloud session..."
+                  : session
+                    ? `Signed in as ${session.user.role}`
+                    : "No cloud session stored"}
+              </p>
+            </div>
+          </CardContent>
         </Card>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-        {!isSignedIn ? (
-          <Card className="border border-border/70 bg-card/80">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {authMode === "sign-in" ? (
-                  <LogIn className="h-4 w-4 text-primary" />
-                ) : (
-                  <UserPlus className="h-4 w-4 text-primary" />
-                )}
-                {authMode === "sign-in" ? "Sign In" : "Create Account"}
-              </CardTitle>
-              <CardDescription>
-                {authMode === "sign-in"
-                  ? "Sign in to unlock cloud-verified trust, backup snapshots, and restore history."
-                  : "Create your Vaultime cloud account to start syncing events and storing remote backups."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="cloud-email">Email</Label>
-                <Input
-                  id="cloud-email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  disabled={busy || !config?.configured}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cloud-password">Password</Label>
-                <Input
-                  id="cloud-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  disabled={busy || !config?.configured}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && email && password) {
-                      void handleAuth();
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4 pt-2">
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() =>
-                    setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")
-                  }
-                >
-                  {authMode === "sign-in"
-                    ? "Need an account? Sign up"
-                    : "Already have an account? Sign in"}
-                </button>
-                <Button
-                  onClick={handleAuth}
-                  disabled={busy || !email || !password || !config?.configured}
-                >
-                  {busy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : authMode === "sign-in" ? (
-                    <LogIn className="h-4 w-4" />
-                  ) : (
-                    <UserPlus className="h-4 w-4" />
-                  )}
-                  {authMode === "sign-in" ? "Sign In" : "Sign Up"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="relative overflow-hidden border border-border/70 bg-card/80">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.2),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.12),transparent_38%)]" />
-            <CardHeader className="relative">
-              <CardTitle className="flex items-center gap-2">
-                <Cloud className="h-4 w-4 text-primary" />
-                Account
-              </CardTitle>
-              <CardDescription>
-                Signed in and ready for remote backup and sync.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="relative space-y-4">
-              <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Email
-                </p>
-                <p className="mt-1 text-sm font-medium">{session?.user.email}</p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Device Registration
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className={
-                      session?.device_registered
-                        ? "mt-2 border-emerald-500/50 text-emerald-300"
-                        : "mt-2 border-amber-400/50 text-amber-200"
-                    }
-                  >
-                    {session?.device_registered ? "Ready" : "Pending"}
-                  </Badge>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Last Sync
-                  </p>
-                  <p className="mt-2 text-sm font-medium">
-                    {formatCloudMoment(syncStatus?.last_sync_at)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-border/70 bg-background/45 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Plan
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  {hasPremium ? (
-                    <>
-                      <Badge
-                        variant="outline"
-                        className="border-violet-400/50 text-violet-200"
-                      >
-                        <Crown className="mr-1 h-3 w-3" />
-                        Pro
-                      </Badge>
-                      {!billingEnabled && (
-                        <span className="text-xs text-muted-foreground">
-                          (billing not configured)
-                        </span>
-                      )}
-                      {subscription?.cancel_at_period_end && (
-                        <span className="text-xs text-amber-200">
-                          Cancels at period end
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="border-muted-foreground/50 text-muted-foreground"
-                    >
-                      Free
-                    </Badge>
-                  )}
-                </div>
-                {subscription?.current_period_end && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {subscription.status === "canceled" || subscription.status === "expired"
-                      ? "Expired"
-                      : subscription.cancel_at_period_end
-                        ? "Access until"
-                        : "Renews"}{" "}
-                    {formatCloudMoment(subscription.current_period_end)}
-                  </p>
-                )}
-                {billingEnabled && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {hasPremium ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleManageSubscription}
-                        disabled={billingBusy}
-                      >
-                        {billingBusy ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <CreditCard className="h-3.5 w-3.5" />
-                        )}
-                        Manage Subscription
-                        <ExternalLink className="h-3 w-3 opacity-50" />
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={handleUpgrade}
-                        disabled={billingBusy}
-                      >
-                        {billingBusy ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-3.5 w-3.5" />
-                        )}
-                        Upgrade to Pro
-                        <ExternalLink className="h-3 w-3 opacity-50" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRefreshSubscription}
-                      disabled={billingBusy}
-                      title="Re-check subscription status after completing payment"
-                    >
-                      {billingBusy ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        "Refresh"
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">
-                  {billingEnabled && !hasPremium
-                    ? "Upgrade to Pro to unlock cloud sync, remote backups, and verified trust."
-                    : "Device registration is required for verified sessions and cloud snapshot metadata."}
-                </div>
-                <Button variant="outline" onClick={handleSignOut} disabled={busy}>
-                  {busy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <LogOut className="h-4 w-4" />
-                  )}
-                  Sign Out
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <Card className="border border-border/70 bg-card/80">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              Sync Snapshot
+              <Server className="h-4 w-4 text-primary" />
+              Current status
             </CardTitle>
             <CardDescription>
-              Event acknowledgements and remote snapshot cadence on this device.
+              Cloud auth, device registration, and remote backup transfers now
+              run against your VPS API.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Pending Events
-                </p>
-                <p className="mt-2 text-2xl font-semibold">{pendingEvents}</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Remote Backups
-                </p>
-                <p className="mt-2 text-2xl font-semibold">{backups.length}</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Last Backup
-                </p>
-                <p className="mt-2 text-sm font-medium">
-                  {formatCloudMoment(syncStatus?.last_backup_at)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Status
-                </p>
-                <Badge
-                  variant="outline"
-                  className={
-                    pendingEvents > 0
-                      ? "mt-2 border-amber-400/50 text-amber-200"
-                      : "mt-2 border-emerald-500/50 text-emerald-300"
-                  }
-                >
-                  {pendingEvents > 0 ? "Pending Upload" : "Up To Date"}
-                </Badge>
-              </div>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+              <p>
+                Tokens are issued by the self-hosted API and refreshed from the
+                desktop app when needed.
+              </p>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                onClick={handleSync}
-                disabled={
-                  syncing ||
-                  !config?.configured ||
-                  !isSignedIn ||
-                  !hasPremium
-                }
-              >
-                {syncing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-                Sync Now
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleCreateBackup}
-                disabled={
-                  backupBusy ||
-                  !config?.configured ||
-                  !isSignedIn ||
-                  !hasPremium
-                }
-              >
-                {backupBusy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <HardDriveUpload className="h-4 w-4" />
-                )}
-                Upload Backup
-              </Button>
+            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+              <p>
+                The current device registers against the account after sign-in
+                so the API can associate future backups with this machine.
+              </p>
             </div>
-
-            {isSignedIn && billingEnabled && !hasPremium ? (
-              <div className="rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4 text-xs leading-6 text-violet-100">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-                  <div>
-                    <p className="font-medium text-violet-200">
-                      Upgrade to Pro to unlock sync and cloud backup
-                    </p>
-                    <p className="mt-1 text-violet-200/70">
-                      Pro subscribers can sync hash-linked session events for
-                      Verified trust, upload full backup snapshots, and restore
-                      from any device.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
-                Sync uploads hash-linked session events and promotes clean sessions
-                to <span className="font-medium text-foreground">Verified</span>{" "}
-                after the cloud acknowledges the full chain. Cloud backups are
-                stored in a private bucket over HTTPS and rely on provider-managed
-                encryption at rest for this v1 implementation.
-              </div>
-            )}
+            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <HardDriveUpload className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+              <p>
+                Backup archives are created and restored in Rust, while the VPS
+                verifies the uploaded SHA-256 checksum before storing them.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
+              <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+              <p>
+                Current cloud backups use TLS transport plus archive-integrity
+                verification. End-to-end encrypted backup blobs are still a
+                planned hardening step, not shipped yet.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {isSignedIn ? (
-        <Card className="border border-border/70 bg-card/80">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ArchiveRestore className="h-4 w-4 text-primary" />
-              Remote Backups
-            </CardTitle>
-            <CardDescription>
-              Restore points stored in your private cloud bucket, newest first.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {backups.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 p-5 text-sm text-muted-foreground">
-                No cloud backups yet. Upload a snapshot after your first sync to
-                create a restore point.
-              </div>
-            ) : (
-              backups.map((backup) => (
-                <div
-                  key={backup.id}
-                  className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-muted/20 p-4 lg:flex-row lg:items-center lg:justify-between"
+      {!session ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Card className="border border-border/70 bg-card/80">
+            <CardHeader>
+              <CardTitle>Sign In</CardTitle>
+              <CardDescription>
+                Use an existing cloud account. The admin bootstrap account can
+                sign in here too.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleLogin}>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-login-email">Email</Label>
+                  <Input
+                    id="cloud-login-email"
+                    autoComplete="email"
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-login-password">Password</Label>
+                  <Input
+                    id="cloud-login-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={authBusy || !loginEmail.trim() || !loginPassword}
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">
-                        {backup.label ?? "Cloud snapshot"}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className="border-violet-400/35 text-violet-200"
-                      >
-                        {formatBytes(backup.size_bytes)}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Created {formatCloudMoment(backup.created_at)}
+                  {authBusy ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Signing in
+                    </>
+                  ) : (
+                    "Sign In"
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/70 bg-card/80">
+            <CardHeader>
+              <CardTitle>Create Cloud Account</CardTitle>
+              <CardDescription>
+                Sign up with a shareable invite key that was generated on your
+                VPS or by an admin account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleSignUp}>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-signup-email">Email</Label>
+                  <Input
+                    id="cloud-signup-email"
+                    autoComplete="email"
+                    value={signUpEmail}
+                    onChange={(event) => setSignUpEmail(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-signup-password">Password</Label>
+                  <Input
+                    id="cloud-signup-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={signUpPassword}
+                    onChange={(event) => setSignUpPassword(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cloud-signup-invite">Invite code</Label>
+                  <Input
+                    id="cloud-signup-invite"
+                    placeholder="VTLINV-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+                    value={inviteCode}
+                    onChange={(event) => setInviteCode(event.target.value)}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={
+                    authBusy ||
+                    !signUpEmail.trim() ||
+                    !signUpPassword ||
+                    !inviteCode.trim()
+                  }
+                >
+                  {authBusy ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Creating account
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <Card className="border border-border/70 bg-card/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserRound className="h-4 w-4 text-primary" />
+                  Account
+                </CardTitle>
+                <CardDescription>
+                  Your current session is stored locally and refreshed from the
+                  VPS API as needed.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Email
                     </p>
-                    <p className="mt-2 truncate text-[11px] text-muted-foreground">
-                      {backup.checksum}
+                    <p className="mt-2 text-sm font-medium">{session.user.email}</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Role
+                    </p>
+                    <p className="mt-2 text-sm font-medium">{session.user.role}</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Access token
+                    </p>
+                    <p className="mt-2 text-sm font-medium">
+                      Expires {formatTimestamp(session.expires_at)}
                     </p>
                   </div>
-
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Refresh token
+                    </p>
+                    <p className="mt-2 text-sm font-medium">
+                      Expires {formatTimestamp(session.refresh_expires_at)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-3">
                   <Button
                     variant="outline"
-                    onClick={() => void handleOpenRestoreDialog(backup.id)}
-                    disabled={previewingBackupId === backup.id || restoring}
+                    onClick={handleRefreshSession}
+                    disabled={authBusy}
                   >
-                    {previewingBackupId === backup.id ? (
+                    {authBusy ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <ArchiveRestore className="h-4 w-4" />
+                      <RefreshCw className="h-4 w-4" />
                     )}
-                    Restore
+                    Refresh session
+                  </Button>
+                  <Button variant="destructive" onClick={handleLogout} disabled={authBusy}>
+                    <LogOut className="h-4 w-4" />
+                    Sign out
                   </Button>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border border-border/70 bg-card/80">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              Cloud Benefits
-            </CardTitle>
-            <CardDescription>
-              What the paid cloud tier adds on top of local-first tracking.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              {
-                title: "Verified Trust",
-                description:
-                  "Clean sessions can move from Local to Verified once the cloud acknowledges their event chain.",
-              },
-              {
-                title: "Remote Snapshot History",
-                description:
-                  "Upload full restore points and bring them back down on another device without relying on launcher APIs.",
-              },
-              {
-                title: "Private Storage",
-                description:
-                  "Backup files travel over HTTPS and live in a private Supabase Storage bucket with provider-managed encryption at rest.",
-              },
-              {
-                title: "Conflict Warnings",
-                description:
-                  "Before a restore runs, Vaultime warns when newer local history or unsynced events would be overwritten.",
-              },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
-              >
-                <p className="text-sm font-medium">{item.title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {item.description}
-                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border/70 bg-card/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Server className="h-4 w-4 text-primary" />
+                  Device registration
+                </CardTitle>
+                <CardDescription>
+                  The VPS tracks this desktop via a stable `client_device_id`.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {device ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                        Device
+                      </p>
+                      <p className="mt-2 text-sm font-medium">{device.device_name}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                        Platform
+                      </p>
+                      <p className="mt-2 text-sm font-medium">{device.platform}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                        Client device id
+                      </p>
+                      <p className="mt-2 break-all text-sm font-medium">
+                        {device.client_device_id}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                        Last seen
+                      </p>
+                      <p className="mt-2 text-sm font-medium">
+                        {formatTimestamp(device.last_seen_at)}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+                    No device registration has been confirmed yet.
+                  </div>
+                )}
+
+                {deviceError && (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+                    Device registration warning: {deviceError}
+                  </div>
+                )}
+
+                <Button
+                  variant="outline"
+                  onClick={handleRegisterDevice}
+                  disabled={deviceBusy}
+                >
+                  {deviceBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Register this device
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border border-border/70 bg-card/80">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <HardDriveUpload className="h-4 w-4 text-primary" />
+                    Remote backup records
+                  </CardTitle>
+                  <CardDescription>
+                    Records already stored on the VPS for this account.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => void handleCreateRemoteBackup()}
+                    disabled={remoteBackupBusy}
+                  >
+                    {remoteBackupBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <HardDriveUpload className="h-4 w-4" />
+                    )}
+                    Create backup
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleReloadBackups()}
+                    disabled={backupsLoading || remoteBackupBusy}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Reload
+                  </Button>
+                </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {backupsLoading ? (
+                <div className="flex h-24 items-center justify-center rounded-2xl border border-border/70 bg-muted/20">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : remoteBackups.length === 0 ? (
+                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+                  No remote backup records exist yet for this account.
+                </div>
+              ) : (
+                remoteBackups.map((backup) => (
+                  <div
+                    key={backup.id}
+                    className="rounded-2xl border border-border/70 bg-muted/20 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {backup.label ?? "Unnamed backup"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Created {formatTimestamp(backup.backup_created_at)}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="border-border/70 text-muted-foreground">
+                        {backup.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          Uploaded
+                        </p>
+                        <p className="mt-1 text-sm">{formatTimestamp(backup.uploaded_at)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          Size
+                        </p>
+                        <p className="mt-1 text-sm">{formatByteSize(backup.size_bytes)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                          Source device
+                        </p>
+                        <p className="mt-1 break-all text-sm">
+                          {backup.client_device_id ?? "Unknown"}
+                        </p>
+                      </div>
+                    </div>
+                    {backup.metadata_json && (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            Games
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {backup.metadata_json.games_count}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            Sessions
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {backup.metadata_json.sessions_count}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            Assets
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {backup.metadata_json.asset_file_count}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            Source device
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {backup.metadata_json.source_device_id}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => openRestoreDialog(backup)}
+                        disabled={remoteBackupBusy || backup.status !== "complete"}
+                      >
+                        <ArchiveRestore className="h-4 w-4" />
+                        Restore to this device
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {isAdmin && (
+            <Card className="border border-border/70 bg-card/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-primary" />
+                  Admin invite control
+                </CardTitle>
+                <CardDescription>
+                  Generate a new shareable invite key for remote backup access.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap items-center justify-between gap-4">
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  This uses the admin-only `/v1/admin/invites` endpoint. The raw
+                  code is shown once here, while only its derived values are
+                  stored on the VPS.
+                </p>
+                <Button onClick={() => setInviteDialogOpen(true)}>
+                  <KeyRound className="h-4 w-4" />
+                  Generate invite
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
+
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Generate Invite</DialogTitle>
+            <DialogDescription>
+              Create a new invite code that you can share with a future cloud
+              backup user.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleGenerateInvite}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="invite-prefix">Prefix</Label>
+                <Input
+                  id="invite-prefix"
+                  value={invitePrefix}
+                  onChange={(event) => setInvitePrefix(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invite-max-redemptions">Max redemptions</Label>
+                <Input
+                  id="invite-max-redemptions"
+                  inputMode="numeric"
+                  value={inviteMaxRedemptions}
+                  onChange={(event) => setInviteMaxRedemptions(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="invite-expiry">Expiry</Label>
+                <Input
+                  id="invite-expiry"
+                  type="datetime-local"
+                  value={inviteExpiry}
+                  onChange={(event) => setInviteExpiry(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invite-note">Note</Label>
+                <Input
+                  id="invite-note"
+                  placeholder="beta tester"
+                  value={inviteNote}
+                  onChange={(event) => setInviteNote(event.target.value)}
+                />
+              </div>
+            </div>
+
+            {lastInvite && (
+              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
+                      Share this code
+                    </p>
+                    <p className="mt-2 break-all font-mono text-base text-emerald-50">
+                      {lastInvite.code}
+                    </p>
+                  </div>
+                  <Button type="button" variant="outline" onClick={handleCopyInvite}>
+                    <Copy className="h-4 w-4" />
+                    {copiedInvite ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
+                      Max redemptions
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-50">
+                      {lastInvite.max_redemptions}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
+                      Expires
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-50">
+                      {formatTimestamp(lastInvite.expires_at)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setInviteDialogOpen(false)}>
+                Close
+              </Button>
+              <Button type="submit" disabled={inviteBusy}>
+                {inviteBusy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="h-4 w-4" />
+                    Generate invite
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={restoreDialogOpen}
         onOpenChange={(open) => {
           setRestoreDialogOpen(open);
           if (!open) {
-            setRestorePreview(null);
+            setRestoreTarget(null);
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Restore Cloud Backup</DialogTitle>
+            <DialogTitle>Restore Remote Backup</DialogTitle>
             <DialogDescription>
-              Review the snapshot details and overwrite risk before restoring it
-              onto this device.
+              This replaces the current local library, sessions, integrity
+              history, and cached artwork on this machine.
             </DialogDescription>
           </DialogHeader>
 
-          {restorePreview && (
+          {restoreTarget && (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Created
+                    Backup
                   </p>
                   <p className="mt-2 text-sm font-medium">
-                    {formatCloudMoment(restorePreview.summary.created_at)}
+                    {restoreTarget.label ?? "Unnamed backup"}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Source Device
+                    Uploaded
                   </p>
                   <p className="mt-2 text-sm font-medium">
-                    {restorePreview.summary.source_device_id}
+                    {formatTimestamp(restoreTarget.uploaded_at)}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                     Games
                   </p>
-                  <p className="mt-2 text-xl font-semibold">
-                    {restorePreview.summary.games_count}
+                  <p className="mt-2 text-sm font-medium">
+                    {restoreTarget.metadata_json?.games_count ?? "Unknown"}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                     Sessions
                   </p>
-                  <p className="mt-2 text-xl font-semibold">
-                    {restorePreview.summary.sessions_count}
+                  <p className="mt-2 text-sm font-medium">
+                    {restoreTarget.metadata_json?.sessions_count ?? "Unknown"}
                   </p>
                 </div>
               </div>
 
-              {(restorePreview.has_active_sessions ||
-                restorePreview.requires_force) && (
-                <div className="rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4 text-sm text-amber-100">
-                  <div className="flex items-start gap-3">
-                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div className="space-y-1">
-                      {restorePreview.has_active_sessions ? (
-                        <p>
-                          Live sessions are still open. Close them before
-                          restoring a cloud backup.
-                        </p>
-                      ) : (
-                        <p>
-                          This restore will overwrite newer local history.
-                        </p>
-                      )}
-                      {restorePreview.unsynced_events > 0 && (
-                        <p>
-                          {restorePreview.unsynced_events} unsynced local
-                          event{restorePreview.unsynced_events === 1 ? "" : "s"}{" "}
-                          would be replaced.
-                        </p>
-                      )}
-                      {restorePreview.newer_local_sessions > 0 && (
-                        <p>
-                          {restorePreview.newer_local_sessions} local
-                          session{restorePreview.newer_local_sessions === 1 ? "" : "s"}{" "}
-                          started after this backup was created.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 text-sm text-muted-foreground">
+                The desktop verifies the downloaded archive checksum before
+                restore, but this is still a destructive action. Close any live
+                sessions first. Vaultime will require a restart after restore so
+                tracking can resume cleanly.
+              </div>
             </div>
           )}
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
             <Button
-              onClick={() => void handleRestoreBackup()}
-              disabled={restoring || restorePreview?.has_active_sessions}
+              type="button"
+              variant="ghost"
+              onClick={() => setRestoreDialogOpen(false)}
             >
-              {restoring ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleRestoreRemoteBackup()}
+              disabled={remoteBackupBusy || !restoreTarget}
+            >
+              {remoteBackupBusy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Restoring
+                </>
               ) : (
-                <ArchiveRestore className="h-4 w-4" />
+                <>
+                  <ArchiveRestore className="h-4 w-4" />
+                  Restore backup
+                </>
               )}
-              {restorePreview?.requires_force ? "Restore Anyway" : "Restore"}
             </Button>
           </DialogFooter>
         </DialogContent>

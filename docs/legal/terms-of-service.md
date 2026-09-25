@@ -1,8 +1,9 @@
 # Terms of Service
 
-**Effective date:** April 6, 2026
+**Effective date:** April 22, 2026
 
-These terms govern your use of the Vaultime desktop application and optional cloud services.
+These terms govern your use of the Vaultime desktop application and any future
+invite-only cloud backup services.
 
 ## 1. Acceptance
 
@@ -18,24 +19,18 @@ The core application runs entirely on your device. No account is required for lo
 
 ## 4. Cloud Services
 
-### Account
-You may create an account to access cloud sync and backup features. You are responsible for maintaining the security of your account credentials.
+The current product direction is local-first with local backup/export available
+without an account.
 
-### Pro Subscription
-Cloud sync and cloud backup require an active Pro subscription. Subscriptions are billed through Stripe on a recurring basis.
-
-- You may cancel your subscription at any time via the Manage Subscription portal.
-- Cancellation takes effect at the end of the current billing period.
-- After cancellation, cloud sync and new cloud backups are disabled, but existing cloud data remains accessible for download.
-
-### Refunds
-Refund requests are handled on a case-by-case basis. Contact the project maintainer.
+If invite-only cloud backup is introduced later, access may be limited to
+manually approved users with invite-based accounts. Any production cloud terms
+will be updated before that service is offered broadly.
 
 ## 5. Acceptable Use
 
 You agree not to:
 
-- Attempt to gain unauthorized access to the cloud infrastructure.
+- Attempt to gain unauthorized access to any cloud infrastructure or backup API.
 - Use the service to store or transmit illegal content.
 - Reverse-engineer the cloud API for purposes other than interoperability with your own data.
 - Interfere with the service's availability for other users.
@@ -50,13 +45,17 @@ Your data is handled as described in our [Privacy Policy](privacy-policy.md). In
 
 ## 7. Integrity System
 
-Vaultime includes an integrity system that assigns trust labels (Local, Suspicious, Recovered, Verified) to play sessions. These labels are informational and heuristic-based. They do not constitute proof of tampering or fraud, and should not be relied upon as authoritative evidence.
+Vaultime includes an integrity system that assigns trust labels (Local,
+Suspicious, Recovered, Verified) to play sessions. These labels are
+informational and heuristic-based. They do not constitute proof of tampering or
+fraud, and should not be relied upon as authoritative evidence.
 
 ## 8. Disclaimer of Warranties
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. See the MIT License for the full disclaimer.
 
-The cloud services are provided on a best-effort basis. We do not guarantee uninterrupted availability or zero data loss for cloud-hosted backups.
+Any future cloud services are provided on a best-effort basis. We do not
+guarantee uninterrupted availability or zero data loss for remote backups.
 
 ## 9. Limitation of Liability
 

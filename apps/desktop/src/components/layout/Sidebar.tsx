@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import {
   Clock,
@@ -9,6 +9,7 @@ import {
   Gamepad2,
   Settings,
 } from "lucide-react";
+import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/tauri";
 
@@ -20,32 +21,8 @@ const navItems = [
 ] as const;
 
 export function Sidebar() {
-  const [cloudConnected, setCloudConnected] = useState(false);
-  const [isPro, setIsPro] = useState(false);
   const [appVersion, setAppVersion] = useState("0.1.0");
-
-  const refreshAuthState = useCallback(() => {
-    api.cloudGetSession().then((session) => {
-      const signedIn = !!session?.user;
-      setCloudConnected(signedIn);
-      if (signedIn) {
-        api.cloudGetSubscription().then((sub) => {
-          setIsPro(
-            sub.tier === "pro" &&
-            (sub.status === "active" || sub.status === "past_due"),
-          );
-        }).catch(() => {});
-      } else {
-        setIsPro(false);
-      }
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    refreshAuthState();
-    window.addEventListener("vaultime:auth-changed", refreshAuthState);
-    return () => window.removeEventListener("vaultime:auth-changed", refreshAuthState);
-  }, [refreshAuthState]);
+  const { session, isAdmin } = useCloudSession();
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(() => {});
@@ -61,13 +38,11 @@ export function Sidebar() {
           src="/icon.svg"
           alt=""
           className="h-10 w-10 shrink-0 transition-all duration-500"
-          style={isPro ? { filter: "brightness(0.5) sepia(1) hue-rotate(280deg) saturate(5) brightness(1.1)" } : undefined}
         />
         <img
           src="/wordmark.svg"
           alt="Vaultime"
           className="h-5 transition-all duration-500"
-          style={isPro ? { filter: "brightness(0.5) sepia(1) hue-rotate(280deg) saturate(5) brightness(1.1)" } : undefined}
         />
       </div>
 
@@ -96,13 +71,19 @@ export function Sidebar() {
                   "h-4 w-4 transition-transform duration-200",
                   isActive && "scale-110",
                 )} />
-                {label}
-                {to === "/cloud" && cloudConnected && (
-                  <span className="relative ml-auto flex h-2.5 w-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-40" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
-                  </span>
-                )}
+                <span className="flex items-center gap-2">
+                  {label}
+                  {to === "/cloud" && session && (
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        isAdmin
+                          ? "bg-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.85)]"
+                          : "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.85)]",
+                      )}
+                    />
+                  )}
+                </span>
               </>
             )}
           </NavLink>
@@ -120,7 +101,9 @@ export function Sidebar() {
           </span>
         </div>
         <p className="mt-2 text-xs leading-5 text-sidebar-foreground/55">
-          Local-first tracking with active and runtime history.
+          {session
+            ? `Cloud connected as ${session.user.role}.`
+            : "Local-first tracking with active and runtime history."}
         </p>
       </div>
     </aside>

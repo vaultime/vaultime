@@ -109,121 +109,6 @@ export interface LocalBackupSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Cloud
-// ---------------------------------------------------------------------------
-
-/** Mirrors the Rust `CloudUser` struct. */
-export interface CloudUser {
-  id: string;
-  email: string;
-  created_at: string | null;
-}
-
-/** Mirrors the Rust `CloudSession` struct. */
-export interface CloudSession {
-  user: CloudUser;
-  device_registered: boolean;
-  expires_at: number;
-}
-
-/** Mirrors the Rust `CloudConfig` struct. */
-export interface CloudConfig {
-  configured: boolean;
-  billing_enabled: boolean;
-}
-
-/** Subscription tier. */
-export type SubscriptionTier = "free" | "pro";
-
-/** Subscription status. */
-export type SubscriptionStatus =
-  | "none"
-  | "active"
-  | "past_due"
-  | "canceled"
-  | "expired";
-
-/** Mirrors the Rust `Subscription` struct. */
-export interface Subscription {
-  tier: SubscriptionTier;
-  status: SubscriptionStatus;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean;
-}
-
-/** Result of a sync pass. */
-export interface SyncResult {
-  uploaded: number;
-  remaining: number;
-  verified_sessions: number;
-  conflicted_events: number;
-  last_sync_at: string | null;
-}
-
-/** Snapshot of current cloud sync status. */
-export interface CloudSyncStatus {
-  connected: boolean;
-  last_sync_at: string | null;
-  last_backup_at: string | null;
-  pending_events: number;
-}
-
-/** Metadata row returned for a cloud backup snapshot. */
-export interface CloudBackupRecord {
-  id: string;
-  device_id: string;
-  created_at: string;
-  checksum: string;
-  storage_path: string;
-  size_bytes: number | null;
-  label: string | null;
-}
-
-/** Summary of a cloud backup payload. */
-export interface CloudBackupSummary {
-  backup_id: string;
-  backup_version: number;
-  created_at: string;
-  app_version: string;
-  source_device_id: string;
-  schema_migrations: string[];
-  overall_checksum: string;
-  games_count: number;
-  sessions_count: number;
-  assets_count: number;
-  asset_file_count: number;
-}
-
-/** Result returned after creating and uploading a cloud backup. */
-export interface CloudBackupUploadResult {
-  backup: CloudBackupRecord;
-  summary: CloudBackupSummary;
-  uploaded_files: number;
-}
-
-/** Preflight details shown before a cloud restore. */
-export interface CloudBackupRestorePreview {
-  backup: CloudBackupRecord;
-  summary: CloudBackupSummary;
-  has_active_sessions: boolean;
-  unsynced_events: number;
-  newer_local_sessions: number;
-  requires_force: boolean;
-}
-
-/** Result returned after restoring a cloud backup locally. */
-export interface CloudBackupRestoreResult {
-  backup: CloudBackupRecord;
-  restart_required: boolean;
-}
-
-/** Input for sign-up / sign-in commands. */
-export interface AuthCredentials {
-  email: string;
-  password: string;
-}
-
-// ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
 
@@ -253,4 +138,100 @@ export interface GameAssetView {
   created_at: string;
   preview_data_url: string | null;
   is_preferred: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Cloud
+// ---------------------------------------------------------------------------
+
+export interface CloudAuthUser {
+  id: string;
+  email: string;
+  role: string;
+}
+
+export interface CloudAuthSession {
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+  refresh_expires_at: string;
+  user: CloudAuthUser;
+}
+
+export interface CloudDevice {
+  id: string;
+  client_device_id: string;
+  device_name: string;
+  platform: string;
+  app_version: string;
+  registered_at: string;
+  last_seen_at: string;
+}
+
+export interface CloudBackupPayloadSummary {
+  local_backup_id: string;
+  backup_version: number;
+  created_at: string;
+  app_version: string;
+  source_device_id: string;
+  overall_checksum: string;
+  games_count: number;
+  sessions_count: number;
+  assets_count: number;
+  asset_file_count: number;
+  archive_format: string;
+  archive_checksum: string;
+  archive_size_bytes: number;
+}
+
+export interface CloudBackupRecord {
+  id: string;
+  label: string | null;
+  storage_key: string;
+  checksum: string;
+  size_bytes: number;
+  backup_created_at: string;
+  uploaded_at: string;
+  status: string;
+  client_device_id: string | null;
+  metadata_json: CloudBackupPayloadSummary | null;
+}
+
+export interface CloudCreateAdminInviteInput {
+  prefix?: string | null;
+  max_redemptions?: number | null;
+  expires_at?: string | null;
+  note?: string | null;
+}
+
+export interface CloudAdminInvite {
+  code: string;
+  lookup_key: string;
+  salt: string;
+  code_hash: string;
+  max_redemptions: number;
+  expires_at: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface CloudBackupUploadResult {
+  backup: CloudBackupRecord;
+  payload_summary: CloudBackupPayloadSummary;
+}
+
+export interface CloudBackupRestoreSummary {
+  created_at: string;
+  source_device_id: string;
+  overall_checksum: string;
+  games_count: number;
+  sessions_count: number;
+  assets_count: number;
+  asset_file_count: number;
+  restart_required: boolean;
+}
+
+export interface CloudBackupRestoreResult {
+  backup: CloudBackupRecord;
+  restored_summary: CloudBackupRestoreSummary;
 }

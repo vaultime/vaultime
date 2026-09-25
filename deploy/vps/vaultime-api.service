@@ -1,0 +1,16 @@
+[Unit]
+Description=Vaultime API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=vaultime
+Group=vaultime
+WorkingDirectory=/srv/vaultime/api/current
+EnvironmentFile=/etc/vaultime/api.env
+ExecStart=/srv/vaultime/api/current/vaultime-api
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

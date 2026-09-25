@@ -37,7 +37,7 @@
     ],
     "category": "Game",
     "shortDescription": "Universal game library and trustworthy playtime tracker",
-    "longDescription": "Vaultime is a local-first, cross-platform game playtime tracker that records active and runtime sessions with integrity verification. Optional cloud sync and backup are available with a Pro subscription.",
+    "longDescription": "Vaultime is a local-first, cross-platform game playtime tracker that records active and runtime sessions with integrity verification. Remote backup is being redesigned as an invite-only self-hosted service.",
     "linux": {
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],

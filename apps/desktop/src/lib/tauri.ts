@@ -13,17 +13,9 @@ import type {
   Setting,
   TrackingDiagnostics,
   GameAssetView,
-  AuthCredentials,
-  CloudBackupRecord,
-  CloudBackupRestorePreview,
+  DiscoveredGame,
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
-  CloudConfig,
-  CloudSession,
-  CloudSyncStatus,
-  Subscription,
-  SyncResult,
-  DiscoveredGame,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -141,6 +133,32 @@ export async function importLocalBackup(
   return invoke<LocalBackupSummary>("import_local_backup", { path });
 }
 
+export async function uploadRemoteBackup(
+  apiBaseUrl: string,
+  accessToken: string,
+  clientDeviceId?: string | null,
+  label?: string | null,
+): Promise<CloudBackupUploadResult> {
+  return invoke<CloudBackupUploadResult>("upload_remote_backup", {
+    apiBaseUrl,
+    accessToken,
+    clientDeviceId,
+    label,
+  });
+}
+
+export async function restoreRemoteBackup(
+  apiBaseUrl: string,
+  accessToken: string,
+  backupId: string,
+): Promise<CloudBackupRestoreResult> {
+  return invoke<CloudBackupRestoreResult>("restore_remote_backup", {
+    apiBaseUrl,
+    accessToken,
+    backupId,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Settings commands
 // ---------------------------------------------------------------------------
@@ -190,90 +208,4 @@ export async function importDiscoveredGames(
   discoveries: DiscoveredGame[],
 ): Promise<Game[]> {
   return invoke<Game[]>("import_discovered_games", { discoveries });
-}
-
-// ---------------------------------------------------------------------------
-// Cloud commands
-// ---------------------------------------------------------------------------
-
-export async function cloudGetConfig(): Promise<CloudConfig> {
-  return invoke<CloudConfig>("cloud_get_config");
-}
-
-export async function cloudGetSession(): Promise<CloudSession | null> {
-  return invoke<CloudSession | null>("cloud_get_session");
-}
-
-export async function cloudSignUp(
-  input: AuthCredentials,
-): Promise<CloudSession> {
-  return invoke<CloudSession>("cloud_sign_up", { input });
-}
-
-export async function cloudSignIn(
-  input: AuthCredentials,
-): Promise<CloudSession> {
-  return invoke<CloudSession>("cloud_sign_in", { input });
-}
-
-export async function cloudSignOut(): Promise<boolean> {
-  return invoke<boolean>("cloud_sign_out");
-}
-
-export async function cloudRefreshToken(): Promise<CloudSession> {
-  return invoke<CloudSession>("cloud_refresh_token");
-}
-
-export async function cloudRegisterDevice(): Promise<boolean> {
-  return invoke<boolean>("cloud_register_device");
-}
-
-export async function cloudGetSubscription(): Promise<Subscription> {
-  return invoke<Subscription>("cloud_get_subscription");
-}
-
-export async function cloudCreateCheckoutUrl(): Promise<string> {
-  return invoke<string>("cloud_create_checkout_url");
-}
-
-export async function cloudCreatePortalUrl(): Promise<string> {
-  return invoke<string>("cloud_create_portal_url");
-}
-
-export async function cloudSyncEvents(): Promise<SyncResult> {
-  return invoke<SyncResult>("cloud_sync_events");
-}
-
-export async function cloudGetUnsyncedCount(): Promise<number> {
-  return invoke<number>("cloud_get_unsynced_count");
-}
-
-export async function cloudGetSyncStatus(): Promise<CloudSyncStatus> {
-  return invoke<CloudSyncStatus>("cloud_get_sync_status");
-}
-
-export async function cloudListBackups(): Promise<CloudBackupRecord[]> {
-  return invoke<CloudBackupRecord[]>("cloud_list_backups");
-}
-
-export async function cloudCreateBackup(): Promise<CloudBackupUploadResult> {
-  return invoke<CloudBackupUploadResult>("cloud_create_backup");
-}
-
-export async function cloudGetRestorePreview(
-  backupId: string,
-): Promise<CloudBackupRestorePreview> {
-  return invoke<CloudBackupRestorePreview>("cloud_get_restore_preview", {
-    backupId,
-  });
-}
-
-export async function cloudRestoreBackup(
-  backupId: string,
-  force = false,
-): Promise<CloudBackupRestoreResult> {
-  return invoke<CloudBackupRestoreResult>("cloud_restore_backup", {
-    backupId,
-    force,
-  });
 }

@@ -5,7 +5,6 @@
 
 pub mod assets;
 pub mod backup;
-pub mod cloud;
 pub mod commands;
 pub mod db;
 pub mod discovery;
@@ -22,7 +21,6 @@ use log::info;
 use tauri::Manager;
 
 use assets::AssetManager;
-use cloud::auth::AuthManager;
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -69,9 +67,6 @@ pub fn run() {
             // Start tracking engine.
             let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
 
-            // Initialize cloud auth manager.
-            let auth_manager = AuthManager::new(app_dir.clone());
-
             app.manage(AppContext {
                 app_dir,
                 asset_cache_dir: asset_cache_dir.clone(),
@@ -82,7 +77,6 @@ pub fn run() {
             app.manage(database);
             app.manage(AssetManager::new(asset_cache_dir));
             app.manage(engine);
-            app.manage(auth_manager);
 
             Ok(())
         })
@@ -106,6 +100,8 @@ pub fn run() {
             commands::export_local_backup,
             commands::inspect_local_backup,
             commands::import_local_backup,
+            commands::upload_remote_backup,
+            commands::restore_remote_backup,
             commands::list_settings,
             commands::set_setting,
             commands::get_tracking_status,
@@ -114,23 +110,6 @@ pub fn run() {
             commands::discover_steam_games,
             commands::get_default_scan_paths,
             commands::import_discovered_games,
-            commands::cloud_sign_up,
-            commands::cloud_sign_in,
-            commands::cloud_sign_out,
-            commands::cloud_refresh_token,
-            commands::cloud_get_session,
-            commands::cloud_get_config,
-            commands::cloud_register_device,
-            commands::cloud_get_subscription,
-            commands::cloud_create_checkout_url,
-            commands::cloud_create_portal_url,
-            commands::cloud_sync_events,
-            commands::cloud_get_unsynced_count,
-            commands::cloud_get_sync_status,
-            commands::cloud_list_backups,
-            commands::cloud_create_backup,
-            commands::cloud_get_restore_preview,
-            commands::cloud_restore_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vaultime");

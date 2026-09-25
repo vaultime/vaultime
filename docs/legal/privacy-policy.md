@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** April 6, 2026
+**Effective date:** April 22, 2026
 
 Vaultime is a local-first desktop application for tracking PC game playtime. This policy explains what data we collect, how we use it, and how we protect it.
 
@@ -18,25 +18,16 @@ This data is stored in a SQLite database in your operating system's application 
 
 ## 2. Cloud Features (Optional)
 
-If you create an account and sign in, the following data is transmitted to our cloud infrastructure:
+The current product direction is local-first. If you only use local tracking and
+local backup/export, we do not receive your data.
 
-### Account Data
-- **Email address** and **hashed password** — stored by Supabase Auth for authentication.
-- **Device registration** — device identifier, platform, and app version sent on sign-in so the cloud service can track which devices belong to your account.
+If an invite-only self-hosted cloud backup service is introduced later, this
+policy will be updated before rollout. That future service is expected to use:
 
-### Cloud Sync
-- **Session events** — the append-only event log for your sessions is uploaded to Supabase so that sessions can receive Verified trust status via server-side acknowledgement timestamps.
-- Events include: session start/end, heartbeats, and integrity metadata (hashes, monotonic timestamps). They do not include screenshots, keystrokes, or application content.
-
-### Cloud Backup
-- **Database snapshots** — a consistent copy of your local SQLite database and cached artwork is uploaded to a private Supabase Storage bucket.
-- Backups are encrypted in transit (HTTPS) and stored with provider-managed encryption at rest.
-- Only you can access your backups via authenticated API calls.
-
-### Billing
-- **Stripe** handles all payment processing. We do not store credit card numbers or payment details in our own infrastructure.
-- Stripe receives your email address to associate payments with your account.
-- A subscription record (tier, status, period end date) is stored in our Supabase database so the app can check your plan status.
+- **Account data** such as email address and account status
+- **Device registration** metadata such as device identifier, platform, and app version
+- **Session event metadata** when server-backed verification is enabled
+- **Encrypted backup archives** containing your exported local data
 
 ## 3. Data We Do Not Collect
 
@@ -48,31 +39,26 @@ If you create an account and sign in, the following data is transmitted to our c
 
 ## 4. Third-Party Services
 
-| Service | Purpose | Data shared |
-|---------|---------|-------------|
-| [Supabase](https://supabase.com) | Authentication, cloud sync, cloud backup storage | Email, session events, backup snapshots, device info |
-| [Stripe](https://stripe.com) | Payment processing | Email, payment method (handled entirely by Stripe) |
-
-Both services maintain their own privacy policies and are GDPR-compliant.
+The current local-first build does not require any third-party cloud provider
+for core tracking or local backups.
 
 ## 5. Data Retention
 
 - **Local data** is retained until you delete the app or its data directory.
-- **Cloud data** is retained while your account is active. You can delete your cloud backups from within the app.
-- **Stripe data** is retained per Stripe's data retention policy.
+- **Cloud data** retention rules will be documented before any invite-only cloud
+  backup service is launched.
 
 ## 6. Data Deletion
 
 - Delete local data by removing the Vaultime application data directory.
-- Delete cloud backups via the Cloud page in the app.
-- To request full account deletion, contact us at the email below.
+- If invite-only cloud backup is introduced later, deletion instructions will be
+  documented here before launch.
 
 ## 7. Security
 
-- All cloud communication uses HTTPS.
-- Authentication tokens are stored locally on your device.
-- Cloud backups are stored in private buckets with row-level security (RLS) ensuring only your authenticated account can access your data.
+- Local backup exports are created on your device.
 - Session event integrity is protected by hash chains and monotonic time validation.
+- Any future cloud communication will use HTTPS and documented account access controls.
 
 ## 8. Children
 

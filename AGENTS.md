@@ -1,10 +1,14 @@
 # Vaultime Agent Guide
 
-This repository currently contains planning material only. Use this file as the working guide for future implementation work, and treat `PLAN.md` as supporting product context rather than the day-to-day execution checklist.
+Use this file as the working guide for implementation work. Treat `PLAN.md` as
+supporting product context rather than the day-to-day execution checklist.
 
 ## Product Summary
 
-Vaultime is a local-first desktop app for tracking PC game playtime across launchers and standalone games. The product should feel like a polished game library manager with trustworthy session history and an optional paid cloud sync tier later.
+Vaultime is a local-first desktop app for tracking PC game playtime across
+launchers and standalone games. The product should feel like a polished game
+library manager with trustworthy session history and an optional invite-only
+self-hosted cloud backup beta later.
 
 ## Default Stack
 
@@ -13,7 +17,7 @@ Vaultime is a local-first desktop app for tracking PC game playtime across launc
 - Frontend: React + TypeScript
 - UI: Tailwind CSS + shadcn/ui
 - Local storage: SQLite
-- Cloud later: Supabase or Postgres-backed custom services
+- Cloud later: self-hosted custom services on `codfishcloud.de` with PostgreSQL
 
 ## Non-Negotiable Product Rules
 
@@ -22,7 +26,7 @@ Vaultime is a local-first desktop app for tracking PC game playtime across launc
 - Use an event-sourced model for play history. Do not rely on a single mutable total-playtime counter.
 - Track and expose three time concepts: runtime, active playtime, and idle/background time.
 - Treat anti-tamper as integrity scoring, not absolute prevention. Never overstate local guarantees.
-- Prefer honest trust labels such as `Local`, `Suspicious`, `Recovered`, and reserve stronger wording like `Verified` for cloud-backed validation.
+- Prefer honest trust labels such as `Local`, `Suspicious`, `Recovered`, and reserve stronger wording like `Verified` for server-backed validation.
 
 ## Recommended Initial Repository Shape
 
@@ -81,5 +85,5 @@ vaultime/
 ## Scope Discipline
 
 - Focus MVP work on local tracking, strong UI, local assets, and local backup/export.
-- Defer social features, plugin systems, mobile apps, and deep launcher integrations.
+- Defer social features, plugin systems, mobile apps, deep launcher integrations, and any public SaaS billing layer.
 - Support one operating system well before broad cross-platform expansion.

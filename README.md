@@ -15,7 +15,7 @@
 
 Vaultime is a cross-platform desktop application that tracks real play sessions across PC games and launchers. It distinguishes between **runtime**, **active playtime**, and **idle/background time**, stores everything locally by default, and presents your library in a premium, dark-themed UI with imported game artwork.
 
-A paid cloud tier with encrypted backup, multi-device sync, and stronger anti-tamper guarantees is planned.
+An invite-only cloud backup beta on your own VPS is the current direction for remote access. The design target is `codfishcloud.de` plus a custom backend with PostgreSQL, not public subscription billing.
 
 ## Features
 
@@ -30,7 +30,7 @@ A paid cloud tier with encrypted backup, multi-device sync, and stronger anti-ta
 
 ## Current Status
 
-Milestones 1–14 cover the core product. Only platform code-signing (Windows certificate, macOS notarization) remains as external setup:
+Milestones 1-14 cover the current prototype. The cloud access strategy is being revised away from public subscription billing toward invite-only access:
 
 | Milestone | Status |
 |---|---|
@@ -43,9 +43,9 @@ Milestones 1–14 cover the core product. Only platform code-signing (Windows ce
 | Image import and asset pipeline | Done |
 | Integrity system v1 | Done |
 | Local backups and cross-platform support | Done |
-| Cloud foundation | Done |
-| Paid backup and sync v1 | Done |
-| Billing and subscription | Done |
+| Cloud foundation prototype | Done |
+| Cloud backup and sync prototype | Done |
+| Invite-only cloud access design | In progress |
 | Auto-discovery and launcher support | Done |
 | Release engineering and publishing | Done* |
 
@@ -60,8 +60,35 @@ Milestones 1–14 cover the core product. Only platform code-signing (Windows ce
 | Frontend | React 19 + TypeScript |
 | Styling | Tailwind CSS v4 + [shadcn/ui](https://ui.shadcn.com/) |
 | Local database | SQLite (rusqlite, bundled, WAL mode) |
+| Self-hosted cloud API | Rust + Axum + PostgreSQL + filesystem backup storage |
 | Process detection | [sysinfo](https://crates.io/crates/sysinfo) |
 | Image processing | [image](https://crates.io/crates/image) crate |
+
+## Invite Keys
+
+If you want to manually grant cloud-backup access, generate invite material with:
+
+```bash
+node scripts/generate-invite-key.mjs --count 3
+```
+
+The script prints the raw invite code plus the derived values you would store in
+your server database. The intended server-side model is documented in
+[`docs/architecture/invite-only-cloud.md`](docs/architecture/invite-only-cloud.md).
+
+The concrete VPS service layout and starter database schema are documented in:
+
+- [`docs/architecture/self-hosted-vps-stack.md`](docs/architecture/self-hosted-vps-stack.md)
+- [`docs/architecture/self-hosted-postgres-schema.sql`](docs/architecture/self-hosted-postgres-schema.sql)
+
+Tracked deploy templates for the VPS live in:
+
+- [`deploy/vps/README.md`](deploy/vps/README.md)
+- [`deploy/vps/Caddyfile`](deploy/vps/Caddyfile)
+- [`deploy/vps/api.env.example`](deploy/vps/api.env.example)
+- [`deploy/vps/vaultime-api.service`](deploy/vps/vaultime-api.service)
+
+The self-hosted API scaffold lives in [`apps/api`](apps/api).
 
 ## Getting Started
 
@@ -102,6 +129,8 @@ Build artifacts are placed in `apps/desktop/src-tauri/target/release/bundle/`.
 vaultime/
   assets/                          # Brand assets (logos, icons)
   apps/
+    api/                           # Self-hosted invite-only cloud API
+      src/
     desktop/
       src/                         # React frontend
         components/
@@ -114,14 +143,13 @@ vaultime/
           library/                 #   Library page, game cards, add/edit/delete
           game-details/            #   Per-game detail view with stats
           sessions/                #   Session timeline and history
-          cloud/                   #   Cloud auth, account, sync status
+          cloud/                   #   Self-hosted cloud roadmap UI
           settings/                #   Tracking rules, detection status, backups
         lib/                       #   API layer, types, time/stat utilities
       src-tauri/                   # Rust backend
         src/
           assets/                  #   Folder scanning, thumbnail caching
           backup/                  #   Export/import/restore logic
-          cloud/                   #   Supabase auth, config, sync types
           db/                      #   SQLite connection, migrations, repositories
           integrity/               #   Hash chains, trust validation
           platform/                #   OS-specific process/window/idle detection

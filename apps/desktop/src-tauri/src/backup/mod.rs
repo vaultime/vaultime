@@ -3,6 +3,8 @@
 
 //! Local backup/export/import pipeline.
 
+pub mod remote;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
