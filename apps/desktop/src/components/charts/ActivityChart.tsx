@@ -43,7 +43,6 @@ export function ActivityChart({
             onMouseEnter={() => setHovered(point.key)}
             onMouseLeave={() => setHovered(null)}
           >
-            {/* Tooltip */}
             {isHovered && hasRuntime && (
               <div className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-white/10 bg-black/80 px-3 py-2 text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md">
                 <p className="font-bold text-foreground">{point.label}</p>
@@ -62,7 +61,6 @@ export function ActivityChart({
               </div>
             )}
 
-            {/* Bar */}
             <div className="relative flex h-full w-full items-end">
               <div
                 className={cn(
@@ -76,14 +74,12 @@ export function ActivityChart({
               >
                 {hasRuntime && (
                   <>
-                    {/* Runtime layer */}
                     <div
                       className={cn(
                         "absolute inset-0 rounded-xl bg-[color:var(--color-chart-3)]/30 transition-all duration-300",
                         isHovered && "bg-[color:var(--color-chart-3)]/45",
                       )}
                     />
-                    {/* Active layer — gradient fill from bottom */}
                     <div
                       className={cn(
                         "absolute inset-x-0 bottom-0 rounded-b-xl bg-gradient-to-t from-[color:var(--color-chart-1)] to-[color:var(--color-chart-5)] transition-all duration-300",
@@ -91,7 +87,6 @@ export function ActivityChart({
                       )}
                       style={{ height: `${activePct}%` }}
                     />
-                    {/* Glow line at top of active section */}
                     {activePct > 10 && (
                       <div
                         className="absolute inset-x-1 h-px bg-white/20 transition-opacity duration-300"
@@ -103,7 +98,6 @@ export function ActivityChart({
               </div>
             </div>
 
-            {/* Date label */}
             <div className="w-full text-center">
               <p
                 className={cn(

@@ -14,7 +14,7 @@ import {
   Timer,
 } from "lucide-react";
 import { Link, useParams } from "react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GameArtwork } from "@/components/media/GameArtwork";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,7 @@ export function GameDetailsPage() {
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
   const [assetBusy, setAssetBusy] = useState(false);
+  const [assetError, setAssetError] = useState<string | null>(null);
 
   const loadGameBundle = useCallback(async (currentGameId: string) => {
     const [fetchedGame, fetchedSessions, fetchedEvents, fetchedAssets] =
@@ -99,8 +100,6 @@ export function GameDetailsPage() {
 
   useEffect(() => {
     if (!gameId) {
-      setError("Game ID is missing.");
-      setLoading(false);
       return;
     }
 
@@ -140,24 +139,36 @@ export function GameDetailsPage() {
     };
   }, [gameId, loadGameBundle]);
 
+  // Changes on every tick while this game runs and once more when it stops.
+  const liveSessionsKey = JSON.stringify(
+    activeSessions.filter((session) => session.game_id === gameId),
+  );
+  const wasLiveRef = useRef(false);
+
   useEffect(() => {
-    if (!gameId) {
+    const live = liveSessionsKey !== "[]";
+    if (!gameId || (!live && !wasLiveRef.current)) {
       return;
     }
+    wasLiveRef.current = live;
 
-    if (!activeSessions.some((session) => session.game_id === gameId)) {
-      return;
-    }
-
-    loadGameBundle(gameId)
-      .then((bundle) => {
-        setGame(bundle.game);
-        setSessions(bundle.sessions);
-        setEvents(bundle.events);
-        setAssets(bundle.assets);
+    let cancelled = false;
+    Promise.all([
+      api.getSessionsForGame(gameId),
+      api.getSessionEventsForGame(gameId),
+    ])
+      .then(([nextSessions, nextEvents]) => {
+        if (!cancelled) {
+          setSessions(nextSessions);
+          setEvents(nextEvents);
+        }
       })
       .catch(() => {});
-  }, [activeSessions, gameId, loadGameBundle]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, liveSessionsKey]);
 
   const totals = useMemo(() => getSessionTotals(sessions), [sessions]);
   const dailyActivity = useMemo(
@@ -195,8 +206,11 @@ export function GameDetailsPage() {
 
     try {
       setAssetBusy(true);
+      setAssetError(null);
       const nextAssets = await api.scanGameAssets(gameId);
       setAssets(nextAssets);
+    } catch (scanError) {
+      setAssetError(`Artwork scan failed: ${String(scanError)}`);
     } finally {
       setAssetBusy(false);
     }
@@ -207,26 +221,29 @@ export function GameDetailsPage() {
       return;
     }
 
-    const selected = await open({
-      multiple: false,
-      directory: false,
-      title: "Choose artwork image",
-      filters: [
-        {
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"],
-        },
-      ],
-    });
-
-    if (!selected || typeof selected !== "string") {
-      return;
-    }
-
     try {
+      setAssetError(null);
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: "Choose artwork image",
+        filters: [
+          {
+            name: "Images",
+            extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"],
+          },
+        ],
+      });
+
+      if (!selected) {
+        return;
+      }
+
       setAssetBusy(true);
       const nextAssets = await api.importGameAsset(gameId, selected);
       setAssets(nextAssets);
+    } catch (importError) {
+      setAssetError(`Artwork import failed: ${String(importError)}`);
     } finally {
       setAssetBusy(false);
     }
@@ -239,15 +256,18 @@ export function GameDetailsPage() {
 
     try {
       setAssetBusy(true);
+      setAssetError(null);
       await api.setPreferredGameAsset(gameId, assetId);
       const nextAssets = await api.listGameAssets(gameId);
       setAssets(nextAssets);
+    } catch (preferError) {
+      setAssetError(`Could not set the cover: ${String(preferError)}`);
     } finally {
       setAssetBusy(false);
     }
   }
 
-  if (loading) {
+  if (loading && gameId) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -255,7 +275,7 @@ export function GameDetailsPage() {
     );
   }
 
-  if (error || !game) {
+  if (!gameId || error || !game) {
     return (
       <div className="space-y-4">
         <Link
@@ -266,7 +286,7 @@ export function GameDetailsPage() {
           Back To Library
         </Link>
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-5 text-sm text-destructive">
-          {error ?? "Game not found."}
+          {!gameId ? "Game ID is missing." : (error ?? "Game not found.")}
         </div>
       </div>
     );
@@ -350,6 +370,11 @@ export function GameDetailsPage() {
                     Add Override
                   </Button>
                 </div>
+                {assetError && (
+                  <div className="max-w-2xl rounded-2xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                    {assetError}
+                  </div>
+                )}
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-right">
                 <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
@@ -512,7 +537,7 @@ export function GameDetailsPage() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <IntegrityBadge status={integritySummary.overallStatus} />
                 <p className="text-xs text-muted-foreground">
-                  Local hash-linked audit log with optional cloud acknowledgement. Device signing is still pending.
+                  Based on the hash-linked audit log kept on this device.
                 </p>
               </div>
             </div>
@@ -532,15 +557,7 @@ export function GameDetailsPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Verified
-                </p>
-                <p className="mt-2 text-xl font-semibold">
-                  {integritySummary.verifiedCount}
-                </p>
-              </div>
+            <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                   Local Only
@@ -627,9 +644,6 @@ export function GameDetailsPage() {
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
                       <span className="rounded-full border border-border/70 bg-background/40 px-2.5 py-1 text-muted-foreground">
                         {event.hash_self ? "Hash linked" : "Missing hash"}
-                      </span>
-                      <span className="rounded-full border border-border/70 bg-background/40 px-2.5 py-1 text-muted-foreground">
-                        {event.signature ? "Signed" : "Unsigned local event"}
                       </span>
                     </div>
                   </div>

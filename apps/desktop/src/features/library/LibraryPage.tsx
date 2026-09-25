@@ -31,10 +31,26 @@ export function LibraryPage() {
     Record<string, GameAssetView>
   >({});
 
+  // A string key so sessions refetch when a game starts or stops, not on every poll.
+  const runningKey = [...new Set(activeSessions.map((s) => s.game_id))]
+    .sort()
+    .join(",");
+  const runningGameIds = useMemo(
+    () => new Set(runningKey ? runningKey.split(",") : []),
+    [runningKey],
+  );
+
   useEffect(() => {
-    Promise.all([api.listSessions(), api.listPreferredGameAssets()])
-      .then(([sessions, assets]) => {
-        setAllSessions(sessions);
+    api
+      .listSessions()
+      .then(setAllSessions)
+      .catch(() => {});
+  }, [games, runningKey]);
+
+  useEffect(() => {
+    api
+      .listPreferredGameAssets()
+      .then((assets) => {
         const nextAssets: Record<string, GameAssetView> = {};
         for (const asset of assets) {
           nextAssets[asset.game_id] = asset;
@@ -42,15 +58,7 @@ export function LibraryPage() {
         setPreferredAssets(nextAssets);
       })
       .catch(() => {});
-  }, [games, activeSessions]);
-
-  const runningGameIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const s of activeSessions) {
-      ids.add(s.game_id);
-    }
-    return ids;
-  }, [activeSessions]);
+  }, [games]);
 
   const totalsByGame = useMemo(() => {
     const map: Record<
@@ -119,7 +127,6 @@ export function LibraryPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Library</h1>
@@ -135,15 +142,12 @@ export function LibraryPage() {
         </div>
       </div>
 
-      {/* Hero dashboard */}
       {!loading && !error && games.length > 0 && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
-          {/* Left — stats + chart */}
           <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/60 p-6">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(135,88,255,0.2),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(59,210,180,0.1),transparent_50%)]" />
 
             <div className="relative space-y-6">
-              {/* Stat pills */}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border border-[color:var(--color-chart-1)]/20 bg-[color:var(--color-chart-1)]/[0.06] p-4">
                   <p className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-chart-1)]">
@@ -186,7 +190,6 @@ export function LibraryPage() {
             </div>
           </div>
 
-          {/* Right — top titles */}
           <div className="rounded-3xl border border-border/70 bg-card/60 p-6">
             <div className="mb-5 flex items-center gap-2">
               <Zap className="h-4 w-4 text-[color:var(--color-chart-1)]" />
@@ -236,21 +239,18 @@ export function LibraryPage() {
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && games.length === 0 && (
         <div className="flex h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02]">
           <div className="rounded-2xl bg-[color:var(--color-chart-1)]/10 p-4">
@@ -269,7 +269,6 @@ export function LibraryPage() {
         </div>
       )}
 
-      {/* Game grid */}
       {!loading && games.length > 0 && (
         <div className="stagger-grid grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {games.map((game) => (

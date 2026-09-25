@@ -5,54 +5,60 @@ import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 
-/** Manages the session list state. */
 export function useSessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const list = await api.listSessions();
-      setSessions(list);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Only the first load shows the spinner. Later refreshes swap data in place.
+  const refresh = useCallback(
+    () =>
+      api
+        .listSessions()
+        .then((list) => {
+          setSessions(list);
+          setError(null);
+        })
+        .catch((e: unknown) => setError(String(e)))
+        .finally(() => setLoading(false)),
+    [],
+  );
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return { sessions, loading, error, refresh };
 }
 
-/** Tracks currently active (open) sessions, polling periodically. */
+function sameSessions(a: Session[], b: Session[]): boolean {
+  return a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Polls open sessions. The array keeps its identity while nothing changes. */
 export function useActiveSessions(pollIntervalMs = 5_000) {
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function refresh() {
-      try {
-        const active = await api.getActiveSessions();
-        if (!cancelled) {
-          setActiveSessions(active);
-        }
-      } catch {
-        // Silently ignore polling errors to avoid UI noise.
-      }
+    function poll() {
+      api
+        .getActiveSessions()
+        .then((active) => {
+          if (!cancelled) {
+            setActiveSessions((current) =>
+              sameSessions(current, active) ? current : active,
+            );
+          }
+        })
+        .catch(() => {
+          // Polling errors are transient. The next tick retries.
+        });
     }
 
-    void refresh();
-    const id = setInterval(() => {
-      void refresh();
-    }, pollIntervalMs);
+    poll();
+    const id = setInterval(poll, pollIntervalMs);
 
     return () => {
       cancelled = true;
@@ -60,14 +66,5 @@ export function useActiveSessions(pollIntervalMs = 5_000) {
     };
   }, [pollIntervalMs]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const active = await api.getActiveSessions();
-      setActiveSessions(active);
-    } catch {
-      // Silently ignore polling errors to avoid UI noise.
-    }
-  }, []);
-
-  return { activeSessions, refresh };
+  return { activeSessions };
 }

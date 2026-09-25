@@ -3,7 +3,6 @@
 
 import { Clock, Play } from "lucide-react";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
-import { getSessionTrustStatus } from "@/lib/integrity";
 import { formatCompactDuration, formatDuration, formatSessionDate } from "@/lib/time";
 import { groupSessionsByDay } from "@/lib/session-stats";
 import type { Session } from "@/lib/types";
@@ -75,7 +74,7 @@ function SessionRow({
               Live
             </span>
           )}
-          <IntegrityBadge status={getSessionTrustStatus(session)} />
+          <IntegrityBadge status={session.integrity_status} />
         </div>
       </div>
     </div>

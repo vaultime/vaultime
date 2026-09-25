@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Activity, Clock, Loader2, Shield, TimerReset, Zap } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Game } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useSessions, useActiveSessions } from "./useSessions";
@@ -39,20 +39,28 @@ export function SessionsPage() {
   );
 
   useEffect(() => {
-    api.listGames().then((games: Game[]) => {
-      const map: Record<string, string> = {};
-      for (const g of games) {
-        map[g.id] = g.title;
-      }
-      setGames(games);
-      setGameMap(map);
-    });
-  }, [sessions]);
+    api
+      .listGames()
+      .then((games: Game[]) => {
+        const map: Record<string, string> = {};
+        for (const g of games) {
+          map[g.id] = g.title;
+        }
+        setGames(games);
+        setGameMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
+  // Refresh on every change to the open sessions, including the last one ending,
+  // so a finished session stops showing as live. useSessions covers the first load.
+  const seenActiveRef = useRef(activeSessions);
   useEffect(() => {
-    if (activeSessions.length > 0) {
-      refresh();
+    if (seenActiveRef.current === activeSessions) {
+      return;
     }
+    seenActiveRef.current = activeSessions;
+    void refresh();
   }, [activeSessions, refresh]);
 
   if (loading) {
@@ -80,7 +88,6 @@ export function SessionsPage() {
         </p>
       </div>
 
-      {/* Stat row */}
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
         <div className="rounded-2xl border border-[color:var(--color-chart-1)]/20 bg-[color:var(--color-chart-1)]/[0.06] p-4">
           <div className="flex items-center gap-2">
@@ -141,7 +148,6 @@ export function SessionsPage() {
         </div>
       </div>
 
-      {/* Integrity overview */}
       <div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/60 p-6">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(147,51,234,0.12),transparent_45%),radial-gradient(ellipse_at_bottom_right,rgba(59,130,246,0.08),transparent_45%)]" />
         <div className="relative">
@@ -156,9 +162,6 @@ export function SessionsPage() {
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <IntegrityBadge status={integritySummary.overallStatus} />
-            <span className="rounded-full border border-green-500/20 bg-green-500/[0.06] px-2.5 py-1 text-[11px] tabular-nums text-green-400">
-              {integritySummary.verifiedCount} verified
-            </span>
             <span className="rounded-full border border-border/70 bg-white/[0.04] px-2.5 py-1 text-[11px] tabular-nums text-muted-foreground">
               {integritySummary.localCount} local
             </span>
@@ -174,7 +177,6 @@ export function SessionsPage() {
         </div>
       </div>
 
-      {/* Chart + most played */}
       {sessions.length > 0 && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
           <div className="rounded-3xl border border-border/70 bg-card/60 p-6">
@@ -237,7 +239,6 @@ export function SessionsPage() {
         </div>
       )}
 
-      {/* Timeline */}
       {sessions.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02]">
           <div className="rounded-2xl bg-white/[0.04] p-4">

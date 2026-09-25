@@ -56,12 +56,10 @@ export function GameCard({
           : "border-border/70 hover:border-primary/40"
       }`}
     >
-      {/* Running glow overlay */}
       {isRunning && (
         <div className="pointer-events-none absolute inset-0 z-20 rounded-2xl border-2 border-green-500/30 animate-pulse-glow" />
       )}
 
-      {/* Running badge */}
       {isRunning && (
         <div className="absolute top-3 left-3 z-10">
           <div className="flex items-center gap-1.5 rounded-full bg-green-500/90 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-[0_0_12px_rgba(34,197,94,0.4)]">
@@ -112,10 +110,8 @@ export function GameCard({
             imageClassName="transition-transform duration-500 group-hover:scale-[1.05]"
             iconClassName="h-14 w-14"
           />
-          {/* Bottom gradient for text readability */}
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-card via-card/80 to-transparent" />
 
-          {/* Title overlay on artwork */}
           <div className="absolute inset-x-0 bottom-0 p-4">
             <h3 className="truncate text-base font-bold leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
               {game.title}
@@ -131,7 +127,6 @@ export function GameCard({
         <div className="space-y-3 p-4 pt-2">
           {hasTrackedTime ? (
             <>
-              {/* Main stat — active time prominent */}
               <div className="flex items-baseline justify-between">
                 <div className="flex items-center gap-1.5">
                   <Zap className="h-3.5 w-3.5 text-[color:var(--color-chart-1)]" />
@@ -144,7 +139,6 @@ export function GameCard({
                 </span>
               </div>
 
-              {/* Active ratio bar */}
               <div className="relative h-1.5 overflow-hidden rounded-full bg-white/8">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[color:var(--color-chart-1)] to-[color:var(--color-chart-5)] transition-all duration-500"
@@ -154,7 +148,6 @@ export function GameCard({
                 />
               </div>
 
-              {/* Bottom row — sessions, integrity, last played */}
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <span>
@@ -171,7 +164,7 @@ export function GameCard({
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-3 py-4 text-center text-xs text-muted-foreground">
-              Launch to start tracking
+              Start the game to begin tracking
             </div>
           )}
         </div>

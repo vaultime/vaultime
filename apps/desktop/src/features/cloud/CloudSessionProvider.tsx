@@ -13,6 +13,7 @@ import {
 import {
   CLOUD_API_BASE_URL,
   CloudApiError,
+  cloudDelete,
   cloudGetJson,
   cloudPostJson,
 } from "@/lib/cloud-api";
@@ -66,6 +67,7 @@ interface CloudSessionContextValue {
   listBackups: () => Promise<CloudBackupRecord[]>;
   uploadRemoteBackup: (label?: string | null) => Promise<CloudBackupUploadResult>;
   restoreRemoteBackup: (backupId: string) => Promise<CloudBackupRestoreResult>;
+  deleteBackup: (backupId: string) => Promise<void>;
   createAdminInvite: (
     input: CloudCreateAdminInviteInput,
   ) => Promise<CloudAdminInvite>;
@@ -306,6 +308,15 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  async function deleteBackup(backupId: string) {
+    return withAuthenticatedSession((current) =>
+      cloudDelete(
+        `/v1/backups/${encodeURIComponent(backupId)}`,
+        current.access_token,
+      ),
+    );
+  }
+
   async function createAdminInvite(input: CloudCreateAdminInviteInput) {
     const current = await ensureAuthenticatedSession();
     if (current.user.role !== "admin") {
@@ -348,10 +359,14 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         if (shouldClearPersistedSession(error)) {
           applyClearedSession();
           void clearPersistedSessionStorage(current.user.id);
-          throw new Error("Your cloud session expired. Sign in again.");
+          throw new Error("Your cloud session expired. Sign in again.", {
+            cause: error,
+          });
         }
 
-        throw new Error(`Cloud API unavailable: ${describeError(error)}`);
+        throw new Error(`Cloud API unavailable: ${describeError(error)}`, {
+          cause: error,
+        });
       }
     }
 
@@ -474,6 +489,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     listBackups,
     uploadRemoteBackup,
     restoreRemoteBackup,
+    deleteBackup,
     createAdminInvite,
   };
 

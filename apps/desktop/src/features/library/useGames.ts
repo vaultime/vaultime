@@ -5,27 +5,27 @@ import { useCallback, useEffect, useState } from "react";
 import type { Game } from "@/lib/types";
 import * as api from "@/lib/tauri";
 
-/** Manages the game list state and CRUD actions. */
 export function useGames() {
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const list = await api.listGames();
-      setGames(list);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Only the first load shows the spinner. Later refreshes swap data in place.
+  const refresh = useCallback(
+    () =>
+      api
+        .listGames()
+        .then((list) => {
+          setGames(list);
+          setError(null);
+        })
+        .catch((e: unknown) => setError(String(e)))
+        .finally(() => setLoading(false)),
+    [],
+  );
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return { games, loading, error, refresh };

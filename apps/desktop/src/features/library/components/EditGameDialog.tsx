@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Folder, FileIcon } from "lucide-react";
 import {
@@ -29,14 +29,19 @@ export function EditGameDialog({ game, onClose, onSaved }: EditGameDialogProps) 
   const [executablePath, setExecutablePath] = useState("");
   const [installFolder, setInstallFolder] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formGame, setFormGame] = useState<Game | null>(null);
 
-  useEffect(() => {
+  // Reset the form during render whenever the dialog opens for a game.
+  if (game !== formGame) {
+    setFormGame(game);
     if (game) {
       setTitle(game.title);
       setExecutablePath(game.executable_path ?? "");
       setInstallFolder(game.install_folder ?? "");
+      setError(null);
     }
-  }, [game]);
+  }
 
   async function pickExecutable() {
     const selected = await open({
@@ -52,7 +57,7 @@ export function EditGameDialog({ game, onClose, onSaved }: EditGameDialogProps) 
       ],
     });
     if (selected) {
-      setExecutablePath(typeof selected === "string" ? selected : selected);
+      setExecutablePath(selected);
     }
   }
 
@@ -63,13 +68,14 @@ export function EditGameDialog({ game, onClose, onSaved }: EditGameDialogProps) 
       title: "Select game install folder",
     });
     if (selected) {
-      setInstallFolder(typeof selected === "string" ? selected : selected);
+      setInstallFolder(selected);
     }
   }
 
   async function handleSave() {
     if (!game || !title.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       const pathsChanged =
         executablePath !== (game.executable_path ?? "") ||
@@ -86,7 +92,7 @@ export function EditGameDialog({ game, onClose, onSaved }: EditGameDialogProps) 
       onSaved();
       onClose();
     } catch (e) {
-      console.error("Failed to update game:", e);
+      setError(`Could not save the game: ${String(e)}`);
     } finally {
       setSaving(false);
     }
@@ -141,6 +147,12 @@ export function EditGameDialog({ game, onClose, onSaved }: EditGameDialogProps) 
               </Button>
             </div>
           </div>
+
+          {error && (
+            <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
         </div>
 
         <DialogFooter>

@@ -43,8 +43,6 @@ export interface Session {
   idle_ms: number;
   runtime_ms: number;
   integrity_status: string;
-  cloud_verified: boolean;
-  cloud_verified_at: string | null;
   closed_cleanly: boolean;
 }
 
@@ -60,8 +58,6 @@ export interface SessionEvent {
   hash_prev: string | null;
   hash_self: string | null;
   signature: string | null;
-  synced_at: string | null;
-  server_ack_at: string | null;
 }
 
 /** Mirrors the Rust `BackupSnapshot` struct. */
@@ -108,10 +104,6 @@ export interface LocalBackupSummary {
   restart_required: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Discovery
-// ---------------------------------------------------------------------------
-
 /** A game candidate found during auto-discovery. */
 export interface DiscoveredGame {
   title: string;
@@ -121,10 +113,6 @@ export interface DiscoveredGame {
   source_id: string | null;
   already_added: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// Assets
-// ---------------------------------------------------------------------------
 
 /** Artwork entry plus an inline preview payload returned by the backend. */
 export interface GameAssetView {
@@ -139,10 +127,6 @@ export interface GameAssetView {
   preview_data_url: string | null;
   is_preferred: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// Cloud
-// ---------------------------------------------------------------------------
 
 export interface CloudAuthUser {
   id: string;

@@ -20,7 +20,7 @@ export class CloudApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT";
+  method?: "GET" | "POST" | "DELETE";
   body?: unknown;
   accessToken?: string;
   signal?: AbortSignal;
@@ -52,15 +52,13 @@ export async function cloudPostJson<T>(
   });
 }
 
-export async function cloudPutJson<T>(
+export async function cloudDelete(
   path: string,
-  body: unknown,
   accessToken?: string,
   signal?: AbortSignal,
-): Promise<T> {
-  return cloudRequest<T>(path, {
-    method: "PUT",
-    body,
+): Promise<void> {
+  await cloudRequest<void>(path, {
+    method: "DELETE",
     accessToken,
     signal,
   });

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useEffectEvent, useState, type FormEvent } from "react";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   ArchiveRestore,
   Cloud,
@@ -11,8 +12,10 @@ import {
   Loader2,
   LogOut,
   RefreshCw,
+  RotateCcw,
   Server,
   Shield,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -121,6 +124,7 @@ export function CloudPage() {
     apiBaseUrl,
     backupKeyReady,
     createAdminInvite,
+    deleteBackup,
     device,
     deviceError,
     initializing,
@@ -150,6 +154,9 @@ export function CloudPage() {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [remoteBackups, setRemoteBackups] = useState<CloudBackupRecord[]>([]);
   const [restoreTarget, setRestoreTarget] = useState<CloudBackupRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CloudBackupRecord | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [restartRequired, setRestartRequired] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [signUpEmail, setSignUpEmail] = useState("");
@@ -166,37 +173,49 @@ export function CloudPage() {
   const [inviteExpiry, setInviteExpiry] = useState("");
   const [inviteNote, setInviteNote] = useState("");
 
-  const loadBackups = useEffectEvent(async (accountId: string) => {
-    try {
-      setBackupsLoading(true);
-      setErrorMessage(null);
-      const backups = await listBackups();
-      setRemoteBackups(backups);
-      persistCachedRemoteBackups(accountId, backups);
-    } catch (error) {
-      const cached = loadCachedRemoteBackups(accountId);
-      if (cached) {
-        setErrorMessage(null);
-        setRemoteBackups(cached);
-        setStatusMessage(
-          "Cloud API unavailable. Showing the last cached remote backup list.",
-        );
-      } else {
-        setErrorMessage(describeError(error));
-      }
-    } finally {
-      setBackupsLoading(false);
-    }
+  function requestBackups(accountId: string) {
+    return listBackups()
+      .then((backups) => {
+        setRemoteBackups(backups);
+        persistCachedRemoteBackups(accountId, backups);
+      })
+      .catch((error: unknown) => {
+        const cached = loadCachedRemoteBackups(accountId);
+        if (cached) {
+          setRemoteBackups(cached);
+          setStatusMessage(
+            "Cloud API unavailable. Showing the last cached remote backup list.",
+          );
+        } else {
+          setErrorMessage(describeError(error));
+        }
+      })
+      .finally(() => setBackupsLoading(false));
+  }
+
+  async function fetchBackups(accountId: string) {
+    setBackupsLoading(true);
+    await requestBackups(accountId);
+  }
+
+  const loadBackups = useEffectEvent((accountId: string) => {
+    void requestBackups(accountId);
   });
 
-  useEffect(() => {
-    if (!session) {
-      setRemoteBackups([]);
-      return;
-    }
+  // Reset during render when the account changes so one account never shows another's backups.
+  const accountId = session?.user.id ?? null;
+  const [backupsAccountId, setBackupsAccountId] = useState<string | null>(null);
+  if (backupsAccountId !== accountId) {
+    setBackupsAccountId(accountId);
+    setRemoteBackups([]);
+    setBackupsLoading(accountId !== null);
+  }
 
-    void loadBackups(session.user.id);
-  }, [session]);
+  useEffect(() => {
+    if (accountId) {
+      loadBackups(accountId);
+    }
+  }, [accountId]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -369,24 +388,7 @@ export function CloudPage() {
     }
 
     setErrorMessage(null);
-    try {
-      setBackupsLoading(true);
-      const backups = await listBackups();
-      setRemoteBackups(backups);
-      persistCachedRemoteBackups(session.user.id, backups);
-    } catch (error) {
-      const cached = loadCachedRemoteBackups(session.user.id);
-      if (cached) {
-        setRemoteBackups(cached);
-        setStatusMessage(
-          "Cloud API unavailable. Showing the last cached remote backup list.",
-        );
-      } else {
-        setErrorMessage(describeError(error));
-      }
-    } finally {
-      setBackupsLoading(false);
-    }
+    await fetchBackups(session.user.id);
   }
 
   async function handleCreateRemoteBackup() {
@@ -411,8 +413,14 @@ export function CloudPage() {
       );
     } catch (error) {
       setErrorMessage(describeError(error));
+      return;
     } finally {
       setRemoteBackupBusy(false);
+    }
+
+    // The server may have rotated out the oldest backup to make room.
+    if (session) {
+      await fetchBackups(session.user.id);
     }
   }
 
@@ -429,11 +437,10 @@ export function CloudPage() {
       const result = await restoreRemoteBackup(restoreTarget.id);
       setRestoreDialogOpen(false);
       setRestoreTarget(null);
-      setStatusMessage(
-        result.restored_summary.restart_required
-          ? "Remote backup restored. Restart Vaultime to resume live tracking on this machine."
-          : "Remote backup restored.",
-      );
+      setStatusMessage("Remote backup restored.");
+      if (result.restored_summary.restart_required) {
+        setRestartRequired(true);
+      }
     } catch (error) {
       setErrorMessage(describeError(error));
     } finally {
@@ -441,9 +448,50 @@ export function CloudPage() {
     }
   }
 
+  async function handleDeleteRemoteBackup() {
+    if (!deleteTarget || !session) {
+      return;
+    }
+
+    const target = deleteTarget;
+    setRemoteBackupBusy(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      await deleteBackup(target.id);
+      setRemoteBackups((current) => {
+        const next = current.filter((backup) => backup.id !== target.id);
+        persistCachedRemoteBackups(session.user.id, next);
+        return next;
+      });
+      setStatusMessage("Remote backup deleted.");
+    } catch (error) {
+      setErrorMessage(describeError(error));
+    } finally {
+      setDeleteDialogOpen(false);
+      setRemoteBackupBusy(false);
+    }
+
+    await fetchBackups(session.user.id);
+  }
+
+  async function handleRestart() {
+    try {
+      await relaunch();
+    } catch (error) {
+      setErrorMessage(describeError(error));
+    }
+  }
+
   function openRestoreDialog(backup: CloudBackupRecord) {
     setRestoreTarget(backup);
     setRestoreDialogOpen(true);
+  }
+
+  function openDeleteDialog(backup: CloudBackupRecord) {
+    setDeleteTarget(backup);
+    setDeleteDialogOpen(true);
   }
 
   return (
@@ -468,8 +516,8 @@ export function CloudPage() {
           )}
         </div>
         <p className="text-muted-foreground">
-          Remote backup now talks to your self-hosted API on `codfishcloud.de`.
-          Auth, device registration, remote backup upload/restore, and admin
+          Remote backup talks to the self-hosted API on codfishcloud.de. Auth,
+          device registration, remote backup upload and restore, and admin
           invite generation are live.
         </p>
       </div>
@@ -486,6 +534,16 @@ export function CloudPage() {
         </div>
       )}
 
+      {restartRequired && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+          Restart Vaultime to resume live tracking on this machine.
+          <Button size="sm" onClick={() => void handleRestart()}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            Restart now
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <Card className="relative overflow-hidden border border-border/70 bg-card/80">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.1),transparent_38%)]" />
@@ -495,7 +553,7 @@ export function CloudPage() {
               Remote connection
             </CardTitle>
             <CardDescription>
-              The desktop app now talks to your VPS API directly for auth and
+              The desktop app talks to the VPS API directly for auth and
               invite-only cloud access.
             </CardDescription>
           </CardHeader>
@@ -545,8 +603,8 @@ export function CloudPage() {
               Current status
             </CardTitle>
             <CardDescription>
-              Cloud auth, device registration, and remote backup transfers now
-              run against your VPS API.
+              Cloud auth, device registration, and remote backup transfers run
+              against the VPS API.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
@@ -945,7 +1003,9 @@ export function CloudPage() {
                     Remote backup records
                   </CardTitle>
                   <CardDescription>
-                    Records already stored on the VPS for this account.
+                    Records stored on the VPS for this account. When the
+                    account limit is reached, a new upload replaces the oldest
+                    backup.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -1074,10 +1134,18 @@ export function CloudPage() {
                         </div>
                       </div>
                     )}
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex flex-wrap justify-end gap-3">
                       <Button
-                      variant="outline"
-                      onClick={() => openRestoreDialog(backup)}
+                        variant="ghost"
+                        onClick={() => openDeleteDialog(backup)}
+                        disabled={remoteBackupBusy}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => openRestoreDialog(backup)}
                         disabled={
                           remoteBackupBusy ||
                           backup.status !== "complete" ||
@@ -1319,6 +1387,70 @@ export function CloudPage() {
                 <>
                   <ArchiveRestore className="h-4 w-4" />
                   Restore backup
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Remote Backup</DialogTitle>
+            <DialogDescription>
+              This removes{" "}
+              <strong className="text-foreground">
+                {deleteTarget?.label ?? "Unnamed backup"}
+              </strong>{" "}
+              from the VPS. Local data on this device is not touched.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTarget && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Uploaded
+                </p>
+                <p className="mt-2 text-sm font-medium">
+                  {formatTimestamp(deleteTarget.uploaded_at)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Size
+                </p>
+                <p className="mt-2 text-sm font-medium">
+                  {formatByteSize(deleteTarget.size_bytes)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteRemoteBackup()}
+              disabled={remoteBackupBusy || !deleteTarget}
+            >
+              {remoteBackupBusy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete backup
                 </>
               )}
             </Button>

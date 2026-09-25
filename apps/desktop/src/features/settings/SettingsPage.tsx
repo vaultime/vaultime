@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { open } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   ArchiveRestore,
@@ -11,6 +12,7 @@ import {
   Info,
   Laptop2,
   Loader2,
+  RotateCcw,
   Save,
   Settings,
   TimerReset,
@@ -112,9 +114,9 @@ function platformCoverageNote(platform: string | undefined): string {
     case "linux":
       return "Linux can use X11-specific tools when available, with heuristics as fallback.";
     case "windows":
-      return "Windows now uses Win32 foreground and idle APIs for native tracking signals.";
+      return "Windows uses Win32 foreground and idle APIs for native tracking signals.";
     case "macos":
-      return "macOS now uses frontmost-process and HID idle probes where the system allows them.";
+      return "macOS uses frontmost-process and HID idle probes where the system allows them.";
     default:
       return "Vaultime prefers native platform signals and falls back to process heuristics when they are unavailable.";
   }
@@ -135,6 +137,7 @@ export function SettingsPage() {
   const [restorePreview, setRestorePreview] =
     useState<LocalBackupSummary | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [restartRequired, setRestartRequired] = useState(false);
 
   async function refreshBackupSnapshots() {
     const snapshots = await api.listBackupSnapshots();
@@ -279,16 +282,23 @@ export function SettingsPage() {
 
       const summary = await api.importLocalBackup(restorePreview.backup_path);
       setRestorePreview(summary);
-      setBackupMessage(
-        summary.restart_required
-          ? "Backup restored. Restart Vaultime to resume live tracking on this machine."
-          : "Backup restored.",
-      );
+      setBackupMessage("Backup restored.");
+      if (summary.restart_required) {
+        setRestartRequired(true);
+      }
       await refreshBackupSnapshots();
     } catch (backupError) {
       setError(String(backupError));
     } finally {
       setBackupBusy(false);
+    }
+  }
+
+  async function handleRestart() {
+    try {
+      await relaunch();
+    } catch (restartError) {
+      setError(String(restartError));
     }
   }
 
@@ -328,6 +338,16 @@ export function SettingsPage() {
       {backupMessage && (
         <div className="rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm text-primary">
           {backupMessage}
+        </div>
+      )}
+
+      {restartRequired && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm text-primary">
+          Restart Vaultime to resume live tracking on this machine.
+          <Button size="sm" onClick={() => void handleRestart()}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            Restart now
+          </Button>
         </div>
       )}
 

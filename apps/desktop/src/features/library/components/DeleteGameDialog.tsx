@@ -26,23 +26,30 @@ export function DeleteGameDialog({
   onDeleted,
 }: DeleteGameDialogProps) {
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function close() {
+    setError(null);
+    onClose();
+  }
 
   async function handleDelete() {
     if (!game) return;
     setDeleting(true);
+    setError(null);
     try {
       await api.deleteGame(game.id);
       onDeleted();
       onClose();
     } catch (e) {
-      console.error("Failed to delete game:", e);
+      setError(`Could not delete the game: ${String(e)}`);
     } finally {
       setDeleting(false);
     }
   }
 
   return (
-    <Dialog open={!!game} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!game} onOpenChange={(open) => !open && close()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Game</DialogTitle>
@@ -52,8 +59,13 @@ export function DeleteGameDialog({
             remove all session history for this game.
           </DialogDescription>
         </DialogHeader>
+        {error && (
+          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={close}>
             Cancel
           </Button>
           <Button

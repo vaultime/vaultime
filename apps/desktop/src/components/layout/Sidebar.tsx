@@ -13,9 +13,6 @@ import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/tauri";
 
-const CONNECTED_BRANDING_FILTER =
-  "brightness(0) saturate(100%) invert(74%) sepia(43%) saturate(2200%) hue-rotate(292deg) brightness(102%) contrast(102%)";
-
 const navItems = [
   { to: "/library", label: "Library", icon: Gamepad2 },
   { to: "/sessions", label: "Sessions", icon: Clock },
@@ -26,43 +23,20 @@ const navItems = [
 export function Sidebar() {
   const [appVersion, setAppVersion] = useState("0.1.0");
   const { session, isAdmin } = useCloudSession();
-  const cloudConnected = Boolean(session);
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    document.title = cloudConnected ? "Vaultime Cloud" : "Vaultime";
-  }, [cloudConnected]);
-
   return (
     <aside className="relative m-4 flex h-[calc(100%-2rem)] w-64 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(31,20,53,0.92),rgba(16,10,29,0.94))] shadow-[0_24px_80px_rgba(7,3,18,0.45)] backdrop-blur-xl">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(150,104,255,0.2),transparent_32%),radial-gradient(circle_at_bottom,rgba(87,41,174,0.24),transparent_40%)]" />
 
-      {/* Logo */}
       <div className="relative flex h-20 items-center gap-3 px-5">
-        <img
-          src="/icon.svg"
-          alt=""
-          className={cn(
-            "h-10 w-10 shrink-0 transition-all duration-500",
-            cloudConnected && "drop-shadow-[0_0_18px_rgba(244,114,182,0.45)]",
-          )}
-          style={cloudConnected ? { filter: CONNECTED_BRANDING_FILTER } : undefined}
-        />
-        <img
-          src="/wordmark.svg"
-          alt="Vaultime"
-          className={cn(
-            "h-5 transition-all duration-500",
-            cloudConnected && "drop-shadow-[0_0_14px_rgba(244,114,182,0.35)]",
-          )}
-          style={cloudConnected ? { filter: CONNECTED_BRANDING_FILTER } : undefined}
-        />
+        <img src="/icon.svg" alt="" className="h-10 w-10 shrink-0" />
+        <img src="/wordmark.svg" alt="Vaultime" className="h-5" />
       </div>
 
-      {/* Navigation */}
       <nav className="relative flex-1 space-y-1 px-3 py-2">
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
@@ -79,7 +53,6 @@ export function Sidebar() {
           >
             {({ isActive }) => (
               <>
-                {/* Active indicator bar */}
                 {isActive && (
                   <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-sidebar-primary shadow-[0_0_8px_rgba(135,88,255,0.6)] animate-fade-up" />
                 )}
@@ -106,7 +79,6 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
       <div className="relative border-t border-white/8 px-5 py-4">
         <div className="flex items-center gap-2">
           <p className="text-[11px] uppercase tracking-[0.28em] text-sidebar-foreground/45">

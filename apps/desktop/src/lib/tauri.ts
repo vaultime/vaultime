@@ -18,10 +18,6 @@ import type {
   CloudBackupUploadResult,
 } from "@/lib/types";
 
-// ---------------------------------------------------------------------------
-// App commands
-// ---------------------------------------------------------------------------
-
 export async function getAppVersion(): Promise<string> {
   return invoke<string>("get_app_version");
 }
@@ -62,10 +58,6 @@ export async function clearCloudBackupKeySecure(
   return invoke<boolean>("clear_cloud_backup_key_secure", { accountId });
 }
 
-// ---------------------------------------------------------------------------
-// Game commands
-// ---------------------------------------------------------------------------
-
 export async function listGames(): Promise<Game[]> {
   return invoke<Game[]>("list_games");
 }
@@ -88,10 +80,6 @@ export async function updateGame(
 export async function deleteGame(id: string): Promise<boolean> {
   return invoke<boolean>("delete_game", { id });
 }
-
-// ---------------------------------------------------------------------------
-// Asset commands
-// ---------------------------------------------------------------------------
 
 export async function listGameAssets(gameId: string): Promise<GameAssetView[]> {
   return invoke<GameAssetView[]>("list_game_assets", { gameId });
@@ -124,10 +112,6 @@ export async function setPreferredGameAsset(
     assetId,
   });
 }
-
-// ---------------------------------------------------------------------------
-// Session commands
-// ---------------------------------------------------------------------------
 
 export async function listSessions(): Promise<Session[]> {
   return invoke<Session[]>("list_sessions");
@@ -199,10 +183,6 @@ export async function restoreRemoteBackup(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Settings commands
-// ---------------------------------------------------------------------------
-
 export async function listSettings(): Promise<Setting[]> {
   return invoke<Setting[]>("list_settings");
 }
@@ -214,21 +194,9 @@ export async function setSetting(
   return invoke<boolean>("set_setting", { key, value });
 }
 
-// ---------------------------------------------------------------------------
-// Tracking commands
-// ---------------------------------------------------------------------------
-
-export async function getTrackingStatus(): Promise<boolean> {
-  return invoke<boolean>("get_tracking_status");
-}
-
 export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
   return invoke<TrackingDiagnostics>("get_tracking_diagnostics");
 }
-
-// ---------------------------------------------------------------------------
-// Discovery commands
-// ---------------------------------------------------------------------------
 
 export async function discoverGames(
   paths: string[],

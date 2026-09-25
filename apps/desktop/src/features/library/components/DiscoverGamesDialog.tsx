@@ -73,18 +73,28 @@ export function DiscoverGamesDialog({ onImported }: DiscoverGamesDialogProps) {
       setResults([]);
       setSelected(new Set());
 
-      // Run folder scan and Steam discovery in parallel.
-      const [defaultPaths, steamGames] = await Promise.all([
-        api.getDefaultScanPaths(),
-        api.discoverSteamGames().catch(() => []),
+      const [steamResult, folderResult] = await Promise.allSettled([
+        api.discoverSteamGames(),
+        api
+          .getDefaultScanPaths()
+          .then((paths) => (paths.length > 0 ? api.discoverGames(paths) : [])),
       ]);
 
-      const folderGames =
-        defaultPaths.length > 0
-          ? await api.discoverGames(defaultPaths).catch(() => [])
-          : [];
+      const failures: string[] = [];
+      if (steamResult.status === "rejected") {
+        failures.push(`Steam scan failed: ${String(steamResult.reason)}`);
+      }
+      if (folderResult.status === "rejected") {
+        failures.push(`Folder scan failed: ${String(folderResult.reason)}`);
+      }
+      setError(failures.length > 0 ? failures.join(" ") : null);
 
-      // Merge and deduplicate by executable path.
+      const steamGames =
+        steamResult.status === "fulfilled" ? steamResult.value : [];
+      const folderGames =
+        folderResult.status === "fulfilled" ? folderResult.value : [];
+
+      // Steam entries win over folder matches for the same executable.
       const byPath = new Map<string, DiscoveredGame>();
       for (const game of [...steamGames, ...folderGames]) {
         if (!byPath.has(game.executable_path)) {
@@ -93,8 +103,6 @@ export function DiscoverGamesDialog({ onImported }: DiscoverGamesDialogProps) {
       }
 
       const merged = Array.from(byPath.values());
-
-      // Sort: new games first, then alphabetically by title.
       merged.sort((a, b) => {
         if (a.already_added !== b.already_added) {
           return a.already_added ? 1 : -1;
@@ -104,13 +112,14 @@ export function DiscoverGamesDialog({ onImported }: DiscoverGamesDialogProps) {
 
       setResults(merged);
 
-      // Pre-select all new games.
-      const newGames = new Set(
-        merged
-          .filter((g) => !g.already_added)
-          .map((g) => g.executable_path),
+      // Folder scan hits are guesses, so only Steam results start selected.
+      setSelected(
+        new Set(
+          merged
+            .filter((g) => !g.already_added && g.source === "steam")
+            .map((g) => g.executable_path),
+        ),
       );
-      setSelected(newGames);
       setScanned(true);
     } catch (scanError) {
       setError(String(scanError));

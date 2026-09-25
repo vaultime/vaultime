@@ -22,11 +22,9 @@ interface AddGameDialogProps {
   onAdded: () => void;
 }
 
-/** Infers a game title from a file or folder path. */
 function inferTitle(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
   const base = normalized.split("/").pop() ?? "";
-  // Strip common executable extensions
   return base.replace(/\.(exe|app|sh|bat|cmd|lnk)$/i, "").replace(/[_-]/g, " ");
 }
 
@@ -36,12 +34,14 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
   const [executablePath, setExecutablePath] = useState("");
   const [installFolder, setInstallFolder] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function reset() {
     setTitle("");
     setExecutablePath("");
     setInstallFolder("");
     setSaving(false);
+    setError(null);
   }
 
   async function pickExecutable() {
@@ -58,10 +58,9 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
       ],
     });
     if (selected) {
-      const path = typeof selected === "string" ? selected : selected;
-      setExecutablePath(path);
+      setExecutablePath(selected);
       if (!title) {
-        setTitle(inferTitle(path));
+        setTitle(inferTitle(selected));
       }
     }
   }
@@ -73,10 +72,9 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
       title: "Select game install folder",
     });
     if (selected) {
-      const path = typeof selected === "string" ? selected : selected;
-      setInstallFolder(path);
+      setInstallFolder(selected);
       if (!title) {
-        setTitle(inferTitle(path));
+        setTitle(inferTitle(selected));
       }
     }
   }
@@ -84,6 +82,7 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
   async function handleSave() {
     if (!title.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       const game = await api.createGame({
         title: title.trim(),
@@ -97,7 +96,7 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
       reset();
       onAdded();
     } catch (e) {
-      console.error("Failed to add game:", e);
+      setError(`Could not add the game: ${String(e)}`);
     } finally {
       setSaving(false);
     }
@@ -162,6 +161,12 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
               </Button>
             </div>
           </div>
+
+          {error && (
+            <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
         </div>
 
         <DialogFooter>

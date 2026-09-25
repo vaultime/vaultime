@@ -18,11 +18,11 @@ export function UpdateBanner() {
     async function checkForUpdate() {
       try {
         const update = await check();
-        if (!cancelled && update?.available) {
+        if (!cancelled && update) {
           setUpdateVersion(update.version);
         }
       } catch {
-        // Silently ignore update check failures (offline, no endpoint configured, etc.)
+        // Offline or no update endpoint. Not worth surfacing.
       }
     }
 
@@ -41,9 +41,11 @@ export function UpdateBanner() {
     try {
       setInstalling(true);
       const update = await check();
-      if (update?.available) {
+      if (update) {
         await update.downloadAndInstall();
         await relaunch();
+      } else {
+        setInstalling(false);
       }
     } catch {
       setInstalling(false);
