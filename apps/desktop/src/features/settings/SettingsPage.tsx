@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { open } from "@tauri-apps/plugin-dialog";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   ArchiveRestore,
   Download,
+  ExternalLink,
   HardDriveDownload,
+  Info,
   Laptop2,
   Loader2,
   Save,
@@ -131,6 +134,7 @@ export function SettingsPage() {
   const [backupSnapshots, setBackupSnapshots] = useState<BackupSnapshot[]>([]);
   const [restorePreview, setRestorePreview] =
     useState<LocalBackupSummary | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
 
   async function refreshBackupSnapshots() {
     const snapshots = await api.listBackupSnapshots();
@@ -145,10 +149,11 @@ export function SettingsPage() {
         setLoading(true);
         setError(null);
 
-        const [settings, trackingDiagnostics, snapshots] = await Promise.all([
+        const [settings, trackingDiagnostics, snapshots, version] = await Promise.all([
           api.listSettings(),
           api.getTrackingDiagnostics(),
           api.listBackupSnapshots(),
+          api.getAppVersion(),
         ]);
 
         if (cancelled) {
@@ -162,6 +167,7 @@ export function SettingsPage() {
         );
         setDiagnostics(trackingDiagnostics);
         setBackupSnapshots(snapshots);
+        setAppVersion(version);
       } catch (loadError) {
         if (!cancelled) {
           setError(String(loadError));
@@ -625,6 +631,58 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border border-border/70">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-primary" />
+            About Vaultime
+          </CardTitle>
+          <CardDescription>
+            Application info and legal documents.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+            <span className="text-sm text-muted-foreground">Version</span>
+            <Badge variant="outline" className="border-primary/40 text-primary">
+              {appVersion ?? "unknown"}
+            </Badge>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+            <span className="text-sm text-muted-foreground">License</span>
+            <span className="text-sm text-foreground">MIT</span>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => shellOpen("https://github.com/schwimmbeck/vaultime")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              GitHub
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => shellOpen("https://github.com/schwimmbeck/vaultime/blob/main/docs/legal/privacy-policy.md")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Privacy Policy
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => shellOpen("https://github.com/schwimmbeck/vaultime/blob/main/docs/legal/terms-of-service.md")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Terms of Service
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

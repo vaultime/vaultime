@@ -197,6 +197,8 @@ export function CloudPage() {
         await loadSignedInData();
       }
 
+      window.dispatchEvent(new CustomEvent("vaultime:auth-changed"));
+
       setMessage(
         authMode === "sign-up"
           ? "Account created. Cloud sync and backup are ready after device registration finishes."
@@ -220,6 +222,7 @@ export function CloudPage() {
       setSubscription(null);
       setBackups([])
       setSyncStatus(await api.cloudGetSyncStatus());
+      window.dispatchEvent(new CustomEvent("vaultime:auth-changed"));
       setMessage("Signed out.");
     } catch (signOutError) {
       setError(String(signOutError));

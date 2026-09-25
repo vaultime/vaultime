@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import {
   Clock,
@@ -23,7 +23,7 @@ export function Sidebar() {
   const [cloudConnected, setCloudConnected] = useState(false);
   const [isPro, setIsPro] = useState(false);
 
-  useEffect(() => {
+  const refreshAuthState = useCallback(() => {
     api.cloudGetSession().then((session) => {
       const signedIn = !!session?.user;
       setCloudConnected(signedIn);
@@ -34,9 +34,17 @@ export function Sidebar() {
             (sub.status === "active" || sub.status === "past_due"),
           );
         }).catch(() => {});
+      } else {
+        setIsPro(false);
       }
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshAuthState();
+    window.addEventListener("vaultime:auth-changed", refreshAuthState);
+    return () => window.removeEventListener("vaultime:auth-changed", refreshAuthState);
+  }, [refreshAuthState]);
 
   return (
     <aside className="relative m-4 flex h-[calc(100%-2rem)] w-64 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(31,20,53,0.92),rgba(16,10,29,0.94))] shadow-[0_24px_80px_rgba(7,3,18,0.45)] backdrop-blur-xl">

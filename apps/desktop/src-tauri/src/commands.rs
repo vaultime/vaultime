@@ -69,6 +69,15 @@ fn normalize_optional_setting(value: Option<String>) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// App commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
+    Ok(app_context.app_version.clone())
+}
+
+// ---------------------------------------------------------------------------
 // Game commands
 // ---------------------------------------------------------------------------
 

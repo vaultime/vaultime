@@ -30,7 +30,7 @@ A paid cloud tier with encrypted backup, multi-device sync, and stronger anti-ta
 
 ## Current Status
 
-Milestones 1–9 are complete. The app is fully functional as a local-first playtime tracker:
+Milestones 1–14 cover the core product. Only platform code-signing (Windows certificate, macOS notarization) remains as external setup:
 
 | Milestone | Status |
 |---|---|
@@ -43,7 +43,13 @@ Milestones 1–9 are complete. The app is fully functional as a local-first play
 | Image import and asset pipeline | Done |
 | Integrity system v1 | Done |
 | Local backups and cross-platform support | Done |
-| Cloud foundation | In progress |
+| Cloud foundation | Done |
+| Paid backup and sync v1 | Done |
+| Billing and subscription | Done |
+| Auto-discovery and launcher support | Done |
+| Release engineering and publishing | Done* |
+
+\* Code signing for Windows and macOS notarization require external certificates/credentials to be configured as CI secrets.
 
 ## Tech Stack
 

@@ -3,6 +3,7 @@
 
 import { Outlet } from "react-router";
 import { Sidebar } from "./Sidebar";
+import { UpdateBanner } from "./UpdateBanner";
 
 export function AppLayout() {
   return (
@@ -11,6 +12,7 @@ export function AppLayout() {
       <Sidebar />
       <main className="relative flex-1 overflow-y-auto">
         <div className="min-h-full p-6 lg:p-8">
+          <UpdateBanner />
           <Outlet />
         </div>
       </main>

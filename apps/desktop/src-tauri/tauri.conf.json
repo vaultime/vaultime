@@ -34,6 +34,34 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Game",
+    "shortDescription": "Universal game library and trustworthy playtime tracker",
+    "longDescription": "Vaultime is a local-first, cross-platform game playtime tracker that records active and runtime sessions with integrity verification. Optional cloud sync and backup are available with a Pro subscription.",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+        "section": "games"
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "gtk3"]
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "both"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/schwimmbeck/vaultime/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
