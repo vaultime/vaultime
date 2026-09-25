@@ -1,0 +1,70 @@
+// SPDX-FileCopyrightText: 2026 Vaultime Contributors
+// SPDX-License-Identifier: MIT
+
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import * as api from "@/lib/tauri";
+import type { Game } from "@/lib/types";
+
+interface DeleteGameDialogProps {
+  game: Game | null;
+  onClose: () => void;
+  onDeleted: () => void;
+}
+
+export function DeleteGameDialog({
+  game,
+  onClose,
+  onDeleted,
+}: DeleteGameDialogProps) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!game) return;
+    setDeleting(true);
+    try {
+      await api.deleteGame(game.id);
+      onDeleted();
+      onClose();
+    } catch (e) {
+      console.error("Failed to delete game:", e);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!game} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete Game</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete{" "}
+            <strong className="text-foreground">{game?.title}</strong>? This will
+            remove all session history for this game.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
