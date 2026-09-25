@@ -2,6 +2,11 @@
 
 Working guide for this repo. Update it when the structure or the rules change.
 
+This file is public and read by anyone who works on the repo with an AI agent.
+Keep it free of personal or private information. Maintainer-only notes such as
+infrastructure, credentials locations, open tasks and decisions live in a local,
+gitignored `PLAN.md`. Read it first when it exists, and never commit it.
+
 ## Product
 
 Vaultime is a local-first desktop app that tracks PC game playtime across
@@ -15,7 +20,7 @@ service that runs on our own VPS.
 - Core: Rust, edition 2024
 - Frontend: React, TypeScript, Tailwind CSS, shadcn/ui on Base UI
 - Local storage: SQLite through rusqlite (bundled)
-- Cloud API: Rust, Axum and PostgreSQL on `codfishcloud.de`
+- Cloud API: Rust, Axum and PostgreSQL, self-hosted
 
 ## Platforms
 
@@ -30,9 +35,10 @@ service that runs on our own VPS.
 ```text
 apps/desktop/     Tauri app, React in src/, Rust in src-tauri/
 apps/api/         Self-hosted cloud backup API
-deploy/vps/       Caddy, systemd and bootstrap scripts for the VPS
-docs/             Architecture notes, legal pages, landing page (docs/site)
-scripts/          Dev helpers such as invite key generation
+deploy/vps/       Server install script, systemd unit and admin tools
+docs/             Legal pages and landing page (docs/site)
+packaging/linux/  Linux build image, AppStream metadata and package smoke test
+scripts/          Dev helpers: Linux checks, packaging, API deploy, invite keys
 assets/           Brand assets
 ```
 
@@ -50,8 +56,11 @@ Rust, from `apps/desktop/src-tauri` or `apps/api`:
 - `cargo clippy --all-targets -- -D warnings`
 - `cargo test`
 
-Linux from a Windows machine: `bash scripts/linux-check.sh` runs the Linux CI
-checks for both crates in Docker.
+From a Windows machine, with Docker:
+
+- `bash scripts/linux-check.sh` runs the Linux CI checks for both crates.
+- `bash scripts/linux-package.sh` builds the Linux packages on Ubuntu 22.04
+  and installs and starts them on Debian, Ubuntu, Fedora, Arch and openSUSE.
 
 Run the checks for everything you touched before calling work done, on both
 Windows and Linux when platform code changed. CI treats warnings as errors.
@@ -116,6 +125,15 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Match the style of the surrounding code.
 - Keep dependencies on current stable versions and drop unused ones.
 
+## Docs
+
+- `README.md` is for users only: what Vaultime does, how to install it, how it
+  counts playtime, where data lives, platform support. No build steps, stack
+  tables, infrastructure or internal structure.
+- Developer and maintainer information goes into `PLAN.md` (local, gitignored),
+  or into `CLAUDE.md` when it is a general rule that is safe to publish.
+- `CHANGELOG.md` records user-visible changes per release.
+
 ## Git
 
 - Never add `Co-Authored-By` trailers or any other AI attribution to commits
@@ -124,9 +142,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   `desktop/tracking: skip time while the machine sleeps` or
   `CLAUDE.md: add commit rules`. The message is lowercase and imperative. A
   plain body is optional.
-- Author and committer are the global git identity (the outlook.de address).
-  Merge pull requests by fast-forwarding `main` locally and pushing. The
-  GitHub merge buttons replace the committer.
+- Author and committer are the local git identity. Merge pull requests by
+  fast-forwarding `main` locally and pushing, because the GitHub merge buttons
+  replace the committer.
 - Never commit generated files such as `__pycache__`, build output or `.env`.
 - Never commit anything private: passwords, keys, tokens, server IPs or
   personal data. Secrets go into GitHub Actions secrets or local files outside
