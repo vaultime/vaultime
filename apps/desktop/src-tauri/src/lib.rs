@@ -11,6 +11,7 @@ pub mod discovery;
 pub mod error;
 pub mod integrity;
 pub mod platform;
+pub mod secure_storage;
 pub mod tracking;
 
 use std::fs;
@@ -82,6 +83,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_version,
+            commands::load_cloud_session_secure,
+            commands::store_cloud_session_secure,
+            commands::clear_cloud_session_secure,
+            commands::store_cloud_backup_key_secure,
+            commands::clear_cloud_backup_key_secure,
             commands::list_games,
             commands::get_game,
             commands::create_game,

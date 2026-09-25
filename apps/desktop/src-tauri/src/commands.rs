@@ -20,6 +20,7 @@ use crate::db::repo::{backup_snapshots, games, session_events, sessions, setting
 use crate::discovery::{self, DiscoveredGame};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
+use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,39 @@ use crate::tracking::engine::TrackingEngine;
 #[tauri::command]
 pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
     Ok(app_context.app_version.clone())
+}
+
+#[tauri::command]
+pub fn load_cloud_session_secure() -> Result<Option<String>, VaultimeError> {
+    secure_storage::load_cloud_session()
+}
+
+#[tauri::command]
+pub fn store_cloud_session_secure(session_json: String) -> Result<bool, VaultimeError> {
+    secure_storage::store_cloud_session(&session_json)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn clear_cloud_session_secure() -> Result<bool, VaultimeError> {
+    secure_storage::clear_cloud_session()?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn store_cloud_backup_key_secure(
+    account_id: String,
+    email: String,
+    password: String,
+) -> Result<bool, VaultimeError> {
+    secure_storage::store_cloud_backup_key(&account_id, &email, &password)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn clear_cloud_backup_key_secure() -> Result<bool, VaultimeError> {
+    secure_storage::clear_cloud_backup_key()?;
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------

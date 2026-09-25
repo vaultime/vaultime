@@ -13,6 +13,9 @@ import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/tauri";
 
+const CONNECTED_BRANDING_FILTER =
+  "brightness(0) saturate(100%) invert(74%) sepia(43%) saturate(2200%) hue-rotate(292deg) brightness(102%) contrast(102%)";
+
 const navItems = [
   { to: "/library", label: "Library", icon: Gamepad2 },
   { to: "/sessions", label: "Sessions", icon: Clock },
@@ -23,10 +26,15 @@ const navItems = [
 export function Sidebar() {
   const [appVersion, setAppVersion] = useState("0.1.0");
   const { session, isAdmin } = useCloudSession();
+  const cloudConnected = Boolean(session);
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    document.title = cloudConnected ? "Vaultime Cloud" : "Vaultime";
+  }, [cloudConnected]);
 
   return (
     <aside className="relative m-4 flex h-[calc(100%-2rem)] w-64 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(31,20,53,0.92),rgba(16,10,29,0.94))] shadow-[0_24px_80px_rgba(7,3,18,0.45)] backdrop-blur-xl">
@@ -37,12 +45,20 @@ export function Sidebar() {
         <img
           src="/icon.svg"
           alt=""
-          className="h-10 w-10 shrink-0 transition-all duration-500"
+          className={cn(
+            "h-10 w-10 shrink-0 transition-all duration-500",
+            cloudConnected && "drop-shadow-[0_0_18px_rgba(244,114,182,0.45)]",
+          )}
+          style={cloudConnected ? { filter: CONNECTED_BRANDING_FILTER } : undefined}
         />
         <img
           src="/wordmark.svg"
           alt="Vaultime"
-          className="h-5 transition-all duration-500"
+          className={cn(
+            "h-5 transition-all duration-500",
+            cloudConnected && "drop-shadow-[0_0_14px_rgba(244,114,182,0.35)]",
+          )}
+          style={cloudConnected ? { filter: CONNECTED_BRANDING_FILTER } : undefined}
         />
       </div>
 

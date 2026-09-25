@@ -5,6 +5,8 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce};
 use reqwest::blocking::{Body, Client, Response};
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
@@ -19,9 +21,14 @@ use crate::assets::AssetManager;
 use crate::backup::{LocalBackupSummary, export_local_backup, import_local_backup};
 use crate::db::connection::Database;
 use crate::error::{Result, VaultimeError};
+use crate::secure_storage;
 
 const CLOUD_STAGING_DIR: &str = ".cloud-staging";
 const ARCHIVE_FORMAT: &str = "zip";
+const ENCRYPTION_SCHEME: &str = "chacha20poly1305-chunked-v1";
+const ENCRYPTED_MAGIC: &[u8; 8] = b"VTENC01\n";
+const ENCRYPTED_AAD: &[u8] = b"vaultime-cloud-backup";
+const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteBackupPayloadSummary {
@@ -36,6 +43,7 @@ pub struct RemoteBackupPayloadSummary {
     pub assets_count: i64,
     pub asset_file_count: usize,
     pub archive_format: String,
+    pub encryption: String,
     pub archive_checksum: String,
     pub archive_size_bytes: u64,
 }
@@ -115,8 +123,11 @@ pub fn upload_remote_backup(
         let local_summary = export_local_backup(db, &asset_manager, app_context, &export_root)?;
         let archive_path = staging_dir.join(format!("{}.zip", local_summary.backup_id));
         create_archive(Path::new(&local_summary.backup_path), &archive_path)?;
+        let encrypted_path = staging_dir.join(format!("{}.enc", local_summary.backup_id));
+        let backup_key = secure_storage::load_cloud_backup_key()?;
+        encrypt_archive(&archive_path, &encrypted_path, &backup_key)?;
 
-        let (archive_size_bytes, archive_checksum) = hash_file(&archive_path)?;
+        let (archive_size_bytes, archive_checksum) = hash_file(&encrypted_path)?;
         let payload_summary =
             payload_summary_from_local(&local_summary, archive_checksum, archive_size_bytes);
         let backup = create_and_upload_backup(
@@ -125,7 +136,7 @@ pub fn upload_remote_backup(
             client_device_id,
             label,
             &payload_summary,
-            &archive_path,
+            &encrypted_path,
         )?;
 
         Ok(RemoteBackupUploadResult {
@@ -162,7 +173,7 @@ pub fn restore_remote_backup(
             ));
         }
 
-        let archive_path = staging_dir.join(format!("{backup_id}.zip"));
+        let archive_path = staging_dir.join(format!("{backup_id}.enc"));
         download_backup_archive(
             &client,
             &api_base_url,
@@ -178,8 +189,12 @@ pub fn restore_remote_backup(
             ));
         }
 
+        let decrypted_archive_path = staging_dir.join(format!("{backup_id}.zip"));
+        let backup_key = secure_storage::load_cloud_backup_key()?;
+        decrypt_archive(&archive_path, &decrypted_archive_path, &backup_key)?;
+
         let extracted_dir = staging_dir.join("extracted");
-        extract_archive(&archive_path, &extracted_dir)?;
+        extract_archive(&decrypted_archive_path, &extracted_dir)?;
 
         let asset_manager = AssetManager::new(app_context.asset_cache_dir.clone());
         let local_summary = import_local_backup(db, &asset_manager, app_context, &extracted_dir)?;
@@ -319,6 +334,7 @@ fn payload_summary_from_local(
         assets_count: local_summary.assets_count,
         asset_file_count: local_summary.asset_file_count,
         archive_format: ARCHIVE_FORMAT.to_string(),
+        encryption: ENCRYPTION_SCHEME.to_string(),
         archive_checksum,
         archive_size_bytes,
     }
@@ -453,6 +469,173 @@ fn hash_file(path: &Path) -> Result<(u64, String)> {
     Ok((bytes, format!("{:x}", hasher.finalize())))
 }
 
+fn encrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Result<()> {
+    let cipher = ChaCha20Poly1305::new(key.into());
+    let mut input = File::open(input_path).map_err(map_backup_io)?;
+    let mut output = File::create(output_path).map_err(map_backup_io)?;
+    let nonce_seed = uuid::Uuid::new_v4();
+    let nonce_prefix = &nonce_seed.as_bytes()[..4];
+
+    output.write_all(ENCRYPTED_MAGIC).map_err(map_backup_io)?;
+    output.write_all(nonce_prefix).map_err(map_backup_io)?;
+
+    let mut current = vec![0_u8; ENCRYPTION_CHUNK_BYTES];
+    let mut next = vec![0_u8; ENCRYPTION_CHUNK_BYTES];
+    let mut current_len = input.read(&mut current).map_err(map_backup_io)?;
+    let mut chunk_index = 0_u64;
+
+    if current_len == 0 {
+        let ciphertext = encrypt_chunk(&cipher, nonce_prefix, chunk_index, &[])?;
+        write_encrypted_chunk(&mut output, true, 0, &ciphertext)?;
+        output.flush().map_err(map_backup_io)?;
+        return Ok(());
+    }
+
+    loop {
+        let next_len = input.read(&mut next).map_err(map_backup_io)?;
+        let is_last = next_len == 0;
+        let ciphertext =
+            encrypt_chunk(&cipher, nonce_prefix, chunk_index, &current[..current_len])?;
+        write_encrypted_chunk(
+            &mut output,
+            is_last,
+            u32::try_from(current_len)
+                .map_err(|_| VaultimeError::Backup("backup chunk length overflow".into()))?,
+            &ciphertext,
+        )?;
+
+        if is_last {
+            break;
+        }
+
+        std::mem::swap(&mut current, &mut next);
+        current_len = next_len;
+        chunk_index += 1;
+    }
+
+    output.flush().map_err(map_backup_io)?;
+    Ok(())
+}
+
+fn decrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Result<()> {
+    let cipher = ChaCha20Poly1305::new(key.into());
+    let mut input = File::open(input_path).map_err(map_backup_io)?;
+    let mut output = File::create(output_path).map_err(map_backup_io)?;
+    let mut magic = [0_u8; 8];
+    input.read_exact(&mut magic).map_err(map_backup_io)?;
+    if &magic != ENCRYPTED_MAGIC {
+        return Err(VaultimeError::Backup(
+            "remote backup has an unexpected encryption header".into(),
+        ));
+    }
+
+    let mut nonce_prefix = [0_u8; 4];
+    input.read_exact(&mut nonce_prefix).map_err(map_backup_io)?;
+    let mut chunk_index = 0_u64;
+
+    loop {
+        let mut flags = [0_u8; 1];
+        input.read_exact(&mut flags).map_err(map_backup_io)?;
+        let is_last = (flags[0] & 0x1) == 0x1;
+
+        let plaintext_len = read_u32(&mut input)?;
+        let ciphertext_len = read_u32(&mut input)?;
+        let mut ciphertext = vec![0_u8; ciphertext_len as usize];
+        input.read_exact(&mut ciphertext).map_err(map_backup_io)?;
+
+        let plaintext = decrypt_chunk(&cipher, &nonce_prefix, chunk_index, &ciphertext)?;
+        if plaintext.len()
+            != usize::try_from(plaintext_len)
+                .map_err(|_| VaultimeError::Backup("invalid plaintext length".into()))?
+        {
+            return Err(VaultimeError::Backup(
+                "decrypted backup chunk length mismatch".into(),
+            ));
+        }
+
+        output.write_all(&plaintext).map_err(map_backup_io)?;
+
+        if is_last {
+            break;
+        }
+
+        chunk_index += 1;
+    }
+
+    output.flush().map_err(map_backup_io)?;
+    Ok(())
+}
+
+fn encrypt_chunk(
+    cipher: &ChaCha20Poly1305,
+    nonce_prefix: &[u8],
+    chunk_index: u64,
+    plaintext: &[u8],
+) -> Result<Vec<u8>> {
+    cipher
+        .encrypt(
+            Nonce::from_slice(&chunk_nonce(nonce_prefix, chunk_index)),
+            Payload {
+                msg: plaintext,
+                aad: ENCRYPTED_AAD,
+            },
+        )
+        .map_err(|error| VaultimeError::Backup(format!("failed to encrypt backup chunk: {error}")))
+}
+
+fn decrypt_chunk(
+    cipher: &ChaCha20Poly1305,
+    nonce_prefix: &[u8],
+    chunk_index: u64,
+    ciphertext: &[u8],
+) -> Result<Vec<u8>> {
+    cipher
+        .decrypt(
+            Nonce::from_slice(&chunk_nonce(nonce_prefix, chunk_index)),
+            Payload {
+                msg: ciphertext,
+                aad: ENCRYPTED_AAD,
+            },
+        )
+        .map_err(|error| VaultimeError::Backup(format!("failed to decrypt backup chunk: {error}")))
+}
+
+fn chunk_nonce(nonce_prefix: &[u8], chunk_index: u64) -> [u8; 12] {
+    let mut nonce = [0_u8; 12];
+    nonce[..4].copy_from_slice(&nonce_prefix[..4]);
+    nonce[4..].copy_from_slice(&chunk_index.to_be_bytes());
+    nonce
+}
+
+fn write_encrypted_chunk(
+    output: &mut File,
+    is_last: bool,
+    plaintext_len: u32,
+    ciphertext: &[u8],
+) -> Result<()> {
+    output
+        .write_all(&[u8::from(is_last)])
+        .map_err(map_backup_io)?;
+    output
+        .write_all(&plaintext_len.to_be_bytes())
+        .map_err(map_backup_io)?;
+    output
+        .write_all(
+            &u32::try_from(ciphertext.len())
+                .map_err(|_| VaultimeError::Backup("encrypted chunk length overflow".into()))?
+                .to_be_bytes(),
+        )
+        .map_err(map_backup_io)?;
+    output.write_all(ciphertext).map_err(map_backup_io)?;
+    Ok(())
+}
+
+fn read_u32(input: &mut File) -> Result<u32> {
+    let mut bytes = [0_u8; 4];
+    input.read_exact(&mut bytes).map_err(map_backup_io)?;
+    Ok(u32::from_be_bytes(bytes))
+}
+
 fn normalized_api_base(api_base_url: &str) -> String {
     api_base_url.trim().trim_end_matches('/').to_string()
 }
@@ -467,4 +650,69 @@ fn map_zip_error(error: zip::result::ZipError) -> VaultimeError {
 
 fn map_cloud_http(error: reqwest::Error) -> VaultimeError {
     VaultimeError::Cloud(format!("HTTP request failed: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decrypt_archive, encrypt_archive};
+    use std::fs;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn test_dir() -> PathBuf {
+        std::env::temp_dir().join(format!("vaultime-remote-backup-test-{}", Uuid::new_v4()))
+    }
+
+    #[test]
+    fn encrypted_archives_round_trip_across_multiple_chunks() {
+        let dir = test_dir();
+        fs::create_dir_all(&dir).expect("test dir");
+
+        let plaintext_path = dir.join("plain.zip");
+        let encrypted_path = dir.join("plain.enc");
+        let restored_path = dir.join("plain-restored.zip");
+        let mut plaintext = Vec::with_capacity(700_000);
+        while plaintext.len() < 700_000 {
+            plaintext.extend_from_slice(b"vaultime-cloud-backup-round-trip");
+        }
+        plaintext.truncate(700_000);
+        fs::write(&plaintext_path, &plaintext).expect("write plaintext");
+
+        let key = [7_u8; 32];
+        encrypt_archive(&plaintext_path, &encrypted_path, &key).expect("encrypt");
+        decrypt_archive(&encrypted_path, &restored_path, &key).expect("decrypt");
+
+        let restored = fs::read(&restored_path).expect("read restored");
+        assert_eq!(restored, plaintext);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn tampered_archives_fail_authentication() {
+        let dir = test_dir();
+        fs::create_dir_all(&dir).expect("test dir");
+
+        let plaintext_path = dir.join("plain.zip");
+        let encrypted_path = dir.join("plain.enc");
+        let restored_path = dir.join("plain-restored.zip");
+        fs::write(&plaintext_path, b"vaultime-backup").expect("write plaintext");
+
+        let key = [9_u8; 32];
+        encrypt_archive(&plaintext_path, &encrypted_path, &key).expect("encrypt");
+
+        let mut encrypted = fs::read(&encrypted_path).expect("read encrypted");
+        let last_index = encrypted.len() - 1;
+        encrypted[last_index] ^= 0x5a;
+        fs::write(&encrypted_path, encrypted).expect("rewrite encrypted");
+
+        let error =
+            decrypt_archive(&encrypted_path, &restored_path, &key).expect_err("tamper fail");
+        assert!(
+            error.to_string().contains("failed to decrypt backup chunk"),
+            "unexpected error: {error}"
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
 }

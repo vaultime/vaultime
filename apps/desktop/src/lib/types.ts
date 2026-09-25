@@ -180,6 +180,7 @@ export interface CloudBackupPayloadSummary {
   assets_count: number;
   asset_file_count: number;
   archive_format: string;
+  encryption: string;
   archive_checksum: string;
   archive_size_bytes: number;
 }

@@ -102,7 +102,7 @@ pub async fn create_backup(
     };
 
     let backup_id = Uuid::new_v4();
-    let storage_key = format!("{}/{backup_id}.vaultime.zip", auth.account_id);
+    let storage_key = format!("{}/{backup_id}.vaultime.enc", auth.account_id);
     let label = payload
         .label
         .as_deref()
@@ -285,7 +285,7 @@ pub async fn download_backup(
         response.headers_mut().insert(
             CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!(
-                "attachment; filename=\"vaultime-backup-{}.zip\"",
+                "attachment; filename=\"vaultime-backup-{}.enc\"",
                 backup.id
             ))
             .map_err(|error| AppError::internal(format!("invalid filename header: {error}")))?,

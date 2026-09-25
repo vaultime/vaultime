@@ -203,7 +203,6 @@ mod tests {
     #[test]
     fn default_paths_returns_list() {
         let paths = default_scan_paths();
-        // Should return at least an empty list without panicking.
-        assert!(paths.len() >= 0);
+        assert!(paths.iter().all(|path| !path.is_empty()));
     }
 }

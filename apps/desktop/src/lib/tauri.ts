@@ -26,6 +26,36 @@ export async function getAppVersion(): Promise<string> {
   return invoke<string>("get_app_version");
 }
 
+export async function loadCloudSessionSecure(): Promise<string | null> {
+  return invoke<string | null>("load_cloud_session_secure");
+}
+
+export async function storeCloudSessionSecure(
+  sessionJson: string,
+): Promise<boolean> {
+  return invoke<boolean>("store_cloud_session_secure", { sessionJson });
+}
+
+export async function clearCloudSessionSecure(): Promise<boolean> {
+  return invoke<boolean>("clear_cloud_session_secure");
+}
+
+export async function storeCloudBackupKeySecure(
+  accountId: string,
+  email: string,
+  password: string,
+): Promise<boolean> {
+  return invoke<boolean>("store_cloud_backup_key_secure", {
+    accountId,
+    email,
+    password,
+  });
+}
+
+export async function clearCloudBackupKeySecure(): Promise<boolean> {
+  return invoke<boolean>("clear_cloud_backup_key_secure");
+}
+
 // ---------------------------------------------------------------------------
 // Game commands
 // ---------------------------------------------------------------------------

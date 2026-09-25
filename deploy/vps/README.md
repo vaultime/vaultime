@@ -13,6 +13,8 @@ self-hosted Vaultime cloud stack on your VPS.
 - `bootstrap-admin-account.py` - creates or promotes the first admin account
 - `finalize-admin-setup.sh` - repairs DB ownership if needed, bootstraps admin,
   rebuilds the API, and restarts the service
+- `redeploy-api.sh` - rebuilds the API, installs the binary, restarts the
+  systemd service, and runs health checks
 - `generate-cloud-invite.py` - generates and inserts invite codes directly
 
 ## Expected stack
@@ -50,3 +52,5 @@ self-hosted Vaultime cloud stack on your VPS.
   admin bootstrap continues.
 - Run `generate-cloud-invite.py` on the VPS when you need a shareable invite
   before the desktop admin UI exists.
+- Run `redeploy-api.sh` after API changes so you do not need to repeat the
+  manual build/install/restart steps.

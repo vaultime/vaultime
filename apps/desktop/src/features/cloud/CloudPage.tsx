@@ -76,6 +76,14 @@ function toIsoTimestamp(value: string) {
   return parsed.toISOString();
 }
 
+function formatApiHostname(value: string) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return value.replace(/^https?:\/\//, "");
+  }
+}
+
 export function CloudPage() {
   const {
     apiBaseUrl,
@@ -391,7 +399,12 @@ export function CloudPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 API host
               </p>
-              <p className="mt-2 text-sm font-medium">{apiBaseUrl}</p>
+              <p className="mt-2 text-sm font-semibold tracking-tight">
+                {formatApiHostname(apiBaseUrl)}
+              </p>
+              <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                {apiBaseUrl}
+              </p>
             </div>
             <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
               <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -405,12 +418,19 @@ export function CloudPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 Session state
               </p>
-              <p className="mt-2 text-sm font-medium">
+              <p className="mt-2 text-sm font-semibold tracking-tight">
                 {initializing
-                  ? "Checking cloud session..."
+                  ? "Restoring secure session"
                   : session
-                    ? `Signed in as ${session.user.role}`
-                    : "No cloud session stored"}
+                    ? "Signed in"
+                    : "No cloud session"}
+              </p>
+              <p className="mt-1 break-all text-xs text-muted-foreground">
+                {initializing
+                  ? "Checking secure storage and refresh token state."
+                  : session
+                    ? `${session.user.email} · ${session.user.role}`
+                    : "Sign in to enable remote backups and invite controls."}
               </p>
             </div>
           </CardContent>
@@ -431,8 +451,8 @@ export function CloudPage() {
             <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
               <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
               <p>
-                Tokens are issued by the self-hosted API and refreshed from the
-                desktop app when needed.
+                Tokens are issued by the self-hosted API, then stored through
+                OS secure storage instead of browser-local session state.
               </p>
             </div>
             <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
@@ -445,16 +465,18 @@ export function CloudPage() {
             <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
               <HardDriveUpload className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
               <p>
-                Backup archives are created and restored in Rust, while the VPS
-                verifies the uploaded SHA-256 checksum before storing them.
+                Backup archives are created in Rust, encrypted on the desktop
+                before upload, and verified by SHA-256 on the VPS before the
+                ciphertext is accepted.
               </p>
             </div>
             <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
               <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
               <p>
-                Current cloud backups use TLS transport plus archive-integrity
-                verification. End-to-end encrypted backup blobs are still a
-                planned hardening step, not shipped yet.
+                The current backup key is derived locally from the login
+                credentials and retained in OS secure storage, which protects
+                backup blobs at rest on the VPS. A separate zero-knowledge
+                backup passphrase is still future hardening.
               </p>
             </div>
           </CardContent>
@@ -793,7 +815,7 @@ export function CloudPage() {
                       </div>
                     </div>
                     {backup.metadata_json && (
-                      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                             Games
@@ -824,6 +846,17 @@ export function CloudPage() {
                           </p>
                           <p className="mt-1 text-sm">
                             {backup.metadata_json.source_device_id}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            Encryption
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {backup.metadata_json.encryption ===
+                            "chacha20poly1305-chunked-v1"
+                              ? "Client-side encrypted"
+                              : backup.metadata_json.encryption}
                           </p>
                         </div>
                       </div>
