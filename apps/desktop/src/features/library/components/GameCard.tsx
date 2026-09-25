@@ -19,7 +19,8 @@ import type { Game } from "@/lib/types";
 interface GameCardProps {
   game: Game;
   isRunning?: boolean;
-  totalPlaytimeMs?: number;
+  totalRuntimeMs?: number;
+  totalActiveMs?: number;
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }
@@ -38,10 +39,14 @@ function formatPlaytime(ms: number): string {
 export function GameCard({
   game,
   isRunning = false,
-  totalPlaytimeMs = 0,
+  totalRuntimeMs = 0,
+  totalActiveMs = 0,
   onEdit,
   onDelete,
 }: GameCardProps) {
+  const hasTrackedTime = totalRuntimeMs > 0 || totalActiveMs > 0;
+  const runtimeDiffers = totalRuntimeMs > totalActiveMs;
+
   return (
     <Card className="group relative overflow-hidden transition-colors hover:border-primary/40">
       {/* Running indicator */}
@@ -67,13 +72,24 @@ export function GameCard({
             <h3 className="truncate text-sm font-semibold leading-tight">
               {game.title}
             </h3>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {totalPlaytimeMs > 0
-                ? formatPlaytime(totalPlaytimeMs)
-                : game.executable_path
+            {hasTrackedTime ? (
+              <div className="mt-1 space-y-0.5">
+                <p className="truncate text-xs text-muted-foreground">
+                  Active {formatPlaytime(totalActiveMs)}
+                </p>
+                {runtimeDiffers && (
+                  <p className="truncate text-[11px] text-muted-foreground/70">
+                    Runtime {formatPlaytime(totalRuntimeMs)}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {game.executable_path
                   ? game.executable_path.split(/[\\/]/).pop()
                   : "No executable"}
-            </p>
+              </p>
+            )}
           </div>
 
           <DropdownMenu>

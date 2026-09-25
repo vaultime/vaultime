@@ -3,7 +3,7 @@
 
 //! Device repository — register and query devices.
 
-use rusqlite::{params, Row};
+use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::Device;
@@ -24,12 +24,7 @@ fn map_db(e: rusqlite::Error) -> VaultimeError {
 }
 
 /// Ensures a device record exists for this machine. Returns the device.
-pub fn ensure_device(
-    db: &Database,
-    id: &str,
-    platform: &str,
-    app_version: &str,
-) -> Result<Device> {
+pub fn ensure_device(db: &Database, id: &str, platform: &str, app_version: &str) -> Result<Device> {
     db.with_conn(|conn| {
         conn.execute(
             "INSERT OR IGNORE INTO devices (id, platform, app_version)
@@ -45,25 +40,17 @@ pub fn ensure_device(
         )
         .map_err(map_db)?;
 
-        conn.query_row(
-            "SELECT * FROM devices WHERE id = ?1",
-            [id],
-            row_to_device,
-        )
-        .map_err(map_db)
+        conn.query_row("SELECT * FROM devices WHERE id = ?1", [id], row_to_device)
+            .map_err(map_db)
     })
 }
 
 /// Returns the device by ID, if it exists.
 pub fn get_device(db: &Database, id: &str) -> Result<Option<Device>> {
     db.with_conn(|conn| {
-        conn.query_row(
-            "SELECT * FROM devices WHERE id = ?1",
-            [id],
-            row_to_device,
-        )
-        .optional()
-        .map_err(map_db)
+        conn.query_row("SELECT * FROM devices WHERE id = ?1", [id], row_to_device)
+            .optional()
+            .map_err(map_db)
     })
 }
 

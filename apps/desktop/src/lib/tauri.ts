@@ -7,6 +7,8 @@ import type {
   CreateGameInput,
   UpdateGameInput,
   Session,
+  Setting,
+  TrackingDiagnostics,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -53,9 +55,28 @@ export async function getActiveSessions(): Promise<Session[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Settings commands
+// ---------------------------------------------------------------------------
+
+export async function listSettings(): Promise<Setting[]> {
+  return invoke<Setting[]>("list_settings");
+}
+
+export async function setSetting(
+  key: string,
+  value: string,
+): Promise<boolean> {
+  return invoke<boolean>("set_setting", { key, value });
+}
+
+// ---------------------------------------------------------------------------
 // Tracking commands
 // ---------------------------------------------------------------------------
 
 export async function getTrackingStatus(): Promise<boolean> {
   return invoke<boolean>("get_tracking_status");
+}
+
+export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
+  return invoke<TrackingDiagnostics>("get_tracking_diagnostics");
 }

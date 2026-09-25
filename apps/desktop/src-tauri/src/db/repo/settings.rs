@@ -3,7 +3,7 @@
 
 //! Settings repository — key/value store for app configuration.
 
-use rusqlite::{params, Row};
+use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::Setting;
@@ -36,11 +36,9 @@ pub fn list_settings(db: &Database) -> Result<Vec<Setting>> {
 /// Gets a single setting value by key.
 pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>> {
     db.with_conn(|conn| {
-        match conn.query_row(
-            "SELECT value FROM settings WHERE key = ?1",
-            [key],
-            |row| row.get::<_, String>(0),
-        ) {
+        match conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+            row.get::<_, String>(0)
+        }) {
             Ok(v) => Ok(Some(v)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(VaultimeError::Database(format!("{e}"))),

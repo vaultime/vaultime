@@ -16,11 +16,18 @@ pub struct RunningProcess {
     pub name: String,
     /// Full executable path, if available.
     pub exe_path: Option<String>,
+    /// Percent CPU usage since the previous refresh.
+    pub cpu_usage: f32,
 }
 
 /// Returns a list of currently running processes.
 pub fn list_running_processes() -> Vec<RunningProcess> {
-    let mut sys = System::new();
+    let mut sys = System::new_all();
+    refresh_running_processes(&mut sys)
+}
+
+/// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
+pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
     sys.processes()
@@ -29,6 +36,7 @@ pub fn list_running_processes() -> Vec<RunningProcess> {
             pid: p.pid().as_u32(),
             name: p.name().to_string_lossy().into_owned(),
             exe_path: p.exe().map(|e| e.to_string_lossy().into_owned()),
+            cpu_usage: p.cpu_usage(),
         })
         .collect()
 }
@@ -88,6 +96,7 @@ mod tests {
             pid: 1,
             name: "game".into(),
             exe_path: Some("/opt/games/cool-game/game".into()),
+            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
@@ -98,6 +107,7 @@ mod tests {
             pid: 2,
             name: "game".into(),
             exe_path: None,
+            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
@@ -108,6 +118,7 @@ mod tests {
             pid: 3,
             name: "firefox".into(),
             exe_path: Some("/usr/bin/firefox".into()),
+            cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, "/opt/games/cool-game/game"));
     }

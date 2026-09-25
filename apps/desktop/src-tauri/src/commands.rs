@@ -5,12 +5,14 @@
 
 use std::sync::Arc;
 
+use serde::Serialize;
 use tauri::State;
 
 use crate::db::connection::Database;
-use crate::db::models::{CreateGame, Game, Session, UpdateGame};
-use crate::db::repo::{games, sessions};
+use crate::db::models::{CreateGame, Game, Session, Setting, UpdateGame};
+use crate::db::repo::{games, sessions, settings};
 use crate::error::VaultimeError;
+use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::tracking::engine::TrackingEngine;
 
 // ---------------------------------------------------------------------------
@@ -28,10 +30,7 @@ pub fn get_game(db: State<'_, Arc<Database>>, id: String) -> Result<Game, Vaulti
 }
 
 #[tauri::command]
-pub fn create_game(
-    db: State<'_, Arc<Database>>,
-    input: CreateGame,
-) -> Result<Game, VaultimeError> {
+pub fn create_game(db: State<'_, Arc<Database>>, input: CreateGame) -> Result<Game, VaultimeError> {
     games::create_game(&db, &input)
 }
 
@@ -67,19 +66,54 @@ pub fn get_sessions_for_game(
 }
 
 #[tauri::command]
-pub fn get_active_sessions(
-    db: State<'_, Arc<Database>>,
-) -> Result<Vec<Session>, VaultimeError> {
+pub fn get_active_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
     sessions::get_active_sessions(&db)
+}
+
+// ---------------------------------------------------------------------------
+// Settings commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_settings(db: State<'_, Arc<Database>>) -> Result<Vec<Setting>, VaultimeError> {
+    settings::list_settings(&db)
+}
+
+#[tauri::command]
+pub fn set_setting(
+    db: State<'_, Arc<Database>>,
+    key: String,
+    value: String,
+) -> Result<bool, VaultimeError> {
+    settings::set_setting(&db, &key, &value)?;
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------
 // Tracking commands
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Serialize)]
+pub struct TrackingDiagnostics {
+    pub running: bool,
+    pub foreground_detection: String,
+    pub idle_detection: String,
+    pub poll_interval_seconds: u64,
+}
+
 #[tauri::command]
-pub fn get_tracking_status(
-    engine: State<'_, TrackingEngine>,
-) -> Result<bool, VaultimeError> {
+pub fn get_tracking_status(engine: State<'_, TrackingEngine>) -> Result<bool, VaultimeError> {
     Ok(engine.is_running())
+}
+
+#[tauri::command]
+pub fn get_tracking_diagnostics(
+    engine: State<'_, TrackingEngine>,
+) -> Result<TrackingDiagnostics, VaultimeError> {
+    Ok(TrackingDiagnostics {
+        running: engine.is_running(),
+        foreground_detection: foreground_detection_strategy().into(),
+        idle_detection: idle_detection_strategy().into(),
+        poll_interval_seconds: 5,
+    })
 }

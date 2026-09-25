@@ -14,12 +14,10 @@ use crate::error::{Result, VaultimeError};
 use super::connection::Database;
 
 /// Embedded migration files, sorted by name at compile time.
-const MIGRATIONS: &[(&str, &str)] = &[
-    (
-        "0001_initial_schema",
-        include_str!("../../migrations/0001_initial_schema.sql"),
-    ),
-];
+const MIGRATIONS: &[(&str, &str)] = &[(
+    "0001_initial_schema",
+    include_str!("../../migrations/0001_initial_schema.sql"),
+)];
 
 /// Creates the migration tracking table if it doesn't exist, then applies
 /// any migrations that haven't been run yet.
@@ -31,11 +29,7 @@ pub(crate) fn run_migrations(db: &Database) -> Result<()> {
                 applied_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
         )
-        .map_err(|e| {
-            VaultimeError::Database(format!(
-                "failed to create _migrations table: {e}"
-            ))
-        })?;
+        .map_err(|e| VaultimeError::Database(format!("failed to create _migrations table: {e}")))?;
 
         for &(name, sql) in MIGRATIONS {
             let already_applied: bool = conn
@@ -45,9 +39,7 @@ pub(crate) fn run_migrations(db: &Database) -> Result<()> {
                     |row| row.get(0),
                 )
                 .map_err(|e| {
-                    VaultimeError::Database(format!(
-                        "failed to check migration {name}: {e}"
-                    ))
+                    VaultimeError::Database(format!("failed to check migration {name}: {e}"))
                 })?;
 
             if already_applied {
@@ -56,21 +48,13 @@ pub(crate) fn run_migrations(db: &Database) -> Result<()> {
 
             info!("applying migration: {name}");
 
-            conn.execute_batch(sql).map_err(|e| {
-                VaultimeError::Database(format!(
-                    "migration {name} failed: {e}"
-                ))
-            })?;
+            conn.execute_batch(sql)
+                .map_err(|e| VaultimeError::Database(format!("migration {name} failed: {e}")))?;
 
-            conn.execute(
-                "INSERT INTO _migrations (name) VALUES (?1)",
-                [name],
-            )
-            .map_err(|e| {
-                VaultimeError::Database(format!(
-                    "failed to record migration {name}: {e}"
-                ))
-            })?;
+            conn.execute("INSERT INTO _migrations (name) VALUES (?1)", [name])
+                .map_err(|e| {
+                    VaultimeError::Database(format!("failed to record migration {name}: {e}"))
+                })?;
         }
 
         Ok(())

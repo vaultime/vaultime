@@ -3,7 +3,7 @@
 
 //! Game repository — CRUD operations for the `games` table.
 
-use rusqlite::{params, Row};
+use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game, UpdateGame};
@@ -45,12 +45,8 @@ pub fn create_game(db: &Database, input: &CreateGame) -> Result<Game> {
         )
         .map_err(map_db)?;
 
-        conn.query_row(
-            "SELECT * FROM games WHERE id = ?1",
-            [&id],
-            row_to_game,
-        )
-        .map_err(map_db)
+        conn.query_row("SELECT * FROM games WHERE id = ?1", [&id], row_to_game)
+            .map_err(map_db)
     })
 }
 
@@ -61,9 +57,7 @@ pub fn list_games(db: &Database) -> Result<Vec<Game>> {
             .prepare("SELECT * FROM games WHERE is_hidden = 0 ORDER BY title COLLATE NOCASE")
             .map_err(map_db)?;
 
-        let rows = stmt
-            .query_map([], row_to_game)
-            .map_err(map_db)?;
+        let rows = stmt.query_map([], row_to_game).map_err(map_db)?;
 
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })
@@ -76,9 +70,7 @@ pub fn list_all_games(db: &Database) -> Result<Vec<Game>> {
             .prepare("SELECT * FROM games ORDER BY title COLLATE NOCASE")
             .map_err(map_db)?;
 
-        let rows = stmt
-            .query_map([], row_to_game)
-            .map_err(map_db)?;
+        let rows = stmt.query_map([], row_to_game).map_err(map_db)?;
 
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })

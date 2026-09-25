@@ -35,6 +35,31 @@ export function useSessions() {
 export function useActiveSessions(pollIntervalMs = 5_000) {
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refresh() {
+      try {
+        const active = await api.getActiveSessions();
+        if (!cancelled) {
+          setActiveSessions(active);
+        }
+      } catch {
+        // Silently ignore polling errors to avoid UI noise.
+      }
+    }
+
+    void refresh();
+    const id = setInterval(() => {
+      void refresh();
+    }, pollIntervalMs);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [pollIntervalMs]);
+
   const refresh = useCallback(async () => {
     try {
       const active = await api.getActiveSessions();
@@ -43,12 +68,6 @@ export function useActiveSessions(pollIntervalMs = 5_000) {
       // Silently ignore polling errors to avoid UI noise.
     }
   }, []);
-
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, pollIntervalMs);
-    return () => clearInterval(id);
-  }, [refresh, pollIntervalMs]);
 
   return { activeSessions, refresh };
 }

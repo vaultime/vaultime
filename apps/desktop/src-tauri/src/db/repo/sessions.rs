@@ -3,7 +3,7 @@
 
 //! Session repository — CRUD operations for the `sessions` table.
 
-use rusqlite::{params, Row};
+use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::Session;
@@ -30,11 +30,7 @@ fn map_db(e: rusqlite::Error) -> VaultimeError {
 }
 
 /// Creates a new open session for a game on a device.
-pub fn create_session(
-    db: &Database,
-    game_id: &str,
-    device_id: &str,
-) -> Result<Session> {
+pub fn create_session(db: &Database, game_id: &str, device_id: &str) -> Result<Session> {
     let id = uuid::Uuid::new_v4().to_string();
 
     db.with_conn(|conn| {
@@ -62,6 +58,8 @@ pub fn end_session(
     db: &Database,
     session_id: &str,
     runtime_ms: i64,
+    active_ms: i64,
+    idle_ms: i64,
 ) -> Result<Session> {
     db.with_conn(|conn| {
         let updated = conn
@@ -69,11 +67,12 @@ pub fn end_session(
                 "UPDATE sessions
                  SET ended_at_wall = datetime('now'),
                      elapsed_monotonic_ms = ?1,
-                     active_ms = ?1,
+                     active_ms = ?2,
+                     idle_ms = ?3,
                      runtime_ms = ?1,
                      closed_cleanly = 1
-                 WHERE id = ?2 AND ended_at_wall IS NULL",
-                params![runtime_ms, session_id],
+                 WHERE id = ?4 AND ended_at_wall IS NULL",
+                params![runtime_ms, active_ms, idle_ms, session_id],
             )
             .map_err(map_db)?;
 
@@ -89,6 +88,37 @@ pub fn end_session(
             row_to_session,
         )
         .map_err(map_db)
+    })
+}
+
+/// Persists the latest timing counters for an open session.
+pub fn update_session_timing(
+    db: &Database,
+    session_id: &str,
+    runtime_ms: i64,
+    active_ms: i64,
+    idle_ms: i64,
+) -> Result<()> {
+    db.with_conn(|conn| {
+        let updated = conn
+            .execute(
+                "UPDATE sessions
+                 SET elapsed_monotonic_ms = ?1,
+                     active_ms = ?2,
+                     idle_ms = ?3,
+                     runtime_ms = ?1
+                 WHERE id = ?4 AND ended_at_wall IS NULL",
+                params![runtime_ms, active_ms, idle_ms, session_id],
+            )
+            .map_err(map_db)?;
+
+        if updated == 0 {
+            return Err(VaultimeError::Tracking(
+                "session not found or already closed".into(),
+            ));
+        }
+
+        Ok(())
     })
 }
 
@@ -109,10 +139,7 @@ pub fn get_active_sessions(db: &Database) -> Result<Vec<Session>> {
 }
 
 /// Returns all sessions for a specific game, newest first.
-pub fn list_sessions_for_game(
-    db: &Database,
-    game_id: &str,
-) -> Result<Vec<Session>> {
+pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Session>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
@@ -122,9 +149,7 @@ pub fn list_sessions_for_game(
             )
             .map_err(map_db)?;
 
-        let rows = stmt
-            .query_map([game_id], row_to_session)
-            .map_err(map_db)?;
+        let rows = stmt.query_map([game_id], row_to_session).map_err(map_db)?;
 
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })
@@ -145,12 +170,8 @@ pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
 /// Returns a single session by ID.
 pub fn get_session(db: &Database, id: &str) -> Result<Session> {
     db.with_conn(|conn| {
-        conn.query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
-            [id],
-            row_to_session,
-        )
-        .map_err(map_db)
+        conn.query_row("SELECT * FROM sessions WHERE id = ?1", [id], row_to_session)
+            .map_err(map_db)
     })
 }
 
@@ -204,10 +225,12 @@ mod tests {
         let game_id = seed_game(&db);
         let session = create_session(&db, &game_id, DEV_ID).unwrap();
 
-        let ended = end_session(&db, &session.id, 60_000).unwrap();
+        let ended = end_session(&db, &session.id, 60_000, 45_000, 15_000).unwrap();
         assert!(ended.ended_at_wall.is_some());
         assert!(ended.closed_cleanly);
         assert_eq!(ended.runtime_ms, 60_000);
+        assert_eq!(ended.active_ms, 45_000);
+        assert_eq!(ended.idle_ms, 15_000);
     }
 
     #[test]
@@ -215,9 +238,9 @@ mod tests {
         let db = test_db();
         let game_id = seed_game(&db);
         let session = create_session(&db, &game_id, DEV_ID).unwrap();
-        end_session(&db, &session.id, 1000).unwrap();
+        end_session(&db, &session.id, 1000, 1000, 0).unwrap();
 
-        let result = end_session(&db, &session.id, 2000);
+        let result = end_session(&db, &session.id, 2000, 1500, 500);
         assert!(result.is_err());
     }
 
@@ -228,10 +251,25 @@ mod tests {
 
         let s1 = create_session(&db, &game_id, DEV_ID).unwrap();
         let _s2 = create_session(&db, &game_id, DEV_ID).unwrap();
-        end_session(&db, &s1.id, 5000).unwrap();
+        end_session(&db, &s1.id, 5000, 4000, 1000).unwrap();
 
         let active = get_active_sessions(&db).unwrap();
         assert_eq!(active.len(), 1);
+    }
+
+    #[test]
+    fn update_session_timing_persists_progress() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = create_session(&db, &game_id, DEV_ID).unwrap();
+
+        update_session_timing(&db, &session.id, 90_000, 60_000, 30_000).unwrap();
+
+        let updated = get_session(&db, &session.id).unwrap();
+        assert_eq!(updated.runtime_ms, 90_000);
+        assert_eq!(updated.active_ms, 60_000);
+        assert_eq!(updated.idle_ms, 30_000);
+        assert!(updated.ended_at_wall.is_none());
     }
 
     #[test]

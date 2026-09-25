@@ -33,13 +33,22 @@ export function LibraryPage() {
     return ids;
   }, [activeSessions]);
 
-  // Build total playtime per game from closed sessions.
-  const playtimeByGame = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Build total timing stats per game.
+  const totalsByGame = useMemo(() => {
+    const map: Record<
+      string,
+      { runtimeMs: number; activeMs: number; idleMs: number }
+    > = {};
     for (const s of allSessions) {
-      if (s.ended_at_wall) {
-        map[s.game_id] = (map[s.game_id] ?? 0) + s.runtime_ms;
-      }
+      const totals = map[s.game_id] ?? {
+        runtimeMs: 0,
+        activeMs: 0,
+        idleMs: 0,
+      };
+      totals.runtimeMs += s.runtime_ms;
+      totals.activeMs += s.active_ms;
+      totals.idleMs += s.idle_ms;
+      map[s.game_id] = totals;
     }
     return map;
   }, [allSessions]);
@@ -86,7 +95,8 @@ export function LibraryPage() {
               key={game.id}
               game={game}
               isRunning={runningGameIds.has(game.id)}
-              totalPlaytimeMs={playtimeByGame[game.id] ?? 0}
+              totalRuntimeMs={totalsByGame[game.id]?.runtimeMs ?? 0}
+              totalActiveMs={totalsByGame[game.id]?.activeMs ?? 0}
               onEdit={setEditingGame}
               onDelete={setDeletingGame}
             />

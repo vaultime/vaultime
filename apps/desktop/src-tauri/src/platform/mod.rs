@@ -3,4 +3,5 @@
 
 //! Platform abstraction — OS-specific process, window, and idle APIs.
 
+pub mod activity;
 pub mod process;

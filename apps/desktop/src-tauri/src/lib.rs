@@ -35,13 +35,10 @@ pub fn run() {
                 .app_data_dir()
                 .expect("failed to resolve app data directory");
 
-            fs::create_dir_all(&app_dir)
-                .expect("failed to create app data directory");
+            fs::create_dir_all(&app_dir).expect("failed to create app data directory");
 
             let db_path = app_dir.join("vaultime.db");
-            let database = Arc::new(
-                Database::open(&db_path).expect("failed to open database"),
-            );
+            let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
 
             // Register this device.
             let device_id = machine_id();
@@ -52,10 +49,7 @@ pub fn run() {
             info!("device registered: {device_id} ({platform} v{version})");
 
             // Start tracking engine.
-            let engine = TrackingEngine::start(
-                Arc::clone(&database),
-                device_id,
-            );
+            let engine = TrackingEngine::start(Arc::clone(&database), device_id);
 
             app.manage(database);
             app.manage(engine);
@@ -71,7 +65,10 @@ pub fn run() {
             commands::list_sessions,
             commands::get_sessions_for_game,
             commands::get_active_sessions,
+            commands::list_settings,
+            commands::set_setting,
             commands::get_tracking_status,
+            commands::get_tracking_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vaultime");

@@ -52,3 +52,11 @@ export interface Setting {
   value: string;
   updated_at: string;
 }
+
+/** Runtime tracking capabilities reported by the backend. */
+export interface TrackingDiagnostics {
+  running: boolean;
+  foreground_detection: string;
+  idle_detection: string;
+  poll_interval_seconds: number;
+}

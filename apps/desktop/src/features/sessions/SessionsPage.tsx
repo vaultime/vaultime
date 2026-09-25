@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { Clock, Loader2, Play } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Game, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useSessions, useActiveSessions } from "./useSessions";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -60,9 +61,16 @@ function SessionRow({
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {isActive ? "In progress..." : formatDuration(session.runtime_ms)}
-        </span>
+        <div className="text-right">
+          <p className="text-sm tabular-nums text-foreground">
+            Runtime {formatDuration(session.runtime_ms)}
+          </p>
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Active {formatDuration(session.active_ms)}
+            {" · "}
+            Idle {formatDuration(session.idle_ms)}
+          </p>
+        </div>
         {isActive && (
           <Badge
             variant="outline"
@@ -88,6 +96,17 @@ export function SessionsPage() {
   const { sessions, loading, error, refresh } = useSessions();
   const { activeSessions } = useActiveSessions();
   const [gameMap, setGameMap] = useState<Record<string, string>>({});
+  const summary = useMemo(() => {
+    return sessions.reduce(
+      (acc, session) => {
+        acc.runtime += session.runtime_ms;
+        acc.active += session.active_ms;
+        acc.idle += session.idle_ms;
+        return acc;
+      },
+      { runtime: 0, active: 0, idle: 0 },
+    );
+  }, [sessions]);
 
   // Build a game name lookup from the game list.
   useEffect(() => {
@@ -130,6 +149,41 @@ export function SessionsPage() {
         <p className="text-muted-foreground">
           Timeline of your play sessions across all games.
         </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle>Runtime</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
+            {formatDuration(summary.runtime)}
+          </CardContent>
+        </Card>
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle>Active</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
+            {formatDuration(summary.active)}
+          </CardContent>
+        </Card>
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle>Idle</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
+            {formatDuration(summary.idle)}
+          </CardContent>
+        </Card>
+        <Card className="border border-border/70">
+          <CardHeader>
+            <CardTitle>Live Sessions</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-2xl font-semibold tabular-nums">
+            {activeSessions.length}
+          </CardContent>
+        </Card>
       </div>
 
       {sessions.length === 0 ? (

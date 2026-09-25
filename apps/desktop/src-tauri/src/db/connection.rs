@@ -20,15 +20,12 @@ pub struct Database {
 impl Database {
     /// Opens (or creates) the database at `path` and runs pending migrations.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path).map_err(|e| {
-            VaultimeError::Database(format!("failed to open database: {e}"))
-        })?;
+        let conn = Connection::open(path)
+            .map_err(|e| VaultimeError::Database(format!("failed to open database: {e}")))?;
 
         // Enable WAL mode for better concurrent read performance.
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-            .map_err(|e| {
-                VaultimeError::Database(format!("failed to set pragmas: {e}"))
-            })?;
+            .map_err(|e| VaultimeError::Database(format!("failed to set pragmas: {e}")))?;
 
         let db = Self {
             conn: Mutex::new(conn),
@@ -42,14 +39,11 @@ impl Database {
     /// Opens an in-memory database (useful for tests).
     #[cfg(test)]
     pub fn open_in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory().map_err(|e| {
-            VaultimeError::Database(format!("failed to open in-memory db: {e}"))
-        })?;
+        let conn = Connection::open_in_memory()
+            .map_err(|e| VaultimeError::Database(format!("failed to open in-memory db: {e}")))?;
 
         conn.execute_batch("PRAGMA foreign_keys=ON;")
-            .map_err(|e| {
-                VaultimeError::Database(format!("failed to set pragmas: {e}"))
-            })?;
+            .map_err(|e| VaultimeError::Database(format!("failed to set pragmas: {e}")))?;
 
         let db = Self {
             conn: Mutex::new(conn),
@@ -65,9 +59,10 @@ impl Database {
     where
         F: FnOnce(&Connection) -> Result<T>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            VaultimeError::Database(format!("connection lock poisoned: {e}"))
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| VaultimeError::Database(format!("connection lock poisoned: {e}")))?;
         f(&conn)
     }
 }
