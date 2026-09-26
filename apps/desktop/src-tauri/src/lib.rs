@@ -15,13 +15,14 @@ pub mod integrity;
 pub mod platform;
 pub mod secure_storage;
 pub mod tracking;
+pub mod tray;
 
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::{LevelFilter, info};
-use tauri::Manager;
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
@@ -44,10 +45,7 @@ pub fn run() {
     tauri::Builder::default()
         // Must be registered first. A second instance would track every game twice.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            tray::show_main_window(app);
         }))
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -64,40 +62,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .setup(|app| {
-            let app_dir = app
-                .path()
-                .app_data_dir()
-                .expect("failed to resolve app data directory");
-
-            fs::create_dir_all(&app_dir).expect("failed to create app data directory");
-            let asset_cache_dir = app_dir.join("asset-cache");
-            fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
-
-            let db_path = app_dir.join("vaultime.db");
-            let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
-
-            let device_id = machine_id();
-            let platform = std::env::consts::OS.to_string();
-            let version = env!("CARGO_PKG_VERSION").to_string();
-            devices::ensure_device(&database, &device_id, &platform, &version)
-                .expect("failed to register device");
-            info!("device registered: {device_id} ({platform} v{version})");
-
-            let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
-
-            app.manage(AppContext {
-                app_dir,
-                asset_cache_dir: asset_cache_dir.clone(),
-                db_path,
-                device_id,
-                app_version: version,
-            });
-            app.manage(database);
-            app.manage(AssetManager::new(asset_cache_dir));
-            app.manage(engine);
-
-            Ok(())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .arg(tray::MINIMIZED_ARG)
+                .build(),
+        )
+        .setup(setup)
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && window.label() == "main"
+                && tray::close_to_tray(window.app_handle())
+            {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_version,
@@ -130,13 +108,66 @@ pub fn run() {
             commands::list_settings,
             commands::set_setting,
             commands::get_tracking_diagnostics,
+            commands::tray_available,
             commands::discover_games,
             commands::discover_steam_games,
             commands::get_default_scan_paths,
             commands::import_discovered_games,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Vaultime");
+        .build(tauri::generate_context!())
+        .expect("error while building Vaultime")
+        .run(|app, event| {
+            if let RunEvent::Exit = event
+                && let Some(engine) = app.try_state::<TrackingEngine>()
+            {
+                engine.shutdown();
+            }
+        });
+}
+
+/// Opens the database, registers this device, starts tracking and creates the tray.
+fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let app_dir = app
+        .path()
+        .app_data_dir()
+        .expect("failed to resolve app data directory");
+
+    fs::create_dir_all(&app_dir).expect("failed to create app data directory");
+    let asset_cache_dir = app_dir.join("asset-cache");
+    fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
+
+    let db_path = app_dir.join("vaultime.db");
+    let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
+
+    let device_id = machine_id();
+    let platform = std::env::consts::OS.to_string();
+    let version = env!("CARGO_PKG_VERSION").to_string();
+    devices::ensure_device(&database, &device_id, &platform, &version)
+        .expect("failed to register device");
+    info!("device registered: {device_id} ({platform} v{version})");
+
+    let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
+
+    app.manage(AppContext {
+        app_dir,
+        asset_cache_dir: asset_cache_dir.clone(),
+        db_path,
+        device_id,
+        app_version: version,
+    });
+    app.manage(database);
+    app.manage(AssetManager::new(asset_cache_dir));
+    app.manage(engine);
+
+    // The window starts hidden. A login item starts in the tray, when there is one.
+    let tray = tray::create(app.handle());
+    let start_in_tray = tray.available && std::env::args().any(|arg| arg == tray::MINIMIZED_ARG);
+    app.manage(tray);
+    if !start_in_tray {
+        tray::show_main_window(app.handle());
+    }
+
+    Ok(())
 }
 
 /// Identifier for this machine. The hostname is used so existing session rows

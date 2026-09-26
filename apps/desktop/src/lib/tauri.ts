@@ -198,6 +198,11 @@ export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
   return invoke<TrackingDiagnostics>("get_tracking_diagnostics");
 }
 
+/** Whether this system shows a tray icon, so closing the window can keep tracking. */
+export async function trayAvailable(): Promise<boolean> {
+  return invoke<boolean>("tray_available");
+}
+
 export async function discoverGames(
   paths: string[],
 ): Promise<DiscoveredGame[]> {

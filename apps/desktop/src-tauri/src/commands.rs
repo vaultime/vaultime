@@ -355,6 +355,12 @@ pub struct TrackingDiagnostics {
     pub poll_interval_seconds: u64,
 }
 
+/// Whether this system shows a tray icon, so closing the window can keep tracking.
+#[tauri::command]
+pub fn tray_available(tray: State<'_, crate::tray::TrayState>) -> bool {
+    tray.available
+}
+
 #[tauri::command]
 pub fn get_tracking_diagnostics(
     engine: State<'_, TrackingEngine>,

@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -105,27 +106,50 @@ pub struct TrackingEngine {
     paused: Arc<AtomicBool>,
     /// Held for the duration of every tick, so `pause` can wait for one to finish.
     tick_lock: Arc<Mutex<()>>,
+    thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl TrackingEngine {
     /// Spawns the tracker on a background thread.
     pub fn start(db: Arc<Database>, device_id: String) -> Self {
-        let engine = Self {
-            running: Arc::new(AtomicBool::new(true)),
-            paused: Arc::new(AtomicBool::new(false)),
-            tick_lock: Arc::new(Mutex::new(())),
+        let running = Arc::new(AtomicBool::new(true));
+        let paused = Arc::new(AtomicBool::new(false));
+        let tick_lock = Arc::new(Mutex::new(()));
+
+        let thread = {
+            let running = Arc::clone(&running);
+            let paused = Arc::clone(&paused);
+            let tick_lock = Arc::clone(&tick_lock);
+            std::thread::Builder::new()
+                .name("vaultime-tracker".into())
+                .spawn(move || poll_loop(&db, &device_id, &running, &paused, &tick_lock))
+                .expect("failed to spawn tracking thread")
         };
 
-        let running = Arc::clone(&engine.running);
-        let paused = Arc::clone(&engine.paused);
-        let tick_lock = Arc::clone(&engine.tick_lock);
-        std::thread::Builder::new()
-            .name("vaultime-tracker".into())
-            .spawn(move || poll_loop(&db, &device_id, &running, &paused, &tick_lock))
-            .expect("failed to spawn tracking thread");
-
         info!("tracking engine started");
-        engine
+        Self {
+            running,
+            paused,
+            tick_lock,
+            thread: Mutex::new(Some(thread)),
+        }
+    }
+
+    /// Stops the tracker and waits until it has closed the running sessions,
+    /// so a quit does not leave them to be recovered on the next start.
+    pub fn shutdown(&self) {
+        self.running.store(false, Ordering::SeqCst);
+        let thread = self
+            .thread
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(thread) = thread {
+            thread.thread().unpark();
+            if thread.join().is_err() {
+                error!("tracking thread panicked during shutdown");
+            }
+        }
     }
 
     /// Stops tracking and returns once no tick is in progress.
@@ -156,6 +180,18 @@ impl Drop for TrackingEngine {
     }
 }
 
+/// Sleeps until the next tick, or returns early when `shutdown` wakes the thread.
+fn wait_for_next_tick(running: &AtomicBool) {
+    let next_tick = Instant::now() + POLL_INTERVAL;
+    while running.load(Ordering::SeqCst) {
+        let now = Instant::now();
+        if now >= next_tick {
+            break;
+        }
+        std::thread::park_timeout(next_tick - now);
+    }
+}
+
 fn poll_loop(
     db: &Database,
     device_id: &str,
@@ -179,7 +215,7 @@ fn poll_loop(
             }
         }
 
-        std::thread::sleep(POLL_INTERVAL);
+        wait_for_next_tick(running);
     }
 
     for session in active.into_values() {
@@ -525,6 +561,42 @@ fn close_orphaned_sessions(db: &Database) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shutdown_closes_running_sessions_without_waiting_for_a_tick() {
+        // The test binary itself is the running "game".
+        let db = Arc::new(Database::open_in_memory().unwrap());
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let exe = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Test Binary".into(),
+                executable_path: Some(exe),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+
+        let engine = TrackingEngine::start(Arc::clone(&db), "device".into());
+        let deadline = Instant::now() + POLL_INTERVAL;
+        while sessions::get_active_sessions(&db).unwrap().is_empty() {
+            assert!(Instant::now() < deadline, "no session started");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        let started = Instant::now();
+        engine.shutdown();
+        assert!(started.elapsed() < POLL_INTERVAL);
+        assert!(sessions::get_active_sessions(&db).unwrap().is_empty());
+        let closed = &sessions::list_sessions_for_game(&db, &game.id).unwrap()[0];
+        assert!(closed.closed_cleanly);
+        assert_eq!(closed.integrity_status, "local");
+    }
     use crate::db::models::CreateGame;
     use crate::db::repo::{devices, session_events};
 

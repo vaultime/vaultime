@@ -3,6 +3,11 @@
 
 import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import {
+  disable as disableAutostart,
+  enable as enableAutostart,
+  isEnabled as autostartEnabled,
+} from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ArchiveRestore, Download, ExternalLink, Loader2, RotateCcw, Upload } from "lucide-react";
@@ -61,13 +66,27 @@ export function SettingsPage() {
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [restorePreview, setRestorePreview] = useState<LocalBackupSummary | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
+  const [trayAvailable, setTrayAvailable] = useState(false);
+  const [closeToTray, setCloseToTray] = useState(true);
+  const [autostart, setAutostart] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.listSettings(), api.getTrackingDiagnostics(), api.listBackupSnapshots(), api.getAppVersion()])
-      .then(([settings, nextDiagnostics, nextSnapshots, version]) => {
+    Promise.all([
+      api.listSettings(),
+      api.getTrackingDiagnostics(),
+      api.listBackupSnapshots(),
+      api.getAppVersion(),
+      // Optional extras. Failing here must not hide the tracking rules.
+      api.trayAvailable().catch(() => false),
+      autostartEnabled().catch(() => false),
+    ])
+      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin]) => {
         if (cancelled) return;
         const values = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
+        setTrayAvailable(Boolean(tray));
+        setCloseToTray(values.close_to_tray !== "false");
+        setAutostart(Boolean(startsAtLogin));
         const seconds = Number(values.idle_threshold_seconds ?? DEFAULT_IDLE_THRESHOLD_SECONDS);
         setIdleMinutes(String(seconds / SECONDS_PER_MINUTE));
         setBackgroundActive(values.treat_background_as_active === "true");
@@ -104,6 +123,26 @@ export function SettingsPage() {
       setError(String(saveError));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function changeCloseToTray(next: boolean) {
+    setCloseToTray(next);
+    try {
+      await api.setSetting("close_to_tray", String(next));
+    } catch (saveError) {
+      setCloseToTray(!next);
+      setError(String(saveError));
+    }
+  }
+
+  async function changeAutostart(next: boolean) {
+    setAutostart(next);
+    try {
+      await (next ? enableAutostart() : disableAutostart());
+    } catch (autostartError) {
+      setAutostart(!next);
+      setError(String(autostartError));
     }
   }
 
@@ -227,6 +266,36 @@ export function SettingsPage() {
             </Button>
             {saved && <span className="text-sm text-faint">Saved. New sessions use these rules.</span>}
           </div>
+        </PageSection>
+
+        <PageSection title="In the background" description="Vaultime counts games only while it runs.">
+          <PageRow
+            label="Keep tracking when the window is closed"
+            htmlFor="close-to-tray"
+            hint={
+              trayAvailable
+                ? "Vaultime stays in the tray. Quit it from the tray menu."
+                : "This system has no tray, so closing the window quits Vaultime. On Linux, installing libayatana-appindicator3 adds one."
+            }
+          >
+            <Switch
+              id="close-to-tray"
+              checked={trayAvailable && closeToTray}
+              disabled={!trayAvailable}
+              onCheckedChange={(checked) => void changeCloseToTray(checked)}
+            />
+          </PageRow>
+          <PageRow
+            label={diagnostics?.platform === "windows" ? "Start with Windows" : "Start when you log in"}
+            htmlFor="autostart"
+            hint={
+              trayAvailable
+                ? "Starts quietly in the tray, so the first game of the day counts too."
+                : "Opens Vaultime when you log in."
+            }
+          >
+            <Switch id="autostart" checked={autostart} onCheckedChange={(checked) => void changeAutostart(checked)} />
+          </PageRow>
         </PageSection>
 
         <PageSection

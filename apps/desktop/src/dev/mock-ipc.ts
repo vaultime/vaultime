@@ -122,6 +122,8 @@ mockIPC((cmd, payload) => {
       return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", poll_interval_seconds: 5 };
     case "load_cloud_session_secure":
       return null;
+    case "tray_available":
+      return true;
     default:
       // Everything else answers with an empty result.
       return cmd.startsWith("list_") || cmd.startsWith("get_") ? [] : null;
