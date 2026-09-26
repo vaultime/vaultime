@@ -26,6 +26,8 @@ import * as api from "@/lib/tauri";
 
 interface DiscoverGamesDialogProps {
   onImported: () => void;
+  autoOpen?: boolean;
+  onDismiss?: () => void;
 }
 
 function sourceLabel(source: string): string {
@@ -48,8 +50,16 @@ function sourceBadgeClass(source: string): string {
   }
 }
 
-export function DiscoverGamesDialog({ onImported }: DiscoverGamesDialogProps) {
+export function DiscoverGamesDialog({ onImported, autoOpen, onDismiss }: DiscoverGamesDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Opened from the command palette through the URL.
+  const [autoOpened, setAutoOpened] = useState(false);
+  if (autoOpen && !autoOpened) {
+    setAutoOpened(true);
+    setIsOpen(true);
+  } else if (!autoOpen && autoOpened) {
+    setAutoOpened(false);
+  }
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [results, setResults] = useState<DiscoveredGame[]>([]);
@@ -182,7 +192,10 @@ export function DiscoverGamesDialog({ onImported }: DiscoverGamesDialogProps) {
       open={isOpen}
       onOpenChange={(open) => {
         setIsOpen(open);
-        if (!open) reset();
+        if (!open) {
+          reset();
+          onDismiss?.();
+        }
       }}
     >
       <DialogTrigger

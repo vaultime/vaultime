@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Gamepad2, Loader2, Zap } from "lucide-react";
 import { useGames } from "./useGames";
 import { useActiveSessions } from "../sessions/useSessions";
@@ -22,6 +23,8 @@ import {
 import { formatCalendarDay, formatCompactDuration } from "@/lib/time";
 
 export function LibraryPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const clearAction = () => setSearchParams({}, { replace: true });
   const { games, loading, error, refresh } = useGames();
   const { activeSessions } = useActiveSessions();
   const [editingGame, setEditingGame] = useState<Game | null>(null);
@@ -137,8 +140,16 @@ export function LibraryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <DiscoverGamesDialog onImported={refresh} />
-          <AddGameDialog onAdded={refresh} />
+          <DiscoverGamesDialog
+            onImported={refresh}
+            autoOpen={searchParams.get("discover") === "1"}
+            onDismiss={clearAction}
+          />
+          <AddGameDialog
+            onAdded={refresh}
+            autoOpen={searchParams.get("add") === "1"}
+            onDismiss={clearAction}
+          />
         </div>
       </div>
 

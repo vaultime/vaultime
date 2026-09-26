@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { Game, Session } from "@/lib/types";
-import { parseVaultimeDate } from "@/lib/time";
+import { parseVaultimeDate, UI_LOCALE } from "@/lib/time";
 
 export interface SessionTotals {
   runtimeMs: number;
@@ -84,7 +84,7 @@ export function buildDailyActivity(
     const key = toDayKey(day);
     points.set(key, {
       key,
-      label: day.toLocaleDateString(undefined, {
+      label: day.toLocaleDateString(UI_LOCALE, {
         month: "short",
         day: "numeric",
       }),
@@ -119,7 +119,7 @@ export function groupSessionsByDay(sessions: Session[]): SessionDayGroup[] {
     const existing = groups.get(key) ?? {
       key,
       label: parseVaultimeDate(session.started_at_wall).toLocaleDateString(
-        undefined,
+        UI_LOCALE,
         {
           weekday: "long",
           month: "long",

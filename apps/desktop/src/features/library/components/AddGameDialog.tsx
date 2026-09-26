@@ -20,6 +20,8 @@ import * as api from "@/lib/tauri";
 
 interface AddGameDialogProps {
   onAdded: () => void;
+  autoOpen?: boolean;
+  onDismiss?: () => void;
 }
 
 function inferTitle(path: string): string {
@@ -28,8 +30,16 @@ function inferTitle(path: string): string {
   return base.replace(/\.(exe|app|sh|bat|cmd|lnk)$/i, "").replace(/[_-]/g, " ");
 }
 
-export function AddGameDialog({ onAdded }: AddGameDialogProps) {
+export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Opened from the command palette through the URL.
+  const [autoOpened, setAutoOpened] = useState(false);
+  if (autoOpen && !autoOpened) {
+    setAutoOpened(true);
+    setIsOpen(true);
+  } else if (!autoOpen && autoOpened) {
+    setAutoOpened(false);
+  }
   const [title, setTitle] = useState("");
   const [executablePath, setExecutablePath] = useState("");
   const [installFolder, setInstallFolder] = useState("");
@@ -107,7 +117,10 @@ export function AddGameDialog({ onAdded }: AddGameDialogProps) {
       open={isOpen}
       onOpenChange={(open) => {
         setIsOpen(open);
-        if (!open) reset();
+        if (!open) {
+          reset();
+          onDismiss?.();
+        }
       }}
     >
       <DialogTrigger render={<Button />}>
