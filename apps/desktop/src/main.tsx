@@ -12,6 +12,10 @@ import "./index.css";
 
 document.documentElement.classList.add("dark");
 
+if (import.meta.env.VITE_MOCK_IPC === "1") {
+  await import("./dev/mock-ipc");
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
