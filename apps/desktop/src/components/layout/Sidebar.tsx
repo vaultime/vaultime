@@ -9,6 +9,7 @@ import {
   Gamepad2,
   Settings,
 } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/tauri";
@@ -33,8 +34,7 @@ export function Sidebar() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(150,104,255,0.2),transparent_32%),radial-gradient(circle_at_bottom,rgba(87,41,174,0.24),transparent_40%)]" />
 
       <div className="relative flex h-20 items-center gap-3 px-5">
-        <img src="/icon.svg" alt="" className="h-10 w-10 shrink-0" />
-        <img src="/wordmark.svg" alt="Vaultime" className="h-5" />
+        <Logo />
       </div>
 
       <nav className="relative flex-1 space-y-1 px-3 py-2">
