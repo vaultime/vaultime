@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
+use crate::constants::DEFAULT_INVITE_MAX_REDEMPTIONS;
 use crate::error::{AppError, AppResult};
 use crate::invites::generate_invite;
 use crate::models::{AdminInviteResponse, CreateAdminInviteRequest};
@@ -20,7 +21,9 @@ pub async fn create_invite(
 
     let invite = generate_invite(
         payload.prefix.as_deref(),
-        payload.max_redemptions.unwrap_or(1),
+        payload
+            .max_redemptions
+            .unwrap_or(DEFAULT_INVITE_MAX_REDEMPTIONS),
         payload.expires_at,
         payload.note,
     )?;

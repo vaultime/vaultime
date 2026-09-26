@@ -3,6 +3,7 @@
 
 mod auth;
 mod config;
+mod constants;
 mod error;
 mod invites;
 mod models;
@@ -11,6 +12,7 @@ mod routes;
 use std::sync::Arc;
 
 use config::Config;
+use constants::DB_MAX_CONNECTIONS;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tracing::info;
@@ -35,7 +37,7 @@ async fn main() -> Result<(), error::AppError> {
     tokio::fs::create_dir_all(&config.backup_root).await?;
 
     let db = PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(DB_MAX_CONNECTIONS)
         .connect(&config.database_url)
         .await?;
 

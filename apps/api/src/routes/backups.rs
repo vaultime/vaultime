@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
+use crate::constants::{BYTES_PER_MIB, SECS_PER_MINUTE};
 use crate::error::{AppError, AppResult};
 use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
 
@@ -173,7 +174,7 @@ pub async fn upload_backup_content(
             remove_backup(&state, auth.account_id, backup_id, &backup.storage_key).await?;
             return Err(AppError::bad_request(format!(
                 "backup exceeds the current {} MiB size limit",
-                max_backup_bytes / (1024 * 1024)
+                max_backup_bytes / BYTES_PER_MIB
             )));
         }
         Err(error) => {
@@ -375,7 +376,7 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
     {
         return Err(AppError::conflict(format!(
             "wait at least {} minutes between remote backups",
-            min_interval_seconds / 60
+            min_interval_seconds / SECS_PER_MINUTE
         )));
     }
 

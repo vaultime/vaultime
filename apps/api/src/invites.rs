@@ -6,10 +6,12 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 
 use crate::auth::{chunk_code, hash_invite_code, random_bytes};
+use crate::constants::{
+    INVITE_BODY_LENGTH, INVITE_BODY_RANDOM_BYTES, INVITE_LOOKUP_KEY_LENGTH, INVITE_SALT_BYTES,
+};
 use crate::error::{AppError, AppResult};
 
 const DEFAULT_PREFIX: &str = "VTLINV";
-const BODY_LENGTH: usize = 24;
 
 #[derive(Debug, Clone)]
 pub struct GeneratedInvite {
@@ -38,8 +40,8 @@ pub fn generate_invite(
     let prefix = normalize_prefix(prefix)?;
     let body = generate_body_token()?;
     let code = format!("{prefix}-{}", chunk_code(&body));
-    let lookup_key = body[..12].to_string();
-    let salt = hex::encode(random_bytes::<16>()?);
+    let lookup_key = body[..INVITE_LOOKUP_KEY_LENGTH].to_string();
+    let salt = hex::encode(random_bytes::<INVITE_SALT_BYTES>()?);
     let code_hash = hash_invite_code(&code, &salt)?;
     let note = note
         .as_deref()
@@ -73,19 +75,19 @@ fn normalize_prefix(raw: Option<&str>) -> AppResult<String> {
     Ok(value)
 }
 
-/// Same scheme as the invite generator scripts: base64url of 18 random bytes, alphanumerics only,
-/// uppercased and cut to 24 characters.
+/// Same scheme as the invite generator scripts: base64url of random bytes, alphanumerics only,
+/// uppercased and cut to the body length.
 fn generate_body_token() -> AppResult<String> {
     loop {
         let token = URL_SAFE_NO_PAD
-            .encode(random_bytes::<18>()?)
+            .encode(random_bytes::<INVITE_BODY_RANDOM_BYTES>()?)
             .chars()
             .filter(char::is_ascii_alphanumeric)
             .map(|ch| ch.to_ascii_uppercase())
             .collect::<String>();
 
-        if token.len() >= BODY_LENGTH {
-            return Ok(token[..BODY_LENGTH].to_string());
+        if token.len() >= INVITE_BODY_LENGTH {
+            return Ok(token[..INVITE_BODY_LENGTH].to_string());
         }
     }
 }

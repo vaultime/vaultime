@@ -17,18 +17,12 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::config::Config;
+use crate::constants::{
+    ACCESS_TOKEN_TTL_MINUTES, INVITE_CODE_GROUP_LENGTH, INVITE_HASH_BYTES,
+    INVITE_LOOKUP_KEY_LENGTH, INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_P, INVITE_SCRYPT_R,
+    MIN_PASSWORD_LENGTH, REFRESH_TOKEN_BYTES, REFRESH_TOKEN_TTL_DAYS,
+};
 use crate::error::{AppError, AppResult};
-
-const ACCESS_TOKEN_TTL_MINUTES: i64 = 15;
-const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
-const MIN_PASSWORD_LENGTH: usize = 10;
-
-// The VPS and Node invite generators use the same scrypt settings. Changing them breaks every
-// stored invite hash.
-const INVITE_SCRYPT_LOG_N: u8 = 14;
-const INVITE_SCRYPT_R: u32 = 8;
-const INVITE_SCRYPT_P: u32 = 1;
-const INVITE_HASH_BYTES: usize = 64;
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedAccount {
@@ -64,21 +58,21 @@ impl ParsedInviteCode {
             .map(|ch| ch.to_ascii_uppercase())
             .collect::<String>();
 
-        if body.len() < 12 {
+        if body.len() < INVITE_LOOKUP_KEY_LENGTH {
             return Err(AppError::bad_request("invite code is too short"));
         }
 
         Ok(Self {
             normalized_code: format!("{prefix}-{}", chunk_code(&body)),
-            lookup_key: body[..12].to_string(),
+            lookup_key: body[..INVITE_LOOKUP_KEY_LENGTH].to_string(),
         })
     }
 }
 
-/// Splits an ASCII code body into dash separated groups of four.
+/// Splits an ASCII code body into dash separated groups.
 pub fn chunk_code(body: &str) -> String {
     body.as_bytes()
-        .chunks(4)
+        .chunks(INVITE_CODE_GROUP_LENGTH)
         .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
         .collect::<Vec<_>>()
         .join("-")
@@ -126,7 +120,7 @@ pub fn hash_refresh_token(token: &str, pepper: &str) -> String {
 }
 
 pub fn generate_refresh_token() -> AppResult<String> {
-    Ok(URL_SAFE_NO_PAD.encode(random_bytes::<32>()?))
+    Ok(URL_SAFE_NO_PAD.encode(random_bytes::<REFRESH_TOKEN_BYTES>()?))
 }
 
 pub fn random_bytes<const N: usize>() -> AppResult<[u8; N]> {
