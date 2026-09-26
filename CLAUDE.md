@@ -104,10 +104,19 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 
 ## UX
 
-- Premium and image-rich, not a background utility.
-- Dark-first with a deep-purple, atmospheric look instead of stock component
-  styling.
-- Library, game detail and session timeline come first.
+- Premium and image-rich, not a background utility. Never ship stock
+  component styling.
+- Editorial look: Fraunces (softened) for titles and sentences, Hanken
+  Grotesk for interface text, JetBrains Mono for every number. Hairline rules
+  instead of boxes and shadows, small uppercase labels, generous space.
+- Dark ink ground with violet `#9D7CFF` as the brand color and the color of
+  active time. Game pages take a dark tint and light ink from the cover art.
+- Shell like a music player: library rail on the left with search, a Ctrl+K
+  command palette, and a live session bar at the bottom.
+- Write about play in plain sentences ("A long evening in Elden Ring"), not
+  tables. Sessions read like a journal.
+- Logo: clock hands at five past eleven forming a V inside a rounded vault
+  frame, with a violet pivot. The wordmark is Fraunces 600.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope
