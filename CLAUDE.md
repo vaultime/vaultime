@@ -48,7 +48,9 @@ Frontend, from `apps/desktop`:
 
 - `npm ci`
 - `npm run tauri dev` starts the app
-- `npm run typecheck`, `npm run lint` and `npm run build`
+- `npm run typecheck`, `npm run lint`, `npm test` and `npm run build`
+- Tests live next to the code as `*.test.ts` and run in Berlin time with a
+  German locale, so day boundaries and date formats differ from UTC.
 - `VITE_MOCK_IPC=1 npx vite build --outDir dist-mock`, then
   `npx vite preview --outDir dist-mock` shows the UI in a browser with sample
   data. `bash scripts/ui-screenshots.sh <folder> [page ...]` captures pages.
