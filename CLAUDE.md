@@ -48,7 +48,10 @@ Frontend, from `apps/desktop`:
 
 - `npm ci`
 - `npm run tauri dev` starts the app
-- `npm run lint` and `npm run build`
+- `npm run typecheck`, `npm run lint` and `npm run build`
+- `VITE_MOCK_IPC=1 npx vite build --outDir dist-mock`, then
+  `npx vite preview --outDir dist-mock` shows the UI in a browser with sample
+  data. `bash scripts/ui-screenshots.sh <folder> [page ...]` captures pages.
 
 Rust, from `apps/desktop/src-tauri` or `apps/api`:
 
@@ -131,6 +134,14 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - In comments, docs, UI copy and commit messages: no em or en dashes, no
   semicolons in sentences, no decorative banner comments and no filler words
   like "robust", "seamless", "leverage" or "comprehensive".
+- No magic numbers. Every value that tunes behavior (durations, limits,
+  thresholds, sizes, defaults) is a named constant in one file per codebase:
+  `apps/desktop/src/lib/constants.ts`, `apps/desktop/src-tauri/src/constants.rs`
+  and `apps/api/src/constants.rs`. Put the unit in the name (`_MS`, `_SECS`,
+  `_BYTES`) and give each a one-line doc comment. A value used by both the
+  frontend and the core says so in both files. Exempt are 0, 1 and plain
+  arithmetic, values fixed by an outside format or API, tests and sample data,
+  and styling, which lives in Tailwind classes and the theme in `index.css`.
 - Match the style of the surrounding code.
 - Keep dependencies on current stable versions and drop unused ones.
 

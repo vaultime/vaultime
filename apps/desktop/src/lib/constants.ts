@@ -16,13 +16,13 @@ export const SECONDS_PER_HOUR = 3_600;
 
 // Tracking
 
-/** How often the UI asks for running sessions. Matches POLL_INTERVAL in constants.rs. */
+/** How often the UI asks for running sessions. Same as POLL_INTERVAL in constants.rs. */
 export const ACTIVE_POLL_MS = 5 * SECOND_MS;
 
 /** How often the live timer redraws between polls. */
 export const LIVE_TICK_MS = SECOND_MS;
 
-/** Idle threshold shown until the settings load. Matches the default in constants.rs. */
+/** Idle threshold shown until the settings load. Same as DEFAULT_IDLE_THRESHOLD_SECS in constants.rs. */
 export const DEFAULT_IDLE_THRESHOLD_SECONDS = 300;
 
 // Cloud
