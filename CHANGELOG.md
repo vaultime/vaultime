@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tracking stopped** after a failed restore until Vaultime was restarted.
 - **The library** reloaded all sessions and artwork every 5 seconds.
 - **Charts** put play near midnight on the wrong day outside UTC.
+- **Games with the same file name**, like two different `Game.exe`, no longer count as running when only one of them is. Libraries behind junctions or symlinks still match.
 
 ### Removed
 

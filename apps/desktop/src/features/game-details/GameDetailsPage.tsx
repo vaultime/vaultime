@@ -201,7 +201,7 @@ function GamePage({ gameId }: { gameId: string }) {
               <>
                 <div className="font-mono text-xs leading-relaxed break-all text-soft">{game.executable_path}</div>
                 <p className="mt-2 text-[13px] text-faint">
-                  Matched by its full path, or by its file name when the path is hidden.
+                  Matched by its full path. By file name only when Windows hides the path or the game runs through Wine.
                 </p>
               </>
             ) : (
