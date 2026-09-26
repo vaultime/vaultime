@@ -25,7 +25,9 @@ case "$ID" in
     [[ "$package" == *.rpm ]] && dnf install -y -q "$package" >/dev/null
     ;;
   opensuse*)
-    zypper -q -n install xvfb-run >/dev/null
+    # xvfb-run needs awk. AppImages rely on the libraries every desktop has,
+    # fontconfig among them, which gtk3 brings in.
+    zypper -q -n install xvfb-run gawk libgtk-3-0 >/dev/null
     [[ "$package" == *.rpm ]] && zypper -q -n --no-gpg-checks install "$package" >/dev/null
     ;;
   arch)
