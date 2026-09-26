@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { CloudSessionProvider } from "@/features/cloud/CloudSessionProvider";
 import { LibraryProvider } from "@/features/library/LibraryProvider";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { App } from "@/App";
 import "./index.css";
 
@@ -21,9 +20,7 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <CloudSessionProvider>
         <LibraryProvider>
-          <TooltipProvider>
-            <App />
-          </TooltipProvider>
+          <App />
         </LibraryProvider>
       </CloudSessionProvider>
     </BrowserRouter>

@@ -38,6 +38,9 @@ export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;
 /** Step between byte units, B to KB to MB. */
 export const BYTES_PER_KIB = 1_024;
 
+/** Sizes below this many units get one decimal, "4.2 MB" but "42 MB". */
+export const SIZE_ONE_DECIMAL_BELOW = 10;
+
 // Library and charts
 
 /** Calendar days that count as recent on the library home, today included. */

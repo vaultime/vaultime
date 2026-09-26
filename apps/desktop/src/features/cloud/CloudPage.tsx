@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useEffectEvent, useState, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useState, type FormEvent, type ReactNode } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
   ArchiveRestore,
-  Cloud,
   Copy,
   HardDriveUpload,
   KeyRound,
@@ -13,20 +12,11 @@ import {
   LogOut,
   RefreshCw,
   RotateCcw,
-  Server,
-  Shield,
   Trash2,
-  UserRound,
 } from "lucide-react";
+import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -38,8 +28,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
-import { BYTES_PER_KIB } from "@/lib/constants";
-import { formatLongDate } from "@/lib/time";
+import { BYTES_PER_KIB, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
+import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { CloudAdminInvite, CloudBackupRecord } from "@/lib/types";
 
 function formatTimestamp(value: string | null | undefined) {
@@ -64,7 +54,7 @@ function formatByteSize(bytes: number) {
     units.length - 1,
   );
   const value = bytes / BYTES_PER_KIB ** exponent;
-  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+  return `${value.toFixed(value >= SIZE_ONE_DECIMAL_BELOW || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 }
 
 function toIsoTimestamp(value: string) {
@@ -496,176 +486,51 @@ export function CloudPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">Cloud</h1>
-          <Badge
-            variant="outline"
-            className={
-              session
-                ? "border-emerald-500/40 text-emerald-300"
-                : "border-border/60 text-muted-foreground"
-            }
-          >
-            {session ? "Connected" : "Offline"}
-          </Badge>
-          {isAdmin && (
-            <Badge variant="outline" className="border-amber-400/40 text-amber-200">
-              Admin
-            </Badge>
-          )}
-        </div>
-        <p className="text-muted-foreground">
-          Remote backup talks to the self-hosted API on codfishcloud.de. Auth,
-          device registration, remote backup upload and restore, and admin
-          invite generation are live.
-        </p>
-      </div>
+    <div className="pb-16">
+      <PageHeader
+        overline={session ? `Signed in as ${session.user.email}` : "Invite only"}
+        title="Cloud"
+        aside={isAdmin ? <Badge variant="amber">Admin</Badge> : undefined}
+      >
+        {initializing
+          ? "Looking for a saved session."
+          : session
+            ? backupKeyReady
+              ? "Backups are encrypted on this PC before they leave it. The server never sees your passphrase."
+              : "Unlock backups on this PC with your backup passphrase to start."
+            : "Encrypted backups of your library on a small server, for invited accounts. Vaultime works fully without it."}
+      </PageHeader>
 
-      {errorMessage && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-          {errorMessage}
-        </div>
-      )}
+      <div className="px-8 xl:px-14">
+        {errorMessage && (
+          <Notice tone="warning" className="mt-6">
+            {errorMessage}
+          </Notice>
+        )}
+        {statusMessage && <Notice className="mt-6">{statusMessage}</Notice>}
+        {restartRequired && (
+          <Notice className="mt-6">
+            Restart Vaultime to continue tracking with the restored history.
+            <Button size="sm" onClick={() => void handleRestart()}>
+              <RotateCcw className="size-3.5" />
+              Restart now
+            </Button>
+          </Notice>
+        )}
 
-      {statusMessage && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-          {statusMessage}
-        </div>
-      )}
-
-      {restartRequired && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-          Restart Vaultime to resume live tracking on this machine.
-          <Button size="sm" onClick={() => void handleRestart()}>
-            <RotateCcw className="h-3.5 w-3.5" />
-            Restart now
-          </Button>
-        </div>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <Card className="relative overflow-hidden border border-border/70 bg-card/80">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.1),transparent_38%)]" />
-          <CardHeader className="relative">
-            <CardTitle className="flex items-center gap-2">
-              <Cloud className="h-4 w-4 text-primary" />
-              Remote connection
-            </CardTitle>
-            <CardDescription>
-              The desktop app talks to the VPS API directly for auth and
-              invite-only cloud access.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="relative grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                API host
-              </p>
-              <p className="mt-2 break-all text-sm font-semibold tracking-tight">
-                {formatApiHostname(apiBaseUrl)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                Access model
-              </p>
-              <p className="mt-2 text-sm font-medium">
-                Invite-only signup and admin-generated keys
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                Session state
-              </p>
-              <p className="mt-2 text-sm font-semibold tracking-tight">
-                {initializing
-                  ? "Restoring secure session"
-                  : session
-                    ? "Signed in"
-                    : "No cloud session"}
-              </p>
-              <p className="mt-1 break-all text-xs text-muted-foreground">
-                {initializing
-                  ? "Checking secure storage and refresh token state."
-                  : session
-                    ? `${session.user.email} · ${session.user.role}`
-                    : "Sign in to enable remote backups and invite controls."}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 bg-card/80">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Server className="h-4 w-4 text-primary" />
-              Current status
-            </CardTitle>
-            <CardDescription>
-              Cloud auth, device registration, and remote backup transfers run
-              against the VPS API.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-              <p>
-                Tokens are issued by the self-hosted API, then stored through
-                OS secure storage instead of browser-local session state.
-              </p>
-            </div>
-            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-              <p>
-                The current device registers against the account after sign-in
-                so the API can associate future backups with this machine.
-              </p>
-            </div>
-            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <HardDriveUpload className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-              <p>
-                Backup archives are created in Rust, encrypted on the desktop
-                before upload, and verified by SHA-256 on the VPS before the
-                ciphertext is accepted.
-              </p>
-            </div>
-            <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-              <p>
-                Remote backups are encrypted from a separate backup passphrase
-                that stays on this device and is never sent to the VPS. You
-                need the same passphrase on every device that should create or
-                restore cloud backups.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {!session ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <Card className="border border-border/70 bg-card/80">
-            <CardHeader>
-              <CardTitle>Sign In</CardTitle>
-              <CardDescription>
-                Use an existing cloud account.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleLogin}>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-login-email">Email</Label>
+        {!session ? (
+          <>
+            <PageSection title="Sign in" description="With an account you already have.">
+              <form className="grid max-w-[520px] gap-4" onSubmit={handleLogin}>
+                <Field id="cloud-login-email" label="Email">
                   <Input
                     id="cloud-login-email"
                     autoComplete="email"
                     value={loginEmail}
                     onChange={(event) => setLoginEmail(event.target.value)}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-login-password">Password</Label>
+                </Field>
+                <Field id="cloud-login-password" label="Password">
                   <Input
                     id="cloud-login-password"
                     type="password"
@@ -673,46 +538,30 @@ export function CloudPage() {
                     value={loginPassword}
                     onChange={(event) => setLoginPassword(event.target.value)}
                   />
+                </Field>
+                <div>
+                  <Button type="submit" disabled={authBusy || !loginEmail.trim() || !loginPassword}>
+                    {authBusy && <Loader2 className="size-4 animate-spin" />}
+                    {authBusy ? "Signing in" : "Sign in"}
+                  </Button>
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={authBusy || !loginEmail.trim() || !loginPassword}
-                >
-                  {authBusy ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Signing in
-                    </>
-                  ) : (
-                    "Sign In"
-                  )}
-                </Button>
               </form>
-            </CardContent>
-          </Card>
+            </PageSection>
 
-          <Card className="border border-border/70 bg-card/80">
-            <CardHeader>
-              <CardTitle>Create Cloud Account</CardTitle>
-              <CardDescription>
-                Sign up with a shareable invite key that was generated on your
-                VPS or by an admin account.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleSignUp}>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-signup-email">Email</Label>
+            <PageSection
+              title="Create an account"
+              description="You need an invite code. The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
+            >
+              <form className="grid max-w-[520px] gap-4" onSubmit={handleSignUp}>
+                <Field id="cloud-signup-email" label="Email">
                   <Input
                     id="cloud-signup-email"
                     autoComplete="email"
                     value={signUpEmail}
                     onChange={(event) => setSignUpEmail(event.target.value)}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-signup-password">Password</Label>
+                </Field>
+                <Field id="cloud-signup-password" label="Password">
                   <Input
                     id="cloud-signup-password"
                     type="password"
@@ -720,562 +569,296 @@ export function CloudPage() {
                     value={signUpPassword}
                     onChange={(event) => setSignUpPassword(event.target.value)}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-signup-invite">Invite code</Label>
+                </Field>
+                <Field id="cloud-signup-invite" label="Invite code">
                   <Input
                     id="cloud-signup-invite"
                     placeholder="VTLINV-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
                     value={inviteCode}
                     onChange={(event) => setInviteCode(event.target.value)}
+                    className="font-mono"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-signup-backup-passphrase">
-                    Backup passphrase
-                  </Label>
+                </Field>
+                <Field id="cloud-signup-backup-passphrase" label="Backup passphrase">
                   <Input
                     id="cloud-signup-backup-passphrase"
                     type="password"
                     autoComplete="new-password"
                     value={signUpBackupPassphrase}
-                    onChange={(event) =>
-                      setSignUpBackupPassphrase(event.target.value)
-                    }
+                    onChange={(event) => setSignUpBackupPassphrase(event.target.value)}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cloud-signup-backup-passphrase-confirm">
-                    Confirm backup passphrase
-                  </Label>
+                </Field>
+                <Field id="cloud-signup-backup-passphrase-confirm" label="Backup passphrase again">
                   <Input
                     id="cloud-signup-backup-passphrase-confirm"
                     type="password"
                     autoComplete="new-password"
                     value={signUpBackupPassphraseConfirm}
-                    onChange={(event) =>
-                      setSignUpBackupPassphraseConfirm(event.target.value)
-                    }
+                    onChange={(event) => setSignUpBackupPassphraseConfirm(event.target.value)}
                   />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={
-                    authBusy ||
-                    !signUpEmail.trim() ||
-                    !signUpPassword ||
-                    !inviteCode.trim() ||
-                    !signUpBackupPassphrase ||
-                    !signUpBackupPassphraseConfirm
-                  }
-                >
-                  {authBusy ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Creating account
-                    </>
-                  ) : (
-                    "Create Account"
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Card className="border border-border/70 bg-card/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserRound className="h-4 w-4 text-primary" />
-                  Account
-                </CardTitle>
-                <CardDescription>
-                  Your current session is stored locally and refreshed from the
-                  VPS API as needed.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      Email
-                    </p>
-                    <p className="mt-2 text-sm font-medium">{session.user.email}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      Role
-                    </p>
-                    <p className="mt-2 text-sm font-medium">{session.user.role}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      Access token
-                    </p>
-                    <p className="mt-2 text-sm font-medium">
-                      Expires {formatTimestamp(session.expires_at)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      Refresh token
-                    </p>
-                    <p className="mt-2 text-sm font-medium">
-                      Expires {formatTimestamp(session.refresh_expires_at)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-3">
+                </Field>
+                <div>
                   <Button
-                    variant="outline"
-                    onClick={handleRefreshSession}
-                    disabled={authBusy}
+                    type="submit"
+                    disabled={
+                      authBusy ||
+                      !signUpEmail.trim() ||
+                      !signUpPassword ||
+                      !inviteCode.trim() ||
+                      !signUpBackupPassphrase ||
+                      !signUpBackupPassphraseConfirm
+                    }
                   >
-                    {authBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    Refresh session
-                  </Button>
-                  <Button variant="destructive" onClick={handleLogout} disabled={authBusy}>
-                    <LogOut className="h-4 w-4" />
-                    Sign out
+                    {authBusy && <Loader2 className="size-4 animate-spin" />}
+                    {authBusy ? "Creating the account" : "Create account"}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-border/70 bg-card/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-primary" />
-                  Backup passphrase
-                </CardTitle>
-                <CardDescription>
-                  This device needs your separate backup passphrase before it
-                  can create or restore encrypted remote backups.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {backupKeyReady ? (
-                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-                    Backup passphrase is unlocked on this device. It stays in
-                    OS secure storage and is not sent to the VPS.
+              </form>
+            </PageSection>
+          </>
+        ) : (
+          <>
+            <PageSection
+              title="Backups"
+              description="Kept on the server for this account. When the limit is reached, a new backup replaces the oldest."
+            >
+              {!backupKeyReady && (
+                <form className="mb-8 grid max-w-[520px] gap-4" onSubmit={handleSetBackupPassphrase}>
+                  <p className="text-sm leading-relaxed text-soft">
+                    New account: choose a backup passphrase now. Existing backups: enter the passphrase you used for
+                    them.
+                  </p>
+                  <Field id="device-backup-passphrase" label="Backup passphrase">
+                    <Input
+                      id="device-backup-passphrase"
+                      type="password"
+                      autoComplete="new-password"
+                      value={deviceBackupPassphrase}
+                      onChange={(event) => setDeviceBackupPassphrase(event.target.value)}
+                    />
+                  </Field>
+                  <Field id="device-backup-passphrase-confirm" label="Backup passphrase again">
+                    <Input
+                      id="device-backup-passphrase-confirm"
+                      type="password"
+                      autoComplete="new-password"
+                      value={deviceBackupPassphraseConfirm}
+                      onChange={(event) => setDeviceBackupPassphraseConfirm(event.target.value)}
+                    />
+                  </Field>
+                  <div>
+                    <Button
+                      type="submit"
+                      disabled={backupKeyBusy || !deviceBackupPassphrase || !deviceBackupPassphraseConfirm}
+                    >
+                      {backupKeyBusy && <Loader2 className="size-4 animate-spin" />}
+                      {backupKeyBusy ? "Unlocking" : "Unlock backups on this PC"}
+                    </Button>
                   </div>
-                ) : (
-                  <>
-                    <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 text-sm text-muted-foreground">
-                      If this is a new cloud account, choose a new backup
-                      passphrase now. If this account already has remote
-                      backups, enter the same passphrase that was used before.
-                    </div>
-                    <form className="space-y-4" onSubmit={handleSetBackupPassphrase}>
-                      <div className="space-y-2">
-                        <Label htmlFor="device-backup-passphrase">
-                          Backup passphrase
-                        </Label>
-                        <Input
-                          id="device-backup-passphrase"
-                          type="password"
-                          autoComplete="new-password"
-                          value={deviceBackupPassphrase}
-                          onChange={(event) =>
-                            setDeviceBackupPassphrase(event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="device-backup-passphrase-confirm">
-                          Confirm backup passphrase
-                        </Label>
-                        <Input
-                          id="device-backup-passphrase-confirm"
-                          type="password"
-                          autoComplete="new-password"
-                          value={deviceBackupPassphraseConfirm}
-                          onChange={(event) =>
-                            setDeviceBackupPassphraseConfirm(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="submit"
-                        disabled={
-                          backupKeyBusy ||
-                          !deviceBackupPassphrase ||
-                          !deviceBackupPassphraseConfirm
-                        }
-                      >
-                        {backupKeyBusy ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Unlocking
-                          </>
-                        ) : (
-                          "Unlock backups on this device"
-                        )}
-                      </Button>
-                    </form>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                </form>
+              )}
 
-            <Card className="border border-border/70 bg-card/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Server className="h-4 w-4 text-primary" />
-                  Device registration
-                </CardTitle>
-                <CardDescription>
-                  The VPS tracks this desktop via a stable `client_device_id`.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {device ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        Device
-                      </p>
-                      <p className="mt-2 text-sm font-medium">{device.device_name}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        Platform
-                      </p>
-                      <p className="mt-2 text-sm font-medium">{device.platform}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        Client device id
-                      </p>
-                      <p className="mt-2 break-all text-sm font-medium">
-                        {device.client_device_id}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        Last seen
-                      </p>
-                      <p className="mt-2 text-sm font-medium">
-                        {formatTimestamp(device.last_seen_at)}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                    No device registration has been confirmed yet.
-                  </div>
-                )}
-
-                {deviceError && (
-                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-                    Device registration warning: {deviceError}
-                  </div>
-                )}
-
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => void handleCreateRemoteBackup()} disabled={remoteBackupBusy || !backupKeyReady}>
+                  {remoteBackupBusy ? <Loader2 className="size-4 animate-spin" /> : <HardDriveUpload className="size-4" />}
+                  Back up now
+                </Button>
                 <Button
                   variant="outline"
-                  onClick={handleRegisterDevice}
-                  disabled={deviceBusy}
+                  onClick={() => void handleReloadBackups()}
+                  disabled={backupsLoading || remoteBackupBusy}
                 >
-                  {deviceBusy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  Register this device
+                  <RefreshCw className="size-4" />
+                  Reload
                 </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="border border-border/70 bg-card/80">
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <HardDriveUpload className="h-4 w-4 text-primary" />
-                    Remote backup records
-                  </CardTitle>
-                  <CardDescription>
-                    Records stored on the VPS for this account. When the
-                    account limit is reached, a new upload replaces the oldest
-                    backup.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    onClick={() => void handleCreateRemoteBackup()}
-                    disabled={remoteBackupBusy || !backupKeyReady}
-                  >
-                    {remoteBackupBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <HardDriveUpload className="h-4 w-4" />
-                    )}
-                    Create backup
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => void handleReloadBackups()}
-                    disabled={backupsLoading || remoteBackupBusy}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Reload
-                  </Button>
-                </div>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!backupKeyReady && (
-                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 text-sm text-muted-foreground">
-                  Unlock the backup passphrase on this device before creating
-                  or restoring encrypted remote backups.
-                </div>
-              )}
-              {backupsLoading ? (
-                <div className="flex h-24 items-center justify-center rounded-2xl border border-border/70 bg-muted/20">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : remoteBackups.length === 0 ? (
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                  No remote backup records exist yet for this account.
-                </div>
-              ) : (
-                remoteBackups.map((backup) => (
-                  <div
-                    key={backup.id}
-                    className="rounded-2xl border border-border/70 bg-muted/20 p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {backup.label ?? "Unnamed backup"}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Created {formatTimestamp(backup.backup_created_at)}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="border-border/70 text-muted-foreground">
-                        {backup.status}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          Uploaded
-                        </p>
-                        <p className="mt-1 text-sm">{formatTimestamp(backup.uploaded_at)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          Size
-                        </p>
-                        <p className="mt-1 text-sm">{formatByteSize(backup.size_bytes)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          Source device
-                        </p>
-                        <p className="mt-1 break-all text-sm">
-                          {backup.client_device_id ?? "Unknown"}
-                        </p>
-                      </div>
-                    </div>
-                    {backup.metadata_json && (
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                            Games
-                          </p>
-                          <p className="mt-1 text-sm">
-                            {backup.metadata_json.games_count}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                            Sessions
-                          </p>
-                          <p className="mt-1 text-sm">
-                            {backup.metadata_json.sessions_count}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                            Assets
-                          </p>
-                          <p className="mt-1 text-sm">
-                            {backup.metadata_json.asset_file_count}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                            Source device
-                          </p>
-                          <p className="mt-1 text-sm">
-                            {backup.metadata_json.source_device_id}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                            Encryption
-                          </p>
-                          <p className="mt-1 text-sm">
-                            {backup.metadata_json.encryption ===
-                            "chacha20poly1305-chunked-v1"
-                              ? "Client-side encrypted"
-                              : backup.metadata_json.encryption}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="mt-4 flex flex-wrap justify-end gap-3">
-                      <Button
-                        variant="ghost"
-                        onClick={() => openDeleteDialog(backup)}
-                        disabled={remoteBackupBusy}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => openRestoreDialog(backup)}
-                        disabled={
-                          remoteBackupBusy ||
-                          backup.status !== "complete" ||
-                          !backupKeyReady
-                        }
-                      >
-                        <ArchiveRestore className="h-4 w-4" />
-                        Restore to this device
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
 
-          {isAdmin && (
-            <Card className="border border-border/70 bg-card/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <KeyRound className="h-4 w-4 text-primary" />
-                  Admin invite control
-                </CardTitle>
-                <CardDescription>
-                  Generate a new shareable invite key for remote backup access.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center justify-between gap-4">
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                  This uses the admin-only `/v1/admin/invites` endpoint. The raw
-                  code is shown once here, while only its derived values are
-                  stored on the VPS.
-                </p>
-                <Button onClick={() => setInviteDialogOpen(true)}>
-                  <KeyRound className="h-4 w-4" />
-                  Generate invite
+              <div className="mt-6">
+                {backupsLoading ? (
+                  <p className="flex items-center gap-2 py-3 text-sm text-faint">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading backups
+                  </p>
+                ) : remoteBackups.length === 0 ? (
+                  <p className="py-3 text-sm text-faint">No backups on the server yet.</p>
+                ) : (
+                  remoteBackups.map((backup) => (
+                    <div
+                      key={backup.id}
+                      className="flex flex-wrap items-baseline gap-x-5 gap-y-2 border-b border-rule py-3.5 last:border-b-0"
+                    >
+                      <span className="w-[132px] shrink-0 font-mono text-[13px] text-faint">
+                        {formatSessionStart(backup.uploaded_at)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[15px]">{backup.label ?? "Backup"}</div>
+                        <div className="mt-0.5 text-[13px] text-faint">
+                          {[
+                            backup.metadata_json && `${backup.metadata_json.games_count} games`,
+                            backup.metadata_json && `${backup.metadata_json.sessions_count} sessions`,
+                            formatByteSize(backup.size_bytes),
+                            backup.metadata_json?.source_device_id ?? backup.client_device_id,
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </div>
+                      </div>
+                      {backup.status !== "complete" && <Badge variant="amber">{backup.status}</Badge>}
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openRestoreDialog(backup)}
+                          disabled={remoteBackupBusy || backup.status !== "complete" || !backupKeyReady}
+                        >
+                          <ArchiveRestore className="size-3.5" />
+                          Restore
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Delete ${backup.label ?? "backup"}`}
+                          onClick={() => openDeleteDialog(backup)}
+                          disabled={remoteBackupBusy}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </PageSection>
+
+            <PageSection title="This PC" description="The server links every backup to the PC that made it.">
+              {device ? (
+                <>
+                  <PageRow label="Name">{device.device_name}</PageRow>
+                  <PageRow label="System">{device.platform}</PageRow>
+                  <PageRow label="Last seen">{formatTimestamp(device.last_seen_at)}</PageRow>
+                  <PageRow label="Device id">
+                    <span className="font-mono text-xs text-faint">{device.client_device_id}</span>
+                  </PageRow>
+                </>
+              ) : (
+                <p className="text-sm text-faint">This PC is not registered yet.</p>
+              )}
+              <PageRow label="Backup passphrase">
+                <span className={backupKeyReady ? "text-soft" : "text-amber"}>
+                  {backupKeyReady ? "Unlocked, kept in the system keychain" : "Locked"}
+                </span>
+              </PageRow>
+              {deviceError && (
+                <Notice tone="warning" className="mt-4">
+                  Registering this PC failed: {deviceError}
+                </Notice>
+              )}
+              <Button variant="outline" size="sm" className="mt-4" onClick={handleRegisterDevice} disabled={deviceBusy}>
+                {deviceBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                Register again
+              </Button>
+            </PageSection>
+
+            <PageSection title="Account">
+              <PageRow label="Email">{session.user.email}</PageRow>
+              <PageRow label="Role">{session.user.role}</PageRow>
+              <PageRow label="Signed in until">{formatTimestamp(session.refresh_expires_at)}</PageRow>
+              <div className="mt-4 flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleRefreshSession} disabled={authBusy}>
+                  {authBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  Renew session
                 </Button>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
+                <Button variant="ghost" size="sm" onClick={handleLogout} disabled={authBusy}>
+                  <LogOut className="size-3.5" />
+                  Sign out
+                </Button>
+              </div>
+            </PageSection>
+
+            {isAdmin && (
+              <PageSection
+                title="Invites"
+                description="Only admins see this. A new code is shown once. The server keeps only a hash of it."
+              >
+                <Button onClick={() => setInviteDialogOpen(true)}>
+                  <KeyRound className="size-4" />
+                  Create an invite
+                </Button>
+              </PageSection>
+            )}
+          </>
+        )}
+
+        <PageSection title="Server">
+          <PageRow label="Address">
+            <span className="font-mono text-sm">{formatApiHostname(apiBaseUrl)}</span>
+          </PageRow>
+          <PageRow label="Encryption" hint="With your backup passphrase, before anything leaves this PC.">
+            ChaCha20-Poly1305
+          </PageRow>
+          <PageRow label="Checksums" hint="The server checks every upload before it accepts it.">
+            SHA-256
+          </PageRow>
+        </PageSection>
+      </div>
 
       <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Generate Invite</DialogTitle>
-            <DialogDescription>
-              Create a new invite code that you can share with a future cloud
-              backup user.
-            </DialogDescription>
+            <DialogTitle>Create an invite</DialogTitle>
+            <DialogDescription>A code someone can use to create a cloud account.</DialogDescription>
           </DialogHeader>
 
-          <form className="space-y-4" onSubmit={handleGenerateInvite}>
+          <form className="grid gap-4" onSubmit={handleGenerateInvite}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="invite-prefix">Prefix</Label>
+              <Field id="invite-prefix" label="Prefix">
                 <Input
                   id="invite-prefix"
                   value={invitePrefix}
                   onChange={(event) => setInvitePrefix(event.target.value)}
+                  className="font-mono"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="invite-max-redemptions">Max redemptions</Label>
+              </Field>
+              <Field id="invite-max-redemptions" label="Uses">
                 <Input
                   id="invite-max-redemptions"
                   inputMode="numeric"
                   value={inviteMaxRedemptions}
                   onChange={(event) => setInviteMaxRedemptions(event.target.value)}
                 />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="invite-expiry">Expiry</Label>
+              </Field>
+              <Field id="invite-expiry" label="Expires">
                 <Input
                   id="invite-expiry"
                   type="datetime-local"
                   value={inviteExpiry}
                   onChange={(event) => setInviteExpiry(event.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="invite-note">Note</Label>
+              </Field>
+              <Field id="invite-note" label="Note">
                 <Input
                   id="invite-note"
                   placeholder="beta tester"
                   value={inviteNote}
                   onChange={(event) => setInviteNote(event.target.value)}
                 />
-              </div>
+              </Field>
             </div>
 
             {lastInvite && (
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
-                      Share this code
-                    </p>
-                    <p className="mt-2 break-all font-mono text-base text-emerald-50">
-                      {lastInvite.code}
-                    </p>
-                  </div>
-                  <Button type="button" variant="outline" onClick={handleCopyInvite}>
-                    <Copy className="h-4 w-4" />
+              <div className="border-l-2 border-violet py-1 pl-4">
+                <div className="label-caps">Share this code</div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <span className="font-mono text-base break-all">{lastInvite.code}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={handleCopyInvite}>
+                    <Copy className="size-3.5" />
                     {copiedInvite ? "Copied" : "Copy"}
                   </Button>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
-                      Max redemptions
-                    </p>
-                    <p className="mt-1 text-sm text-emerald-50">
-                      {lastInvite.max_redemptions}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
-                      Expires
-                    </p>
-                    <p className="mt-1 text-sm text-emerald-50">
-                      {formatTimestamp(lastInvite.expires_at)}
-                    </p>
-                  </div>
-                </div>
+                <p className="mt-2 text-[13px] text-faint">
+                  {lastInvite.max_redemptions} use{lastInvite.max_redemptions === 1 ? "" : "s"}, expires{" "}
+                  {formatTimestamp(lastInvite.expires_at)}
+                </p>
               </div>
             )}
 
@@ -1284,17 +867,8 @@ export function CloudPage() {
                 Close
               </Button>
               <Button type="submit" disabled={inviteBusy}>
-                {inviteBusy ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating
-                  </>
-                ) : (
-                  <>
-                    <KeyRound className="h-4 w-4" />
-                    Generate invite
-                  </>
-                )}
+                {inviteBusy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+                {inviteBusy ? "Creating" : "Create invite"}
               </Button>
             </DialogFooter>
           </form>
@@ -1310,67 +884,32 @@ export function CloudPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Restore Remote Backup</DialogTitle>
+            <DialogTitle>Restore this backup?</DialogTitle>
             <DialogDescription>
-              This replaces the current local library, sessions, integrity
-              history, and cached artwork on this machine.
+              It replaces the library, sessions, event logs and covers on this PC.
             </DialogDescription>
           </DialogHeader>
 
           {restoreTarget && (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Backup
-                  </p>
-                  <p className="mt-2 text-sm font-medium">
-                    {restoreTarget.label ?? "Unnamed backup"}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Uploaded
-                  </p>
-                  <p className="mt-2 text-sm font-medium">
-                    {formatTimestamp(restoreTarget.uploaded_at)}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Games
-                  </p>
-                  <p className="mt-2 text-sm font-medium">
-                    {restoreTarget.metadata_json?.games_count ?? "Unknown"}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Sessions
-                  </p>
-                  <p className="mt-2 text-sm font-medium">
-                    {restoreTarget.metadata_json?.sessions_count ?? "Unknown"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 text-sm text-muted-foreground">
-                The desktop verifies the downloaded archive checksum before
-                restore, but this is still a destructive action. Close any live
-                sessions first. Vaultime will require a restart after restore so
-                tracking can resume cleanly.
-              </div>
+            <div className="grid gap-3">
+              <p className="text-[15px]">
+                {restoreTarget.label ?? "Backup"}, uploaded {formatTimestamp(restoreTarget.uploaded_at)}
+              </p>
+              <p className="font-mono text-sm text-soft">
+                {restoreTarget.metadata_json?.games_count ?? "?"} games,{" "}
+                {restoreTarget.metadata_json?.sessions_count ?? "?"} sessions
+              </p>
+              <p className="text-[13px] leading-relaxed text-faint">
+                The download is checked against its checksum first. Close running games before you restore. Vaultime
+                asks for a restart afterwards so tracking picks up cleanly.
+              </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setRestoreDialogOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setRestoreDialogOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -1379,17 +918,8 @@ export function CloudPage() {
               onClick={() => void handleRestoreRemoteBackup()}
               disabled={remoteBackupBusy || !restoreTarget}
             >
-              {remoteBackupBusy ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Restoring
-                </>
-              ) : (
-                <>
-                  <ArchiveRestore className="h-4 w-4" />
-                  Restore backup
-                </>
-              )}
+              {remoteBackupBusy ? <Loader2 className="size-4 animate-spin" /> : <ArchiveRestore className="size-4" />}
+              {remoteBackupBusy ? "Restoring" : "Replace with this backup"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1398,43 +928,15 @@ export function CloudPage() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete Remote Backup</DialogTitle>
+            <DialogTitle>Delete this backup?</DialogTitle>
             <DialogDescription>
-              This removes{" "}
-              <strong className="text-foreground">
-                {deleteTarget?.label ?? "Unnamed backup"}
-              </strong>{" "}
-              from the VPS. Local data on this device is not touched.
+              {deleteTarget?.label ?? "The backup"}, {deleteTarget ? formatByteSize(deleteTarget.size_bytes) : ""},
+              is removed from the server. Nothing on this PC changes.
             </DialogDescription>
           </DialogHeader>
 
-          {deleteTarget && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Uploaded
-                </p>
-                <p className="mt-2 text-sm font-medium">
-                  {formatTimestamp(deleteTarget.uploaded_at)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Size
-                </p>
-                <p className="mt-2 text-sm font-medium">
-                  {formatByteSize(deleteTarget.size_bytes)}
-                </p>
-              </div>
-            </div>
-          )}
-
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -1443,21 +945,21 @@ export function CloudPage() {
               onClick={() => void handleDeleteRemoteBackup()}
               disabled={remoteBackupBusy || !deleteTarget}
             >
-              {remoteBackupBusy ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Deleting
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4" />
-                  Delete backup
-                </>
-              )}
+              {remoteBackupBusy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {remoteBackupBusy ? "Deleting" : "Delete backup"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
     </div>
   );
 }
