@@ -29,6 +29,7 @@ Vaultime keeps track of how long you really play your PC games, no matter which 
 - **Automatic tracking.** Start a game and Vaultime records the session. No launcher integration needed.
 - **Real playtime.** Runtime, active playtime and idle time are counted separately.
 - **Sleep aware.** Time while your computer sleeps is never counted.
+- **Runs in the background.** Closing the window keeps Vaultime tracking in the tray, and it can start when you log in.
 - **Game discovery.** Finds your Steam games and scans common folders of Epic, GOG, Xbox, EA, Ubisoft and Battle.net games.
 - **Your artwork.** Picks up cover art from your game folders, and you choose the cover per game.
 - **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
