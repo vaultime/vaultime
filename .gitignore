@@ -35,3 +35,6 @@ __pycache__/
 # Linux bundles built by scripts/linux-package.sh
 dist-linux/
 dist-api/
+
+# Local Claude Code settings
+.claude/settings.local.json
