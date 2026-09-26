@@ -104,12 +104,8 @@ mockIPC((cmd, payload) => {
       return "0.1.0";
     case "list_games":
       return allGames;
-    case "get_game":
-      return allGames.find((game) => game.id === args.id);
     case "list_sessions":
       return allSessions;
-    case "get_sessions_for_game":
-      return allSessions.filter((session) => session.game_id === args.gameId);
     case "get_session_events_for_game": {
       const ids = new Set(allSessions.filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id));

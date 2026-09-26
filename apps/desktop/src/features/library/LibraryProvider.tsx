@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS } from "@/lib/constants";
+import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, SETTING_KEYS } from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import type { Game, Session } from "@/lib/types";
@@ -40,7 +40,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             .map((asset) => [asset.game_id, asset.preview_data_url as string]),
         ),
       );
-      const threshold = Number(settings.find((s) => s.key === "idle_threshold_seconds")?.value);
+      const threshold = Number(settings.find((s) => s.key === SETTING_KEYS.idleThreshold)?.value);
       if (Number.isFinite(threshold) && threshold > 0) setIdleThresholdSeconds(threshold);
       setError(null);
     } catch (loadError) {

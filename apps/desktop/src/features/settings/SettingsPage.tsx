@@ -20,11 +20,12 @@ import {
   DEFAULT_IDLE_THRESHOLD_SECONDS,
   MIN_IDLE_THRESHOLD_SECONDS,
   SECONDS_PER_MINUTE,
+  SETTING_KEYS,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
-import { capitalize, numberWords } from "@/lib/words";
+import { capitalize, numberWords, plural } from "@/lib/words";
 
 const LINKS = [
   { label: "Source code", url: "https://github.com/schwimmbeck/vaultime" },
@@ -85,11 +86,11 @@ export function SettingsPage() {
         if (cancelled) return;
         const values = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
         setTrayAvailable(Boolean(tray));
-        setCloseToTray(values.close_to_tray !== "false");
+        setCloseToTray(values[SETTING_KEYS.closeToTray] !== "false");
         setAutostart(Boolean(startsAtLogin));
-        const seconds = Number(values.idle_threshold_seconds ?? DEFAULT_IDLE_THRESHOLD_SECONDS);
+        const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECONDS);
         setIdleMinutes(String(seconds / SECONDS_PER_MINUTE));
-        setBackgroundActive(values.treat_background_as_active === "true");
+        setBackgroundActive(values[SETTING_KEYS.backgroundActive] === "true");
         setDiagnostics(nextDiagnostics);
         setSnapshots(nextSnapshots);
         setAppVersion(version);
@@ -114,8 +115,8 @@ export function SettingsPage() {
     try {
       setSaving(true);
       setError(null);
-      await api.setSetting("idle_threshold_seconds", String(seconds));
-      await api.setSetting("treat_background_as_active", String(backgroundActive));
+      await api.setSetting(SETTING_KEYS.idleThreshold, String(seconds));
+      await api.setSetting(SETTING_KEYS.backgroundActive, String(backgroundActive));
       setSaved(true);
       // The live bar shows the idle time too.
       await refresh();
@@ -129,7 +130,7 @@ export function SettingsPage() {
   async function changeCloseToTray(next: boolean) {
     setCloseToTray(next);
     try {
-      await api.setSetting("close_to_tray", String(next));
+      await api.setSetting(SETTING_KEYS.closeToTray, String(next));
     } catch (saveError) {
       setCloseToTray(!next);
       setError(String(saveError));
@@ -344,8 +345,8 @@ export function SettingsPage() {
                 Backup from {formatLongDate(restorePreview.created_at)}, made on {restorePreview.source_device_id}.
               </p>
               <p className="mt-2 font-mono text-sm text-soft">
-                {restorePreview.games_count} games, {restorePreview.sessions_count} sessions,{" "}
-                {restorePreview.asset_file_count} images
+                {plural(restorePreview.games_count, "game")}, {plural(restorePreview.sessions_count, "session")},{" "}
+                {plural(restorePreview.asset_file_count, "image")}
               </p>
               <p className="mt-3 max-w-[560px] text-[13px] leading-relaxed text-faint">
                 Restoring replaces the library, sessions, event logs and covers on this PC. Close running games

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
+import { MIN_BACKUP_PASSPHRASE_CHARS } from "@/lib/constants";
+
 const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim();
 
 export const CLOUD_API_BASE_URL = (
@@ -8,6 +10,12 @@ export const CLOUD_API_BASE_URL = (
     ? configuredCloudApiBaseUrl
     : "https://vaultime.codfishcloud.de"
 ).replace(/\/+$/, "");
+
+/** Prefix of invite codes, the server uses the same default. */
+export const INVITE_CODE_PREFIX = "VTLINV";
+
+/** Shown when a backup passphrase is shorter than the minimum. */
+export const BACKUP_PASSPHRASE_TOO_SHORT = `The backup passphrase needs at least ${MIN_BACKUP_PASSPHRASE_CHARS} characters.`;
 
 export class CloudApiError extends Error {
   public readonly status: number;
@@ -87,7 +95,7 @@ async function cloudRequest<T>(
     });
   } catch {
     throw new CloudApiError(
-      "Cloud API unavailable. Check your connection or VPS status.",
+      "Could not reach the cloud server. Check your connection.",
       0,
     );
   }

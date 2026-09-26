@@ -26,9 +26,9 @@ const FIXED: Command[] = [
   { id: "page-cloud", label: "Cloud", hint: "Encrypted backups on the server", kind: "Page", to: "/cloud" },
   { id: "page-settings", label: "Settings", hint: "Tracking, backups and more", kind: "Page", to: "/settings" },
   { id: "action-add", label: "Add a game", hint: "Pick an executable by hand", kind: "Action", to: "/library?add=1" },
-  { id: "action-discover", label: "Discover games", hint: "Find Steam and launcher games", kind: "Action", to: "/library?discover=1" },
-  { id: "action-backup", label: "Export a local backup", hint: "Settings, local backups", kind: "Action", to: "/settings" },
-  { id: "action-idle", label: "Idle threshold", hint: "Settings, tracking", kind: "Action", to: "/settings" },
+  { id: "action-discover", label: "Discover games", hint: "Scan Steam and the folders of other launchers", kind: "Action", to: "/library?discover=1" },
+  { id: "setting-backup", label: "Local backups", hint: "Save or restore a backup", kind: "Page", to: "/settings" },
+  { id: "setting-idle", label: "Idle time", hint: "When time stops counting as active", kind: "Page", to: "/settings" },
 ];
 
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {

@@ -43,33 +43,6 @@ export function parseVaultimeDate(value: string): Date {
   return new Date(`${value}Z`);
 }
 
-export function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / SECOND_MS);
-  const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR);
-  const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
-  const seconds = totalSeconds % SECONDS_PER_MINUTE;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  return `${seconds}s`;
-}
-
-export function formatSessionDate(value: string): string {
-  return parseVaultimeDate(value).toLocaleDateString(UI_LOCALE, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function formatCalendarDay(value: string): string {
   return parseVaultimeDate(value).toLocaleDateString(UI_LOCALE, {
     month: "short",

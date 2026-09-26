@@ -156,7 +156,7 @@ export function lastPlayedLine(lastPlayedAt: string | null): string {
   if (!lastPlayedAt) return "Not played yet";
   const when = formatRelativeDay(lastPlayedAt);
   if (when !== "Yesterday" && when.endsWith("day")) return `Last played on ${when}`;
-  if (when.startsWith("In ")) return `Last played in ${when.slice(3)}`;
+  if (when.startsWith("In ")) return `Last played in ${when.slice("In ".length)}`;
   return `Last played ${when.charAt(0).toLowerCase()}${when.slice(1)}`;
 }
 

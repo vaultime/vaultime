@@ -7,7 +7,7 @@ import { LibraryPage } from "@/features/library/LibraryPage";
 import { JournalPage } from "@/features/journal/JournalPage";
 import { CloudPage } from "@/features/cloud/CloudPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
-import { GameDetailsPage } from "@/features/game-details";
+import { GameDetailsPage } from "@/features/game-details/GameDetailsPage";
 
 export function App() {
   return (

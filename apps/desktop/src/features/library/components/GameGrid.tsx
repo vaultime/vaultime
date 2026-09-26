@@ -61,13 +61,12 @@ export function GameGrid({
           <span className="font-mono text-sm text-faint">{summaries.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          <div role="radiogroup" aria-label="Sort games" className="mr-2 flex rounded-full border border-hairline p-0.5">
+          <div role="group" aria-label="Sort games" className="mr-2 flex rounded-full border border-hairline p-0.5">
             {(Object.keys(SORTS) as Sort[]).map((key) => (
               <button
                 key={key}
                 type="button"
-                role="radio"
-                aria-checked={sort === key}
+                aria-pressed={sort === key}
                 onClick={() => setSort(key)}
                 className={cn(
                   "h-8 rounded-full px-3.5 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",

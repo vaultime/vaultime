@@ -11,7 +11,6 @@ export interface ActivityPoint {
   runtimeMs: number;
   activeMs: number;
   idleMs: number;
-  sessionsCount: number;
 }
 
 export function buildDailyActivity(
@@ -36,7 +35,6 @@ export function buildDailyActivity(
       runtimeMs: 0,
       activeMs: 0,
       idleMs: 0,
-      sessionsCount: 0,
     });
   }
 
@@ -50,7 +48,6 @@ export function buildDailyActivity(
     point.runtimeMs += session.runtime_ms;
     point.activeMs += session.active_ms;
     point.idleMs += session.idle_ms;
-    point.sessionsCount += 1;
   }
 
   return [...points.values()];

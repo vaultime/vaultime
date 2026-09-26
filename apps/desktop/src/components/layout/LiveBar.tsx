@@ -6,14 +6,9 @@ import { Link } from "react-router";
 import { ArrowUpRight, Gamepad2 } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
 import { useLibrary } from "@/features/library/library-context";
+import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatHoursMinutes, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
-
-const TRUST_LABEL: Record<string, string> = {
-  local: "Local",
-  suspicious: "Suspicious",
-  recovered: "Recovered",
-};
 
 /** The bar at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
@@ -41,7 +36,7 @@ export function LiveBar() {
     return (
       <footer
         aria-label="Live session"
-        className="col-span-2 grid h-[76px] grid-cols-3 items-center border-t border-rule bg-[#120e19] px-6"
+        className="col-span-2 grid h-[76px] grid-cols-3 items-center border-t border-rule bg-bar px-6"
       >
         <div className="flex items-center gap-3.5">
           <span className="flex size-11 items-center justify-center rounded-md bg-raised text-faint">
@@ -68,7 +63,7 @@ export function LiveBar() {
   const runtimeMs = current.runtime_ms + sincePoll;
   const counted = current.active_ms + current.idle_ms;
   const activeShare = counted > 0 ? current.active_ms / counted : 1;
-  const trust = TRUST_LABEL[current.integrity_status] ?? current.integrity_status;
+  const trust = getIntegrityMeta(current.integrity_status).label;
   const startedAt = parseVaultimeDate(current.started_at_wall).toLocaleTimeString(UI_LOCALE, {
     hour: "2-digit",
     minute: "2-digit",
@@ -77,7 +72,7 @@ export function LiveBar() {
   return (
     <footer
       aria-label="Live session"
-      className="col-span-2 grid h-[76px] grid-cols-3 items-center border-t border-rule bg-[#120e19] px-6"
+      className="col-span-2 grid h-[76px] grid-cols-3 items-center border-t border-rule bg-bar px-6"
     >
       <div className="flex min-w-0 items-center gap-3.5">
         <Cover title={title} src={covers[current.game_id]} variant="tile" className="size-11 text-xl" />
@@ -94,7 +89,7 @@ export function LiveBar() {
       </div>
 
       <div className="flex flex-col items-center gap-1.5">
-        <span className="font-mono text-[22px] tracking-wide tabular-nums" aria-label={`Running for ${formatHoursMinutes(runtimeMs)}`}>
+        <span className="font-mono text-[22px] tracking-wide tabular-nums" role="timer" aria-label={`Running for ${formatHoursMinutes(runtimeMs)}`}>
           {formatClock(runtimeMs)}
         </span>
         <div className="flex items-center gap-2.5 text-xs text-faint tabular-nums">

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { SECOND_MS } from "@/lib/constants";
-import { formatDuration } from "@/lib/time";
+import { formatHoursMinutes } from "@/lib/time";
 import type { SessionEvent } from "@/lib/types";
 import { capitalize } from "@/lib/words";
 
@@ -116,7 +116,7 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
         typeof payload?.wall_gap_ms === "number" ? payload.wall_gap_ms : null;
       return gapMs === null
         ? "Time while the machine slept or tracking paused was not counted"
-        : `${formatDuration(gapMs)} not counted while the machine slept or tracking paused`;
+        : `${formatHoursMinutes(gapMs)} not counted while the machine slept or tracking paused`;
     }
     case "heartbeat": {
       const driftMs =

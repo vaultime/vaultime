@@ -65,7 +65,7 @@ export function UpdateBanner() {
           ) : (
             <Download className="h-3.5 w-3.5" />
           )}
-          {installing ? "Installing..." : "Update and restart"}
+          {installing ? "Installing" : "Update and restart"}
         </Button>
         <button
           type="button"

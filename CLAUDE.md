@@ -113,8 +113,11 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Premium and image-rich, not a background utility. Never ship stock
   component styling.
 - Editorial look: Fraunces (softened) for titles and sentences, Hanken
-  Grotesk for interface text, JetBrains Mono for every number. Hairline rules
-  instead of boxes and shadows, small uppercase labels, generous space.
+  Grotesk for interface text, JetBrains Mono for stats, clocks, times and
+  paths. Small counts inside lists use Hanken Grotesk with tabular figures.
+  Hairline rules instead of boxes and shadows, small uppercase labels,
+  generous space. Colors come from the tokens in `index.css`, never loose hex
+  values in components.
 - Dark ink ground with violet `#9D7CFF` as the brand color and the color of
   active time. Game pages take a dark tint and light ink from the cover art.
 - Shell like a music player: library rail on the left with search, a Ctrl+K

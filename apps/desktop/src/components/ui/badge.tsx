@@ -11,13 +11,9 @@ const badgeVariants = cva(
       variant: {
         default: "border-violet text-violet",
         secondary: "border-faint text-faint",
-        destructive: "border-destructive text-destructive",
         amber: "border-amber text-amber",
         sky: "border-sky text-sky",
         outline: "border-hairline text-soft",
-        ghost:
-          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
       },
     },
     defaultVariants: {
@@ -48,4 +44,4 @@ function Badge({
   })
 }
 
-export { Badge, badgeVariants }
+export { Badge }

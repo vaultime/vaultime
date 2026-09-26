@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  createContext,
-  useContext,
   useEffect,
   useEffectEvent,
   useRef,
@@ -17,7 +15,8 @@ import {
   cloudGetJson,
   cloudPostJson,
 } from "@/lib/cloud-api";
-import { TOKEN_REFRESH_MARGIN_MS } from "@/lib/constants";
+import { MIN_BACKUP_PASSPHRASE_CHARS, TOKEN_REFRESH_MARGIN_MS } from "@/lib/constants";
+import { BACKUP_PASSPHRASE_TOO_SHORT } from "@/lib/cloud-api";
 import {
   clearCloudBackupKeySecure,
   clearCloudSessionSecure,
@@ -33,48 +32,15 @@ import type {
   CloudAdminInvite,
   CloudAuthSession,
   CloudBackupRecord,
-  CloudBackupRestoreResult,
-  CloudBackupUploadResult,
   CloudCreateAdminInviteInput,
   CloudDevice,
 } from "@/lib/types";
+import { describeError } from "@/lib/utils";
+import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
 
 const CLOUD_SESSION_STORAGE_KEY = "vaultime.cloud.session";
 const CLOUD_DEVICE_ID_STORAGE_KEY = "vaultime.cloud.device-id";
 
-interface CloudSessionContextValue {
-  apiBaseUrl: string;
-  initializing: boolean;
-  session: CloudAuthSession | null;
-  device: CloudDevice | null;
-  deviceError: string | null;
-  backupKeyReady: boolean;
-  isAdmin: boolean;
-  login: (
-    email: string,
-    password: string,
-    backupPassphrase?: string | null,
-  ) => Promise<CloudAuthSession>;
-  signUp: (
-    email: string,
-    password: string,
-    inviteCode: string,
-    backupPassphrase: string,
-  ) => Promise<CloudAuthSession>;
-  setBackupPassphrase: (passphrase: string) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshSession: () => Promise<CloudAuthSession | null>;
-  registerCurrentDevice: () => Promise<CloudDevice | null>;
-  listBackups: () => Promise<CloudBackupRecord[]>;
-  uploadRemoteBackup: (label?: string | null) => Promise<CloudBackupUploadResult>;
-  restoreRemoteBackup: (backupId: string) => Promise<CloudBackupRestoreResult>;
-  deleteBackup: (backupId: string) => Promise<void>;
-  createAdminInvite: (
-    input: CloudCreateAdminInviteInput,
-  ) => Promise<CloudAdminInvite>;
-}
-
-const CloudSessionContext = createContext<CloudSessionContextValue | null>(null);
 
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
@@ -178,7 +144,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       email,
       password,
     });
-    await persistCloudAuthState(next);
+    await persistCloudSession(next);
     if (backupPassphrase?.trim()) {
       await persistBackupPassphrase(next, backupPassphrase);
       setBackupKeyReady(true);
@@ -201,7 +167,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       password,
       invite_code: inviteCode,
     });
-    await persistCloudAuthState(next);
+    await persistCloudSession(next);
     await persistBackupPassphrase(next, backupPassphrase);
     setBackupKeyReady(true);
     applySession(next);
@@ -216,8 +182,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     }
 
     const normalized = passphrase.trim();
-    if (normalized.length < 12) {
-      throw new Error("Backup passphrase must be at least 12 characters.");
+    if (normalized.length < MIN_BACKUP_PASSPHRASE_CHARS) {
+      throw new Error(BACKUP_PASSPHRASE_TOO_SHORT);
     }
 
     await persistBackupPassphrase(current, normalized);
@@ -456,7 +422,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     try {
       appVersionRef.current = await getAppVersion();
     } catch {
-      appVersionRef.current = "0.1.0";
+      appVersionRef.current = "unknown";
     }
 
     return appVersionRef.current;
@@ -501,15 +467,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useCloudSession() {
-  const value = useContext(CloudSessionContext);
-  if (!value) {
-    throw new Error("useCloudSession must be used within CloudSessionProvider");
-  }
-  return value;
-}
-
 async function loadPersistedSession(): Promise<CloudAuthSession | null> {
   try {
     const secureRaw = await loadCloudSessionSecure();
@@ -526,12 +483,6 @@ async function loadPersistedSession(): Promise<CloudAuthSession | null> {
   }
 
   return parseStoredSession(legacyRaw);
-}
-
-async function persistCloudAuthState(
-  session: CloudAuthSession,
-): Promise<void> {
-  await persistCloudSession(session);
 }
 
 async function persistCloudSession(session: CloudAuthSession): Promise<void> {
@@ -563,10 +514,6 @@ async function ensureBackupKeyForSession(
       "Set or unlock your backup passphrase on this device before using remote backups.",
     );
   }
-}
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function parseStoredSession(raw: string): CloudAuthSession | null {

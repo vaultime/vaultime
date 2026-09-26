@@ -11,7 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Notice } from "@/components/layout/Page";
 import * as api from "@/lib/tauri";
+import { describeError } from "@/lib/utils";
 import type { Game } from "@/lib/types";
 
 interface DeleteGameDialogProps {
@@ -42,7 +44,7 @@ export function DeleteGameDialog({
       onDeleted();
       onClose();
     } catch (e) {
-      setError(`Could not delete the game: ${String(e)}`);
+      setError(`Could not delete the game: ${describeError(e)}`);
     } finally {
       setDeleting(false);
     }
@@ -52,18 +54,13 @@ export function DeleteGameDialog({
     <Dialog open={!!game} onOpenChange={(open) => !open && close()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete Game</DialogTitle>
+          <DialogTitle>Delete this game?</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete{" "}
-            <strong className="text-foreground">{game?.title}</strong>? This will
-            remove all session history for this game.
+            <strong className="font-medium text-text">{game?.title}</strong> and all of its sessions are
+            removed from this PC. Backups you made earlier keep them.
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        {error && <Notice tone="warning">{error}</Notice>}
         <DialogFooter>
           <Button variant="ghost" onClick={close}>
             Cancel
@@ -73,7 +70,7 @@ export function DeleteGameDialog({
             onClick={handleDelete}
             disabled={deleting}
           >
-            {deleting ? "Deleting..." : "Delete"}
+            {deleting ? "Deleting" : "Delete game"}
           </Button>
         </DialogFooter>
       </DialogContent>

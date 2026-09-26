@@ -17,6 +17,15 @@ export const SECONDS_PER_HOUR = 3_600;
 export const HOURS_PER_DAY = 24;
 export const DAYS_PER_WEEK = 7;
 
+// Settings
+
+/** Keys of the settings table, the Rust core reads the same ones from constants.rs. */
+export const SETTING_KEYS = {
+  idleThreshold: "idle_threshold_seconds",
+  backgroundActive: "treat_background_as_active",
+  closeToTray: "close_to_tray",
+} as const;
+
 // Tracking
 
 /** How often the UI asks for running sessions. Same as POLL_INTERVAL in constants.rs. */
@@ -35,6 +44,9 @@ export const MIN_IDLE_THRESHOLD_SECONDS = 5;
 
 /** Refresh the access token when it expires within this window. */
 export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;
+
+/** Shortest backup passphrase the app accepts. */
+export const MIN_BACKUP_PASSPHRASE_CHARS = 12;
 
 /** Step between byte units, B to KB to MB. */
 export const BYTES_PER_KIB = 1_024;

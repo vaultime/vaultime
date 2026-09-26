@@ -4,16 +4,15 @@
 import { CHART_MIN_BAR_PERCENT } from "@/lib/constants";
 import type { ActivityPoint } from "@/lib/session-stats";
 import { formatHoursMinutes } from "@/lib/time";
-import { cn } from "@/lib/utils";
 
 /** One column per day, active time in violet with idle time stacked on top. */
-export function DayBars({ points, className }: { points: ActivityPoint[]; className?: string }) {
+export function DayBars({ points }: { points: ActivityPoint[] }) {
   const max = Math.max(1, ...points.map((point) => point.activeMs + point.idleMs));
   const height = (ms: number) => `${Math.max(CHART_MIN_BAR_PERCENT, (ms / max) * 100)}%`;
   const middle = points[Math.floor(points.length / 2)];
 
   return (
-    <figure className={cn("flex flex-col gap-2.5", className)}>
+    <figure className="flex flex-col gap-2.5">
       <div
         role="img"
         aria-label={`Active and idle time for each of the last ${points.length} days`}

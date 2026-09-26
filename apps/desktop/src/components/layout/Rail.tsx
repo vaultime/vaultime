@@ -35,7 +35,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
       <button
         type="button"
         onClick={onSearch}
-        className="flex h-11 items-center gap-2.5 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-[#3a3050] hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+        className="flex h-11 items-center gap-2.5 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-hairline-strong hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
       >
         <Search className="size-4 shrink-0" strokeWidth={1.6} />
         <span className="flex-1">Search or jump to</span>

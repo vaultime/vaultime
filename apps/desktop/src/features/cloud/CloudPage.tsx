@@ -27,10 +27,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
-import { BYTES_PER_KIB, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
+import { useCloudSession } from "@/features/cloud/cloud-context";
+import { BACKUP_PASSPHRASE_TOO_SHORT, INVITE_CODE_PREFIX } from "@/lib/cloud-api";
+import { BYTES_PER_KIB, MIN_BACKUP_PASSPHRASE_CHARS, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { CloudAdminInvite, CloudBackupRecord } from "@/lib/types";
+import { describeError } from "@/lib/utils";
+import { capitalize, plural } from "@/lib/words";
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -76,10 +79,6 @@ function formatApiHostname(value: string) {
   } catch {
     return value.replace(/^https?:\/\//, "");
   }
-}
-
-function describeError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function remoteBackupCacheKey(accountId: string) {
@@ -159,7 +158,7 @@ export function CloudPage() {
   const [deviceBackupPassphraseConfirm, setDeviceBackupPassphraseConfirm] =
     useState("");
   const [inviteCode, setInviteCode] = useState("");
-  const [invitePrefix, setInvitePrefix] = useState("VTLINV");
+  const [invitePrefix, setInvitePrefix] = useState(INVITE_CODE_PREFIX);
   const [inviteMaxRedemptions, setInviteMaxRedemptions] = useState("1");
   const [inviteExpiry, setInviteExpiry] = useState("");
   const [inviteNote, setInviteNote] = useState("");
@@ -231,8 +230,8 @@ export function CloudPage() {
     setStatusMessage(null);
 
     try {
-      if (signUpBackupPassphrase.trim().length < 12) {
-        throw new Error("Backup passphrase must be at least 12 characters.");
+      if (signUpBackupPassphrase.trim().length < MIN_BACKUP_PASSPHRASE_CHARS) {
+        throw new Error(BACKUP_PASSPHRASE_TOO_SHORT);
       }
       if (signUpBackupPassphrase !== signUpBackupPassphraseConfirm) {
         throw new Error("Backup passphrase confirmation does not match.");
@@ -312,8 +311,8 @@ export function CloudPage() {
     setStatusMessage(null);
 
     try {
-      if (deviceBackupPassphrase.trim().length < 12) {
-        throw new Error("Backup passphrase must be at least 12 characters.");
+      if (deviceBackupPassphrase.trim().length < MIN_BACKUP_PASSPHRASE_CHARS) {
+        throw new Error(BACKUP_PASSPHRASE_TOO_SHORT);
       }
       if (deviceBackupPassphrase !== deviceBackupPassphraseConfirm) {
         throw new Error("Backup passphrase confirmation does not match.");
@@ -573,7 +572,7 @@ export function CloudPage() {
                 <Field id="cloud-signup-invite" label="Invite code">
                   <Input
                     id="cloud-signup-invite"
-                    placeholder="VTLINV-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+                    placeholder={`${INVITE_CODE_PREFIX}-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`}
                     value={inviteCode}
                     onChange={(event) => setInviteCode(event.target.value)}
                     className="font-mono"
@@ -694,8 +693,8 @@ export function CloudPage() {
                         <div className="text-[15px]">{backup.label ?? "Backup"}</div>
                         <div className="mt-0.5 text-[13px] text-faint">
                           {[
-                            backup.metadata_json && `${backup.metadata_json.games_count} games`,
-                            backup.metadata_json && `${backup.metadata_json.sessions_count} sessions`,
+                            backup.metadata_json && plural(backup.metadata_json.games_count, "game"),
+                            backup.metadata_json && plural(backup.metadata_json.sessions_count, "session"),
                             formatByteSize(backup.size_bytes),
                             backup.metadata_json?.source_device_id ?? backup.client_device_id,
                           ]
@@ -734,7 +733,7 @@ export function CloudPage() {
               {device ? (
                 <>
                   <PageRow label="Name">{device.device_name}</PageRow>
-                  <PageRow label="System">{device.platform}</PageRow>
+                  <PageRow label="System">{capitalize(device.platform)}</PageRow>
                   <PageRow label="Last seen">{formatTimestamp(device.last_seen_at)}</PageRow>
                   <PageRow label="Device id">
                     <span className="font-mono text-xs text-faint">{device.client_device_id}</span>
@@ -761,7 +760,7 @@ export function CloudPage() {
 
             <PageSection title="Account">
               <PageRow label="Email">{session.user.email}</PageRow>
-              <PageRow label="Role">{session.user.role}</PageRow>
+              <PageRow label="Role">{capitalize(session.user.role)}</PageRow>
               <PageRow label="Signed in until">{formatTimestamp(session.refresh_expires_at)}</PageRow>
               <div className="mt-4 flex gap-2">
                 <Button variant="outline" size="sm" onClick={handleRefreshSession} disabled={authBusy}>
@@ -856,8 +855,8 @@ export function CloudPage() {
                   </Button>
                 </div>
                 <p className="mt-2 text-[13px] text-faint">
-                  {lastInvite.max_redemptions} use{lastInvite.max_redemptions === 1 ? "" : "s"}, expires{" "}
-                  {formatTimestamp(lastInvite.expires_at)}
+                  {plural(lastInvite.max_redemptions, "use")},{" "}
+                  {lastInvite.expires_at ? `expires ${formatTimestamp(lastInvite.expires_at)}` : "never expires"}
                 </p>
               </div>
             )}
@@ -898,8 +897,9 @@ export function CloudPage() {
                 {restoreTarget.label ?? "Backup"}, uploaded {formatTimestamp(restoreTarget.uploaded_at)}
               </p>
               <p className="font-mono text-sm text-soft">
-                {restoreTarget.metadata_json?.games_count ?? "?"} games,{" "}
-                {restoreTarget.metadata_json?.sessions_count ?? "?"} sessions
+                {restoreTarget.metadata_json
+                  ? `${plural(restoreTarget.metadata_json.games_count, "game")}, ${plural(restoreTarget.metadata_json.sessions_count, "session")}`
+                  : "Contents unknown"}
               </p>
               <p className="text-[13px] leading-relaxed text-faint">
                 The download is checked against its checksum first. Close running games before you restore. Vaultime
