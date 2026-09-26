@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A new look.** The library opens on the game you play right now or last, in colors taken from its cover, with a shelf of recent games and every game below. Game pages show the last two weeks and every session as a sentence.
+- **Journal.** Your play week by week, with a 24 hour strip for each day. It replaces the Sessions page.
+- **Live bar.** The running game, its timer and the active and idle split stay at the bottom of every page.
+- **Search with Ctrl+K.** Jump to any game, page or action.
+- **Reasons for trust labels.** Flagged and recovered sessions say what happened, and time skipped during sleep is shown.
 - **Invite-only cloud backup on our own server.** Free, with the same limits for every account. Backups are encrypted on your computer before upload.
 - **Delete cloud backups** from the Cloud page. At the backup limit a new upload replaces your oldest backup instead of failing.
 - **Windows support.** Steam games are found wherever Steam is installed, and games in Epic, GOG, Xbox, EA, Ubisoft and Battle.net folders on every drive.
@@ -24,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Starting Vaultime twice** brings the open window to the front instead of tracking every game twice.
 - **Errors are shown** in dialogs and discovery instead of disappearing silently.
 - **macOS builds** are not offered for now.
+- **The idle time** is set in minutes, and a change shows up right away.
+- **Dates** use English words with your region's date order and clock.
 
 ### Fixed
 
@@ -32,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Artwork after a restore** pointed at missing files.
 - **Tracking stopped** after a failed restore until Vaultime was restarted.
 - **The library** reloaded all sessions and artwork every 5 seconds.
+- **Charts** put play near midnight on the wrong day outside UTC.
 
 ### Removed
 

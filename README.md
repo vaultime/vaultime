@@ -31,7 +31,9 @@ Vaultime keeps track of how long you really play your PC games, no matter which 
 - **Sleep aware.** Time while your computer sleeps is never counted.
 - **Game discovery.** Finds your Steam games and scans common folders of Epic, GOG, Xbox, EA, Ubisoft and Battle.net games.
 - **Your artwork.** Picks up cover art from your game folders, and you choose the cover per game.
-- **Session history.** A timeline and stats for every game, with an honest trust label per session.
+- **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
+- **Game pages in the game's colors.** The last two weeks at a glance, totals, and the cover you pick.
+- **Always in view.** A live bar shows the running game and its timer, and Ctrl+K jumps to any game or page.
 - **Backups.** Export and restore your whole library locally, or use the optional encrypted cloud backup.
 
 ## Download
