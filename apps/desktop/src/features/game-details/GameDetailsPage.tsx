@@ -28,6 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ActivityChart } from "@/components/charts/ActivityChart";
 import { SessionTimeline } from "@/features/sessions/components/SessionTimeline";
+import { ACTIVITY_CHART_DAYS } from "@/lib/constants";
 import {
   buildDailyActivity,
   getSessionTotals,
@@ -172,7 +173,7 @@ export function GameDetailsPage() {
 
   const totals = useMemo(() => getSessionTotals(sessions), [sessions]);
   const dailyActivity = useMemo(
-    () => buildDailyActivity(sessions, 14),
+    () => buildDailyActivity(sessions, ACTIVITY_CHART_DAYS),
     [sessions],
   );
   const integritySummary = useMemo(

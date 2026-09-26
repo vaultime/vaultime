@@ -38,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCloudSession } from "@/features/cloud/CloudSessionProvider";
+import { BYTES_PER_KIB } from "@/lib/constants";
 import { formatLongDate } from "@/lib/time";
 import type { CloudAdminInvite, CloudBackupRecord } from "@/lib/types";
 
@@ -59,10 +60,10 @@ function formatByteSize(bytes: number) {
 
   const units = ["B", "KB", "MB", "GB", "TB"];
   const exponent = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
+    Math.floor(Math.log(bytes) / Math.log(BYTES_PER_KIB)),
     units.length - 1,
   );
-  const value = bytes / 1024 ** exponent;
+  const value = bytes / BYTES_PER_KIB ** exponent;
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 }
 

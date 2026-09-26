@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useState } from "react";
+import { ACTIVE_POLL_MS } from "@/lib/constants";
 import type { Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 
@@ -36,7 +37,7 @@ function sameSessions(a: Session[], b: Session[]): boolean {
 }
 
 /** Polls open sessions. The array keeps its identity while nothing changes. */
-export function useActiveSessions(pollIntervalMs = 5_000) {
+export function useActiveSessions(pollIntervalMs = ACTIVE_POLL_MS) {
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
 
   useEffect(() => {

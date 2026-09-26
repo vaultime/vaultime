@@ -3,6 +3,7 @@
 
 import { Activity, Clock, Loader2, Shield, TimerReset, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ACTIVITY_CHART_DAYS } from "@/lib/constants";
 import type { Game } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { useSessions, useActiveSessions } from "./useSessions";
@@ -26,7 +27,7 @@ export function SessionsPage() {
     return getSessionTotals(sessions);
   }, [sessions]);
   const dailyActivity = useMemo(
-    () => buildDailyActivity(sessions, 14),
+    () => buildDailyActivity(sessions, ACTIVITY_CHART_DAYS),
     [sessions],
   );
   const integritySummary = useMemo(

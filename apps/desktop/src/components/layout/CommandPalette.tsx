@@ -7,6 +7,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Search } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
 import { useLibrary } from "@/features/library/library-context";
+import { PALETTE_GAMES_IDLE, PALETTE_GAMES_SEARCHING } from "@/lib/constants";
 import { formatHoursShort } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +42,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     const matches = (text: string) => !needle || text.toLowerCase().includes(needle);
     const games: Command[] = summaries
       .filter(({ game }) => matches(game.title))
-      .slice(0, needle ? 8 : 5)
+      .slice(0, needle ? PALETTE_GAMES_SEARCHING : PALETTE_GAMES_IDLE)
       .map(({ game, cover, runtimeMs }) => ({
         id: `game-${game.id}`,
         label: game.title,

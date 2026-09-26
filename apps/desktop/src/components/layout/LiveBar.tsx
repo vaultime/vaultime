@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { ArrowUpRight, Gamepad2 } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
 import { useLibrary } from "@/features/library/library-context";
+import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatHoursMinutes, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
 
 const TRUST_LABEL: Record<string, string> = {
@@ -23,7 +24,7 @@ export function LiveBar() {
   // Tick every second while something runs, so the timer does not jump every poll.
   useEffect(() => {
     if (!current) return;
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    const timer = setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
     return () => clearInterval(timer);
   }, [current]);
 
@@ -114,7 +115,7 @@ export function LiveBar() {
 
       <div className="flex items-center justify-end gap-4">
         <span className="text-[13px] text-faint">
-          Counts as idle after {Math.round(idleThresholdSeconds / 60)} min away
+          Counts as idle after {Math.round(idleThresholdSeconds / SECONDS_PER_MINUTE)} min away
         </span>
         <Link
           to={`/library/${current.game_id}`}

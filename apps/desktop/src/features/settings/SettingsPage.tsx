@@ -30,6 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DEFAULT_IDLE_THRESHOLD_SECONDS } from "@/lib/constants";
 import { formatLongDate, formatSessionDate } from "@/lib/time";
 import type {
   BackupSnapshot,
@@ -129,7 +130,7 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [idleThresholdSeconds, setIdleThresholdSeconds] = useState("300");
+  const [idleThresholdSeconds, setIdleThresholdSeconds] = useState(String(DEFAULT_IDLE_THRESHOLD_SECONDS));
   const [treatBackgroundAsActive, setTreatBackgroundAsActive] = useState(false);
   const [diagnostics, setDiagnostics] =
     useState<TrackingDiagnostics | null>(null);
@@ -164,7 +165,7 @@ export function SettingsPage() {
         }
 
         const values = mapSettings(settings);
-        setIdleThresholdSeconds(values.idle_threshold_seconds ?? "300");
+        setIdleThresholdSeconds(values.idle_threshold_seconds ?? String(DEFAULT_IDLE_THRESHOLD_SECONDS));
         setTreatBackgroundAsActive(
           values.treat_background_as_active === "true",
         );

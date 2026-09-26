@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
+import { SECOND_MS } from "@/lib/constants";
 import { formatDuration } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
 
@@ -189,7 +190,7 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
         return "Timing counters persisted";
       }
 
-      const driftSeconds = Math.round(Math.abs(driftMs) / 1000);
+      const driftSeconds = Math.round(Math.abs(driftMs) / SECOND_MS);
       return driftSeconds > 0
         ? `Timing counters persisted, ${driftSeconds}s drift`
         : "Timing counters persisted";

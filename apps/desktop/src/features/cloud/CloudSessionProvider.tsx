@@ -17,6 +17,7 @@ import {
   cloudGetJson,
   cloudPostJson,
 } from "@/lib/cloud-api";
+import { TOKEN_REFRESH_MARGIN_MS } from "@/lib/constants";
 import {
   clearCloudBackupKeySecure,
   clearCloudSessionSecure,
@@ -349,7 +350,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       throw new Error("Your cloud session expired. Sign in again.");
     }
 
-    if (isExpired(current.expires_at, 60_000)) {
+    if (isExpired(current.expires_at, TOKEN_REFRESH_MARGIN_MS)) {
       try {
         const refreshed = await refreshWithToken(current.refresh_token);
         applySession(refreshed);
