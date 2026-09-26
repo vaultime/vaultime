@@ -6,8 +6,10 @@ import {
   DAY_PART_HOURS,
   DAYS_PER_WEEK,
   HOUR_MS,
+  HOURS_PER_DAY,
   JUST_NOW_MINUTES,
   MINUTE_MS,
+  MINUTES_PER_HOUR,
   SECOND_MS,
   SECONDS_PER_HOUR,
   SECONDS_PER_MINUTE,
@@ -32,8 +34,10 @@ export function parseVaultimeDate(value: string): Date {
     return new Date(value);
   }
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return new Date(`${value}T00:00:00Z`);
+  // A bare date is a calendar day, so it starts at local midnight.
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (day) {
+    return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
   }
 
   return new Date(`${value}Z`);
@@ -185,4 +189,18 @@ export function isoWeekNumber(date: Date): number {
 /** "14:10", in the regional clock. */
 export function formatClockTime(value: Date): string {
   return value.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * Where a moment sits on the 24 hour strip of `day`, in percent. It uses the
+ * clock time, so the hour labels stay right on days with a daylight saving
+ * switch. Moments before the day give 0, moments after it 100.
+ */
+export function clockPercent(moment: Date, day: Date): number {
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const nextDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  if (moment < dayStart) return 0;
+  if (moment >= nextDay) return 100;
+  const minutes = moment.getHours() * MINUTES_PER_HOUR + moment.getMinutes() + moment.getSeconds() / SECONDS_PER_MINUTE;
+  return (minutes / (HOURS_PER_DAY * MINUTES_PER_HOUR)) * 100;
 }

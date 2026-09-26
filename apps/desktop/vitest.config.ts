@@ -1,16 +1,31 @@
 import { defineConfig, mergeConfig } from "vitest/config";
 import viteConfig from "./vite.config.ts";
 
-// Tests see dates the way a user in Berlin does, so day boundaries differ
-// from UTC and bugs that mix the two show up.
-process.env.TZ = "Europe/Berlin";
+// Every test runs in several time zones, so code that mixes up local and UTC
+// days fails somewhere. West and east of UTC, a half hour offset, the date
+// line and UTC itself.
+const TIME_ZONES = [
+  "Europe/Berlin",
+  "America/Los_Angeles",
+  "Asia/Kolkata",
+  "Pacific/Auckland",
+  "America/Sao_Paulo",
+  "UTC",
+];
 
 export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      include: ["src/**/*.test.ts"],
-      setupFiles: ["src/test/setup.ts"],
+      projects: TIME_ZONES.map((zone) => ({
+        extends: true,
+        test: {
+          name: zone,
+          include: ["src/**/*.test.ts"],
+          setupFiles: ["src/test/setup.ts"],
+          env: { TZ: zone },
+        },
+      })),
     },
   }),
 );

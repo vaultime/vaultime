@@ -9,7 +9,6 @@ import { useLibrary, type GameSummary } from "@/features/library/library-context
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
   DAYS_PER_WEEK,
-  HOUR_MS,
   HOURS_PER_DAY,
   JOURNAL_MIN_SPAN_PERCENT,
   JOURNAL_TICK_HOURS,
@@ -18,6 +17,7 @@ import { tintForTitle } from "@/lib/game-tint";
 import { weekSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
 import {
+  clockPercent,
   formatClockTime,
   formatHoursMinutes,
   isoWeekNumber,
@@ -172,9 +172,6 @@ function DaySection({
   events: SessionEvent[];
   now: Date;
 }) {
-  const dayStart = day.start.getTime();
-  const toPercent = (time: number) => ((time - dayStart) / (HOURS_PER_DAY * HOUR_MS)) * 100;
-
   return (
     <section className="flex gap-10 border-b border-rule py-7">
       <div className="w-[190px] shrink-0">
@@ -191,10 +188,10 @@ function DaySection({
         <div>
           <div aria-hidden="true" className="relative h-2.5 rounded-full bg-raised">
             {day.sessions.map((session) => {
-              const start = parseVaultimeDate(session.started_at_wall).getTime();
-              const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
-              const left = Math.max(0, toPercent(start));
-              const width = Math.max(JOURNAL_MIN_SPAN_PERCENT, Math.min(100, toPercent(end)) - left);
+              const start = parseVaultimeDate(session.started_at_wall);
+              const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
+              const left = clockPercent(start, day.start);
+              const width = Math.max(JOURNAL_MIN_SPAN_PERCENT, clockPercent(end, day.start) - left);
               const summary = byGame.get(session.game_id);
               const tint = summary?.tint ?? tintForTitle(summary?.game.title ?? "");
               return (

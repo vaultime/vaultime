@@ -22,6 +22,14 @@ describe("buildDailyActivity", () => {
     expect(points[13].key).toBe("2026-09-29");
   });
 
+  it("counts late evening play on the local day", () => {
+    // 22:30 in Los Angeles is already the next day in UTC.
+    const evening = session(at(2026, 9, 28, 22, 30), 60);
+    const points = buildDailyActivity([evening], 14);
+    expect(points.find((point) => point.key === "2026-09-28")?.runtimeMs).toBe(60 * MINUTE_MS);
+    expect(points.find((point) => point.key === "2026-09-29")?.runtimeMs).toBe(0);
+  });
+
   it("counts play after midnight on the local day", () => {
     // 00:30 in Berlin is still the previous day in UTC.
     const lateNight = session(at(2026, 9, 29, 0, 30), 45, { active_ms: 40 * MINUTE_MS, idle_ms: 5 * MINUTE_MS });
@@ -30,6 +38,24 @@ describe("buildDailyActivity", () => {
     expect(today?.activeMs).toBe(40 * MINUTE_MS);
     expect(today?.idleMs).toBe(5 * MINUTE_MS);
     expect(points.find((point) => point.key === "2026-09-28")?.runtimeMs).toBe(0);
+  });
+});
+
+describe("buildDailyActivity around daylight saving", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("has every calendar day once", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 10, 5, 12, 0));
+    const keys = buildDailyActivity([], 60).map((point) => point.key);
+    expect(new Set(keys).size).toBe(60);
+    expect(keys[0]).toBe("2026-09-07");
+    expect(keys.at(-1)).toBe("2026-11-05");
+    expect(keys).toContain("2026-09-27");
+    expect(keys).toContain("2026-10-25");
+    expect(keys).toContain("2026-11-01");
   });
 });
 

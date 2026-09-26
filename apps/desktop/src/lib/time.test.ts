@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { at } from "@/test/sessions";
 import {
+  clockPercent,
   formatClock,
   formatDayPart,
   formatHoursMinutes,
@@ -17,12 +18,13 @@ import {
   UI_LOCALE,
 } from "./time";
 
-// Tuesday evening in Berlin.
+// Tuesday evening, local time.
 const now = new Date(2026, 8, 29, 21, 30);
 
 describe("test setup", () => {
-  it("runs in Berlin time, so local and UTC days differ", () => {
-    expect(new Date(2026, 8, 29).getTimezoneOffset()).toBe(-120);
+  it("runs in the time zone of the project", () => {
+    const canonical = new Intl.DateTimeFormat("en", { timeZone: import.meta.env.TZ }).resolvedOptions().timeZone;
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(canonical);
   });
 });
 
@@ -35,6 +37,11 @@ describe("UI_LOCALE", () => {
 describe("parseVaultimeDate", () => {
   it("reads timestamps without a zone as UTC", () => {
     expect(parseVaultimeDate("2026-09-29T20:00:00").toISOString()).toBe("2026-09-29T20:00:00.000Z");
+  });
+
+  it("reads a bare date as the local calendar day", () => {
+    const day = parseVaultimeDate("2026-09-29");
+    expect([day.getFullYear(), day.getMonth(), day.getDate(), day.getHours()]).toEqual([2026, 8, 29, 0]);
   });
 
   it("keeps an explicit offset", () => {
@@ -108,5 +115,25 @@ describe("weeks", () => {
     // 1 January 2027 is a Friday, so it still belongs to the last week of 2026.
     expect(isoWeekNumber(new Date(2027, 0, 1))).toBe(53);
     expect(isoWeekNumber(new Date(2027, 0, 4))).toBe(1);
+  });
+});
+
+// Daylight saving ends on 25 October 2026 in Berlin, on 1 November in Los
+// Angeles, and starts on 27 September in Auckland. Other zones do not switch.
+describe("daylight saving", () => {
+  it("keeps whole days across a switch", () => {
+    expect(formatRelativeDay(at(2026, 10, 25, 12, 0), new Date(2026, 9, 26, 10, 0))).toBe("Yesterday");
+    expect(formatRelativeDay(at(2026, 10, 31, 12, 0), new Date(2026, 10, 2, 10, 0))).toBe("Saturday");
+    expect(startOfWeek(new Date(2026, 9, 28, 12, 0))).toEqual(new Date(2026, 9, 26));
+    expect(isoWeekNumber(new Date(2026, 9, 25, 23, 0))).toBe(43);
+    expect(isoWeekNumber(new Date(2026, 9, 26, 0, 30))).toBe(44);
+  });
+
+  it("places the strip by clock time on a 25 hour day", () => {
+    const day = new Date(2026, 9, 25);
+    expect(clockPercent(new Date(2026, 9, 25, 6, 0), day)).toBe(25);
+    expect(clockPercent(new Date(2026, 9, 25, 23, 0), day)).toBeCloseTo((23 / 24) * 100);
+    expect(clockPercent(new Date(2026, 9, 24, 23, 0), day)).toBe(0);
+    expect(clockPercent(new Date(2026, 9, 26, 0, 30), day)).toBe(100);
   });
 });
