@@ -1,9 +1,8 @@
 <p align="center">
-  <img src="assets/timesafe.svg" alt="Vaultime icon" width="120" />
-</p>
-
-<p align="center">
-  <img src="assets/vaultime.svg" alt="Vaultime" width="360" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/vaultime-lockup-light.svg">
+    <img src="assets/vaultime-lockup-dark.svg" alt="Vaultime" width="380">
+  </picture>
 </p>
 
 <p align="center">
