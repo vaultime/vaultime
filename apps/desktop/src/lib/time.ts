@@ -1,6 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
+import {
+  DAY_MS,
+  DAY_PART_HOURS,
+  HOUR_MS,
+  JUST_NOW_MINUTES,
+  MINUTE_MS,
+  SECOND_MS,
+  SECONDS_PER_HOUR,
+  SECONDS_PER_MINUTE,
+  WEEKDAY_NAME_DAYS,
+} from "@/lib/constants";
+
 /**
  * English words to match the UI, with the date order and clock of the user's
  * region. A German system gets "Tuesday, 29 September" and a 24 hour clock.
@@ -27,10 +39,10 @@ export function parseVaultimeDate(value: string): Date {
 }
 
 export function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const totalSeconds = Math.floor(ms / SECOND_MS);
+  const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR);
+  const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+  const seconds = totalSeconds % SECONDS_PER_MINUTE;
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
@@ -44,9 +56,8 @@ export function formatDuration(ms: number): string {
 }
 
 export function formatCompactDuration(ms: number): string {
-  const totalMinutes = Math.floor(ms / 60_000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  const hours = Math.floor(ms / HOUR_MS);
+  const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
@@ -87,22 +98,27 @@ export function formatWeekday(value: string): string {
   });
 }
 
+/** Whole calendar days between two dates, 0 for the same day. */
+function calendarDaysAgo(date: Date, now: Date): number {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((startOfToday.getTime() - startOfDay.getTime()) / DAY_MS);
+}
+
 /** "Just now", "12 min ago", "3 hours ago", "Yesterday", "Monday", "In August". */
 export function formatRelativeDay(value: string, now = new Date()): string {
   const date = parseVaultimeDate(value);
-  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
-  if (minutes < 2) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  const elapsedMs = now.getTime() - date.getTime();
+  if (elapsedMs < JUST_NOW_MINUTES * MINUTE_MS) return "Just now";
+  if (elapsedMs < HOUR_MS) return `${Math.floor(elapsedMs / MINUTE_MS)} min ago`;
 
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const days = Math.round((startOfToday.getTime() - startOfDay.getTime()) / 86_400_000);
+  const days = calendarDaysAgo(date, now);
   if (days === 0) {
-    const hours = Math.floor(minutes / 60);
+    const hours = Math.floor(elapsedMs / HOUR_MS);
     return hours === 1 ? "An hour ago" : `${hours} hours ago`;
   }
   if (days === 1) return "Yesterday";
-  if (days < 7) return date.toLocaleDateString(UI_LOCALE, { weekday: "long" });
+  if (days < WEEKDAY_NAME_DAYS) return date.toLocaleDateString(UI_LOCALE, { weekday: "long" });
 
   const month = date.toLocaleDateString(UI_LOCALE, { month: "long" });
   return date.getFullYear() === now.getFullYear()
@@ -112,21 +128,39 @@ export function formatRelativeDay(value: string, now = new Date()): string {
 
 /** Whole hours for lists: "40 min", "3 h", "142 h". */
 export function formatHoursShort(ms: number): string {
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h`;
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)} min`;
+  return `${Math.floor(ms / HOUR_MS)} h`;
 }
 
 /** Stopwatch style: "01:24:10". */
 export function formatClock(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
+  const total = Math.max(0, Math.floor(ms / SECOND_MS));
+  const hours = Math.floor(total / SECONDS_PER_HOUR);
+  const minutes = Math.floor((total % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+  return `${pad(hours)}:${pad(minutes)}:${pad(total % SECONDS_PER_MINUTE)}`;
 }
 
 /** Hours and minutes with a space: "4 h 05", "38 min". */
 export function formatHoursMinutes(ms: number): string {
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`;
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)} min`;
+  const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
+  return `${Math.floor(ms / HOUR_MS)} h ${String(minutes).padStart(2, "0")}`;
+}
+
+/** Part of the day within the last week: "This morning", "Last night", "Saturday evening". */
+export function formatDayPart(value: string, now = new Date()): string {
+  const date = parseVaultimeDate(value);
+  const hour = date.getHours();
+  const { morning, afternoon, evening, night } = DAY_PART_HOURS;
+  const afterMidnight = hour < morning;
+  const part =
+    afterMidnight || hour >= night ? "night" : hour < afternoon ? "morning" : hour < evening ? "afternoon" : "evening";
+  // Play after midnight still belongs to the night before.
+  const day = new Date(date.getTime() - (afterMidnight ? morning * HOUR_MS : 0));
+  const days = calendarDaysAgo(day, now);
+  if (days === 0) return part === "night" ? "Tonight" : `This ${part}`;
+  if (days === 1) return part === "night" ? "Last night" : `Yesterday ${part}`;
+  if (days < WEEKDAY_NAME_DAYS) return `${day.toLocaleDateString(UI_LOCALE, { weekday: "long" })} ${part}`;
+  return formatCalendarDay(value);
 }

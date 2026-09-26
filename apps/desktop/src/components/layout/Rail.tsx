@@ -71,6 +71,9 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
           <span className="label-caps">Your games</span>
           <span className="font-mono text-[11px] text-faint">{summaries.length}</span>
         </div>
+        {summaries.length === 0 && (
+          <p className="px-3 text-[13px] text-faint">Games you add show up here.</p>
+        )}
         <ul className="no-scrollbar -mr-2 flex min-h-0 flex-col gap-0.5 overflow-y-auto pr-2">
           {summaries.map(({ game, cover, runtimeMs, lastPlayedAt }) => {
             const selected = location.pathname === `/library/${game.id}`;

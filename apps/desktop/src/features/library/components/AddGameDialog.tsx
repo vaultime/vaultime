@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Folder, FileIcon } from "lucide-react";
 import {
   Dialog,
@@ -11,7 +11,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +18,9 @@ import { Label } from "@/components/ui/label";
 import * as api from "@/lib/tauri";
 
 interface AddGameDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onAdded: () => void;
-  autoOpen?: boolean;
-  onDismiss?: () => void;
 }
 
 function inferTitle(path: string): string {
@@ -30,16 +29,7 @@ function inferTitle(path: string): string {
   return base.replace(/\.(exe|app|sh|bat|cmd|lnk)$/i, "").replace(/[_-]/g, " ");
 }
 
-export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  // Opened from the command palette through the URL.
-  const [autoOpened, setAutoOpened] = useState(false);
-  if (autoOpen && !autoOpened) {
-    setAutoOpened(true);
-    setIsOpen(true);
-  } else if (!autoOpen && autoOpened) {
-    setAutoOpened(false);
-  }
+export function AddGameDialog({ open, onOpenChange, onAdded }: AddGameDialogProps) {
   const [title, setTitle] = useState("");
   const [executablePath, setExecutablePath] = useState("");
   const [installFolder, setInstallFolder] = useState("");
@@ -54,8 +44,15 @@ export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogPro
     setError(null);
   }
 
+  // Start with an empty form every time the dialog opens.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) reset();
+  }
+
   async function pickExecutable() {
-    const selected = await open({
+    const selected = await openFileDialog({
       multiple: false,
       directory: false,
       title: "Select game executable",
@@ -76,7 +73,7 @@ export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogPro
   }
 
   async function pickFolder() {
-    const selected = await open({
+    const selected = await openFileDialog({
       multiple: false,
       directory: true,
       title: "Select game install folder",
@@ -102,8 +99,7 @@ export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogPro
       if (executablePath || installFolder) {
         await api.scanGameAssets(game.id).catch(() => {});
       }
-      setIsOpen(false);
-      reset();
+      onOpenChange(false);
       onAdded();
     } catch (e) {
       setError(`Could not add the game: ${String(e)}`);
@@ -113,22 +109,10 @@ export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogPro
   }
 
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        setIsOpen(open);
-        if (!open) {
-          reset();
-          onDismiss?.();
-        }
-      }}
-    >
-      <DialogTrigger render={<Button />}>
-        Add Game
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Game</DialogTitle>
+          <DialogTitle>Add a game</DialogTitle>
           <DialogDescription>
             Select a game executable or install folder to start tracking.
           </DialogDescription>
@@ -161,7 +145,7 @@ export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogPro
           </div>
 
           <div className="space-y-2">
-            <Label>Install Folder</Label>
+            <Label>Install folder</Label>
             <div className="flex gap-2">
               <Input
                 readOnly
@@ -185,15 +169,12 @@ export function AddGameDialog({ onAdded, autoOpen, onDismiss }: AddGameDialogPro
         <DialogFooter>
           <Button
             variant="ghost"
-            onClick={() => {
-              setIsOpen(false);
-              reset();
-            }}
+            onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!title.trim() || saving}>
-            {saving ? "Adding..." : "Add Game"}
+            {saving ? "Adding..." : "Add game"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -19,15 +19,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import type { DiscoveredGame } from "@/lib/types";
 import * as api from "@/lib/tauri";
 
 interface DiscoverGamesDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onImported: () => void;
-  autoOpen?: boolean;
-  onDismiss?: () => void;
 }
 
 function sourceLabel(source: string): string {
@@ -50,16 +49,7 @@ function sourceBadgeClass(source: string): string {
   }
 }
 
-export function DiscoverGamesDialog({ onImported, autoOpen, onDismiss }: DiscoverGamesDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  // Opened from the command palette through the URL.
-  const [autoOpened, setAutoOpened] = useState(false);
-  if (autoOpen && !autoOpened) {
-    setAutoOpened(true);
-    setIsOpen(true);
-  } else if (!autoOpen && autoOpened) {
-    setAutoOpened(false);
-  }
+export function DiscoverGamesDialog({ open, onOpenChange, onImported }: DiscoverGamesDialogProps) {
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [results, setResults] = useState<DiscoveredGame[]>([]);
@@ -75,6 +65,13 @@ export function DiscoverGamesDialog({ onImported, autoOpen, onDismiss }: Discove
     setScanning(false);
     setImporting(false);
   }, []);
+
+  // Start over every time the dialog opens.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) reset();
+  }
 
   async function handleScan() {
     try {
@@ -174,8 +171,7 @@ export function DiscoverGamesDialog({ onImported, autoOpen, onDismiss }: Discove
       setImporting(true);
       setError(null);
       await api.importDiscoveredGames(toImport);
-      setIsOpen(false);
-      reset();
+      onOpenChange(false);
       onImported();
     } catch (importError) {
       setError(String(importError));
@@ -188,28 +184,13 @@ export function DiscoverGamesDialog({ onImported, autoOpen, onDismiss }: Discove
   const selectedCount = selected.size;
 
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        setIsOpen(open);
-        if (!open) {
-          reset();
-          onDismiss?.();
-        }
-      }}
-    >
-      <DialogTrigger
-        render={<Button variant="outline" />}
-      >
-        <Search className="h-4 w-4" />
-        Discover
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
 
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderSearch className="h-4 w-4 text-primary" />
-            Discover Games
+            Discover games
           </DialogTitle>
           <DialogDescription>
             Scan common install folders and Steam for games to add to your

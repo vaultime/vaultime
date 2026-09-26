@@ -26,10 +26,8 @@ export function AppLayout() {
     <div className="grid h-screen grid-cols-[272px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-ink text-text">
       <Rail onSearch={() => setPaletteOpen(true)} />
       <main className="min-h-0 overflow-y-auto">
-        <div className="min-h-full p-6 lg:p-8">
-          <UpdateBanner />
-          <Outlet />
-        </div>
+        <UpdateBanner />
+        <Outlet />
       </main>
       <LiveBar />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />

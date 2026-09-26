@@ -2,14 +2,19 @@
 // SPDX-License-Identifier: MIT
 
 import { createContext, useContext } from "react";
+import type { GameTint } from "@/lib/game-tint";
 import type { Game, Session } from "@/lib/types";
 
 export interface GameSummary {
   game: Game;
   cover: string | null;
+  /** From the cover art when there is some, otherwise from the title. */
+  tint: GameTint;
   runtimeMs: number;
   activeMs: number;
   sessionsCount: number;
+  suspiciousCount: number;
+  recoveredCount: number;
   lastPlayedAt: string | null;
 }
 
@@ -24,6 +29,8 @@ export interface LibraryState {
   /** Every game with its totals, most recently played first. */
   summaries: GameSummary[];
   loaded: boolean;
+  /** Why the last load failed, null when it worked. */
+  error: string | null;
   refresh: () => Promise<void>;
 }
 

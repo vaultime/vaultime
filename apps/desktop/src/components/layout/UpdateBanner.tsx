@@ -53,8 +53,8 @@ export function UpdateBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3">
-      <p className="text-sm text-foreground">
+    <div className="flex items-center justify-between gap-4 border-b border-violet/30 bg-violet/10 px-8 py-2.5 xl:px-14">
+      <p className="text-sm text-text">
         Vaultime <span className="font-semibold">v{updateVersion}</span> is
         available.
       </p>
@@ -65,12 +65,13 @@ export function UpdateBanner() {
           ) : (
             <Download className="h-3.5 w-3.5" />
           )}
-          {installing ? "Installing..." : "Update & Restart"}
+          {installing ? "Installing..." : "Update and restart"}
         </Button>
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+          aria-label="Dismiss"
+          className="rounded-full p-1.5 text-faint hover:bg-white/10 hover:text-text"
         >
           <X className="h-4 w-4" />
         </button>
