@@ -3,7 +3,7 @@
 #
 #   cd apps/desktop && VITE_MOCK_IPC=1 npx vite build --outDir dist-mock
 #   npx vite preview --outDir dist-mock --port 4173 &
-#   bash scripts/ui-screenshots.sh <output-folder> [page ...]
+#   bash ../../scripts/ui-screenshots.sh <output-folder> [page ...]
 #
 # Set HEIGHT to capture more of a long page, the default is 900.
 # Uses the Microsoft Edge that ships with Windows, in headless mode.
@@ -13,7 +13,7 @@ out=${1:?usage: ui-screenshots.sh <output-folder> [page ...]}
 shift
 pages=("$@")
 if [ ${#pages[@]} -eq 0 ]; then
-  pages=(library sessions cloud settings library/game-1)
+  pages=(library journal cloud settings library/game-1)
 fi
 
 edge="/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"

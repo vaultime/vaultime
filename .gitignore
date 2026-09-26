@@ -21,7 +21,6 @@ Thumbs.db
 .env.*.local
 
 # Tauri
-apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/.cargo/config.toml
 
@@ -32,7 +31,7 @@ PLAN.md
 __pycache__/
 *.pyc
 
-# Linux bundles built by scripts/linux-package.sh
+# Output of scripts/linux-package.sh and scripts/deploy-api.sh
 dist-linux/
 dist-api/
 

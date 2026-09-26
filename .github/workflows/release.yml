@@ -1,9 +1,9 @@
 name: Release
 
-# A version tag builds the Windows and Linux installers into a draft release,
-# installs the Linux packages on several distros and publishes the release
-# once everything passed. A manual run builds and tests without publishing and
-# keeps the installers as workflow artifacts.
+# A version tag runs the CI checks, builds the Windows and Linux installers
+# into a draft release, installs the Linux packages on several distros and
+# publishes the release once everything passed. A manual run builds and tests
+# without publishing and keeps the installers as workflow artifacts.
 
 on:
   push:
@@ -11,15 +11,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  checks:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+
   windows:
     name: Build (Windows)
+    needs: checks
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
@@ -80,7 +87,10 @@ jobs:
 
   linux:
     name: Build (Linux)
+    needs: checks
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     # The oldest supported base keeps the glibc floor at 2.35, so the packages
     # run on Debian 12, Fedora, Arch, openSUSE and newer Ubuntu as well.
     container: ubuntu:22.04
@@ -197,6 +207,8 @@ jobs:
     needs: [windows, linux, linux-smoke]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - name: Publish the draft
         env:

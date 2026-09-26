@@ -38,7 +38,7 @@ apps/api/         Self-hosted cloud backup API
 deploy/vps/       Server install script, systemd unit and admin tools
 docs/             Legal pages and landing page (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
-scripts/          Dev helpers: Linux checks, packaging, API deploy, invite keys
+scripts/          Dev helpers: Linux checks, packaging, API deploy, logo, UI screenshots
 assets/           Brand assets
 ```
 
@@ -53,7 +53,8 @@ Frontend, from `apps/desktop`:
   German locale, so day boundaries and date formats differ from UTC.
 - `VITE_MOCK_IPC=1 npx vite build --outDir dist-mock`, then
   `npx vite preview --outDir dist-mock` shows the UI in a browser with sample
-  data. `bash scripts/ui-screenshots.sh <folder> [page ...]` captures pages.
+  data. `bash ../../scripts/ui-screenshots.sh <folder> [page ...]` captures
+  pages with headless Edge, `HEIGHT=1800` for long ones.
 
 Rust, from `apps/desktop/src-tauri` or `apps/api`:
 

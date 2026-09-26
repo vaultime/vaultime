@@ -29,7 +29,6 @@ You agree not to:
 
 - Try to gain unauthorized access to the server or other accounts.
 - Store or transmit illegal content.
-- Reverse-engineer the cloud API for purposes other than working with your own data.
 - Interfere with the service's availability for others.
 
 ## 6. Data and Privacy

@@ -38,7 +38,7 @@ The server does not store IP addresses in its database.
 
 ## 4. Third Parties
 
-Cloud backup runs on a server operated by the Vaultime maintainer. No third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host.
+Cloud backup runs on a server operated by the Vaultime maintainer. No third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host, which sees your IP address like any web server does.
 
 ## 5. Retention
 
@@ -61,7 +61,7 @@ Cloud backup runs on a server operated by the Vaultime maintainer. No third-part
 
 ## 8. Children
 
-Vaultime is not directed at children under 13. We do not knowingly collect data from children.
+Vaultime is not directed at children under 16. We do not knowingly collect data from children.
 
 ## 9. Changes
 

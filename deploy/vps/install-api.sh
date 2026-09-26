@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Installs or updates the Vaultime API on Ubuntu 24.04. Run as root with the
 # release binary and vaultime-api.service next to this script. Running it
-# again updates the binary and keeps the database and secrets.
+# again updates the binary and keeps the database and secrets. Caddy has to
+# be installed already. The script adds a site to its config.
 #
 #   install-api.sh <domain>     the public API host, for example api.example.com
 set -euo pipefail

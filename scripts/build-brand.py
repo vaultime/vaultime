@@ -110,7 +110,6 @@ def lockup_svg(ink, pivot):
 
 def main():
     ASSETS.mkdir(exist_ok=True)
-    (ASSETS / "vaultime-icon.svg").write_text(tile_svg(512), encoding="utf8")
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")

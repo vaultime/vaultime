@@ -89,7 +89,7 @@ These labels detect changes, they cannot prevent them. They are hints, not proof
 
 ## Backups
 
-- **Local backups** are folders you can keep anywhere. Create one with Export Backup under Settings, Local Backups. Choose Backup To Restore shows what is inside before anything is replaced.
+- **Local backups** are folders you can keep anywhere. Create one with Save a backup under Settings, Local backups. Restore from a backup shows what is inside before anything is replaced.
 - **Cloud backup** is free and invite-only. Backups are encrypted on your computer with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe, without it a backup cannot be restored. When you reach the backup limit, a new upload replaces your oldest one. You can also delete backups yourself.
 
 ## Your data
