@@ -7,7 +7,7 @@
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
-import type { Game, Session } from "@/lib/types";
+import type { Game, Session, SessionEvent } from "@/lib/types";
 
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -75,6 +75,26 @@ const live: Session = {
 const played = scenario === "empty" || scenario === "unplayed" ? [] : [live, ...sessions];
 const allSessions = played.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
 const allGames = scenario === "empty" ? [] : games;
+
+// Flagged and recovered sessions explain themselves, and one skipped a sleep.
+const events: SessionEvent[] = allSessions.flatMap((session, index) => {
+  const event = (type: string, payload: Record<string, unknown>): SessionEvent => ({
+    id: `${session.id}-${type}`,
+    session_id: session.id,
+    sequence: 2,
+    event_type: type,
+    event_time_wall: session.started_at_wall,
+    event_time_monotonic: null,
+    payload_json: JSON.stringify(payload),
+    hash_prev: "preview",
+    hash_self: "preview",
+    signature: null,
+  });
+  if (session.integrity_status === "suspicious") return [event("integrity_flagged", { reason: "wall_clock_step_mismatch" })];
+  if (session.integrity_status === "recovered") return [event("recovered", { reason: "startup_orphan_cleanup" })];
+  if (index === 3) return [event("tracking_gap", { wall_gap_ms: 2 * HOUR_MS + 14 * MINUTE_MS })];
+  return [];
+});
 const running = scenario ? [] : [live];
 
 mockIPC((cmd, payload) => {
@@ -90,6 +110,10 @@ mockIPC((cmd, payload) => {
       return allSessions;
     case "get_sessions_for_game":
       return allSessions.filter((session) => session.game_id === args.gameId);
+    case "get_session_events_for_game": {
+      const ids = new Set(allSessions.filter((session) => session.game_id === args.gameId).map((session) => session.id));
+      return events.filter((event) => ids.has(event.session_id));
+    }
     case "get_active_sessions":
       return running;
     case "list_settings":
