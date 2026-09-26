@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const PAGES = [
   { to: "/library", label: "Library", icon: LibraryBig },
-  { to: "/sessions", label: "Sessions", icon: BookOpen },
+  { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/cloud", label: "Cloud", icon: Cloud },
   { to: "/settings", label: "Settings", icon: SlidersHorizontal },
 ] as const;

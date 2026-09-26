@@ -22,7 +22,7 @@ interface Command {
 
 const FIXED: Command[] = [
   { id: "page-library", label: "Library", hint: "All your games", kind: "Page", to: "/library" },
-  { id: "page-sessions", label: "Sessions", hint: "Every session you played", kind: "Page", to: "/sessions" },
+  { id: "page-journal", label: "Journal", hint: "Your play, week by week", kind: "Page", to: "/journal" },
   { id: "page-cloud", label: "Cloud", hint: "Encrypted backups on the server", kind: "Page", to: "/cloud" },
   { id: "page-settings", label: "Settings", hint: "Tracking, backups and more", kind: "Page", to: "/settings" },
   { id: "action-add", label: "Add a game", hint: "Pick an executable by hand", kind: "Action", to: "/library?add=1" },

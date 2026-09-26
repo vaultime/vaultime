@@ -82,7 +82,7 @@ export function gamePlaytime(sessions: Session[]): Phrase {
 }
 
 /** The part of the day that holds most of the playtime, when there is a clear one. */
-export function habitOf(sessions: Session[]): DayPart | null {
+function habitOf(sessions: Session[]): DayPart | null {
   if (sessions.length < HABIT_MIN_SESSIONS) return null;
   const byPart = new Map<DayPart, number>();
   let total = 0;
@@ -158,4 +158,37 @@ export function lastPlayedLine(lastPlayedAt: string | null): string {
   if (when !== "Yesterday" && when.endsWith("day")) return `Last played on ${when}`;
   if (when.startsWith("In ")) return `Last played in ${when.slice(3)}`;
   return `Last played ${when.charAt(0).toLowerCase()}${when.slice(1)}`;
+}
+
+/** "eleven hours and twenty minutes", "forty minutes". */
+function durationWords(ms: number): string {
+  const hours = Math.floor(ms / HOUR_MS);
+  const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
+  const minutePart = `${numberWords(minutes)} minute${minutes === 1 ? "" : "s"}`;
+  if (hours === 0) return minutePart;
+  const hourPart = `${numberWords(hours)} hour${hours === 1 ? "" : "s"}`;
+  return minutes > 0 ? `${hourPart} and ${minutePart}` : hourPart;
+}
+
+/** "Nine sessions, eleven hours and twenty minutes in all. *Saturday* was the longest day." */
+export function weekSentence({
+  sessionsCount,
+  runtimeMs,
+  longestDay,
+  daysPlayed,
+  current,
+}: {
+  sessionsCount: number;
+  runtimeMs: number;
+  longestDay: string | null;
+  daysPlayed: number;
+  /** This week, which may still get more play. */
+  current: boolean;
+}): Phrase {
+  if (sessionsCount === 0 || !longestDay) {
+    return { before: current ? "Nothing played yet this week." : "Nothing played that week." };
+  }
+  const lead = `${capitalize(numberWords(sessionsCount))} session${sessionsCount === 1 ? "" : "s"}, ${durationWords(runtimeMs)} in all.`;
+  if (daysPlayed === 1) return { before: `${lead} All of it on `, em: longestDay, after: "." };
+  return { before: `${lead} `, em: longestDay, after: " was the longest day." };
 }

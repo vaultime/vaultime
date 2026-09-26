@@ -12,20 +12,25 @@ export function SessionLine({
   session,
   events,
   gameTitle,
+  when,
+  bordered = true,
 }: {
   session: Session;
   /** Events of this session or more, used to explain flags and skipped time. */
   events: SessionEvent[];
   /** Set when the list mixes games. */
   gameTitle?: string;
+  /** Replaces the start day and time in the left column. */
+  when?: string;
+  bordered?: boolean;
 }) {
   const note = sessionTrustNote(session, events);
   const live = !session.ended_at_wall;
 
   return (
-    <article className="flex items-baseline gap-5 border-b border-rule py-3.5">
+    <article className={cn("flex items-baseline gap-5", bordered && "border-b border-rule py-3.5")}>
       <span className="w-[132px] shrink-0 font-mono text-[13px] text-faint">
-        {formatSessionStart(session.started_at_wall)}
+        {when ?? formatSessionStart(session.started_at_wall)}
       </span>
       <div className="min-w-0 flex-1">
         <div className={cn("font-display text-[22px] leading-snug", live && "text-violet")}>

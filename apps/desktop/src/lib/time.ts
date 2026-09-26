@@ -4,6 +4,7 @@
 import {
   DAY_MS,
   DAY_PART_HOURS,
+  DAYS_PER_WEEK,
   HOUR_MS,
   JUST_NOW_MINUTES,
   MINUTE_MS,
@@ -55,17 +56,6 @@ export function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-export function formatCompactDuration(ms: number): string {
-  const hours = Math.floor(ms / HOUR_MS);
-  const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  return `${minutes}m`;
-}
-
 export function formatSessionDate(value: string): string {
   return parseVaultimeDate(value).toLocaleDateString(UI_LOCALE, {
     weekday: "short",
@@ -89,12 +79,6 @@ export function formatLongDate(value: string): string {
     month: "long",
     day: "numeric",
     year: "numeric",
-  });
-}
-
-export function formatWeekday(value: string): string {
-  return parseVaultimeDate(value).toLocaleDateString(UI_LOCALE, {
-    weekday: "short",
   });
 }
 
@@ -175,10 +159,30 @@ export function formatDayPart(value: string, now = new Date()): string {
 /** "Today 22:10", "Yesterday 22:10", "Sun 21:40", "16 Sept 21:40". */
 export function formatSessionStart(value: string, now = new Date()): string {
   const date = parseVaultimeDate(value);
-  const clock = date.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
+  const clock = formatClockTime(date);
   const days = calendarDaysAgo(date, now);
   if (days === 0) return `Today ${clock}`;
   if (days === 1) return `Yesterday ${clock}`;
   if (days < WEEKDAY_NAME_DAYS) return `${date.toLocaleDateString(UI_LOCALE, { weekday: "short" })} ${clock}`;
   return `${date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })} ${clock}`;
+}
+
+/** Midnight at the start of the Monday of the week that holds `date`. */
+export function startOfWeek(date: Date): Date {
+  const daysSinceMonday = (date.getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysSinceMonday);
+}
+
+/** ISO 8601 week number. A week belongs to the year that holds its Thursday. */
+export function isoWeekNumber(date: Date): number {
+  const THURSDAY_AFTER_MONDAY = 3;
+  const monday = startOfWeek(date);
+  const thursday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + THURSDAY_AFTER_MONDAY);
+  const firstOfYear = new Date(thursday.getFullYear(), 0, 1);
+  return Math.floor(calendarDaysAgo(firstOfYear, thursday) / DAYS_PER_WEEK) + 1;
+}
+
+/** "14:10", in the regional clock. */
+export function formatClockTime(value: Date): string {
+  return value.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
 }

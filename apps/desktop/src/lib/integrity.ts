@@ -3,28 +3,15 @@
 
 import { SECOND_MS } from "@/lib/constants";
 import { formatDuration } from "@/lib/time";
-import type { Session, SessionEvent } from "@/lib/types";
+import type { SessionEvent } from "@/lib/types";
+import { capitalize } from "@/lib/words";
 
 export interface IntegrityMeta {
   label: string;
   description: string;
 }
 
-export interface IntegritySummary {
-  overallStatus: string;
-  totalCount: number;
-  localCount: number;
-  suspiciousCount: number;
-  recoveredCount: number;
-  openCount: number;
-  note: string;
-}
-
-const STATUS_PRIORITY: Record<string, number> = {
-  local: 1,
-  recovered: 2,
-  suspicious: 3,
-};
+const KNOWN_STATUSES = new Set(["local", "recovered", "suspicious"]);
 
 export function normalizeIntegrityStatus(
   status: string | null | undefined,
@@ -34,7 +21,7 @@ export function normalizeIntegrityStatus(
     return "local";
   }
 
-  return normalized in STATUS_PRIORITY ? normalized : "local";
+  return KNOWN_STATUSES.has(normalized) ? normalized : "local";
 }
 
 export function getIntegrityMeta(status: string): IntegrityMeta {
@@ -61,63 +48,18 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
   }
 }
 
-export function summarizeIntegrity(sessions: Session[]): IntegritySummary {
-  let overallStatus = "local";
-  let localCount = 0;
-  let suspiciousCount = 0;
-  let recoveredCount = 0;
-  let openCount = 0;
-
-  for (const session of sessions) {
-    const normalized = normalizeIntegrityStatus(session.integrity_status);
-
-    if (normalized === "suspicious") {
-      suspiciousCount += 1;
-    } else if (normalized === "recovered") {
-      recoveredCount += 1;
-    } else {
-      localCount += 1;
-    }
-
-    if (!session.ended_at_wall) {
-      openCount += 1;
-    }
-
-    if (
-      STATUS_PRIORITY[normalized] > STATUS_PRIORITY[overallStatus]
-    ) {
-      overallStatus = normalized;
-    }
-  }
-
-  return {
-    overallStatus,
-    totalCount: sessions.length,
-    localCount,
-    suspiciousCount,
-    recoveredCount,
-    openCount,
-    note: buildIntegrityNote({
-      totalCount: sessions.length,
-      suspiciousCount,
-      recoveredCount,
-      openCount,
-    }),
-  };
-}
-
-export function formatIntegrityReason(reason: string | null | undefined): string {
+function formatIntegrityReason(reason: string | null | undefined): string {
   switch (reason) {
     case "wall_clock_moved_backwards":
       return "System clock moved backwards";
     case "wall_clock_step_mismatch":
       return "Wall clock jumped away from monotonic time";
     case "wall_clock_drift_exceeded":
-      return "Wall-clock drift exceeded tolerance";
+      return "Wall clock drifted too far from monotonic time";
     case "startup_orphan_cleanup":
       return "Recovered after restart";
     default:
-      return titleCaseWords((reason ?? "local_integrity_issue").replaceAll("_", " "));
+      return capitalize((reason ?? "local_integrity_issue").replaceAll("_", " "));
   }
 }
 
@@ -136,7 +78,7 @@ export function formatIntegrityEventType(eventType: string): string {
     case "tracking_gap":
       return "Sleep or pause left out";
     default:
-      return titleCaseWords(eventType.replaceAll("_", " "));
+      return capitalize(eventType.replaceAll("_", " "));
   }
 }
 
@@ -191,38 +133,4 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
     default:
       return "Audit event recorded";
   }
-}
-
-function buildIntegrityNote({
-  totalCount,
-  suspiciousCount,
-  recoveredCount,
-  openCount,
-}: {
-  totalCount: number;
-  suspiciousCount: number;
-  recoveredCount: number;
-  openCount: number;
-}): string {
-  if (totalCount === 0) {
-    return "Trust labels appear after the first tracked session.";
-  }
-
-  if (suspiciousCount > 0) {
-    return `${suspiciousCount} session${suspiciousCount === 1 ? "" : "s"} flagged for clock mismatch or timing drift.`;
-  }
-
-  if (recoveredCount > 0) {
-    return `${recoveredCount} session${recoveredCount === 1 ? "" : "s"} reconstructed after a restart or interrupted shutdown.`;
-  }
-
-  if (openCount > 0) {
-    return `${openCount} live session${openCount === 1 ? "" : "s"} still open on this device.`;
-  }
-
-  return "All tracked sessions look internally consistent in local mode so far.";
-}
-
-function titleCaseWords(value: string): string {
-  return value.replace(/\b\w/g, (match) => match.toUpperCase());
 }

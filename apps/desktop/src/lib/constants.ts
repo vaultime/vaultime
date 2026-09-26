@@ -13,6 +13,8 @@ export const HOUR_MS = 60 * MINUTE_MS;
 export const DAY_MS = 24 * HOUR_MS;
 export const SECONDS_PER_MINUTE = 60;
 export const SECONDS_PER_HOUR = 3_600;
+export const HOURS_PER_DAY = 24;
+export const DAYS_PER_WEEK = 7;
 
 // Tracking
 
@@ -59,6 +61,14 @@ export const GAME_RECENT_SESSIONS = 8;
 
 /** Notable integrity events listed in a game's event log. */
 export const EVENT_LOG_LIMIT = 12;
+
+// Journal
+
+/** Hours between the labels under a day's 24 hour strip. */
+export const JOURNAL_TICK_HOURS = 6;
+
+/** Narrowest span on the strip, in percent of the day, so short sessions still show. */
+export const JOURNAL_MIN_SPAN_PERCENT = 0.8;
 
 // Time phrases
 

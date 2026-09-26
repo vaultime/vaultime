@@ -4,7 +4,7 @@
 import { Routes, Route, Navigate, Outlet } from "react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LibraryPage } from "@/features/library/LibraryPage";
-import { SessionsPage } from "@/features/sessions/SessionsPage";
+import { JournalPage } from "@/features/journal/JournalPage";
 import { CloudPage } from "@/features/cloud/CloudPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { GameDetailsPage } from "@/features/game-details";
@@ -16,8 +16,9 @@ export function App() {
         <Route index element={<Navigate to="/library" replace />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="library/:gameId" element={<GameDetailsPage />} />
+        <Route path="journal" element={<JournalPage />} />
+        <Route path="sessions" element={<Navigate to="/journal" replace />} />
         <Route element={<PaddedPage />}>
-          <Route path="sessions" element={<SessionsPage />} />
           <Route path="cloud" element={<CloudPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

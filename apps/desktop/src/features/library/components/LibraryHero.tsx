@@ -87,8 +87,8 @@ export function LibraryHero(props: HeroProps) {
               Open game
               <ArrowRight className="size-4" strokeWidth={1.8} />
             </TintedButton>
-            <TintedButton tint={tint} to="/sessions">
-              All sessions
+            <TintedButton tint={tint} to="/journal">
+              Read the journal
             </TintedButton>
           </div>
         </div>
