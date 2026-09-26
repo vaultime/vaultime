@@ -185,8 +185,12 @@ jobs:
           path: pkg
 
       - name: Install and start the app
-        # The artifact keeps the deb, rpm and appimage folders.
-        run: bash packaging/linux/smoke-test.sh "$(find pkg -name '*.${{ matrix.package }}' | head -n 1)"
+        # The artifact keeps the deb, rpm and appimage folders. A glob works
+        # on minimal images without find.
+        run: |
+          shopt -s globstar nullglob
+          packages=(pkg/**/*.${{ matrix.package }})
+          bash packaging/linux/smoke-test.sh "${packages[0]}"
 
   publish:
     name: Publish release
