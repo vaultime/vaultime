@@ -57,32 +57,25 @@ pub struct GameAssetView {
     pub is_preferred: bool,
 }
 
-pub fn list_game_assets(
-    db: &Database,
-    asset_manager: &AssetManager,
-    game_id: &str,
-) -> Result<Vec<GameAssetView>> {
+pub fn list_game_assets(db: &Database, game_id: &str) -> Result<Vec<GameAssetView>> {
     let game = games::get_game(db, game_id)?;
     let assets = game_assets::list_assets_for_game(db, game_id)?;
     let preferred_asset_id = preferred_asset_id(&game);
-    build_asset_views(&assets, preferred_asset_id.as_deref(), asset_manager)
+    build_asset_views(&assets, preferred_asset_id.as_deref())
 }
 
-pub fn list_preferred_game_assets(
-    db: &Database,
-    asset_manager: &AssetManager,
-) -> Result<Vec<GameAssetView>> {
+pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
     let games = games::list_games(db)?;
     let mut views = Vec::new();
 
     for game in games {
         let assets = game_assets::list_assets_for_game(db, &game.id)?;
         let preferred_asset_id = preferred_asset_id(&game);
-        let maybe_view = build_asset_views(&assets, preferred_asset_id.as_deref(), asset_manager)?
+        let maybe_view = build_asset_views(&assets, preferred_asset_id.as_deref())?
             .into_iter()
             .find(|asset| asset.is_preferred)
             .or_else(|| {
-                build_asset_views(&assets, None, asset_manager)
+                build_asset_views(&assets, None)
                     .ok()
                     .and_then(|mut asset_views| asset_views.drain(..).next())
             });
@@ -142,7 +135,7 @@ pub fn scan_game_assets(
         previous_preferred_asset_id.as_deref(),
     )?;
 
-    list_game_assets(db, asset_manager, game_id)
+    list_game_assets(db, game_id)
 }
 
 pub fn import_game_asset(
@@ -171,7 +164,7 @@ pub fn import_game_asset(
     )?;
 
     set_preferred_game_asset(db, game_id, &inserted.id)?;
-    list_game_assets(db, asset_manager, game_id)
+    list_game_assets(db, game_id)
 }
 
 pub fn set_preferred_game_asset(db: &Database, game_id: &str, asset_id: &str) -> Result<bool> {
@@ -210,7 +203,6 @@ fn ensure_preferred_asset(
 fn build_asset_views(
     assets: &[GameAsset],
     preferred_asset_id: Option<&str>,
-    asset_manager: &AssetManager,
 ) -> Result<Vec<GameAssetView>> {
     let resolved_preferred = preferred_asset_id
         .and_then(|asset_id| assets.iter().find(|asset| asset.id == asset_id))
@@ -228,7 +220,7 @@ fn build_asset_views(
             cache_path: asset.cache_path.clone(),
             hash: asset.hash.clone(),
             created_at: asset.created_at.clone(),
-            preview_data_url: build_preview_data_url(asset, asset_manager).ok(),
+            preview_data_url: build_preview_data_url(asset).ok(),
             is_preferred: resolved_preferred
                 .as_deref()
                 .is_some_and(|preferred_id| preferred_id == asset.id),
@@ -238,7 +230,7 @@ fn build_asset_views(
     Ok(views)
 }
 
-fn build_preview_data_url(asset: &GameAsset, asset_manager: &AssetManager) -> Result<String> {
+fn build_preview_data_url(asset: &GameAsset) -> Result<String> {
     let data_path = asset
         .cache_path
         .as_deref()
@@ -258,7 +250,6 @@ fn build_preview_data_url(asset: &GameAsset, asset_manager: &AssetManager) -> Re
     };
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-    let _ = asset_manager;
     Ok(format!("data:{mime};base64,{encoded}"))
 }
 

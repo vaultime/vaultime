@@ -81,15 +81,6 @@ pub fn get_asset(db: &Database, asset_id: &str) -> Result<GameAsset> {
     })
 }
 
-pub fn delete_asset(db: &Database, asset_id: &str) -> Result<bool> {
-    db.with_conn(|conn| {
-        let deleted = conn
-            .execute("DELETE FROM game_assets WHERE id = ?1", [asset_id])
-            .map_err(map_db)?;
-        Ok(deleted > 0)
-    })
-}
-
 pub fn delete_non_user_assets_for_game(db: &Database, game_id: &str) -> Result<Vec<GameAsset>> {
     let assets = list_assets_for_game(db, game_id)?;
     let removable: Vec<GameAsset> = assets

@@ -720,7 +720,6 @@ mod tests {
         AppContext {
             app_dir: root.clone(),
             asset_cache_dir: asset_cache_dir.clone(),
-            db_path: root.join("vaultime.db"),
             device_id: "test-device".into(),
             app_version: "0.1.0".into(),
         }
@@ -765,7 +764,7 @@ mod tests {
     #[test]
     fn export_and_import_roundtrip_restores_data() {
         let context = test_paths();
-        let db = Database::open(&context.db_path).unwrap();
+        let db = Database::open(&context.app_dir.join("vaultime.db")).unwrap();
         devices::ensure_device(&db, &context.device_id, "linux", &context.app_version).unwrap();
 
         let game = games::create_game(

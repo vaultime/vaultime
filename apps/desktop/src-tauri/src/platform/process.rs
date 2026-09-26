@@ -18,12 +18,6 @@ pub struct RunningProcess {
     pub cpu_usage: f32,
 }
 
-/// Returns a list of currently running processes.
-pub fn list_running_processes() -> Vec<RunningProcess> {
-    let mut sys = System::new_all();
-    refresh_running_processes(&mut sys)
-}
-
 /// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
 pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -281,7 +275,7 @@ mod tests {
 
     #[test]
     fn list_processes_runs() {
-        let procs = list_running_processes();
+        let procs = refresh_running_processes(&mut System::new());
         // Should at least find the current test process.
         assert!(!procs.is_empty());
     }

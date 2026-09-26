@@ -35,7 +35,6 @@ use tracking::engine::TrackingEngine;
 pub struct AppContext {
     pub app_dir: PathBuf,
     pub asset_cache_dir: PathBuf,
-    pub db_path: PathBuf,
     pub device_id: String,
     pub app_version: String,
 }
@@ -86,7 +85,6 @@ pub fn run() {
             commands::store_cloud_backup_key_secure,
             commands::clear_cloud_backup_key_secure,
             commands::list_games,
-            commands::get_game,
             commands::create_game,
             commands::update_game,
             commands::delete_game,
@@ -96,7 +94,6 @@ pub fn run() {
             commands::import_game_asset,
             commands::set_preferred_game_asset,
             commands::list_sessions,
-            commands::get_sessions_for_game,
             commands::get_active_sessions,
             commands::get_session_events_for_game,
             commands::list_backup_snapshots,
@@ -151,7 +148,6 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(AppContext {
         app_dir,
         asset_cache_dir: asset_cache_dir.clone(),
-        db_path,
         device_id,
         app_version: version,
     });

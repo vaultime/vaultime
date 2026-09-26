@@ -350,6 +350,7 @@ pub fn get_active_sessions(db: &Database) -> Result<Vec<Session>> {
 }
 
 /// Returns all sessions for a specific game, newest first.
+#[cfg(test)]
 pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Session>> {
     db.with_conn(|conn| {
         let mut stmt = conn
@@ -385,16 +386,6 @@ pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
     })
 }
 
-/// Returns a single session by ID.
-pub fn get_session(db: &Database, id: &str) -> Result<Session> {
-    db.with_conn(|conn| {
-        let session = conn
-            .query_row("SELECT * FROM sessions WHERE id = ?1", [id], row_to_session)
-            .map_err(map_db)?;
-        attach_validated_status(conn, session)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +394,15 @@ mod tests {
     use crate::db::repo::{devices, games};
 
     const DEV_ID: &str = "test-device";
+
+    fn get_session(db: &Database, id: &str) -> Result<Session> {
+        db.with_conn(|conn| {
+            let session = conn
+                .query_row("SELECT * FROM sessions WHERE id = ?1", [id], row_to_session)
+                .map_err(map_db)?;
+            attach_validated_status(conn, session)
+        })
+    }
 
     fn test_db() -> Database {
         let db = Database::open_in_memory().expect("in-memory db");

@@ -77,11 +77,6 @@ pub fn list_games(db: State<'_, Arc<Database>>) -> Result<Vec<Game>, VaultimeErr
 }
 
 #[tauri::command]
-pub fn get_game(db: State<'_, Arc<Database>>, id: String) -> Result<Game, VaultimeError> {
-    games::get_game(&db, &id)
-}
-
-#[tauri::command]
 pub fn create_game(db: State<'_, Arc<Database>>, input: CreateGame) -> Result<Game, VaultimeError> {
     games::create_game(&db, &input)
 }
@@ -103,18 +98,16 @@ pub fn delete_game(db: State<'_, Arc<Database>>, id: String) -> Result<bool, Vau
 #[tauri::command(async)]
 pub fn list_game_assets(
     db: State<'_, Arc<Database>>,
-    asset_manager: State<'_, AssetManager>,
     game_id: String,
 ) -> Result<Vec<GameAssetView>, VaultimeError> {
-    assets::list_game_assets(&db, &asset_manager, &game_id)
+    assets::list_game_assets(&db, &game_id)
 }
 
 #[tauri::command(async)]
 pub fn list_preferred_game_assets(
     db: State<'_, Arc<Database>>,
-    asset_manager: State<'_, AssetManager>,
 ) -> Result<Vec<GameAssetView>, VaultimeError> {
-    assets::list_preferred_game_assets(&db, &asset_manager)
+    assets::list_preferred_game_assets(&db)
 }
 
 #[tauri::command(async)]
@@ -148,14 +141,6 @@ pub fn set_preferred_game_asset(
 #[tauri::command(async)]
 pub fn list_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
     sessions::list_all_sessions(&db)
-}
-
-#[tauri::command(async)]
-pub fn get_sessions_for_game(
-    db: State<'_, Arc<Database>>,
-    game_id: String,
-) -> Result<Vec<Session>, VaultimeError> {
-    sessions::list_sessions_for_game(&db, &game_id)
 }
 
 #[tauri::command]

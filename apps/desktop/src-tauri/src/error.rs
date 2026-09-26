@@ -1,26 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-//! Structured error types for Vaultime.
+//! Error type of the desktop core. It reaches the frontend as its message.
 
 use std::fmt;
 
-/// Top-level error type for Vaultime operations.
 #[derive(Debug)]
 pub enum VaultimeError {
-    /// Database-related errors.
     Database(String),
-    /// Local backup/export/import errors.
+    /// Local and remote backups, including archive and encryption errors.
     Backup(String),
-    /// Tracking engine errors.
     Tracking(String),
-    /// Integrity validation errors.
     Integrity(String),
-    /// Asset/image pipeline errors.
     Asset(String),
-    /// Platform-specific errors.
-    Platform(String),
-    /// Cloud sync errors.
+    /// Secure storage and the cloud backup API.
     Cloud(String),
 }
 
@@ -32,7 +25,6 @@ impl fmt::Display for VaultimeError {
             Self::Tracking(msg) => write!(f, "tracking error: {msg}"),
             Self::Integrity(msg) => write!(f, "integrity error: {msg}"),
             Self::Asset(msg) => write!(f, "asset error: {msg}"),
-            Self::Platform(msg) => write!(f, "platform error: {msg}"),
             Self::Cloud(msg) => write!(f, "cloud error: {msg}"),
         }
     }
@@ -49,5 +41,4 @@ impl serde::Serialize for VaultimeError {
     }
 }
 
-/// Convenience type alias.
 pub type Result<T> = std::result::Result<T, VaultimeError>;

@@ -44,27 +44,3 @@ pub fn ensure_device(db: &Database, id: &str, platform: &str, app_version: &str)
             .map_err(map_db)
     })
 }
-
-/// Returns the device by ID, if it exists.
-pub fn get_device(db: &Database, id: &str) -> Result<Option<Device>> {
-    db.with_conn(|conn| {
-        conn.query_row("SELECT * FROM devices WHERE id = ?1", [id], row_to_device)
-            .optional()
-            .map_err(map_db)
-    })
-}
-
-/// Extension trait to convert `rusqlite::Error::QueryReturnedNoRows` to `None`.
-trait OptionalRow<T> {
-    fn optional(self) -> rusqlite::Result<Option<T>>;
-}
-
-impl<T> OptionalRow<T> for rusqlite::Result<T> {
-    fn optional(self) -> rusqlite::Result<Option<T>> {
-        match self {
-            Ok(v) => Ok(Some(v)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-}
