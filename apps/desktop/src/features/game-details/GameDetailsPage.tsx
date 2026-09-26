@@ -1,686 +1,378 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { open } from "@tauri-apps/plugin-dialog";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { ImagePlus, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { DayBars, DayBarsLegend } from "@/components/charts/DayBars";
 import {
-  ArrowLeft,
-  Clock3,
-  Shield,
-  ImagePlus,
-  Loader2,
-  PaintBucket,
-  PlayCircle,
-  RefreshCw,
-  Timer,
-} from "lucide-react";
-import { Link, useParams } from "react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GameArtwork } from "@/components/media/GameArtwork";
-import { IntegrityBadge } from "@/components/status/IntegrityBadge";
+  TintedHeader,
+  TintedOverline,
+  TintedSentence,
+  TintedTitle,
+} from "@/components/layout/Tinted";
+import { Cover } from "@/components/media/Cover";
+import { PhraseText } from "@/components/media/PhraseText";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ActivityChart } from "@/components/charts/ActivityChart";
-import { SessionTimeline } from "@/features/sessions/components/SessionTimeline";
-import { ACTIVITY_CHART_DAYS } from "@/lib/constants";
-import {
-  buildDailyActivity,
-  getSessionTotals,
-} from "@/lib/session-stats";
-import {
-  formatCompactDuration,
-  formatLongDate,
-  formatSessionDate,
-  formatCalendarDay,
-} from "@/lib/time";
-import {
-  formatIntegrityEventType,
-  getIntegrityEventDetail,
-  summarizeIntegrity,
-} from "@/lib/integrity";
-import type { Game, GameAssetView, Session, SessionEvent } from "@/lib/types";
+import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
+import { EditGameDialog } from "@/features/library/components/EditGameDialog";
+import { useLibrary } from "@/features/library/library-context";
+import { SessionLine } from "@/features/sessions/components/SessionLine";
+import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS } from "@/lib/constants";
+import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
+import { gamePlaytime } from "@/lib/sentences";
+import { buildDailyActivity } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
-import { useActiveSessions } from "@/features/sessions";
+import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
+import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
+import { capitalize, numberWords } from "@/lib/words";
+import { cn } from "@/lib/utils";
 
-function DetailStatCard({
-  title,
-  value,
-  hint,
-}: {
-  title: string;
-  value: string;
-  hint: string;
-}) {
-  return (
-    <Card className="border border-border/70 bg-card/70">
-      <CardHeader className="pb-2">
-        <CardDescription>{title}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
-      </CardContent>
-    </Card>
-  );
-}
+const SOURCE_LABELS: Record<string, string> = {
+  steam: "Steam",
+  folder_scan: "Found in a folder",
+};
 
 export function GameDetailsPage() {
   const { gameId } = useParams();
-  const { activeSessions } = useActiveSessions();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [game, setGame] = useState<Game | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // A fresh page per game, so nothing from the last game lingers while loading.
+  return gameId ? <GamePage key={gameId} gameId={gameId} /> : null;
+}
+
+function GamePage({ gameId }: { gameId: string }) {
+  const navigate = useNavigate();
+  const { summaries, sessions: allSessions, active, loaded, refresh } = useLibrary();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
-  const [assetBusy, setAssetBusy] = useState(false);
-  const [assetError, setAssetError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [editing, setEditing] = useState<Game | null>(null);
+  const [deleting, setDeleting] = useState<Game | null>(null);
 
-  const loadGameBundle = useCallback(async (currentGameId: string) => {
-    const [fetchedGame, fetchedSessions, fetchedEvents, fetchedAssets] =
-      await Promise.all([
-      api.getGame(currentGameId),
-      api.getSessionsForGame(currentGameId),
-      api.getSessionEventsForGame(currentGameId),
-      api.listGameAssets(currentGameId),
-      ]);
-
-    return {
-      game: fetchedGame,
-      sessions: fetchedSessions,
-      events: fetchedEvents,
-      assets: fetchedAssets,
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!gameId) {
-      return;
-    }
-
-    const currentGameId = gameId;
-
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const bundle = await loadGameBundle(currentGameId);
-
-        if (cancelled) {
-          return;
-        }
-
-        setGame(bundle.game);
-        setSessions(bundle.sessions);
-        setEvents(bundle.events);
-        setAssets(bundle.assets);
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(String(loadError));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [gameId, loadGameBundle]);
-
-  // Changes on every tick while this game runs and once more when it stops.
-  const liveSessionsKey = JSON.stringify(
-    activeSessions.filter((session) => session.game_id === gameId),
+  const summary = summaries.find((entry) => entry.game.id === gameId);
+  const sessions = useMemo(
+    () =>
+      allSessions
+        .filter((session) => session.game_id === gameId)
+        .sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall)),
+    [allSessions, gameId],
   );
-  const wasLiveRef = useRef(false);
+  const days = useMemo(() => buildDailyActivity(sessions, ACTIVITY_CHART_DAYS), [sessions]);
+  const playing = active.some((session) => session.game_id === gameId);
 
+  // Events explain flagged sessions. Reload them whenever the sessions change.
   useEffect(() => {
-    const live = liveSessionsKey !== "[]";
-    if (!gameId || (!live && !wasLiveRef.current)) {
-      return;
-    }
-    wasLiveRef.current = live;
-
     let cancelled = false;
-    Promise.all([
-      api.getSessionsForGame(gameId),
-      api.getSessionEventsForGame(gameId),
-    ])
-      .then(([nextSessions, nextEvents]) => {
-        if (!cancelled) {
-          setSessions(nextSessions);
-          setEvents(nextEvents);
-        }
+    api
+      .getSessionEventsForGame(gameId)
+      .then((next) => {
+        if (!cancelled) setEvents(next);
       })
       .catch(() => {});
-
     return () => {
       cancelled = true;
     };
-  }, [gameId, liveSessionsKey]);
+  }, [gameId, sessions]);
 
-  const totals = useMemo(() => getSessionTotals(sessions), [sessions]);
-  const dailyActivity = useMemo(
-    () => buildDailyActivity(sessions, ACTIVITY_CHART_DAYS),
-    [sessions],
-  );
-  const integritySummary = useMemo(
-    () => summarizeIntegrity(sessions),
-    [sessions],
-  );
-  const notableEvents = useMemo(
-    () =>
-      events
-        .filter((event) => event.event_type !== "heartbeat")
-        .slice(0, 8),
-    [events],
-  );
-  const heartbeatCount = useMemo(
-    () => events.filter((event) => event.event_type === "heartbeat").length,
-    [events],
-  );
-  const peakDay = useMemo(() => {
-    return [...dailyActivity].sort((a, b) => b.activeMs - a.activeMs)[0] ?? null;
-  }, [dailyActivity]);
-  const runningNow = activeSessions.some((session) => session.game_id === gameId);
-  const preferredAsset = useMemo(
-    () => assets.find((asset) => asset.is_preferred) ?? assets[0] ?? null,
-    [assets],
-  );
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listGameAssets(gameId)
+      .then((next) => {
+        if (!cancelled) setAssets(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId]);
 
-  async function handleRescanArtwork() {
-    if (!gameId) {
-      return;
-    }
+  if (!loaded) return null;
 
-    try {
-      setAssetBusy(true);
-      setAssetError(null);
-      const nextAssets = await api.scanGameAssets(gameId);
-      setAssets(nextAssets);
-    } catch (scanError) {
-      setAssetError(`Artwork scan failed: ${String(scanError)}`);
-    } finally {
-      setAssetBusy(false);
-    }
-  }
-
-  async function handleImportArtwork() {
-    if (!gameId) {
-      return;
-    }
-
-    try {
-      setAssetError(null);
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        title: "Choose artwork image",
-        filters: [
-          {
-            name: "Images",
-            extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"],
-          },
-        ],
-      });
-
-      if (!selected) {
-        return;
-      }
-
-      setAssetBusy(true);
-      const nextAssets = await api.importGameAsset(gameId, selected);
-      setAssets(nextAssets);
-    } catch (importError) {
-      setAssetError(`Artwork import failed: ${String(importError)}`);
-    } finally {
-      setAssetBusy(false);
-    }
-  }
-
-  async function handleSelectPreferred(assetId: string) {
-    if (!gameId) {
-      return;
-    }
-
-    try {
-      setAssetBusy(true);
-      setAssetError(null);
-      await api.setPreferredGameAsset(gameId, assetId);
-      const nextAssets = await api.listGameAssets(gameId);
-      setAssets(nextAssets);
-    } catch (preferError) {
-      setAssetError(`Could not set the cover: ${String(preferError)}`);
-    } finally {
-      setAssetBusy(false);
-    }
-  }
-
-  if (loading && gameId) {
+  if (!summary) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="px-8 pt-12 xl:px-14">
+        <h1 className="font-display text-4xl">This game is not in your library</h1>
+        <p className="mt-3 text-faint">It may have been deleted.</p>
+        <Button variant="outline" className="mt-6" nativeButton={false} render={<Link to="/library" />}>
+          Back to the library
+        </Button>
       </div>
     );
   }
 
-  if (!gameId || error || !game) {
-    return (
-      <div className="space-y-4">
-        <Link
-          to="/library"
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back To Library
-        </Link>
-        <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-5 text-sm text-destructive">
-          {!gameId ? "Game ID is missing." : (error ?? "Game not found.")}
-        </div>
-      </div>
-    );
+  const { game, cover, tint } = summary;
+  const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
+  const firstPlayed = sessions.at(-1)?.started_at_wall;
+  const longest = sessions.reduce((best, session) => Math.max(best, session.runtime_ms), 0);
+  const idleMs = sessions.reduce((sum, session) => sum + session.idle_ms, 0);
+
+  function onAssetsChanged(next: GameAssetView[]) {
+    setAssets(next);
+    // Covers and tints live in the library state.
+    refresh().catch(() => {});
   }
 
   return (
-    <div className="space-y-6">
-      <Link
-        to="/library"
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium transition-colors hover:bg-muted"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back To Library
-      </Link>
-
-      <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/70">
-        {preferredAsset?.preview_data_url && (
-          <div className="absolute inset-0">
-            <img
-              src={preferredAsset.preview_data_url}
-              alt={`${game.title} background art`}
-              className="h-full w-full object-cover opacity-22 blur-[2px]"
-            />
+    <div className="pb-16">
+      <TintedHeader tint={tint} backdrop={cover} className="pt-9 pb-9">
+        <div className="flex items-end gap-10">
+          <div className="min-w-0 flex-1">
+            <TintedOverline tint={tint}>
+              <Link to="/library" className="hover:underline">
+                Library
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span>{SOURCE_LABELS[game.launcher_source ?? ""] ?? "Added by hand"}</span>
+              {playing && (
+                <>
+                  <span aria-hidden="true">/</span>
+                  <span className="size-2 animate-live-ring rounded-full bg-violet" />
+                  <span>Playing now</span>
+                </>
+              )}
+            </TintedOverline>
+            <TintedTitle tint={tint} text={game.title} />
+            <TintedSentence tint={tint}>
+              <PhraseText phrase={gamePlaytime(sessions)} />
+            </TintedSentence>
           </div>
-        )}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(10,6,18,0.94),rgba(10,6,18,0.68)_52%,rgba(10,6,18,0.88)),radial-gradient(circle_at_top_left,rgba(152,92,255,0.34),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(82,43,179,0.28),transparent_36%)]" />
-        <div className="relative grid gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:p-8">
-          <GameArtwork
-            src={preferredAsset?.preview_data_url ?? null}
-            alt={`${game.title} artwork`}
-            className="h-72 rounded-[1.75rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.35)]"
-            imageClassName="object-cover object-center"
-            iconClassName="h-20 w-20"
+          <Cover
+            title={game.title}
+            src={cover}
+            variant="card"
+            className="hidden h-[240px] w-[180px] p-4 text-[30px] shadow-2xl shadow-black/40 lg:flex"
           />
-
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-3xl font-semibold tracking-tight">
-                    {game.title}
-                  </h1>
-                  {runningNow && (
-                    <Badge className="bg-green-600 text-white">Running</Badge>
-                  )}
-                  {integritySummary.totalCount > 0 && (
-                    <IntegrityBadge status={integritySummary.overallStatus} />
-                  )}
-                </div>
-                <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                  {game.executable_path ??
-                    game.install_folder ??
-                    "Manual game entry without an executable path yet."}
-                </p>
-                {integritySummary.totalCount > 0 && (
-                  <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
-                    {integritySummary.note}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleRescanArtwork}
-                    disabled={assetBusy}
-                    className="bg-background/35 backdrop-blur-sm"
-                  >
-                    {assetBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    Rescan Artwork
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleImportArtwork}
-                    disabled={assetBusy}
-                    className="bg-background/35 backdrop-blur-sm"
-                  >
-                    <ImagePlus className="h-4 w-4" />
-                    Add Override
-                  </Button>
-                </div>
-                {assetError && (
-                  <div className="max-w-2xl rounded-2xl border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    {assetError}
-                  </div>
-                )}
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-right">
-                <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                  Last played
-                </p>
-                <p className="mt-2 text-sm font-medium">
-                  {totals.lastPlayedAt
-                    ? formatLongDate(totals.lastPlayedAt)
-                    : "No sessions yet"}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <DetailStatCard
-                title="Active Time"
-                value={formatCompactDuration(totals.activeMs)}
-                hint={`${Math.round(totals.activeRatio * 100)}% of tracked runtime counted as active play`}
-              />
-              <DetailStatCard
-                title="Runtime"
-                value={formatCompactDuration(totals.runtimeMs)}
-                hint={`${formatCompactDuration(totals.idleMs)} spent in idle or background time`}
-              />
-              <DetailStatCard
-                title="Sessions"
-                value={String(totals.sessionsCount)}
-                hint={
-                  totals.sessionsCount > 0
-                    ? `${formatCompactDuration(totals.averageActiveMs)} average active time per session`
-                    : "Start a tracked session to build game history"
-                }
-              />
-              <DetailStatCard
-                title="Peak Day"
-                value={
-                  peakDay && peakDay.activeMs > 0
-                    ? formatCompactDuration(peakDay.activeMs)
-                    : "0m"
-                }
-                hint={
-                  peakDay && peakDay.activeMs > 0
-                    ? `${formatCalendarDay(peakDay.key)} was the busiest recent day`
-                    : "No recent active day yet"
-                }
-              />
-            </div>
-          </div>
         </div>
-      </section>
+      </TintedHeader>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <Card className="border border-border/70">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PlayCircle className="h-4 w-4 text-primary" />
-              Recent Activity
-            </CardTitle>
-            <CardDescription>
-              Last 14 days of tracked runtime with the active portion highlighted.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ActivityChart points={dailyActivity} />
-            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--color-chart-1)]" />
-                Active time
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--color-chart-3)]/60" />
-                Runtime envelope
-              </div>
+      <div className="grid xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex min-w-0 flex-col gap-10 px-8 pt-8 xl:pr-10 xl:pl-14">
+          <section aria-labelledby="days-title" className="flex flex-col gap-3.5">
+            <div className="flex items-baseline justify-between">
+              <h2 id="days-title" className="font-display text-[30px]">
+                The last {numberWords(ACTIVITY_CHART_DAYS)} days
+              </h2>
+              <DayBarsLegend />
             </div>
-          </CardContent>
-        </Card>
+            <DayBars points={days} />
+          </section>
 
-        <Card className="border border-border/70">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PaintBucket className="h-4 w-4 text-primary" />
-              Artwork Rack
-            </CardTitle>
-            <CardDescription>
-              Scanned folder art and manual overrides cached for this game.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {assets.length > 0 ? (
+          <section aria-labelledby="sessions-title">
+            <h2 id="sessions-title" className="font-display mb-1.5 text-[30px]">
+              {showAll ? "Every session" : "Recent sessions"}
+            </h2>
+            {sessions.length === 0 ? (
+              <p className="py-3.5 text-faint">No sessions yet. They appear here as soon as you play.</p>
+            ) : (
+              shown.map((session) => <SessionLine key={session.id} session={session} events={events} />)
+            )}
+            {sessions.length > GAME_RECENT_SESSIONS && (
+              <button
+                type="button"
+                onClick={() => setShowAll((value) => !value)}
+                className="mt-4 text-sm text-violet hover:text-text focus-visible:underline focus-visible:outline-none"
+              >
+                {showAll ? "Show recent sessions only" : `Show all ${sessions.length} sessions`}
+              </button>
+            )}
+          </section>
+
+          <EventLog events={events} />
+        </div>
+
+        <aside
+          aria-label="Details"
+          className="flex flex-col gap-8 border-rule px-8 pt-10 xl:border-l xl:pt-8 xl:pr-14 xl:pl-8"
+        >
+          <AsideSection title="Totals">
+            <TotalRow label="Runtime" value={formatHoursMinutes(summary.runtimeMs)} />
+            <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
+            <TotalRow label="Idle" value={formatHoursMinutes(idleMs)} />
+            <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
+            <TotalRow label="Longest" value={formatHoursMinutes(longest)} />
+            <TotalRow label="First played" value={firstPlayed ? formatCalendarDay(firstPlayed) : "Not yet"} />
+          </AsideSection>
+
+          <CoverPicker gameId={gameId} assets={assets} onChanged={onAssetsChanged} />
+
+          <AsideSection title="Tracking">
+            {game.executable_path ? (
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  {assets.map((asset) => (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      onClick={() => handleSelectPreferred(asset.id)}
-                      disabled={assetBusy}
-                      className="group text-left"
-                    >
-                      <div
-                        className={`overflow-hidden rounded-[1.4rem] border transition-all ${
-                          asset.is_preferred
-                            ? "border-primary shadow-[0_0_0_1px_rgba(193,151,255,0.3)]"
-                            : "border-border/70 hover:border-primary/40"
-                        }`}
-                      >
-                        <GameArtwork
-                          src={asset.preview_data_url}
-                          alt={`${game.title} asset`}
-                          className="aspect-[4/5]"
-                          imageClassName="transition-transform duration-500 group-hover:scale-[1.03]"
-                        />
-                      </div>
-                      <div className="mt-2 px-1">
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                          {asset.asset_type}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {asset.source === "user_picked"
-                            ? "Manual override"
-                            : "Folder scan"}
-                          {asset.is_preferred ? " · preferred" : ""}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">
-                  Click any cached image to make it the preferred cover used in
-                  the library and on this detail page.
-                </div>
+                <div className="font-mono text-xs leading-relaxed break-all text-soft">{game.executable_path}</div>
+                <p className="mt-2 text-[13px] text-faint">
+                  Matched by its full path, or by its file name when the path is hidden.
+                </p>
               </>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-5 text-sm text-muted-foreground">
-                No artwork has been cached for this game yet. Rescan the game
-                folder or add a manual image override.
-              </div>
+              <p className="text-[13px] text-faint">
+                No executable set, so this game is not tracked yet. Edit it to pick one.
+              </p>
             )}
-          </CardContent>
-        </Card>
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditing(game)}>
+                <Pencil className="size-3.5" />
+                Edit
+              </Button>
+              <Button variant="ghost" size="sm" className="text-faint" onClick={() => setDeleting(game)}>
+                <Trash2 className="size-3.5" />
+                Delete
+              </Button>
+            </div>
+          </AsideSection>
+        </aside>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <Card className="border border-border/70">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-primary" />
-              Tracking Snapshot
-            </CardTitle>
-            <CardDescription>
-              Quick read on active time, local trust, and recovery state.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Trust Status
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <IntegrityBadge status={integritySummary.overallStatus} />
-                <p className="text-xs text-muted-foreground">
-                  Based on the hash-linked audit log kept on this device.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Active Ratio
-              </p>
-              <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-[color:var(--color-chart-1)]"
-                  style={{ width: `${Math.max(4, totals.activeRatio * 100)}%` }}
-                />
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                {Math.round(totals.activeRatio * 100)}% of runtime stayed active.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Local Only
-                </p>
-                <p className="mt-2 text-xl font-semibold">
-                  {integritySummary.localCount}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Recovered
-                </p>
-                <p className="mt-2 text-xl font-semibold">
-                  {integritySummary.recoveredCount}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Suspicious
-                </p>
-                <p className="mt-2 text-xl font-semibold">
-                  {integritySummary.suspiciousCount}
-                </p>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Session Average
-              </p>
-              <p className="mt-2 text-xl font-semibold">
-                {formatCompactDuration(totals.averageActiveMs)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              Integrity Audit
-            </CardTitle>
-            <CardDescription>
-              Notable local audit events for this title, newest first.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              Session events are hash-linked locally. Heartbeat rows are stored
-              in the database but hidden here unless they carry a notable state
-              change.
-            </div>
-
-            {notableEvents.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4">
-                No session audit events recorded for this title yet.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {notableEvents.map((event) => (
-                  <div
-                    key={event.id}
-                    className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-foreground">
-                          {formatIntegrityEventType(event.event_type)}
-                        </p>
-                        <p className="text-xs leading-5 text-muted-foreground">
-                          {getIntegrityEventDetail(event)}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          #{event.sequence}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatSessionDate(event.event_time_wall)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-                      <span className="rounded-full border border-border/70 bg-background/40 px-2.5 py-1 text-muted-foreground">
-                        {event.hash_self ? "Hash linked" : "Missing hash"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {heartbeatCount > 0 && (
-              <p className="text-xs leading-5 text-muted-foreground">
-                {heartbeatCount} heartbeat event
-                {heartbeatCount === 1 ? "" : "s"} omitted to keep the audit
-                trail readable.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border border-border/70">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Timer className="h-4 w-4 text-primary" />
-            Session History
-          </CardTitle>
-          <CardDescription>
-            Every tracked session for {game.title}, newest first.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SessionTimeline
-            sessions={sessions}
-            showGameName={false}
-            emptyMessage="This game has no tracked sessions yet."
-          />
-        </CardContent>
-      </Card>
+      <EditGameDialog game={editing} onClose={() => setEditing(null)} onSaved={refresh} />
+      <DeleteGameDialog
+        game={deleting}
+        onClose={() => setDeleting(null)}
+        onDeleted={() => {
+          navigate("/library");
+          refresh().catch(() => {});
+        }}
+      />
     </div>
+  );
+}
+
+function AsideSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="label-caps mb-2.5">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function TotalRow({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between border-b border-rule py-2.5">
+      <span className="text-sm text-soft">{label}</span>
+      <span className={cn("font-mono text-[15px] tabular-nums", accent && "text-violet")}>{value}</span>
+    </div>
+  );
+}
+
+function CoverPicker({
+  gameId,
+  assets,
+  onChanged,
+}: {
+  gameId: string;
+  assets: GameAssetView[];
+  onChanged: (assets: GameAssetView[]) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const withPreview = assets.filter((asset) => asset.preview_data_url);
+
+  async function run(task: () => Promise<GameAssetView[] | null>, failure: string) {
+    try {
+      setBusy(true);
+      setError(null);
+      const next = await task();
+      if (next) onChanged(next);
+    } catch (taskError) {
+      setError(`${failure}: ${String(taskError)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rescan = () => run(() => api.scanGameAssets(gameId), "The scan failed");
+  const choose = (assetId: string) =>
+    run(async () => {
+      await api.setPreferredGameAsset(gameId, assetId);
+      return api.listGameAssets(gameId);
+    }, "Could not use that image");
+  const addImage = () =>
+    run(async () => {
+      const selected = await openFileDialog({
+        multiple: false,
+        directory: false,
+        title: "Choose a cover image",
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"] }],
+      });
+      return selected ? api.importGameAsset(gameId, selected) : null;
+    }, "Could not add the image");
+
+  return (
+    <AsideSection title="Cover">
+      {withPreview.length > 0 && (
+        <div className="flex flex-wrap gap-2.5">
+          {withPreview.map((asset, index) => (
+            <button
+              key={asset.id}
+              type="button"
+              disabled={busy}
+              onClick={() => choose(asset.id)}
+              aria-pressed={asset.is_preferred}
+              aria-label={`Use image ${index + 1}${asset.is_preferred ? ", in use" : ""}`}
+              className={cn(
+                "h-24 w-[72px] overflow-hidden rounded-[5px] border transition focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:outline-none",
+                asset.is_preferred ? "border-2 border-text" : "border-rule opacity-70 hover:opacity-100",
+              )}
+            >
+              <img src={asset.preview_data_url ?? undefined} alt="" className="size-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="mt-2.5 text-[13px] text-faint">
+        {withPreview.length === 0
+          ? "No artwork yet. Scan the game folder or add an image."
+          : `${capitalize(numberWords(withPreview.length))} image${withPreview.length === 1 ? "" : "s"} to choose from.`}
+      </p>
+      <div className="mt-3 flex gap-2">
+        <Button variant="outline" size="sm" onClick={rescan} disabled={busy}>
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          Scan folder
+        </Button>
+        <Button variant="outline" size="sm" onClick={addImage} disabled={busy}>
+          <ImagePlus className="size-3.5" />
+          Add image
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="mt-2.5 text-[13px] text-amber">
+          {error}
+        </p>
+      )}
+    </AsideSection>
+  );
+}
+
+/** The notable local events, for anyone who wants to check the record. */
+function EventLog({ events }: { events: SessionEvent[] }) {
+  const notable = events.filter((event) => event.event_type !== "heartbeat");
+  if (notable.length === 0) return null;
+  const shown = [...notable]
+    .sort((a, b) => b.event_time_wall.localeCompare(a.event_time_wall))
+    .slice(0, EVENT_LOG_LIMIT);
+
+  return (
+    <details className="group border-t border-rule pt-4">
+      <summary className="flex cursor-pointer list-none items-baseline justify-between text-sm text-faint hover:text-soft">
+        <span>
+          Event log, {notable.length} entr{notable.length === 1 ? "y" : "ies"}
+        </span>
+        <span className="text-xs group-open:hidden">Show</span>
+        <span className="hidden text-xs group-open:inline">Hide</span>
+      </summary>
+      <p className="mt-3 text-[13px] text-faint">
+        Every session keeps a hash-linked log on this PC. It can reveal edits to the record, but it cannot
+        prove there were none.
+      </p>
+      <ul className="mt-2">
+        {shown.map((event) => (
+          <li key={event.id} className="flex items-baseline gap-5 border-b border-rule py-2.5 text-[13px]">
+            <span className="w-[132px] shrink-0 font-mono text-faint">{formatSessionStart(event.event_time_wall)}</span>
+            <span className="w-40 shrink-0 text-soft">{formatIntegrityEventType(event.event_type)}</span>
+            <span className="min-w-0 flex-1 text-faint">{getIntegrityEventDetail(event)}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

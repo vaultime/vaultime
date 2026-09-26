@@ -15,8 +15,8 @@ export function App() {
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/library" replace />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="library/:gameId" element={<GameDetailsPage />} />
         <Route element={<PaddedPage />}>
-          <Route path="library/:gameId" element={<GameDetailsPage />} />
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="cloud" element={<CloudPage />} />
           <Route path="settings" element={<SettingsPage />} />

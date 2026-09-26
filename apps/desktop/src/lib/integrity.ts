@@ -8,7 +8,6 @@ import type { Session, SessionEvent } from "@/lib/types";
 export interface IntegrityMeta {
   label: string;
   description: string;
-  className: string;
 }
 
 export interface IntegritySummary {
@@ -45,16 +44,12 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
         label: "Suspicious",
         description:
           "Tracking found a clock jump, timing drift, or another local inconsistency.",
-        className:
-          "border-amber-400/35 bg-amber-500/10 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
       };
     case "recovered":
       return {
         label: "Recovered",
         description:
           "Session history was reconstructed after an interrupted shutdown or restart.",
-        className:
-          "border-sky-400/35 bg-sky-500/10 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
       };
     case "local":
     default:
@@ -62,8 +57,6 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
         label: "Local",
         description:
           "Locally tracked session history with no currently detected integrity issue.",
-        className:
-          "border-emerald-400/35 bg-emerald-500/10 text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
       };
   }
 }
@@ -131,17 +124,17 @@ export function formatIntegrityReason(reason: string | null | undefined): string
 export function formatIntegrityEventType(eventType: string): string {
   switch (eventType) {
     case "started":
-      return "Tracking Started";
+      return "Tracking started";
     case "heartbeat":
       return "Heartbeat";
     case "integrity_flagged":
-      return "Integrity Flagged";
+      return "Flagged";
     case "recovered":
       return "Recovered";
     case "ended":
-      return "Tracking Ended";
+      return "Tracking ended";
     case "tracking_gap":
-      return "Sleep or Pause Skipped";
+      return "Sleep or pause left out";
     default:
       return titleCaseWords(eventType.replaceAll("_", " "));
   }

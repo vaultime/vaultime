@@ -148,19 +148,37 @@ export function formatHoursMinutes(ms: number): string {
   return `${Math.floor(ms / HOUR_MS)} h ${String(minutes).padStart(2, "0")}`;
 }
 
+export type DayPart = "morning" | "afternoon" | "evening" | "night";
+
+export function dayPartOf(date: Date): DayPart {
+  const hour = date.getHours();
+  const { morning, afternoon, evening, night } = DAY_PART_HOURS;
+  if (hour < morning || hour >= night) return "night";
+  if (hour < afternoon) return "morning";
+  return hour < evening ? "afternoon" : "evening";
+}
+
 /** Part of the day within the last week: "This morning", "Last night", "Saturday evening". */
 export function formatDayPart(value: string, now = new Date()): string {
   const date = parseVaultimeDate(value);
-  const hour = date.getHours();
-  const { morning, afternoon, evening, night } = DAY_PART_HOURS;
-  const afterMidnight = hour < morning;
-  const part =
-    afterMidnight || hour >= night ? "night" : hour < afternoon ? "morning" : hour < evening ? "afternoon" : "evening";
+  const part = dayPartOf(date);
   // Play after midnight still belongs to the night before.
-  const day = new Date(date.getTime() - (afterMidnight ? morning * HOUR_MS : 0));
+  const afterMidnight = date.getHours() < DAY_PART_HOURS.morning;
+  const day = new Date(date.getTime() - (afterMidnight ? DAY_PART_HOURS.morning * HOUR_MS : 0));
   const days = calendarDaysAgo(day, now);
   if (days === 0) return part === "night" ? "Tonight" : `This ${part}`;
   if (days === 1) return part === "night" ? "Last night" : `Yesterday ${part}`;
   if (days < WEEKDAY_NAME_DAYS) return `${day.toLocaleDateString(UI_LOCALE, { weekday: "long" })} ${part}`;
   return formatCalendarDay(value);
+}
+
+/** "Today 22:10", "Yesterday 22:10", "Sun 21:40", "16 Sept 21:40". */
+export function formatSessionStart(value: string, now = new Date()): string {
+  const date = parseVaultimeDate(value);
+  const clock = date.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
+  const days = calendarDaysAgo(date, now);
+  if (days === 0) return `Today ${clock}`;
+  if (days === 1) return `Yesterday ${clock}`;
+  if (days < WEEKDAY_NAME_DAYS) return `${date.toLocaleDateString(UI_LOCALE, { weekday: "short" })} ${clock}`;
+  return `${date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })} ${clock}`;
 }

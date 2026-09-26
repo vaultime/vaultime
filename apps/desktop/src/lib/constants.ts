@@ -41,6 +41,9 @@ export const RECENT_DAYS = 7;
 /** Calendar days in the activity charts. */
 export const ACTIVITY_CHART_DAYS = 14;
 
+/** Shortest visible bar in a chart, in percent of its height, so small days still show. */
+export const CHART_MIN_BAR_PERCENT = 3;
+
 /** Game results in the command palette, before and while typing. */
 export const PALETTE_GAMES_IDLE = 5;
 export const PALETTE_GAMES_SEARCHING = 8;
@@ -49,7 +52,25 @@ export const PALETTE_GAMES_SEARCHING = 8;
 export const HERO_TITLE_LARGE_MAX_CHARS = 14;
 export const HERO_TITLE_MEDIUM_MAX_CHARS = 26;
 
+// Game page
+
+/** Sessions listed before "Show all". */
+export const GAME_RECENT_SESSIONS = 8;
+
+/** Notable integrity events listed in a game's event log. */
+export const EVENT_LOG_LIMIT = 12;
+
 // Time phrases
+
+/** Session lengths that change the words for a session: quick, short, plain, long, marathon. */
+export const SESSION_QUICK_MAX_MS = 20 * MINUTE_MS;
+export const SESSION_SHORT_MAX_MS = HOUR_MS;
+export const SESSION_PLAIN_MAX_MS = 2 * HOUR_MS;
+export const SESSION_LONG_MAX_MS = 4 * HOUR_MS;
+
+/** A part of the day counts as a habit after this many sessions and share of runtime. */
+export const HABIT_MIN_SESSIONS = 3;
+export const HABIT_MIN_SHARE = 0.5;
 
 /** Under this many minutes a time reads "Just now". */
 export const JUST_NOW_MINUTES = 2;
