@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 // Sample data for previewing the UI in a plain browser, without the Rust core.
-// Only loaded when VITE_MOCK_IPC=1, never in real builds.
+// Only loaded when VITE_MOCK_IPC=1, never in real builds. Add ?mock=empty to
+// the URL for a fresh install, or ?mock=unplayed for games without sessions.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import type { Game, Session } from "@/lib/types";
 
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
+
+const scenario = new URLSearchParams(window.location.search).get("mock");
 
 const titles = ["Elden Ring", "Hades II", "Balatro", "Hollow Knight", "Celeste", "Stardew Valley", "Outer Wilds"];
 
@@ -22,8 +24,8 @@ const games: Game[] = titles.map((title, index) => ({
   launcher_source: index < 4 ? "steam" : "folder_scan",
   metadata_json: "{}",
   is_hidden: false,
-  created_at: iso(now - 90 * DAY),
-  updated_at: iso(now - 90 * DAY),
+  created_at: iso(now - 90 * DAY_MS),
+  updated_at: iso(now - 90 * DAY_MS),
 }));
 
 // A few weeks of evenings, weighted towards the first games.
@@ -37,8 +39,8 @@ for (let day = 21; day >= 1; day -= 1) {
   const plays = random() < 0.25 ? 0 : 1 + Math.floor(random() * 2);
   for (let play = 0; play < plays; play += 1) {
     const game = games[Math.min(Math.floor(random() * random() * titles.length), titles.length - 1)];
-    const start = now - day * DAY + (18 + play * 2.5 + random()) * HOUR - (now % DAY);
-    const runtime = Math.round((0.6 + random() * 3.2) * HOUR);
+    const start = now - day * DAY_MS + (18 + play * 2.5 + random()) * HOUR_MS - (now % DAY_MS);
+    const runtime = Math.round((0.6 + random() * 3.2) * HOUR_MS);
     const idle = Math.round(runtime * (0.05 + random() * 0.15));
     sessions.push({
       id: `session-${day}-${play}`,
@@ -56,7 +58,7 @@ for (let day = 21; day >= 1; day -= 1) {
   }
 }
 
-const liveRuntime = 84 * 60_000 + 10_000;
+const liveRuntime = 84 * MINUTE_MS + 10 * SECOND_MS;
 const live: Session = {
   id: "session-live",
   game_id: games[0].id,
@@ -70,7 +72,10 @@ const live: Session = {
   integrity_status: "local",
   closed_cleanly: false,
 };
-const allSessions = [live, ...sessions].sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
+const played = scenario === "empty" || scenario === "unplayed" ? [] : [live, ...sessions];
+const allSessions = played.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
+const allGames = scenario === "empty" ? [] : games;
+const running = scenario ? [] : [live];
 
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
@@ -78,15 +83,15 @@ mockIPC((cmd, payload) => {
     case "get_app_version":
       return "0.1.0";
     case "list_games":
-      return games;
+      return allGames;
     case "get_game":
-      return games.find((game) => game.id === args.id);
+      return allGames.find((game) => game.id === args.id);
     case "list_sessions":
       return allSessions;
     case "get_sessions_for_game":
       return allSessions.filter((session) => session.game_id === args.gameId);
     case "get_active_sessions":
-      return [live];
+      return running;
     case "list_settings":
       return [{ key: "idle_threshold_seconds", value: "300", updated_at: iso(now) }];
     case "get_tracking_diagnostics":
