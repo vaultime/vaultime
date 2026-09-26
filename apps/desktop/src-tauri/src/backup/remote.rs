@@ -19,6 +19,10 @@ use zip::write::SimpleFileOptions;
 use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::backup::{LocalBackupSummary, export_local_backup, import_local_backup};
+use crate::constants::{
+    ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, HASH_BUFFER_BYTES, NONCE_BYTES,
+    NONCE_PREFIX_BYTES,
+};
 use crate::db::connection::Database;
 use crate::error::{Result, VaultimeError};
 use crate::secure_storage;
@@ -28,7 +32,6 @@ const ARCHIVE_FORMAT: &str = "zip";
 const ENCRYPTION_SCHEME: &str = "chacha20poly1305-chunked-v1";
 const ENCRYPTED_MAGIC: &[u8; 8] = b"VTENC01\n";
 const ENCRYPTED_AAD: &[u8] = b"vaultime-cloud-backup";
-const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteBackupPayloadSummary {
@@ -380,7 +383,7 @@ fn create_archive(source_dir: &Path, destination_path: &Path) -> Result<()> {
     let mut archive = zip::ZipWriter::new(archive_file);
     let options = SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+        .unix_permissions(ARCHIVE_FILE_MODE);
 
     for entry in WalkDir::new(source_dir).min_depth(1) {
         let entry = entry.map_err(|error| {
@@ -454,7 +457,7 @@ fn hash_file(path: &Path) -> Result<(u64, String)> {
     let mut file = File::open(path).map_err(map_backup_io)?;
     let mut hasher = Sha256::new();
     let mut bytes = 0_u64;
-    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; HASH_BUFFER_BYTES];
 
     loop {
         let read = file.read(&mut buffer).map_err(map_backup_io)?;
@@ -470,12 +473,16 @@ fn hash_file(path: &Path) -> Result<(u64, String)> {
     Ok((bytes, crate::hex::encode(&hasher.finalize())))
 }
 
-fn encrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Result<()> {
+fn encrypt_archive(
+    input_path: &Path,
+    output_path: &Path,
+    key: &[u8; BACKUP_KEY_BYTES],
+) -> Result<()> {
     let cipher = ChaCha20Poly1305::new(key.into());
     let mut input = File::open(input_path).map_err(map_backup_io)?;
     let mut output = File::create(output_path).map_err(map_backup_io)?;
     let nonce_seed = uuid::Uuid::new_v4();
-    let nonce_prefix = &nonce_seed.as_bytes()[..4];
+    let nonce_prefix = &nonce_seed.as_bytes()[..NONCE_PREFIX_BYTES];
 
     output.write_all(ENCRYPTED_MAGIC).map_err(map_backup_io)?;
     output.write_all(nonce_prefix).map_err(map_backup_io)?;
@@ -518,11 +525,15 @@ fn encrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Res
     Ok(())
 }
 
-fn decrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Result<()> {
+fn decrypt_archive(
+    input_path: &Path,
+    output_path: &Path,
+    key: &[u8; BACKUP_KEY_BYTES],
+) -> Result<()> {
     let cipher = ChaCha20Poly1305::new(key.into());
     let mut input = File::open(input_path).map_err(map_backup_io)?;
     let mut output = File::create(output_path).map_err(map_backup_io)?;
-    let mut magic = [0_u8; 8];
+    let mut magic = [0_u8; ENCRYPTED_MAGIC.len()];
     input.read_exact(&mut magic).map_err(map_backup_io)?;
     if &magic != ENCRYPTED_MAGIC {
         return Err(VaultimeError::Backup(
@@ -530,7 +541,7 @@ fn decrypt_archive(input_path: &Path, output_path: &Path, key: &[u8; 32]) -> Res
         ));
     }
 
-    let mut nonce_prefix = [0_u8; 4];
+    let mut nonce_prefix = [0_u8; NONCE_PREFIX_BYTES];
     input.read_exact(&mut nonce_prefix).map_err(map_backup_io)?;
     let mut chunk_index = 0_u64;
 
@@ -601,10 +612,10 @@ fn decrypt_chunk(
         .map_err(|error| VaultimeError::Backup(format!("failed to decrypt backup chunk: {error}")))
 }
 
-fn chunk_nonce(nonce_prefix: &[u8], chunk_index: u64) -> [u8; 12] {
-    let mut nonce = [0_u8; 12];
-    nonce[..4].copy_from_slice(&nonce_prefix[..4]);
-    nonce[4..].copy_from_slice(&chunk_index.to_be_bytes());
+fn chunk_nonce(nonce_prefix: &[u8], chunk_index: u64) -> [u8; NONCE_BYTES] {
+    let mut nonce = [0_u8; NONCE_BYTES];
+    nonce[..NONCE_PREFIX_BYTES].copy_from_slice(&nonce_prefix[..NONCE_PREFIX_BYTES]);
+    nonce[NONCE_PREFIX_BYTES..].copy_from_slice(&chunk_index.to_be_bytes());
     nonce
 }
 

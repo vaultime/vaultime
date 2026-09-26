@@ -12,25 +12,16 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use sysinfo::System;
 
+use crate::constants::{
+    CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS,
+    DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE, MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS,
+    POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD,
+};
 use crate::db::connection::Database;
 use crate::db::repo::{games, sessions, settings};
 use crate::integrity;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{RunningProcess, matches_executable, refresh_running_processes};
-
-pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
-/// Grace period so a quick alt-tab does not count as idle.
-const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
-/// CPU usage above this counts as process activity.
-const PROCESS_ACTIVITY_CPU_THRESHOLD: f32 = 0.5;
-/// Allowed difference between wall and monotonic time within one tick.
-const CLOCK_STEP_TOLERANCE_MS: i64 = 20_000;
-/// Allowed drift between wall and monotonic time over a whole session.
-const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
-/// A longer pause between ticks means the machine slept or the tracker stalled.
-/// That time is not counted. On Windows the monotonic clock keeps running
-/// during sleep and on Linux it stops, so both clocks are checked.
-const MAX_TICK_GAP_MS: i64 = 60_000;
 
 /// Tracks a currently running game session.
 struct ActiveSession {
@@ -86,8 +77,8 @@ impl TrackingSettings {
             .ok()
             .flatten()
             .and_then(|value| value.parse::<u64>().ok())
-            .unwrap_or(300)
-            .max(5);
+            .unwrap_or(DEFAULT_IDLE_THRESHOLD_SECS)
+            .max(MIN_IDLE_THRESHOLD_SECS);
 
         let treat_background_as_active = settings::get_setting(db, "treat_background_as_active")
             .ok()
@@ -489,7 +480,7 @@ fn detect_integrity_reason(
     monotonic_delta_ms: i64,
     drift_ms: i64,
 ) -> Option<String> {
-    if wall_delta_ms < -1_000 {
+    if wall_delta_ms < -CLOCK_BACKWARDS_TOLERANCE_MS {
         return Some("wall_clock_moved_backwards".into());
     }
 

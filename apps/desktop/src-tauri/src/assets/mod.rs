@@ -15,14 +15,17 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
+use crate::constants::{
+    ARTWORK_PENALTY_SCREENSHOT_PATH, ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO,
+    ARTWORK_SCORE_POSTER, ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_USER_PICKED, ASSET_SCAN_DEPTH,
+    BANNER_HEIGHT_PX, BANNER_WIDTH_PX, COVER_HEIGHT_PX, COVER_WIDTH_PX, ICON_MAX_SIZE_PX,
+    MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
+};
 use crate::db::connection::Database;
 use crate::db::models::{Game, GameAsset, GameMetadata};
 use crate::db::repo::{game_assets, games};
 use crate::error::{Result, VaultimeError};
 
-const MAX_SCAN_DEPTH: usize = 3;
-const MAX_SCANNED_ASSETS: usize = 10;
-const MAX_LIBRARY_PREVIEWS: usize = 20;
 const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "ico"];
 
 #[derive(Debug)]
@@ -153,7 +156,7 @@ pub fn import_game_asset(
         path: PathBuf::from(source_path),
         asset_type: classify_asset_type(Path::new(source_path)),
         source: "user_picked".into(),
-        score: 10_000,
+        score: ARTWORK_SCORE_USER_PICKED,
     };
 
     let cached = cache_candidate(asset_manager, &game, &candidate, true)?;
@@ -270,7 +273,7 @@ fn find_candidates(game: &Game) -> Result<Vec<AssetCandidate>> {
 
     for root in roots {
         for entry in WalkDir::new(root)
-            .max_depth(MAX_SCAN_DEPTH)
+            .max_depth(ASSET_SCAN_DEPTH)
             .follow_links(false)
             .into_iter()
             .filter_map(std::result::Result::ok)
@@ -368,22 +371,22 @@ fn score_candidate(path: &Path) -> i32 {
 
     let mut score = 0;
     if file_name.contains("cover") || file_name.contains("capsule") {
-        score += 120;
+        score += ARTWORK_SCORE_COVER;
     }
     if file_name.contains("poster") || file_name.contains("banner") {
-        score += 100;
+        score += ARTWORK_SCORE_POSTER;
     }
     if file_name.contains("hero") || file_name.contains("art") {
-        score += 80;
+        score += ARTWORK_SCORE_HERO;
     }
     if file_name.contains("logo") || file_name.contains("icon") {
-        score += 60;
+        score += ARTWORK_SCORE_LOGO;
     }
     if file_name.contains("screenshot") || file_name.contains("screen") {
-        score += 20;
+        score += ARTWORK_SCORE_SCREENSHOT;
     }
     if path_text.contains("screenshot") {
-        score -= 20;
+        score -= ARTWORK_PENALTY_SCREENSHOT_PATH;
     }
 
     let depth_penalty = path.components().count() as i32;
@@ -460,10 +463,14 @@ fn cache_candidate(
 
 fn process_image(image: image::DynamicImage, asset_type: &str) -> image::DynamicImage {
     match asset_type {
-        "banner" => image.resize_to_fill(1280, 720, FilterType::Lanczos3),
-        "icon" => image.thumbnail(512, 512),
-        "screenshot" => image.resize(1280, 720, FilterType::Lanczos3),
-        _ => image.resize_to_fill(720, 960, FilterType::Lanczos3),
+        "banner" => image.resize_to_fill(BANNER_WIDTH_PX, BANNER_HEIGHT_PX, FilterType::Lanczos3),
+        "icon" => image.thumbnail(ICON_MAX_SIZE_PX, ICON_MAX_SIZE_PX),
+        "screenshot" => image.resize(
+            SCREENSHOT_MAX_WIDTH_PX,
+            SCREENSHOT_MAX_HEIGHT_PX,
+            FilterType::Lanczos3,
+        ),
+        _ => image.resize_to_fill(COVER_WIDTH_PX, COVER_HEIGHT_PX, FilterType::Lanczos3),
     }
 }
 

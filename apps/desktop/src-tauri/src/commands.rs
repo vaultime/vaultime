@@ -17,6 +17,7 @@ use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
+use crate::constants::{BACKUP_HISTORY_LIMIT, POLL_INTERVAL};
 use crate::db::connection::Database;
 use crate::db::models::{
     BackupSnapshot, CreateGame, Game, Session, SessionEvent, Setting, UpdateGame,
@@ -26,7 +27,7 @@ use crate::discovery::{self, DiscoveredGame};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::secure_storage;
-use crate::tracking::engine::{POLL_INTERVAL, TrackingEngine};
+use crate::tracking::engine::TrackingEngine;
 
 #[tauri::command]
 pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
@@ -174,7 +175,7 @@ pub fn get_session_events_for_game(
 pub fn list_backup_snapshots(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<BackupSnapshot>, VaultimeError> {
-    backup_snapshots::list_snapshots(&db, 8)
+    backup_snapshots::list_snapshots(&db, BACKUP_HISTORY_LIMIT)
 }
 
 #[tauri::command(async)]

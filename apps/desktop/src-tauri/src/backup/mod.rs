@@ -16,13 +16,13 @@ use walkdir::WalkDir;
 
 use crate::AppContext;
 use crate::assets::AssetManager;
+use crate::constants::BACKUP_VERSION;
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
 use crate::db::repo::devices;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
-const BACKUP_VERSION: u32 = 1;
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 const BACKUP_DB_FILE: &str = "vaultime.db";
 const BACKUP_MANIFEST_FILE: &str = "manifest.json";

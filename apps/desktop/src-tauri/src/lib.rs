@@ -6,6 +6,7 @@
 pub mod assets;
 pub mod backup;
 pub mod commands;
+pub mod constants;
 pub mod db;
 pub mod discovery;
 pub mod error;
@@ -24,6 +25,7 @@ use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
+use constants::{LOG_FILES_KEPT, LOG_MAX_FILE_BYTES};
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -54,8 +56,8 @@ pub fn run() {
                     Target::new(TargetKind::Stdout),
                     Target::new(TargetKind::LogDir { file_name: None }),
                 ])
-                .max_file_size(2_000_000)
-                .rotation_strategy(RotationStrategy::KeepSome(3))
+                .max_file_size(LOG_MAX_FILE_BYTES)
+                .rotation_strategy(RotationStrategy::KeepSome(LOG_FILES_KEPT))
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())

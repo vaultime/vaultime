@@ -6,6 +6,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use keyring::Entry;
 
+use crate::constants::BACKUP_KEY_BYTES;
 use crate::error::{Result, VaultimeError};
 
 const KEYRING_SERVICE: &str = "de.codfish.vaultime";
@@ -48,7 +49,7 @@ pub fn store_cloud_backup_key(account_id: &str, passphrase: &str) -> Result<()> 
     Ok(())
 }
 
-pub fn load_cloud_backup_key(account_id: &str) -> Result<[u8; 32]> {
+pub fn load_cloud_backup_key(account_id: &str) -> Result<[u8; BACKUP_KEY_BYTES]> {
     let encoded = load_cloud_backup_key_encoded(account_id)?.ok_or_else(|| {
         VaultimeError::Cloud(
             "No backup passphrase is configured for this account on this device.".into(),
@@ -58,7 +59,7 @@ pub fn load_cloud_backup_key(account_id: &str) -> Result<[u8; 32]> {
         .decode(encoded)
         .map_err(|error| VaultimeError::Cloud(format!("invalid stored backup key: {error}")))?;
 
-    let bytes: [u8; 32] = decoded
+    let bytes: [u8; BACKUP_KEY_BYTES] = decoded
         .try_into()
         .map_err(|_| VaultimeError::Cloud("stored backup key has an unexpected length".into()))?;
 
@@ -71,9 +72,9 @@ pub fn clear_cloud_backup_key(account_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn derive_cloud_backup_key(account_id: &str, passphrase: &str) -> Result<[u8; 32]> {
+fn derive_cloud_backup_key(account_id: &str, passphrase: &str) -> Result<[u8; BACKUP_KEY_BYTES]> {
     let salt = format!("vaultime-cloud-backup-passphrase:{account_id}");
-    let mut output = [0_u8; 32];
+    let mut output = [0_u8; BACKUP_KEY_BYTES];
     Argon2::default()
         .hash_password_into(passphrase.as_bytes(), salt.as_bytes(), &mut output)
         .map_err(|error| VaultimeError::Cloud(format!("failed to derive backup key: {error}")))?;

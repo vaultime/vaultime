@@ -9,13 +9,12 @@ use std::path::{Path, PathBuf};
 use log::info;
 use walkdir::WalkDir;
 
+use crate::constants::DISCOVERY_SCAN_DEPTH;
 use crate::db::connection::Database;
 use crate::error::Result;
 use crate::platform::process::path_key;
 
 use super::{DiscoveredGame, is_executable, library_executables, metadata};
-
-const MAX_SCAN_DEPTH: usize = 4;
 
 /// Scans the given folders for game executables.
 ///
@@ -30,7 +29,7 @@ pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGam
         info!("scanning folder for games: {}", root.display());
 
         let entries = WalkDir::new(root)
-            .max_depth(MAX_SCAN_DEPTH)
+            .max_depth(DISCOVERY_SCAN_DEPTH)
             .follow_links(false)
             .into_iter()
             .filter_map(std::result::Result::ok)
@@ -100,8 +99,7 @@ fn candidate_paths() -> Vec<PathBuf> {
 #[cfg(windows)]
 fn fixed_drives() -> Vec<PathBuf> {
     use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
-
-    const DRIVE_FIXED: u32 = 3;
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     // SAFETY: GetLogicalDrives has no preconditions.
     let mask = unsafe { GetLogicalDrives() };

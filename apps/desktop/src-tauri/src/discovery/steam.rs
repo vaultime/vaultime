@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use log::info;
 
+use crate::constants::{STEAM_EXECUTABLE_SCAN_DEPTH, STEAM_TOP_LEVEL_BONUS_BYTES};
 use crate::db::connection::Database;
 use crate::error::Result;
 use crate::platform::process::path_key;
@@ -179,12 +180,10 @@ fn parse_app_manifest(
 /// Picks the most likely game binary in an install folder.
 ///
 /// The largest executable wins since the game binary is usually bigger than
-/// helpers and tools. Files in the top folder get a 100 MB head start.
+/// helpers and tools. Files in the top folder get a size head start.
 fn find_main_executable(install_dir: &Path) -> Option<PathBuf> {
-    const TOP_LEVEL_BONUS: u64 = 100_000_000;
-
     walkdir::WalkDir::new(install_dir)
-        .max_depth(3)
+        .max_depth(STEAM_EXECUTABLE_SCAN_DEPTH)
         .follow_links(false)
         .into_iter()
         .filter_map(std::result::Result::ok)
@@ -193,7 +192,7 @@ fn find_main_executable(install_dir: &Path) -> Option<PathBuf> {
         .max_by_key(|entry| {
             let size = entry.metadata().map_or(0, |meta| meta.len());
             if entry.depth() <= 1 {
-                size + TOP_LEVEL_BONUS
+                size + STEAM_TOP_LEVEL_BONUS_BYTES
             } else {
                 size
             }
