@@ -8,12 +8,12 @@ use std::time::Duration;
 // Tracking
 
 /// How often the tracker polls running processes. The frontend polls at the
-/// same rate, see ACTIVE_POLL_MS in lib/constants.ts.
+/// same rate, see `ACTIVE_POLL_MS` in `lib/constants.ts`.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// Grace period so a quick alt-tab does not count as idle.
 pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// Idle threshold when the `idle_threshold_seconds` setting is missing or invalid.
-/// Same as DEFAULT_IDLE_THRESHOLD_SECONDS in lib/constants.ts.
+/// Same as `DEFAULT_IDLE_THRESHOLD_SECONDS` in `lib/constants.ts`.
 pub const DEFAULT_IDLE_THRESHOLD_SECS: u64 = 300;
 /// Lowest idle threshold the setting can choose.
 pub const MIN_IDLE_THRESHOLD_SECS: u64 = 5;
