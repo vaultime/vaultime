@@ -18,9 +18,9 @@ export function App() {
         <Route path="library/:gameId" element={<GameDetailsPage />} />
         <Route path="journal" element={<JournalPage />} />
         <Route path="sessions" element={<Navigate to="/journal" replace />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route element={<PaddedPage />}>
           <Route path="cloud" element={<CloudPage />} />
-          <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>
     </Routes>

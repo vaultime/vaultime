@@ -15,7 +15,8 @@ pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// Idle threshold when the `idle_threshold_seconds` setting is missing or invalid.
 /// Same as `DEFAULT_IDLE_THRESHOLD_SECONDS` in `lib/constants.ts`.
 pub const DEFAULT_IDLE_THRESHOLD_SECS: u64 = 300;
-/// Lowest idle threshold the setting can choose.
+/// Lowest idle threshold the setting can choose. Same as
+/// `MIN_IDLE_THRESHOLD_SECONDS` in `lib/constants.ts`.
 pub const MIN_IDLE_THRESHOLD_SECS: u64 = 5;
 /// CPU usage in percent at or above which a game process counts as active.
 pub const PROCESS_ACTIVITY_CPU_THRESHOLD: f32 = 0.5;

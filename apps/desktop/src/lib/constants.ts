@@ -27,6 +27,9 @@ export const LIVE_TICK_MS = SECOND_MS;
 /** Idle threshold shown until the settings load. Same as DEFAULT_IDLE_THRESHOLD_SECS in constants.rs. */
 export const DEFAULT_IDLE_THRESHOLD_SECONDS = 300;
 
+/** Lowest idle threshold the settings accept. Same as MIN_IDLE_THRESHOLD_SECS in constants.rs. */
+export const MIN_IDLE_THRESHOLD_SECONDS = 5;
+
 // Cloud
 
 /** Refresh the access token when it expires within this window. */

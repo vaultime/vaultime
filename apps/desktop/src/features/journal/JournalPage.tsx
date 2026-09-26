@@ -3,6 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PageHeader } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
@@ -110,28 +111,22 @@ export function JournalPage() {
 
   return (
     <div className="pb-16">
-      <header className="flex items-end justify-between gap-10 border-b border-rule px-8 pt-12 pb-8 xl:px-14">
-        <div className="min-w-0">
-          <div className="label-caps">
-            Journal, week {isoWeekNumber(weekStart)}
-            {weekYear}
-          </div>
-          <h1 className="font-display mt-3 text-[clamp(56px,6vw,84px)] leading-[0.95] font-medium tracking-[-0.03em]">
-            {title}
-          </h1>
-          <p className="font-display mt-4 max-w-[640px] text-[23px] leading-[1.3] text-pretty text-soft">
-            <PhraseText phrase={sentence} />
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2.5">
-          <WeekButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
-            <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
-          </WeekButton>
-          <WeekButton label="Next week" disabled={offset >= 0} onClick={() => setOffset((value) => value + 1)}>
-            <ChevronRight className="size-[18px]" strokeWidth={1.8} />
-          </WeekButton>
-        </div>
-      </header>
+      <PageHeader
+        overline={`Journal, week ${isoWeekNumber(weekStart)}${weekYear}`}
+        title={title}
+        aside={
+          <>
+            <WeekButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
+              <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
+            </WeekButton>
+            <WeekButton label="Next week" disabled={offset >= 0} onClick={() => setOffset((value) => value + 1)}>
+              <ChevronRight className="size-[18px]" strokeWidth={1.8} />
+            </WeekButton>
+          </>
+        }
+      >
+        <PhraseText phrase={sentence} />
+      </PageHeader>
 
       <div className="px-8 xl:px-14">
         {days.map((day) => (
