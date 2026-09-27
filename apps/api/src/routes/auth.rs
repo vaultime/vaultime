@@ -208,20 +208,14 @@ pub async fn refresh(
 
     tx.commit().await?;
 
-    let (access_token, expires_at) =
-        create_access_token(&state.config, row.account_id, &row.email, &row.role)?;
-
-    Ok(Json(AuthResponse {
-        access_token,
+    Ok(Json(auth_response(
+        &state,
+        row.account_id,
+        &row.email,
+        &row.role,
         refresh_token,
-        expires_at,
         refresh_expires_at,
-        user: AuthUserResponse {
-            id: row.account_id,
-            email: row.email,
-            role: row.role,
-        },
-    }))
+    )?))
 }
 
 pub async fn logout(
@@ -263,6 +257,25 @@ async fn issue_session(
     )
     .await?;
 
+    auth_response(
+        state,
+        account_id,
+        email,
+        role,
+        refresh_token,
+        refresh_expires_at,
+    )
+}
+
+/// Pairs a stored refresh token with a new access token.
+fn auth_response(
+    state: &AppState,
+    account_id: Uuid,
+    email: &str,
+    role: &str,
+    refresh_token: String,
+    refresh_expires_at: DateTime<Utc>,
+) -> AppResult<AuthResponse> {
     let (access_token, expires_at) = create_access_token(&state.config, account_id, email, role)?;
 
     Ok(AuthResponse {

@@ -7,7 +7,7 @@ description = "Self-hosted invite-only API for Vaultime cloud backup"
 
 [dependencies]
 argon2 = "0.6"
-axum = { version = "0.8", features = ["macros"] }
+axum = "0.8"
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"

@@ -13,6 +13,7 @@ use axum::response::Response;
 use chrono::{DateTime, Duration, Utc};
 use futures_util::TryStreamExt;
 use sha2::{Digest, Sha256};
+use sqlx::AssertSqlSafe;
 use tokio::fs::{self, File};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio_util::io::ReaderStream;
@@ -24,29 +25,23 @@ use crate::constants::{BYTES_PER_MIB, SECS_PER_MINUTE};
 use crate::error::{AppError, AppResult};
 use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
 
+/// Turns `b`, a CTE of `cloud_backups` rows, into `BackupRecordResponse` rows.
+const BACKUP_RECORD_SELECT: &str = "
+    SELECT b.id, b.label, b.storage_key, b.checksum, b.size_bytes, b.backup_created_at,
+           b.uploaded_at, b.status, d.client_device_id, b.metadata_json
+    FROM b
+    LEFT JOIN cloud_devices d ON d.id = b.device_id
+";
+
 pub async fn list_backups(
     auth: AuthenticatedAccount,
     State(state): State<AppState>,
 ) -> AppResult<Json<Vec<BackupRecordResponse>>> {
-    let rows = sqlx::query_as::<_, BackupRecordResponse>(
-        r#"
-        SELECT
-            b.id,
-            b.label,
-            b.storage_key,
-            b.checksum,
-            b.size_bytes,
-            b.backup_created_at,
-            b.uploaded_at,
-            b.status,
-            d.client_device_id,
-            b.metadata_json
-        FROM cloud_backups b
-        LEFT JOIN cloud_devices d ON d.id = b.device_id
-        WHERE b.account_id = $1
-        ORDER BY b.uploaded_at DESC
-        "#,
-    )
+    let rows = sqlx::query_as::<_, BackupRecordResponse>(AssertSqlSafe(format!(
+        "WITH b AS (SELECT * FROM cloud_backups WHERE account_id = $1)
+         {BACKUP_RECORD_SELECT}
+         ORDER BY b.uploaded_at DESC"
+    )))
     .bind(auth.account_id)
     .fetch_all(&state.db)
     .await?;
@@ -103,34 +98,25 @@ pub async fn create_backup(
         .filter(|value| !value.is_empty());
     let metadata_json = payload.metadata_json.unwrap_or_default();
 
-    let row = sqlx::query_as::<_, BackupRecordResponse>(
-        r#"
-        INSERT INTO cloud_backups (
-            id,
-            account_id,
-            device_id,
-            label,
-            storage_key,
-            checksum,
-            size_bytes,
-            backup_created_at,
-            status,
-            metadata_json
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, 0, $7, 'pending', $8)
-        RETURNING
-            id,
-            label,
-            storage_key,
-            checksum,
-            size_bytes,
-            backup_created_at,
-            uploaded_at,
-            status,
-            $9::TEXT AS client_device_id,
-            metadata_json
-        "#,
-    )
+    let row = sqlx::query_as::<_, BackupRecordResponse>(AssertSqlSafe(format!(
+        "WITH b AS (
+             INSERT INTO cloud_backups (
+                 id,
+                 account_id,
+                 device_id,
+                 label,
+                 storage_key,
+                 checksum,
+                 size_bytes,
+                 backup_created_at,
+                 status,
+                 metadata_json
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, 0, $7, 'pending', $8)
+             RETURNING *
+         )
+         {BACKUP_RECORD_SELECT}"
+    )))
     .bind(backup_id)
     .bind(auth.account_id)
     .bind(device_id)
@@ -139,7 +125,6 @@ pub async fn create_backup(
     .bind(checksum)
     .bind(payload.backup_created_at)
     .bind(metadata_json)
-    .bind(client_device_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -194,27 +179,17 @@ pub async fn upload_backup_content(
 
     fs::rename(&temp_path, &final_path).await?;
 
-    let row = sqlx::query_as::<_, BackupRecordResponse>(
-        r#"
-        UPDATE cloud_backups
-        SET size_bytes = $1,
-            status = 'complete',
-            uploaded_at = NOW()
-        WHERE id = $2 AND account_id = $3
-        RETURNING
-            id,
-            label,
-            storage_key,
-            checksum,
-            size_bytes,
-            backup_created_at,
-            uploaded_at,
-            status,
-            (SELECT d.client_device_id FROM cloud_devices d WHERE d.id = cloud_backups.device_id)
-                AS client_device_id,
-            metadata_json
-        "#,
-    )
+    let row = sqlx::query_as::<_, BackupRecordResponse>(AssertSqlSafe(format!(
+        "WITH b AS (
+             UPDATE cloud_backups
+             SET size_bytes = $1,
+                 status = 'complete',
+                 uploaded_at = NOW()
+             WHERE id = $2 AND account_id = $3
+             RETURNING *
+         )
+         {BACKUP_RECORD_SELECT}"
+    )))
     .bind(size_bytes)
     .bind(backup_id)
     .bind(auth.account_id)
@@ -301,24 +276,10 @@ async fn find_backup(
     account_id: Uuid,
     backup_id: Uuid,
 ) -> AppResult<BackupRecordResponse> {
-    sqlx::query_as::<_, BackupRecordResponse>(
-        r#"
-        SELECT
-            b.id,
-            b.label,
-            b.storage_key,
-            b.checksum,
-            b.size_bytes,
-            b.backup_created_at,
-            b.uploaded_at,
-            b.status,
-            d.client_device_id,
-            b.metadata_json
-        FROM cloud_backups b
-        LEFT JOIN cloud_devices d ON d.id = b.device_id
-        WHERE b.id = $1 AND b.account_id = $2
-        "#,
-    )
+    sqlx::query_as::<_, BackupRecordResponse>(AssertSqlSafe(format!(
+        "WITH b AS (SELECT * FROM cloud_backups WHERE id = $1 AND account_id = $2)
+         {BACKUP_RECORD_SELECT}"
+    )))
     .bind(backup_id)
     .bind(account_id)
     .fetch_optional(&state.db)
