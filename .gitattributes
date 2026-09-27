@@ -3,3 +3,7 @@
 Dockerfile text eol=lf
 *.py text eol=lf
 *.service text eol=lf
+
+# sqlx checksums include line endings, and the live database was migrated
+# with CRLF files. Every checkout keeps them CRLF so any build matches it.
+apps/api/migrations/*.sql text eol=crlf
