@@ -55,7 +55,7 @@ Windows 10 and 11 are supported. Download `Vaultime_x.y.z_x64-setup.exe` and run
 
 For the AppImage, make it executable (`chmod +x Vaultime_*.AppImage`) and start it.
 
-On X11 Vaultime asks the X server which window is in front and how long you have been away, nothing extra to install. On Wayland, GNOME tells it how long you have been away, and games that run through XWayland, which is most of them, are seen in front as well. On other Wayland desktops Vaultime estimates idle time from the game's CPU usage.
+On X11 Vaultime asks the X server which window is in front and when you last used the keyboard or mouse, nothing extra to install. Games that keep the screensaver off still turn idle when you leave. On Wayland the same works for games that run through XWayland, which is most of them, and GNOME also reports how long you have been away from any window.
 
 Signing in to cloud backup needs a keyring service such as GNOME Keyring or KWallet. Most desktops ship one.
 

@@ -107,13 +107,14 @@ mod imp {
 #[cfg(target_os = "linux")]
 mod imp {
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Mutex, OnceLock, PoisonError};
+    use std::sync::{Arc, Mutex, OnceLock, PoisonError};
     use std::thread;
     use std::time::{Duration, Instant};
 
     use log::{info, warn};
     use x11rb::connection::Connection;
     use x11rb::cookie::VoidCookie;
+    use x11rb::errors::ReplyError;
     use x11rb::protocol::Event;
     use x11rb::protocol::screensaver::ConnectionExt as _;
     use x11rb::protocol::xinput::{ConnectionExt as _, Device, EventMask, XIEventMask};
@@ -126,7 +127,14 @@ mod imp {
     const GNOME_IDLE_MONITOR_PATH: &str = "/org/gnome/Mutter/IdleMonitor/Core";
 
     pub fn foreground_strategy() -> &'static str {
-        if x11().is_some() { "x11" } else { HEURISTIC }
+        static STRATEGY: OnceLock<&'static str> = OnceLock::new();
+        STRATEGY.get_or_init(|| {
+            if with_x11(|_| Ok(Some(()))).is_some() {
+                "x11"
+            } else {
+                HEURISTIC
+            }
+        })
     }
 
     pub fn idle_strategy() -> &'static str {
@@ -136,13 +144,9 @@ mod imp {
             // desktop's own idle monitor is the better source.
             let strategy = if wayland_session() && gnome_idle().is_some() {
                 "gnome_dbus"
-            } else if raw_input().is_some() {
+            } else if raw_input_idle().is_some() {
                 "x11_input"
-            } else if x11().is_some_and(|x11| {
-                x11.lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .screensaver
-            }) {
+            } else if with_x11(|x11| Ok(Some(x11.screensaver))) == Some(true) {
                 "x11"
             } else {
                 HEURISTIC
@@ -153,33 +157,23 @@ mod imp {
     }
 
     pub fn foreground_pid() -> Option<u32> {
-        x11()?
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .foreground_pid()
+        with_x11(X11::foreground_pid)
     }
 
     pub fn idle_duration() -> Option<Duration> {
         match idle_strategy() {
             "gnome_dbus" => gnome_idle(),
-            "x11_input" => raw_input()
-                .and_then(RawInput::idle)
-                .or_else(screensaver_idle),
-            "x11" => screensaver_idle(),
+            "x11_input" => raw_input_idle().or_else(|| with_x11(X11::idle)),
+            "x11" => with_x11(X11::idle),
             _ => None,
         }
-    }
-
-    fn screensaver_idle() -> Option<Duration> {
-        x11()?.lock().unwrap_or_else(PoisonError::into_inner).idle()
     }
 
     fn wayland_session() -> bool {
         std::env::var_os("WAYLAND_DISPLAY").is_some()
     }
 
-    /// A connection to the X server, on Wayland the one for X11 apps, opened on
-    /// first use.
+    /// A connection to the X server, on Wayland the one for X11 apps.
     struct X11 {
         connection: RustConnection,
         root: Window,
@@ -213,32 +207,56 @@ mod imp {
         }
 
         /// Reads one 32 bit value of a window property.
-        fn property(&self, window: Window, property: Atom, kind: AtomEnum) -> Option<u32> {
+        fn property(
+            &self,
+            window: Window,
+            property: Atom,
+            kind: AtomEnum,
+        ) -> Result<Option<u32>, ReplyError> {
             let reply = self
                 .connection
-                .get_property(false, window, property, kind, 0, 1)
-                .ok()?
-                .reply()
-                .ok()?;
-            reply.value32()?.next()
+                .get_property(false, window, property, kind, 0, 1)?
+                .reply()?;
+            Ok(reply.value32().and_then(|mut values| values.next()))
         }
 
-        fn foreground_pid(&self) -> Option<u32> {
+        fn foreground_pid(&self) -> Result<Option<u32>, ReplyError> {
             let window = self.property(self.root, self.active_window, AtomEnum::WINDOW)?;
-            if window == 0 {
-                return None;
+            match window {
+                None | Some(0) => Ok(None),
+                Some(window) => self.property(window, self.window_pid, AtomEnum::CARDINAL),
             }
-            self.property(window, self.window_pid, AtomEnum::CARDINAL)
         }
 
-        fn idle(&self) -> Option<Duration> {
-            let info = self
-                .connection
-                .screensaver_query_info(self.root)
-                .ok()?
-                .reply()
-                .ok()?;
-            Some(Duration::from_millis(u64::from(info.ms_since_user_input)))
+        fn idle(&self) -> Result<Option<Duration>, ReplyError> {
+            if !self.screensaver {
+                return Ok(None);
+            }
+            let info = self.connection.screensaver_query_info(self.root)?.reply()?;
+            Ok(Some(Duration::from_millis(u64::from(
+                info.ms_since_user_input,
+            ))))
+        }
+    }
+
+    /// Runs `read` on the X connection. A broken connection is dropped and
+    /// opened again on a later call, which recovers from an X server restart.
+    fn with_x11<T>(read: impl FnOnce(&X11) -> Result<Option<T>, ReplyError>) -> Option<T> {
+        static CONNECTION: Mutex<Option<X11>> = Mutex::new(None);
+
+        let mut connection = CONNECTION.lock().unwrap_or_else(PoisonError::into_inner);
+        if connection.is_none() {
+            *connection = X11::connect();
+        }
+        match read(connection.as_ref()?) {
+            Ok(value) => value,
+            // For example a window that closed between two requests.
+            Err(ReplyError::X11Error(_)) => None,
+            Err(ReplyError::ConnectionError(error)) => {
+                warn!("lost the connection to the X server: {error}");
+                *connection = None;
+                None
+            }
         }
     }
 
@@ -283,6 +301,18 @@ mod imp {
                 alive: AtomicBool::new(true),
             };
             input.select(true)?.check().ok()?;
+            Some(input)
+        }
+
+        /// Connects and starts the thread that reads the events.
+        fn start() -> Option<Arc<Self>> {
+            let input = Arc::new(Self::connect()?);
+            let reader = Arc::clone(&input);
+            thread::Builder::new()
+                .name("vaultime-x11-input".into())
+                .spawn(move || reader.run())
+                .ok()?;
+            info!("reading X11 input events");
             Some(input)
         }
 
@@ -342,42 +372,32 @@ mod imp {
                 .unwrap_or_else(PoisonError::into_inner) = Instant::now();
         }
 
-        fn idle(&self) -> Option<Duration> {
-            if !self.alive.load(Ordering::Relaxed) {
-                return None;
-            }
+        fn idle(&self) -> Duration {
             if !self.watching_motion.load(Ordering::Relaxed)
                 && let Some(cookie) = self.select(true)
             {
                 cookie.ignore_error();
             }
-            Some(
-                self.last_input
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .elapsed(),
-            )
+            self.last_input
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .elapsed()
         }
     }
 
-    fn raw_input() -> Option<&'static RawInput> {
-        static RAW_INPUT: OnceLock<Option<&'static RawInput>> = OnceLock::new();
-        *RAW_INPUT.get_or_init(|| {
-            let input: &'static RawInput = Box::leak(Box::new(RawInput::connect()?));
-            thread::Builder::new()
-                .name("vaultime-x11-input".into())
-                .spawn(|| input.run())
-                .ok()?;
-            info!("reading X11 input events");
-            Some(input)
-        })
-    }
+    /// Time since the last input from the raw events. A lost connection is
+    /// opened again on a later call.
+    fn raw_input_idle() -> Option<Duration> {
+        static RAW_INPUT: Mutex<Option<Arc<RawInput>>> = Mutex::new(None);
 
-    fn x11() -> Option<&'static Mutex<X11>> {
-        static X11_CONNECTION: OnceLock<Option<Mutex<X11>>> = OnceLock::new();
-        X11_CONNECTION
-            .get_or_init(|| X11::connect().map(Mutex::new))
+        let mut input = RAW_INPUT.lock().unwrap_or_else(PoisonError::into_inner);
+        if input
             .as_ref()
+            .is_none_or(|input| !input.alive.load(Ordering::Relaxed))
+        {
+            *input = RawInput::start();
+        }
+        Some(input.as_ref()?.idle())
     }
 
     /// GNOME reports the time since the last input over D-Bus, on X11 and Wayland.
@@ -519,8 +539,11 @@ mod tests {
         assert!(idle() < away);
 
         // Games that warp the pointer and SDL's screensaver resets are no input.
+        // The XWayland of a headless Weston goes down on a warp.
         sleep(away);
-        run("xdotool", &["mousemove", "10", "10"]);
+        if std::env::var_os("WAYLAND_DISPLAY").is_none() {
+            run("xdotool", &["mousemove", "10", "10"]);
+        }
         run("xset", &["s", "reset"]);
         sleep(settle);
         assert!(idle() >= away);
@@ -539,6 +562,36 @@ mod tests {
         run("xdotool", &["key", "shift"]);
         sleep(settle);
         assert!(idle() < away);
+    }
+
+    /// The X connections come back after the X server restarts. Needs a
+    /// compositor that starts it on demand, like `weston --xwayland`, and `xdotool`:
+    /// `cargo test -- --ignored --nocapture xwayland_restart`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "needs Weston with XWayland"]
+    fn x11_input_survives_an_xwayland_restart() {
+        use std::process::Command;
+        use std::thread::sleep;
+
+        let run = |program: &str, args: &[&str]| {
+            assert!(Command::new(program).args(args).status().unwrap().success());
+        };
+        let idle = || capture_activity_snapshot().idle_for.unwrap();
+        let settle = Duration::from_millis(500);
+        let away = Duration::from_secs(3);
+        assert_eq!(idle_detection_strategy(), "x11_input");
+        idle();
+
+        run("pkill", &["-x", "Xwayland"]);
+        sleep(settle);
+        assert!(idle() < away, "a new connection starts from now");
+
+        sleep(away);
+        assert!(idle() >= away);
+        run("xdotool", &["key", "shift"]);
+        sleep(settle);
+        assert!(idle() < away, "input reaches the new connection");
     }
 
     #[test]
