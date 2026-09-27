@@ -24,7 +24,8 @@ The first public release.
 - **Game pages.** The last two weeks at a glance, every session as a sentence, totals and the cover you pick.
 - **Journal.** Your play week by week, with a 24 hour strip for each day.
 - **Live bar and search.** The running game and its timer stay at the bottom of every page, and Ctrl+K jumps to any game, page or action.
-- **Game discovery.** Finds your Steam games and scans the folders of Epic, GOG, Xbox, EA, Ubisoft and Battle.net games on every drive.
+- **Game discovery.** Reads what Steam, Epic, GOG Galaxy, Heroic and Lutris have installed, and scans the folders of Xbox, EA, Ubisoft and Battle.net games on every drive.
+- **Steam covers.** Steam games get the cover art Steam already keeps on your PC.
 - **Artwork.** Picks up cover art from your game folders, or add your own.
 
 ### Backups

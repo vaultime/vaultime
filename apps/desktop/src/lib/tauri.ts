@@ -201,6 +201,11 @@ export async function discoverGames(
   return invoke<DiscoveredGame[]>("discover_games", { paths });
 }
 
+/** Games from Epic, GOG, Heroic and Lutris that are installed on this PC. */
+export async function discoverLauncherGames(): Promise<DiscoveredGame[]> {
+  return invoke<DiscoveredGame[]>("discover_launcher_games");
+}
+
 export async function discoverSteamGames(): Promise<DiscoveredGame[]> {
   return invoke<DiscoveredGame[]>("discover_steam_games");
 }

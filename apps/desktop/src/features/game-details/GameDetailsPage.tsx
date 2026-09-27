@@ -31,6 +31,10 @@ import { cn } from "@/lib/utils";
 
 const SOURCE_LABELS: Record<string, string> = {
   steam: "Steam",
+  epic: "Epic Games",
+  gog: "GOG",
+  heroic: "Heroic",
+  lutris: "Lutris",
   folder_scan: "Found in a folder",
 };
 

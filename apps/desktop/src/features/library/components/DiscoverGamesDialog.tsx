@@ -21,6 +21,10 @@ import { plural } from "@/lib/words";
 
 const SOURCE_LABELS: Record<string, string> = {
   steam: "Steam",
+  epic: "Epic Games",
+  gog: "GOG",
+  heroic: "Heroic",
+  lutris: "Lutris",
   folder_scan: "Folder",
 };
 
@@ -61,22 +65,25 @@ export function DiscoverGamesDialog({
       setResults([]);
       setSelected(new Set());
 
-      const [steamResult, folderResult] = await Promise.allSettled([
+      const [steamResult, launcherResult, folderResult] = await Promise.allSettled([
         api.discoverSteamGames(),
+        api.discoverLauncherGames(),
         api.getDefaultScanPaths().then((paths) => (paths.length > 0 ? api.discoverGames(paths) : [])),
       ]);
 
       const failures: string[] = [];
       if (steamResult.status === "rejected") failures.push(`The Steam scan failed: ${describeError(steamResult.reason)}`);
+      if (launcherResult.status === "rejected") failures.push(`Reading other launchers failed: ${describeError(launcherResult.reason)}`);
       if (folderResult.status === "rejected") failures.push(`The folder scan failed: ${describeError(folderResult.reason)}`);
       setError(failures.length > 0 ? failures.join(" ") : null);
 
       const steamGames = steamResult.status === "fulfilled" ? steamResult.value : [];
+      const launcherGames = launcherResult.status === "fulfilled" ? launcherResult.value : [];
       const folderGames = folderResult.status === "fulfilled" ? folderResult.value : [];
 
-      // Steam entries win over folder matches for the same executable.
+      // Launcher entries win over folder matches for the same executable.
       const byPath = new Map<string, DiscoveredGame>();
-      for (const game of [...steamGames, ...folderGames]) {
+      for (const game of [...steamGames, ...launcherGames, ...folderGames]) {
         if (!byPath.has(game.executable_path)) byPath.set(game.executable_path, game);
       }
       const merged = [...byPath.values()].sort((a, b) =>
@@ -84,9 +91,13 @@ export function DiscoverGamesDialog({
       );
       setResults(merged);
 
-      // Folder scan hits are guesses, so only Steam results start selected.
+      // Folder scan hits are guesses, so only launcher results start selected.
       setSelected(
-        new Set(merged.filter((game) => !game.already_added && game.source === "steam").map((game) => game.executable_path)),
+        new Set(
+          merged
+            .filter((game) => !game.already_added && game.source !== "folder_scan")
+            .map((game) => game.executable_path),
+        ),
       );
       setScanned(true);
     } catch (scanError) {
@@ -130,7 +141,7 @@ export function DiscoverGamesDialog({
         <DialogHeader>
           <DialogTitle>Discover games</DialogTitle>
           <DialogDescription>
-            Looks through your Steam libraries and the usual install folders of other launchers on every drive.
+            Reads Steam, Epic, GOG Galaxy, Heroic and Lutris, and looks through the usual install folders on every drive.
           </DialogDescription>
         </DialogHeader>
 

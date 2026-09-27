@@ -25,6 +25,7 @@ argon2 = "0.6"
 base64 = "0.23"
 chacha20poly1305 = "0.11"
 chrono = "0.4"
+dirs = "7"
 hostname = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
 keyring = "4.2"
@@ -38,9 +39,6 @@ sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
 zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
-
-[target.'cfg(unix)'.dependencies]
-dirs = "7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.9"

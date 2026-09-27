@@ -107,6 +107,7 @@ pub fn run() {
             commands::tray_available,
             commands::discover_games,
             commands::discover_steam_games,
+            commands::discover_launcher_games,
             commands::get_default_scan_paths,
             commands::import_discovered_games,
         ])

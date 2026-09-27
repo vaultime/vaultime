@@ -355,9 +355,12 @@ fn observe_games(
     let mut observed_games = HashMap::new();
     for game in games {
         if let Some(ref exe_path) = game.executable_path {
-            // Steam gives every game a folder of its own, so any game program in
-            // it counts, whichever build or launcher step is running.
-            let own_folder = if game.launcher_source.as_deref() == Some("steam") {
+            // Launchers give every game a folder of its own, so any game program
+            // in it counts, whichever build or launcher step is running.
+            let own_folder = if matches!(
+                game.launcher_source.as_deref(),
+                Some("steam" | "epic" | "gog" | "heroic")
+            ) {
                 game.install_folder.as_deref()
             } else {
                 None

@@ -389,6 +389,14 @@ pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
     Ok(discovery::scanner::default_scan_paths())
 }
 
+/// Games from Epic, GOG, Heroic and Lutris that are installed here.
+#[tauri::command(async)]
+pub fn discover_launcher_games(
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<DiscoveredGame>, VaultimeError> {
+    discovery::discover_launcher_games(&db)
+}
+
 #[tauri::command(async)]
 pub fn import_discovered_games(
     db: State<'_, Arc<Database>>,
