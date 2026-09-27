@@ -6,6 +6,7 @@
 // the URL for a fresh install, ?mock=unplayed for games without sessions or
 // ?mock=covers for artwork. Covers are not in the repo, copy portrait images
 // to dist-mock/covers/<n>.jpg (n = 1 to 7) after building to see them.
+// ?palette=1 opens the command palette.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
@@ -116,6 +117,11 @@ function coverAssets() {
     preview_data_url: `/covers/${index + 1}.jpg`,
     is_preferred: true,
   }));
+}
+
+// ?palette=1 opens the command palette once the app has rendered.
+if (new URLSearchParams(window.location.search).get("palette") === "1") {
+  setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })), 500);
 }
 
 mockIPC((cmd, payload) => {
