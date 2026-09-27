@@ -9,7 +9,7 @@ import {
   isEnabled as autostartEnabled,
 } from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArchiveRestore, Download, ExternalLink, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
@@ -391,7 +391,7 @@ export function SettingsPage() {
           <PageRow label="License">MIT</PageRow>
           <div className="mt-5 flex flex-wrap gap-2">
             {LINKS.map((link) => (
-              <Button key={link.url} variant="outline" size="sm" onClick={() => shellOpen(link.url)}>
+              <Button key={link.url} variant="outline" size="sm" onClick={() => openUrl(link.url)}>
                 <ExternalLink className="size-3.5" />
                 {link.label}
               </Button>
