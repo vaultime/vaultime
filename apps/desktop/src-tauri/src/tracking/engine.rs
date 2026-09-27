@@ -19,10 +19,14 @@ use crate::constants::{
     POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD,
 };
 use crate::db::connection::Database;
+use crate::db::models::Game;
 use crate::db::repo::{games, sessions, settings};
+use crate::discovery::metadata::is_likely_game_executable;
 use crate::integrity;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
-use crate::platform::process::{RunningProcess, matches_executable, refresh_running_processes};
+use crate::platform::process::{
+    RunningProcess, matches_executable, refresh_running_processes, runs_from_folder,
+};
 
 /// Tracks a currently running game session.
 struct ActiveSession {
@@ -250,15 +254,7 @@ fn poll_tick(
     let processes = refresh_running_processes(system);
     let activity_snapshot = capture_activity_snapshot();
 
-    let mut observed_games: HashMap<String, GameObservation> = HashMap::new();
-    for game in &tracked_games {
-        if let Some(ref exe_path) = game.executable_path {
-            observed_games.insert(
-                game.id.clone(),
-                observe_game_processes(&processes, exe_path, &activity_snapshot),
-            );
-        }
-    }
+    let observed_games = observe_games(&tracked_games, &processes, &activity_snapshot);
 
     for (game_id, observation) in &observed_games {
         if observation.is_running && !active.contains_key(game_id) {
@@ -350,14 +346,45 @@ fn poll_tick(
     Ok(())
 }
 
+/// What each tracked game with an executable is doing right now.
+fn observe_games(
+    games: &[Game],
+    processes: &[RunningProcess],
+    activity_snapshot: &ActivitySnapshot,
+) -> HashMap<String, GameObservation> {
+    let mut observed_games = HashMap::new();
+    for game in games {
+        if let Some(ref exe_path) = game.executable_path {
+            // Steam gives every game a folder of its own, so any game program in
+            // it counts, whichever build or launcher step is running.
+            let own_folder = if game.launcher_source.as_deref() == Some("steam") {
+                game.install_folder.as_deref()
+            } else {
+                None
+            };
+            observed_games.insert(
+                game.id.clone(),
+                observe_game_processes(processes, exe_path, own_folder, activity_snapshot),
+            );
+        }
+    }
+    observed_games
+}
+
 fn observe_game_processes(
     processes: &[RunningProcess],
     executable_path: &str,
+    own_folder: Option<&str>,
     activity_snapshot: &ActivitySnapshot,
 ) -> GameObservation {
     let matched_processes: Vec<&RunningProcess> = processes
         .iter()
-        .filter(|process| matches_executable(process, executable_path))
+        .filter(|process| {
+            matches_executable(process, executable_path)
+                || own_folder.is_some_and(|folder| {
+                    runs_from_folder(process, folder) && is_likely_game_executable(&process.name)
+                })
+        })
         .collect();
 
     if matched_processes.is_empty() {
@@ -561,6 +588,67 @@ fn close_orphaned_sessions(db: &Database) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Starts a real installed game and checks that a session opens and closes.
+    /// Set `VAULTIME_GAME_EXE` and `VAULTIME_GAME_FOLDER` (the Steam install
+    /// folder) and run `cargo test -- --ignored --nocapture real_game`.
+    #[test]
+    #[ignore = "starts a real game"]
+    fn tracks_a_real_game() {
+        let exe = std::env::var("VAULTIME_GAME_EXE").unwrap();
+        let folder = std::env::var("VAULTIME_GAME_FOLDER").unwrap();
+        let db = Arc::new(Database::open_in_memory().unwrap());
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Real Game".into(),
+                executable_path: Some(exe.clone()),
+                install_folder: Some(folder.clone()),
+                launcher_source: Some("steam".into()),
+            },
+        )
+        .unwrap();
+        let engine = TrackingEngine::start(Arc::clone(&db), "device".into());
+
+        let mut child = std::process::Command::new(&exe)
+            .current_dir(std::path::Path::new(&exe).parent().unwrap())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while sessions::get_active_sessions(&db).unwrap().is_empty() {
+            assert!(Instant::now() < deadline, "the game was not seen");
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        println!("session opened");
+        std::thread::sleep(Duration::from_secs(15));
+
+        // End every process of the game, it may have restarted itself through Steam.
+        let _ = child.kill();
+        let _ = child.wait();
+        let mut system = System::new();
+        for process in refresh_running_processes(&mut system) {
+            if runs_from_folder(&process, &folder)
+                && let Some(running) = system.process(sysinfo::Pid::from_u32(process.pid))
+            {
+                running.kill();
+            }
+        }
+        let deadline = Instant::now() + POLL_INTERVAL * 3;
+        while !sessions::get_active_sessions(&db).unwrap().is_empty() {
+            assert!(Instant::now() < deadline, "the session did not close");
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        engine.shutdown();
+
+        let session = &sessions::list_sessions_for_game(&db, &game.id).unwrap()[0];
+        println!(
+            "session closed: runtime {} ms, active {} ms, idle {} ms, {}",
+            session.runtime_ms, session.active_ms, session.idle_ms, session.integrity_status
+        );
+        assert!(session.closed_cleanly);
+        assert!(session.runtime_ms >= 10_000);
+    }
 
     #[test]
     fn shutdown_closes_running_sessions_without_waiting_for_a_tick() {

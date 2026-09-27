@@ -61,6 +61,38 @@ pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bo
     }
 }
 
+/// Whether the process runs a program from inside `folder`, at any depth.
+/// The folder is also compared with links resolved, so a library behind a
+/// junction or symlink still counts.
+pub fn runs_from_folder(process: &RunningProcess, folder: &str) -> bool {
+    let Some(exe) = &process.exe_path else {
+        return false;
+    };
+    let exe = path_key(exe);
+    let resolved = std::fs::canonicalize(folder)
+        .ok()
+        .map(|path| strip_verbatim_prefix(&path.to_string_lossy()).to_owned());
+    std::iter::once(folder.to_owned())
+        .chain(resolved)
+        .any(|candidate| is_inside(&exe, &path_key(&candidate)))
+}
+
+/// True when `path` lies below `folder`, both given as path keys.
+fn is_inside(path: &str, folder: &str) -> bool {
+    let folder = folder.trim_end_matches(['/', '\\']);
+    !folder.is_empty()
+        && path.len() > folder.len()
+        && path.starts_with(folder)
+        && path[folder.len()..].starts_with(['/', '\\'])
+}
+
+/// Windows canonical paths start with `\\?\`, process paths do not.
+fn strip_verbatim_prefix(path: &str) -> &str {
+    path.strip_prefix(r"\\?\")
+        .filter(|rest| !rest.starts_with("UNC"))
+        .unwrap_or(path)
+}
+
 /// Whether the process file at `exe` is the game file, with links resolved.
 /// When the process path cannot be resolved from here, for example because
 /// the game runs in a container, the matching file name has to do.
@@ -251,6 +283,46 @@ mod tests {
             &link.join("game").to_string_lossy()
         ));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn running(exe: &str) -> RunningProcess {
+        RunningProcess {
+            pid: 11,
+            name: file_name(exe).unwrap().into(),
+            exe_path: Some(exe.into()),
+            cpu_usage: 0.0,
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn runs_from_folder_at_any_depth() {
+        let folder = r"C:\Games\Hades II";
+        assert!(runs_from_folder(
+            &running(r"C:\Games\Hades II\Ship\Hades2.exe"),
+            folder
+        ));
+        assert!(runs_from_folder(
+            &running(r"c:\games\hades ii\Release\Hades2.exe"),
+            r"C:\Games\Hades II\"
+        ));
+        assert!(!runs_from_folder(
+            &running(r"C:\Games\Hades II Demo\Hades2.exe"),
+            folder
+        ));
+        assert!(!runs_from_folder(&running(r"C:\Games\Hades II"), folder));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runs_from_folder_at_any_depth() {
+        let folder = "/games/hades";
+        assert!(runs_from_folder(&running("/games/hades/bin/hades"), folder));
+        assert!(!runs_from_folder(
+            &running("/games/hades-demo/hades"),
+            folder
+        ));
+        assert!(!runs_from_folder(&running("/games/other/hades"), "/"));
     }
 
     #[test]
