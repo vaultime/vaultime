@@ -93,15 +93,15 @@ export function LiveBar() {
           {formatClock(runtimeMs)}
         </span>
         <div className="flex items-center gap-2.5 text-xs text-faint tabular-nums">
-          <span>
+          <span className="whitespace-nowrap">
             <span className="label-caps mr-1.5">Active</span>
             {formatHoursMinutes(current.active_ms)}
           </span>
-          <span aria-hidden="true" className="flex h-1.5 w-56 gap-0.5">
+          <span aria-hidden="true" className="flex h-1.5 w-20 gap-0.5 lg:w-36 xl:w-56">
             <span className="rounded-full bg-violet" style={{ width: `${Math.round(activeShare * 100)}%` }} />
             <span className="flex-1 rounded-full bg-idle" />
           </span>
-          <span>
+          <span className="whitespace-nowrap">
             <span className="label-caps mr-1.5">Idle</span>
             {formatHoursMinutes(current.idle_ms)}
           </span>
@@ -109,7 +109,7 @@ export function LiveBar() {
       </div>
 
       <div className="flex items-center justify-end gap-4">
-        <span className="text-[13px] text-faint">
+        <span className="hidden text-[13px] text-faint xl:inline">
           Counts as idle after {Math.round(idleThresholdSeconds / SECONDS_PER_MINUTE)} min away
         </span>
         <Link

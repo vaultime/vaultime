@@ -173,15 +173,15 @@ function DaySection({
   now: Date;
 }) {
   return (
-    <section className="flex gap-10 border-b border-rule py-7">
-      <div className="w-[190px] shrink-0">
+    <section className="flex flex-col gap-5 border-b border-rule py-7 xl:flex-row xl:gap-10">
+      <div className="flex shrink-0 items-baseline gap-4 xl:block xl:w-[190px]">
         <h2 className="font-display text-4xl leading-none">
           {day.start.toLocaleDateString(UI_LOCALE, { weekday: "long" })}
         </h2>
-        <div className="mt-1.5 text-xs tracking-[0.12em] text-faint uppercase">
+        <div className="text-xs tracking-[0.12em] text-faint uppercase xl:mt-1.5">
           {day.start.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" })}
         </div>
-        <div className="mt-3.5 font-mono text-[22px] tabular-nums">{formatHoursMinutes(day.runtimeMs)}</div>
+        <div className="ml-auto font-mono text-[22px] tabular-nums xl:mt-3.5 xl:ml-0">{formatHoursMinutes(day.runtimeMs)}</div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-3.5">

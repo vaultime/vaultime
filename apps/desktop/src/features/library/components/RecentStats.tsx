@@ -8,6 +8,14 @@ import { formatDayPart, formatHoursMinutes } from "@/lib/time";
 import { numberWords } from "@/lib/words";
 import { cn } from "@/lib/utils";
 
+// Hairlines and padding per cell, for two columns and for four from lg on.
+const CELL_BORDERS = [
+  "border-r border-b lg:border-b-0",
+  "border-b pl-6 lg:border-b-0 lg:border-r",
+  "border-r lg:pl-6",
+  "pl-6",
+];
+
 /** Four numbers for the last seven days, separated by hairlines. */
 export function RecentStats({ recent, summaries }: { recent: RecentPlay; summaries: GameSummary[] }) {
   const gamesCount = recent.runtimeByGame.size;
@@ -46,11 +54,11 @@ export function RecentStats({ recent, summaries }: { recent: RecentPlay; summari
   ];
 
   return (
-    <section aria-label={`Past ${RECENT_DAYS} days`} className="grid grid-cols-4 border-b border-rule px-8 xl:px-14">
+    <section aria-label={`Past ${RECENT_DAYS} days`} className="grid grid-cols-2 border-b border-rule px-8 lg:grid-cols-4 xl:px-14">
       {stats.map((stat, index) => (
         <div
           key={stat.label}
-          className={cn("min-w-0 py-6 pr-6", index > 0 && "pl-6", index < stats.length - 1 && "border-r border-rule")}
+          className={cn("min-w-0 border-rule py-6 pr-6", CELL_BORDERS[index])}
         >
           <div className="label-caps">{stat.label}</div>
           <div

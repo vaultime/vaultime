@@ -23,7 +23,7 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="grid h-screen grid-cols-[272px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-ink text-text">
+    <div className="grid h-screen grid-cols-[232px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-ink text-text">
       <Rail onSearch={() => setPaletteOpen(true)} />
       <main className="min-h-0 overflow-y-auto">
         <UpdateBanner />

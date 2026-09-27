@@ -29,7 +29,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
   }, []);
 
   return (
-    <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-5 pt-7 pb-4">
+    <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 xl:px-5">
       <Logo className="px-2" />
 
       <button
@@ -38,7 +38,9 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
         className="flex h-11 items-center gap-2.5 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-hairline-strong hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
       >
         <Search className="size-4 shrink-0" strokeWidth={1.6} />
-        <span className="flex-1">Search or jump to</span>
+        <span className="flex-1">
+          Search<span className="hidden xl:inline"> or jump to</span>
+        </span>
         <kbd className="rounded-[5px] border border-hairline px-1.5 py-0.5 font-mono text-[11px]">Ctrl K</kbd>
       </button>
 
