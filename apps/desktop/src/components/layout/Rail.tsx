@@ -38,9 +38,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
         className="flex h-11 items-center gap-2.5 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-hairline-strong hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
       >
         <Search className="size-4 shrink-0" strokeWidth={1.6} />
-        <span className="min-w-0 flex-1 truncate">
-          Search<span className="hidden xl:inline"> or jump to</span>
-        </span>
+        <span className="min-w-0 flex-1 truncate">Search</span>
         <kbd className="shrink-0 rounded-[5px] border border-hairline px-1.5 py-0.5 font-mono text-[11px]">Ctrl K</kbd>
       </button>
 
