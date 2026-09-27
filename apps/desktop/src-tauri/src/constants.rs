@@ -65,6 +65,9 @@ pub const MAX_SCANNED_ASSETS: usize = 10;
 pub const MAX_LIBRARY_PREVIEWS: usize = 20;
 /// Score of artwork the user picked, above anything a scan can reach.
 pub const ARTWORK_SCORE_USER_PICKED: i32 = 10_000;
+/// Score of the cover from Steam's own library cache, above anything a
+/// folder scan finds.
+pub const ARTWORK_SCORE_STEAM_COVER: i32 = 1_000;
 /// Score for "cover" or "capsule" in the file name.
 pub const ARTWORK_SCORE_COVER: i32 = 120;
 /// Score for "poster" or "banner" in the file name.
@@ -87,6 +90,9 @@ pub const ICON_MAX_SIZE_PX: u32 = 512;
 pub const SCREENSHOT_MAX_WIDTH_PX: u32 = 1280;
 /// Largest height of a cached screenshot.
 pub const SCREENSHOT_MAX_HEIGHT_PX: u32 = 720;
+/// JPEG quality of cached covers, banners and screenshots. Icons stay PNG
+/// for their transparency.
+pub const CACHED_JPEG_QUALITY: u8 = 85;
 /// Width of a cached cover. Covers are cropped to fill.
 pub const COVER_WIDTH_PX: u32 = 720;
 /// Height of a cached cover.

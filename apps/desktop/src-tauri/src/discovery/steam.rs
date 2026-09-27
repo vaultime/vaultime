@@ -180,6 +180,54 @@ fn parse_app_manifest(
     })
 }
 
+/// Portrait covers in Steam's library cache, newest name first.
+const STEAM_COVER_FILES: [&str; 2] = ["library_600x900.jpg", "library_capsule.jpg"];
+
+/// The portrait cover the Steam client keeps for the game installed in
+/// `install_folder`, if the game is a Steam install and Steam cached one.
+pub(crate) fn cached_cover(install_folder: &Path) -> Option<PathBuf> {
+    let app_id = app_id_for_install_folder(install_folder)?;
+    let cache = find_steam_root()?
+        .join("appcache")
+        .join("librarycache")
+        .join(app_id);
+    STEAM_COVER_FILES
+        .iter()
+        .find_map(|name| find_in_cache(&cache, name))
+}
+
+/// Finds the app id through the manifests of the library that holds the
+/// folder, `steamapps/common/<installdir>`.
+fn app_id_for_install_folder(install_folder: &Path) -> Option<String> {
+    let install_dir = install_folder.file_name()?.to_string_lossy().into_owned();
+    let steamapps = install_folder.parent()?.parent()?;
+    find_app_manifests(steamapps)
+        .into_iter()
+        .find_map(|manifest| {
+            let content = fs::read_to_string(manifest).ok()?;
+            let dir = extract_acf_field(&content, "installdir")?;
+            if dir.eq_ignore_ascii_case(&install_dir) {
+                extract_acf_field(&content, "appid")
+            } else {
+                None
+            }
+        })
+}
+
+/// Newer Steam clients keep each image in a hashed folder below the app's
+/// cache folder, older ones directly in it.
+fn find_in_cache(folder: &Path, name: &str) -> Option<PathBuf> {
+    let direct = folder.join(name);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    fs::read_dir(folder)
+        .ok()?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path().join(name))
+        .find(|path| path.is_file())
+}
+
 /// Picks the most likely game binary in an install folder.
 ///
 /// The game binary is usually the biggest program, so size is the base score.
@@ -375,6 +423,60 @@ mod tests {
     fn title_words_skip_short_and_filler_words() {
         assert_eq!(significant_words("Slay the Spire 2"), ["slay", "spire"]);
         assert_eq!(significant_words("Hades II"), ["hades"]);
+    }
+
+    #[test]
+    fn finds_the_app_id_and_the_cached_cover() {
+        let root =
+            std::env::temp_dir().join(format!("vaultime-steam-test-{}", uuid::Uuid::new_v4()));
+        let steamapps = root.join("steamapps");
+        let install = steamapps.join("common").join("Balatro");
+        fs::create_dir_all(&install).unwrap();
+        fs::write(
+            steamapps.join("appmanifest_2379780.acf"),
+            "\"AppState\"\n{\n\t\"appid\"\t\t\"2379780\"\n\t\"installdir\"\t\t\"Balatro\"\n}\n",
+        )
+        .unwrap();
+        assert_eq!(
+            app_id_for_install_folder(&install).as_deref(),
+            Some("2379780")
+        );
+        assert_eq!(
+            app_id_for_install_folder(&steamapps.join("common").join("Other")),
+            None
+        );
+
+        let cache = root.join("librarycache").join("2379780");
+        let hashed = cache.join("137bbd62c036ea008fef89cbf5d6ad884c2735cf");
+        fs::create_dir_all(&hashed).unwrap();
+        fs::write(hashed.join("library_600x900.jpg"), b"").unwrap();
+        assert_eq!(
+            find_in_cache(&cache, "library_600x900.jpg"),
+            Some(hashed.join("library_600x900.jpg"))
+        );
+        fs::write(cache.join("library_600x900.jpg"), b"").unwrap();
+        assert_eq!(
+            find_in_cache(&cache, "library_600x900.jpg"),
+            Some(cache.join("library_600x900.jpg"))
+        );
+        assert_eq!(find_in_cache(&cache, "library_capsule.jpg"), None);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Prints the cached Steam cover for every game in a real library.
+    /// Same setup as `report_local_library`.
+    #[test]
+    #[ignore = "reads a local Steam library"]
+    fn report_local_covers() {
+        let steamapps = PathBuf::from(std::env::var("VAULTIME_STEAMAPPS").unwrap());
+        for manifest in find_app_manifests(&steamapps) {
+            let content = fs::read_to_string(&manifest).unwrap();
+            let Some(dir) = extract_acf_field(&content, "installdir") else {
+                continue;
+            };
+            let install = steamapps.join("common").join(&dir);
+            println!("{dir} | {:?}", cached_cover(&install));
+        }
     }
 
     /// Prints what discovery makes of a real library, to check the picked

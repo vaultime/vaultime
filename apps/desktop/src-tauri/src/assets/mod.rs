@@ -19,13 +19,15 @@ use walkdir::WalkDir;
 
 use crate::constants::{
     ARTWORK_PENALTY_SCREENSHOT_PATH, ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO,
-    ARTWORK_SCORE_POSTER, ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_USER_PICKED, ASSET_SCAN_DEPTH,
-    BANNER_HEIGHT_PX, BANNER_WIDTH_PX, COVER_HEIGHT_PX, COVER_WIDTH_PX, ICON_MAX_SIZE_PX,
-    MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
+    ARTWORK_SCORE_POSTER, ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER,
+    ARTWORK_SCORE_USER_PICKED, ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX, BANNER_WIDTH_PX,
+    CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX, ICON_MAX_SIZE_PX, MAX_LIBRARY_PREVIEWS,
+    MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
 };
 use crate::db::connection::Database;
 use crate::db::models::{Game, GameAsset, GameMetadata};
 use crate::db::repo::{game_assets, games};
+use crate::discovery::steam;
 use crate::error::{Result, VaultimeError};
 
 const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "ico"];
@@ -160,11 +162,13 @@ pub fn scan_game_assets(
     }
 
     let all_assets = game_assets::list_assets_for_game(db, game_id)?;
+    // Candidates were cached best first, so the first new one is the best.
     ensure_preferred_asset(
         db,
         &game,
         &all_assets,
         previous_preferred_asset_id.as_deref(),
+        inserted_assets.first().map(|asset| asset.id.as_str()),
     )?;
 
     list_game_assets(db, game_id)
@@ -219,10 +223,13 @@ fn ensure_preferred_asset(
     game: &Game,
     assets: &[GameAsset],
     previous_preferred_asset_id: Option<&str>,
+    best_scanned_asset_id: Option<&str>,
 ) -> Result<()> {
+    let find = |asset_id: &str| assets.iter().find(|asset| asset.id == asset_id);
     let next_preferred = previous_preferred_asset_id
-        .and_then(|asset_id| assets.iter().find(|asset| asset.id == asset_id))
+        .and_then(find)
         .or_else(|| assets.iter().find(|asset| asset.source == "user_picked"))
+        .or_else(|| best_scanned_asset_id.and_then(find))
         .or_else(|| assets.first())
         .map(|asset| asset.id.clone());
 
@@ -289,11 +296,7 @@ fn build_preview_data_url(asset: &GameAsset) -> Result<String> {
         ))
     })?;
 
-    let mime = if asset.cache_path.is_some() {
-        "image/png"
-    } else {
-        mime_for_path(&data_path)
-    };
+    let mime = mime_for_path(&data_path);
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
     Ok(format!("data:{mime};base64,{encoded}"))
@@ -301,12 +304,22 @@ fn build_preview_data_url(asset: &GameAsset) -> Result<String> {
 
 fn find_candidates(game: &Game) -> Result<Vec<AssetCandidate>> {
     let roots = scan_roots(game);
-    if roots.is_empty() {
-        return Ok(Vec::new());
-    }
-
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
+
+    // Steam keeps a portrait cover for every game it installs.
+    if game.launcher_source.as_deref() == Some("steam")
+        && let Some(folder) = &game.install_folder
+        && let Some(cover) = steam::cached_cover(Path::new(folder))
+    {
+        seen.insert(cover.to_string_lossy().into_owned());
+        candidates.push(AssetCandidate {
+            path: cover,
+            asset_type: "cover".into(),
+            source: "steam_cache".into(),
+            score: ARTWORK_SCORE_STEAM_COVER,
+        });
+    }
 
     for root in roots {
         for entry in WalkDir::new(root)
@@ -474,16 +487,32 @@ fn cache_candidate(
         ))
     })?;
 
+    // Artwork is opaque and much smaller as JPEG, icons keep their transparency.
     let asset_id = uuid::Uuid::new_v4().to_string();
-    let cache_path = game_cache_dir.join(format!("{asset_id}.png"));
-    processed
-        .save_with_format(&cache_path, ImageFormat::Png)
-        .map_err(|e| {
-            VaultimeError::Asset(format!(
-                "failed to write cached image {}: {e}",
-                cache_path.display()
-            ))
-        })?;
+    let as_jpeg = asset_type != "icon";
+    let cache_path = game_cache_dir.join(format!(
+        "{asset_id}.{}",
+        if as_jpeg { "jpg" } else { "png" }
+    ));
+    let written = if as_jpeg {
+        fs::File::create(&cache_path)
+            .map_err(image::ImageError::IoError)
+            .and_then(|file| {
+                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
+                    std::io::BufWriter::new(file),
+                    CACHED_JPEG_QUALITY,
+                );
+                encoder.encode_image(&processed.to_rgb8())
+            })
+    } else {
+        processed.save_with_format(&cache_path, ImageFormat::Png)
+    };
+    written.map_err(|e| {
+        VaultimeError::Asset(format!(
+            "failed to write cached image {}: {e}",
+            cache_path.display()
+        ))
+    })?;
 
     Ok(CachedAsset {
         file_path: candidate.path.to_string_lossy().to_string(),
@@ -572,6 +601,44 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    /// Scans a real Steam game and prints what it picked as the cover. Set
+    /// `VAULTIME_GAME_FOLDER` to a Steam install folder and run
+    /// `cargo test -- --ignored --nocapture real_steam_cover`.
+    #[test]
+    #[ignore = "reads a local Steam install"]
+    fn picks_a_real_steam_cover() {
+        let folder = std::env::var("VAULTIME_GAME_FOLDER").unwrap();
+        let db = Database::open_in_memory().unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Real Game".into(),
+                executable_path: None,
+                install_folder: Some(folder),
+                launcher_source: Some("steam".into()),
+            },
+        )
+        .unwrap();
+        let cache = test_cache();
+        let assets = scan_game_assets(&db, &cache, &game.id).unwrap();
+        for asset in &assets {
+            println!(
+                "asset {} {} preferred={}",
+                asset.source, asset.file_path, asset.is_preferred
+            );
+        }
+        let preferred = assets.iter().find(|asset| asset.is_preferred).unwrap();
+        println!(
+            "{} assets, cover {} from {}, preview {} bytes",
+            assets.len(),
+            preferred.file_path,
+            preferred.source,
+            preferred.preview_data_url.as_ref().map_or(0, String::len)
+        );
+        assert_eq!(preferred.source, "steam_cache");
+        fs::remove_dir_all(cache.cache_dir()).unwrap();
     }
 
     fn test_cache() -> AssetManager {
