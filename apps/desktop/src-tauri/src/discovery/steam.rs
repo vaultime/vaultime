@@ -13,7 +13,10 @@ use std::path::{Path, PathBuf};
 
 use log::info;
 
-use crate::constants::{STEAM_EXECUTABLE_SCAN_DEPTH, STEAM_TOP_LEVEL_BONUS_BYTES};
+use crate::constants::{
+    STEAM_EXECUTABLE_SCAN_DEPTH, STEAM_SHIPPING_BONUS_BYTES, STEAM_TITLE_MATCH_BONUS_BYTES,
+    STEAM_TOP_LEVEL_BONUS_BYTES, TITLE_WORD_MIN_CHARS,
+};
 use crate::db::connection::Database;
 use crate::error::Result;
 use crate::platform::process::path_key;
@@ -163,7 +166,7 @@ fn parse_app_manifest(
         return None;
     }
 
-    let executable = find_main_executable(&install_folder)?;
+    let executable = find_main_executable(&install_folder, &name)?;
     let executable_path = executable.to_string_lossy().into_owned();
     let already_added = existing.contains(&path_key(&executable_path));
 
@@ -179,9 +182,11 @@ fn parse_app_manifest(
 
 /// Picks the most likely game binary in an install folder.
 ///
-/// The largest executable wins since the game binary is usually bigger than
-/// helpers and tools. Files in the top folder get a size head start.
-fn find_main_executable(install_dir: &Path) -> Option<PathBuf> {
+/// The game binary is usually the biggest program, so size is the base score.
+/// An Unreal `-Shipping` build always wins, a name that matches the title gets
+/// a big head start and files in the top folder a small one.
+fn find_main_executable(install_dir: &Path, title: &str) -> Option<PathBuf> {
+    let title_words = significant_words(title);
     walkdir::WalkDir::new(install_dir)
         .max_depth(STEAM_EXECUTABLE_SCAN_DEPTH)
         .follow_links(false)
@@ -190,14 +195,42 @@ fn find_main_executable(install_dir: &Path) -> Option<PathBuf> {
         .filter(|entry| entry.file_type().is_file() && is_executable(entry.path()))
         .filter(|entry| metadata::is_likely_game_executable(&entry.file_name().to_string_lossy()))
         .max_by_key(|entry| {
-            let size = entry.metadata().map_or(0, |meta| meta.len());
-            if entry.depth() <= 1 {
-                size + STEAM_TOP_LEVEL_BONUS_BYTES
-            } else {
-                size
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            let stem = name.strip_suffix(".exe").unwrap_or(&name);
+            let mut score = entry.metadata().map_or(0, |meta| meta.len());
+            if stem.ends_with("-shipping") {
+                score += STEAM_SHIPPING_BONUS_BYTES;
             }
+            if title_words
+                .iter()
+                .any(|word| normalize(stem).contains(word.as_str()))
+            {
+                score += STEAM_TITLE_MATCH_BONUS_BYTES;
+            }
+            if entry.depth() <= 1 {
+                score += STEAM_TOP_LEVEL_BONUS_BYTES;
+            }
+            score
         })
         .map(walkdir::DirEntry::into_path)
+}
+
+/// Lowercase letters and digits only, "Hades II" gives "hadesii".
+fn normalize(text: &str) -> String {
+    text.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// Title words long enough to identify a game, "Slay the Spire 2" gives
+/// "slay" and "spire".
+fn significant_words(title: &str) -> Vec<String> {
+    title
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .map(normalize)
+        .filter(|word| word.len() >= TITLE_WORD_MIN_CHARS && word != "the")
+        .collect()
 }
 
 /// True for redistributables, Proton builds and other Steam tools.
@@ -253,6 +286,111 @@ fn extract_acf_field(content: &str, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A game folder with executables of the given sizes, in a fresh temp folder.
+    #[cfg(windows)]
+    fn game_folder(files: &[(&str, u64)]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("vaultime-exe-test-{}", uuid::Uuid::new_v4()));
+        for (path, size) in files {
+            let path = root.join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::File::create(&path).unwrap().set_len(*size).unwrap();
+        }
+        root
+    }
+
+    #[cfg(windows)]
+    fn picked(files: &[(&str, u64)], title: &str) -> String {
+        let root = game_folder(files);
+        let exe = find_main_executable(&root, title).unwrap();
+        let relative = exe
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        fs::remove_dir_all(root).unwrap();
+        relative
+    }
+
+    // The layouts below are real Steam installs, with their file sizes. They
+    // need .exe files, so they run on Windows.
+
+    #[cfg(windows)]
+    #[test]
+    fn prefers_the_executable_named_like_the_game() {
+        let files = [
+            ("Ship/F10.exe", 9_206_784),
+            ("Release/F10.exe", 9_206_784),
+            ("Release/Hades2.exe", 7_721_032),
+            ("Ship/Hades2.exe", 6_432_432),
+            ("Ship/crashpad_handler.exe", 814_080),
+        ];
+        assert!(picked(&files, "Hades II").ends_with("Hades2.exe"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn prefers_the_unreal_shipping_build() {
+        let files = [
+            ("SB/Binaries/Win64/SB-Win64-Shipping.exe", 359_186_432),
+            ("Engine/Binaries/Win64/UnrealCEFSubProcess.exe", 3_648_512),
+            ("crs-handler.exe", 1_266_856),
+            ("crs-uploader.exe", 859_304),
+            ("SB.exe", 459_776),
+        ];
+        assert_eq!(
+            picked(&files, "Stellar Blade"),
+            "SB/Binaries/Win64/SB-Win64-Shipping.exe"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn skips_source_engine_tools_and_servers() {
+        let files = [
+            ("bin/x64/qc_eyes.exe", 3_694_744),
+            ("bin/x64/elementviewer.exe", 3_636_376),
+            ("bin/x64/studiomdl.exe", 2_459_800),
+            ("srcds_win64.exe", 2_000_000),
+            ("cstrike_win64.exe", 800_000),
+        ];
+        assert_eq!(
+            picked(&files, "Counter-Strike: Source"),
+            "cstrike_win64.exe"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn finds_executables_four_folders_deep() {
+        let files = [
+            ("game/bin/win64/vconsole2.exe", 5_105_304),
+            ("game/bin/win64/cs2.exe", 2_967_704),
+            ("game/csgo/bin/legacy/csgo_legacy_app.exe", 1_728_360),
+        ];
+        assert_eq!(picked(&files, "Counter-Strike 2"), "game/bin/win64/cs2.exe");
+    }
+
+    #[test]
+    fn title_words_skip_short_and_filler_words() {
+        assert_eq!(significant_words("Slay the Spire 2"), ["slay", "spire"]);
+        assert_eq!(significant_words("Hades II"), ["hades"]);
+    }
+
+    /// Prints what discovery makes of a real library, to check the picked
+    /// executables by eye. Run with the steamapps folder in
+    /// `VAULTIME_STEAMAPPS` and `cargo test -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "reads a local Steam library"]
+    fn report_local_library() {
+        let steamapps = PathBuf::from(std::env::var("VAULTIME_STEAMAPPS").unwrap());
+        for manifest in find_app_manifests(&steamapps) {
+            match parse_app_manifest(&manifest, &steamapps, &HashSet::new()) {
+                Some(game) => println!("{} | {}", game.title, game.executable_path),
+                None => println!("skipped {}", manifest.display()),
+            }
+        }
+    }
 
     #[test]
     fn parse_vdf_value() {

@@ -143,15 +143,41 @@ pub fn is_likely_game_executable(filename: &str) -> bool {
         "beservice",
         "steam_api",
         "steamclient",
+        // Crash reporters and embedded browsers.
+        "crs-handler",
+        "crs-uploader",
+        "cefsubprocess",
+        "prereq",
+        // Dedicated servers.
+        "srcds",
+        "dedicated",
     ];
 
-    for pattern in &reject_patterns {
-        if lower.contains(pattern) {
-            return false;
-        }
-    }
+    // Source engine tools that ship next to the game. Whole names only, a
+    // part like "hammer" would also hit games such as Warhammer.
+    let reject_names = [
+        "qc_eyes",
+        "elementviewer",
+        "studiomdl",
+        "hlfaceposer",
+        "dmxedit",
+        "makescenesimage",
+        "vconsole2",
+        "hammer",
+        "captioncompiler",
+        "shadercompile",
+        "resourcecompiler",
+        "vbsp",
+        "vvis",
+        "vrad",
+    ];
 
-    true
+    let stem = lower.strip_suffix(".exe").unwrap_or(&lower);
+    let stem = stem.strip_suffix("_win64").unwrap_or(stem);
+    !reject_patterns
+        .iter()
+        .any(|pattern| lower.contains(pattern))
+        && !reject_names.contains(&stem)
 }
 
 #[cfg(test)]
@@ -210,5 +236,12 @@ mod tests {
         assert!(!is_likely_game_executable("vcredist_x64.exe"));
         assert!(is_likely_game_executable("Cyberpunk2077.exe"));
         assert!(is_likely_game_executable("factorio"));
+        assert!(!is_likely_game_executable("crs-handler.exe"));
+        assert!(!is_likely_game_executable("srcds_win64.exe"));
+        assert!(!is_likely_game_executable("hammer.exe"));
+        assert!(!is_likely_game_executable("vconsole2.exe"));
+        assert!(!is_likely_game_executable("studiomdl_win64.exe"));
+        assert!(is_likely_game_executable("Warhammer3.exe"));
+        assert!(is_likely_game_executable("cstrike_win64.exe"));
     }
 }
