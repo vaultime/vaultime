@@ -3,7 +3,7 @@
 
 //! Process enumeration and game executable matching.
 
-use sysinfo::System;
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// A snapshot of a running process relevant for game matching.
 #[derive(Debug, Clone)]
@@ -14,13 +14,25 @@ pub struct RunningProcess {
     pub name: String,
     /// Full executable path, if available.
     pub exe_path: Option<String>,
+    /// First word of the command line. Wine puts the Windows path of the game
+    /// there, while the executable path is Wine's own.
+    pub command: Option<String>,
     /// Percent CPU usage since the previous refresh.
     pub cpu_usage: f32,
 }
 
 /// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
 pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    // Paths and command lines do not change while a process runs, so they are
+    // read once per process.
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_cpu()
+            .with_exe(UpdateKind::OnlyIfNotSet)
+            .with_cmd(UpdateKind::OnlyIfNotSet),
+    );
 
     sys.processes()
         .values()
@@ -28,6 +40,10 @@ pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
             pid: p.pid().as_u32(),
             name: p.name().to_string_lossy().into_owned(),
             exe_path: p.exe().map(|e| e.to_string_lossy().into_owned()),
+            command: p
+                .cmd()
+                .first()
+                .map(|arg| arg.to_string_lossy().into_owned()),
             cpu_usage: p.cpu_usage(),
         })
         .collect()
@@ -54,8 +70,15 @@ pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bo
 
     match file_name(exe) {
         Some(exe_name) if names_equal(exe_name, game_name) => same_file(exe, game_executable),
+        // A loader such as Wine. Linux cuts process names to 15 characters,
+        // so the Windows path at the start of the command line is checked too.
         Some(exe_name) if !names_equal(exe_name, &process.name) => {
             names_equal(&process.name, game_name)
+                || process
+                    .command
+                    .as_deref()
+                    .and_then(file_name)
+                    .is_some_and(|name| names_equal(name, game_name))
         }
         _ => false,
     }
@@ -150,6 +173,7 @@ mod tests {
             pid: 1,
             name: "game".into(),
             exe_path: Some("/opt/games/cool-game/game".into()),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
@@ -161,6 +185,7 @@ mod tests {
             pid: 2,
             name: "game".into(),
             exe_path: None,
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
@@ -172,6 +197,7 @@ mod tests {
             pid: 3,
             name: "firefox".into(),
             exe_path: Some("/usr/bin/firefox".into()),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, "/opt/games/cool-game/game"));
@@ -201,6 +227,7 @@ mod tests {
             pid: 5,
             name: "game".into(),
             exe_path: Some(second),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, &first));
@@ -213,9 +240,26 @@ mod tests {
             pid: 6,
             name: "game".into(),
             exe_path: Some("/container/only/game".into()),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
+    }
+
+    #[test]
+    fn wine_game_with_a_long_name_matches_by_command_line() {
+        let proc = RunningProcess {
+            pid: 12,
+            name: "SomeVeryLongGam".into(),
+            exe_path: Some("/usr/bin/wine64-preloader".into()),
+            command: Some(r"Z:\home\me\Games\SomeVeryLongGameName.exe".into()),
+            cpu_usage: 0.0,
+        };
+        assert!(matches_executable(
+            &proc,
+            "/home/me/Games/SomeVeryLongGameName.exe"
+        ));
+        assert!(!matches_executable(&proc, "/home/me/Games/OtherGame.exe"));
     }
 
     #[test]
@@ -224,6 +268,7 @@ mod tests {
             pid: 7,
             name: "game.exe".into(),
             exe_path: Some("/usr/bin/wine64-preloader".into()),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/home/me/Games/Cool/game.exe"));
@@ -235,6 +280,7 @@ mod tests {
             pid: 8,
             name: "firefox".into(),
             exe_path: Some("/usr/bin/firefox".into()),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, "/opt/games/firefox-game/game"));
@@ -250,6 +296,7 @@ mod tests {
             pid: 9,
             name: "game".into(),
             exe_path: Some(first),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(
@@ -276,6 +323,7 @@ mod tests {
             pid: 10,
             name: "game".into(),
             exe_path: Some(first),
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(
@@ -290,6 +338,7 @@ mod tests {
             pid: 11,
             name: file_name(exe).unwrap().into(),
             exe_path: Some(exe.into()),
+            command: None,
             cpu_usage: 0.0,
         }
     }
@@ -331,6 +380,7 @@ mod tests {
             pid: 4,
             name: "game.exe".into(),
             exe_path: None,
+            command: None,
             cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, r"C:\Games\Cool\game.exe"));
