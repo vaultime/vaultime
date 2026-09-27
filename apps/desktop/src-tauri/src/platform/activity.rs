@@ -91,111 +91,152 @@ mod imp {
 
 #[cfg(target_os = "linux")]
 mod imp {
-    use std::process::Command;
-    use std::sync::OnceLock;
+    use std::sync::{Mutex, OnceLock, PoisonError};
     use std::time::Duration;
+
+    use log::info;
+    use x11rb::connection::Connection;
+    use x11rb::protocol::screensaver::ConnectionExt as _;
+    use x11rb::protocol::xproto::{Atom, AtomEnum, ConnectionExt as _, Window};
+    use x11rb::rust_connection::RustConnection;
 
     use super::HEURISTIC;
 
+    const GNOME_IDLE_MONITOR: &str = "org.gnome.Mutter.IdleMonitor";
+    const GNOME_IDLE_MONITOR_PATH: &str = "/org/gnome/Mutter/IdleMonitor/Core";
+
     pub fn foreground_strategy() -> &'static str {
-        if xprop_available() { "x11" } else { HEURISTIC }
+        if x11().is_some() { "x11" } else { HEURISTIC }
     }
 
     pub fn idle_strategy() -> &'static str {
-        if xprintidle_available() {
-            "x11"
-        } else {
-            HEURISTIC
-        }
-    }
-
-    pub fn foreground_pid() -> Option<u32> {
-        if !xprop_available() {
-            return None;
-        }
-
-        let root = run("xprop", &["-root", "_NET_ACTIVE_WINDOW"])?;
-        let window_id = parse_window_id(&root)?;
-        let pid = run("xprop", &["-id", &window_id, "_NET_WM_PID"])?;
-        parse_pid(&pid)
-    }
-
-    pub fn idle_duration() -> Option<Duration> {
-        if !xprintidle_available() {
-            return None;
-        }
-
-        let idle_ms = run("xprintidle", &[])?.trim().parse::<u64>().ok()?;
-        Some(Duration::from_millis(idle_ms))
-    }
-
-    // Tool availability does not change while the app runs, so check it once.
-    fn xprop_available() -> bool {
-        static AVAILABLE: OnceLock<bool> = OnceLock::new();
-        *AVAILABLE.get_or_init(|| x11_session() && on_path("xprop"))
-    }
-
-    fn xprintidle_available() -> bool {
-        static AVAILABLE: OnceLock<bool> = OnceLock::new();
-        *AVAILABLE.get_or_init(|| x11_session() && on_path("xprintidle"))
-    }
-
-    fn x11_session() -> bool {
-        std::env::var_os("DISPLAY").is_some()
-    }
-
-    fn on_path(program: &str) -> bool {
-        std::env::var_os("PATH").is_some_and(|paths| {
-            std::env::split_paths(&paths).any(|dir| dir.join(program).is_file())
+        static STRATEGY: OnceLock<&'static str> = OnceLock::new();
+        STRATEGY.get_or_init(|| {
+            // On Wayland the X server only sees input for X11 apps, so the
+            // desktop's own idle monitor is the better source.
+            let strategy = if wayland_session() && gnome_idle().is_some() {
+                "gnome_dbus"
+            } else if x11().is_some_and(|x11| {
+                x11.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .screensaver
+            }) {
+                "x11"
+            } else {
+                HEURISTIC
+            };
+            info!("idle detection: {strategy}");
+            strategy
         })
     }
 
-    fn run(program: &str, args: &[&str]) -> Option<String> {
-        let output = Command::new(program).args(args).output().ok()?;
-        if !output.status.success() {
-            return None;
-        }
-        String::from_utf8(output.stdout).ok()
+    pub fn foreground_pid() -> Option<u32> {
+        x11()?
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .foreground_pid()
     }
 
-    fn parse_window_id(output: &str) -> Option<String> {
-        output
-            .split('#')
-            .nth(1)
-            .map(str::trim)
-            .filter(|value| !value.is_empty() && *value != "0x0")
-            .map(ToOwned::to_owned)
+    pub fn idle_duration() -> Option<Duration> {
+        match idle_strategy() {
+            "gnome_dbus" => gnome_idle(),
+            "x11" => x11()?.lock().unwrap_or_else(PoisonError::into_inner).idle(),
+            _ => None,
+        }
     }
 
-    fn parse_pid(output: &str) -> Option<u32> {
-        output
-            .split('=')
-            .nth(1)
-            .map(str::trim)
-            .and_then(|value| value.parse::<u32>().ok())
+    fn wayland_session() -> bool {
+        std::env::var_os("WAYLAND_DISPLAY").is_some()
     }
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
+    /// A connection to the X server, on Wayland the one for X11 apps, opened on
+    /// first use.
+    struct X11 {
+        connection: RustConnection,
+        root: Window,
+        active_window: Atom,
+        window_pid: Atom,
+        screensaver: bool,
+    }
 
-        #[test]
-        fn parses_window_id_from_xprop_output() {
-            let output = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x4c00007";
-            assert_eq!(parse_window_id(output).as_deref(), Some("0x4c00007"));
+    impl X11 {
+        fn connect() -> Option<Self> {
+            let (connection, screen) = x11rb::connect(None).ok()?;
+            let root = connection.setup().roots.get(screen)?.root;
+            let atom = |name: &[u8]| -> Option<Atom> {
+                Some(connection.intern_atom(false, name).ok()?.reply().ok()?.atom)
+            };
+            let active_window = atom(b"_NET_ACTIVE_WINDOW")?;
+            let window_pid = atom(b"_NET_WM_PID")?;
+            let screensaver = connection
+                .screensaver_query_version(1, 1)
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+                .is_some();
+            info!("connected to the X server, screensaver extension {screensaver}");
+            Some(Self {
+                connection,
+                root,
+                active_window,
+                window_pid,
+                screensaver,
+            })
         }
 
-        #[test]
-        fn ignores_empty_window_id() {
-            let output = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0";
-            assert_eq!(parse_window_id(output), None);
+        /// Reads one 32 bit value of a window property.
+        fn property(&self, window: Window, property: Atom, kind: AtomEnum) -> Option<u32> {
+            let reply = self
+                .connection
+                .get_property(false, window, property, kind, 0, 1)
+                .ok()?
+                .reply()
+                .ok()?;
+            reply.value32()?.next()
         }
 
-        #[test]
-        fn parses_pid_from_xprop_output() {
-            let output = "_NET_WM_PID(CARDINAL) = 4242";
-            assert_eq!(parse_pid(output), Some(4242));
+        fn foreground_pid(&self) -> Option<u32> {
+            let window = self.property(self.root, self.active_window, AtomEnum::WINDOW)?;
+            if window == 0 {
+                return None;
+            }
+            self.property(window, self.window_pid, AtomEnum::CARDINAL)
         }
+
+        fn idle(&self) -> Option<Duration> {
+            let info = self
+                .connection
+                .screensaver_query_info(self.root)
+                .ok()?
+                .reply()
+                .ok()?;
+            Some(Duration::from_millis(u64::from(info.ms_since_user_input)))
+        }
+    }
+
+    fn x11() -> Option<&'static Mutex<X11>> {
+        static X11_CONNECTION: OnceLock<Option<Mutex<X11>>> = OnceLock::new();
+        X11_CONNECTION
+            .get_or_init(|| X11::connect().map(Mutex::new))
+            .as_ref()
+    }
+
+    /// GNOME reports the time since the last input over D-Bus, on X11 and Wayland.
+    fn gnome_idle() -> Option<Duration> {
+        static SESSION_BUS: OnceLock<Option<zbus::blocking::Connection>> = OnceLock::new();
+        let bus = SESSION_BUS
+            .get_or_init(|| zbus::blocking::Connection::session().ok())
+            .as_ref()?;
+        let reply = bus
+            .call_method(
+                Some(GNOME_IDLE_MONITOR),
+                GNOME_IDLE_MONITOR_PATH,
+                Some(GNOME_IDLE_MONITOR),
+                "GetIdletime",
+                &(),
+            )
+            .ok()?;
+        let idle_ms: u64 = reply.body().deserialize().ok()?;
+        Some(Duration::from_millis(idle_ms))
     }
 }
 
@@ -265,6 +306,20 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Prints the signals this desktop offers. Run it in a desktop session
+    /// or under `xvfb-run` with `cargo test -- --ignored --nocapture signals`.
+    #[test]
+    #[ignore = "needs a desktop session"]
+    fn report_activity_signals() {
+        println!(
+            "foreground {}, idle {}",
+            foreground_detection_strategy(),
+            idle_detection_strategy()
+        );
+        println!("{:?}", capture_activity_snapshot());
+        assert_ne!(idle_detection_strategy(), HEURISTIC);
+    }
 
     #[test]
     fn snapshot_flags_match_strategies() {

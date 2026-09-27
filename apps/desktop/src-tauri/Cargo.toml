@@ -44,6 +44,8 @@ dirs = "7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.9"
+x11rb = { version = "0.14", features = ["screensaver"] }
+zbus = "5"
 
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.100"

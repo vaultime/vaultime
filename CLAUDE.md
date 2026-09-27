@@ -27,8 +27,9 @@ service that runs on our own VPS.
 - Windows and Linux are both first-class. Every feature has to work on both
   and CI checks both.
 - macOS code paths may stay, but nothing builds or tests them.
-- Windows uses Win32 APIs for foreground and idle detection. Linux uses X11
-  tools (`xprop`, `xprintidle`) and falls back to a CPU heuristic.
+- Windows uses Win32 APIs for foreground and idle detection. Linux talks to
+  the X server directly (x11rb, XWayland included) and reads GNOME's idle
+  monitor over D-Bus on Wayland, with a CPU heuristic as the fallback.
 
 ## Layout
 
