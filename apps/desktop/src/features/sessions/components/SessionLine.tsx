@@ -29,7 +29,7 @@ export function SessionLine({
 
   return (
     <article className={cn("flex items-baseline gap-5", bordered && "border-b border-rule py-3.5")}>
-      <span className="w-[132px] shrink-0 font-mono text-[13px] text-faint">
+      <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
         {when ?? formatSessionStart(session.started_at_wall)}
       </span>
       <div className="min-w-0 flex-1">

@@ -390,7 +390,7 @@ export function SettingsPage() {
           ) : (
             snapshots.map((snapshot) => (
               <div key={snapshot.id} className="flex items-baseline gap-5 border-b border-rule py-3 last:border-b-0">
-                <span className="w-[132px] shrink-0 font-mono text-[13px] text-faint">
+                <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
                   {formatSessionStart(snapshot.created_at)}
                 </span>
                 <div className="min-w-0 flex-1">

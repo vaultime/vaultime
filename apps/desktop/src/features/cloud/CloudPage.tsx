@@ -688,7 +688,7 @@ export function CloudPage() {
                       key={backup.id}
                       className="flex flex-wrap items-baseline gap-x-5 gap-y-2 border-b border-rule py-3.5 last:border-b-0"
                     >
-                      <span className="w-[132px] shrink-0 font-mono text-[13px] text-faint">
+                      <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
                         {formatSessionStart(backup.uploaded_at)}
                       </span>
                       <div className="min-w-0 flex-1">

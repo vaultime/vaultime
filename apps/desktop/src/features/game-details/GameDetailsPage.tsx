@@ -371,7 +371,7 @@ function EventLog({ events }: { events: SessionEvent[] }) {
       <ul className="mt-2">
         {shown.map((event) => (
           <li key={event.id} className="flex items-baseline gap-5 border-b border-rule py-2.5 text-[13px]">
-            <span className="w-[132px] shrink-0 font-mono text-faint">{formatSessionStart(event.event_time_wall)}</span>
+            <span className="w-[20ch] shrink-0 font-mono text-faint">{formatSessionStart(event.event_time_wall)}</span>
             <span className="w-40 shrink-0 text-soft">{formatIntegrityEventType(event.event_type)}</span>
             <span className="min-w-0 flex-1 text-faint">{getIntegrityEventDetail(event)}</span>
           </li>
