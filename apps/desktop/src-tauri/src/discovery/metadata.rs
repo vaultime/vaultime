@@ -38,33 +38,28 @@ pub fn infer_title(executable_path: &str) -> String {
     clean_title(&filename)
 }
 
+/// Build and launcher suffixes, in lowercase. Each comes before any shorter suffix it ends with.
+const TITLE_SUFFIXES: &[&str] = &[
+    "-win64-shipping",
+    "-win32-shipping",
+    "_win64_shipping",
+    "-shipping",
+    "_shipping",
+    "_x64",
+    "_x86",
+    "-x64",
+    "-x86",
+    ".x86_64",
+    ".x86",
+    "_64bit",
+    "_32bit",
+    "-launcher",
+    "_launcher",
+    " launcher",
+];
+
 fn clean_title(raw: &str) -> String {
-    let mut title = raw.to_string();
-
-    for suffix in &[
-        "-Win64-Shipping",
-        "-Win32-Shipping",
-        "_Win64_Shipping",
-        "-Shipping",
-        "_Shipping",
-        "_x64",
-        "_x86",
-        "-x64",
-        "-x86",
-        ".x86_64",
-        ".x86",
-        "_64bit",
-        "_32bit",
-        "-launcher",
-        "_launcher",
-        " Launcher",
-    ] {
-        if let Some(pos) = title.to_lowercase().rfind(&suffix.to_lowercase()) {
-            title.truncate(pos);
-        }
-    }
-
-    title = title.replace(['_', '-', '.'], " ");
+    let title = strip_title_suffixes(raw).replace(['_', '-', '.'], " ");
 
     let parts: Vec<&str> = title.split_whitespace().collect();
     let result = parts.join(" ");
@@ -73,6 +68,21 @@ fn clean_title(raw: &str) -> String {
         raw.to_string()
     } else {
         result
+    }
+}
+
+/// Strips suffixes from the end only, repeatedly, as in `Game_x64-launcher`.
+/// ASCII lowercasing keeps byte positions, so the cut lands on a char boundary.
+fn strip_title_suffixes(mut title: &str) -> &str {
+    loop {
+        let lower = title.to_ascii_lowercase();
+        let Some(suffix) = TITLE_SUFFIXES
+            .iter()
+            .find(|suffix| lower.ends_with(*suffix))
+        else {
+            return title;
+        };
+        title = &title[..title.len() - suffix.len()];
     }
 }
 
@@ -166,6 +176,25 @@ mod tests {
         assert_eq!(
             infer_title("/games/MyGame/Binaries/Win64/MyGame-Win64-Shipping.exe"),
             "MyGame"
+        );
+    }
+
+    #[test]
+    fn strips_suffixes_after_letters_that_change_length_when_lowercased() {
+        // The Kelvin sign takes three bytes and its lowercase "k" one.
+        assert_eq!(clean_title("\u{212A}ゲーム_x64"), "\u{212A}ゲーム");
+        assert_eq!(
+            clean_title("İstanbul Racer-Win64-Shipping"),
+            "İstanbul Racer"
+        );
+    }
+
+    #[test]
+    fn strips_stacked_suffixes_but_keeps_inner_words() {
+        assert_eq!(clean_title("Game_x64-launcher"), "Game");
+        assert_eq!(
+            clean_title("Space Launcher Tycoon"),
+            "Space Launcher Tycoon"
         );
     }
 
