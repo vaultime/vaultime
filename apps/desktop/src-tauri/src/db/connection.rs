@@ -23,7 +23,7 @@ impl Database {
         let conn = Connection::open(path)
             .map_err(|e| VaultimeError::Database(format!("failed to open database: {e}")))?;
 
-        // Enable WAL mode for better concurrent read performance.
+        // WAL needs fewer disk syncs per commit, which suits the tracker's frequent small writes.
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .map_err(|e| VaultimeError::Database(format!("failed to set pragmas: {e}")))?;
 

@@ -380,7 +380,7 @@ pub fn discover_steam_games(
     discovery::steam::discover_steam_games(&db)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
     Ok(discovery::scanner::default_scan_paths())
 }

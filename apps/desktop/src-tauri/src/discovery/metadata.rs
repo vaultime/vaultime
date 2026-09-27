@@ -38,11 +38,9 @@ pub fn infer_title(executable_path: &str) -> String {
     clean_title(&filename)
 }
 
-/// Clean up a raw name into a presentable title.
 fn clean_title(raw: &str) -> String {
     let mut title = raw.to_string();
 
-    // Strip common executable/launcher suffixes.
     for suffix in &[
         "-Win64-Shipping",
         "-Win32-Shipping",
@@ -66,10 +64,8 @@ fn clean_title(raw: &str) -> String {
         }
     }
 
-    // Replace separators with spaces.
     title = title.replace(['_', '-', '.'], " ");
 
-    // Collapse multiple spaces and trim.
     let parts: Vec<&str> = title.split_whitespace().collect();
     let result = parts.join(" ");
 
@@ -80,7 +76,6 @@ fn clean_title(raw: &str) -> String {
     }
 }
 
-/// Returns `true` for folder names that are too generic to be a game title.
 fn is_generic_folder(name: &str) -> bool {
     let lower = name.to_lowercase();
     matches!(
@@ -108,14 +103,11 @@ fn is_generic_folder(name: &str) -> bool {
     )
 }
 
-/// Check whether a file looks like a game executable based on its name.
-///
-/// Filters out common non-game executables that live in game folders
-/// (crash reporters, redistributables, uninstallers, etc.).
+/// Filters out helper programs that ship in game folders, such as crash
+/// reporters, redistributables and uninstallers.
 pub fn is_likely_game_executable(filename: &str) -> bool {
     let lower = filename.to_lowercase();
 
-    // Reject common non-game executables.
     let reject_patterns = [
         "unins",
         "uninst",
