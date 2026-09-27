@@ -43,7 +43,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2-zli
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 libloading = "0.9"
-x11rb = { version = "0.14", features = ["screensaver"] }
+x11rb = { version = "0.14", features = ["screensaver", "xinput"] }
 zbus = "5"
 
 [target.'cfg(windows)'.dependencies]

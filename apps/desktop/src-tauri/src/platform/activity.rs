@@ -106,12 +106,17 @@ mod imp {
 
 #[cfg(target_os = "linux")]
 mod imp {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Mutex, OnceLock, PoisonError};
-    use std::time::Duration;
+    use std::thread;
+    use std::time::{Duration, Instant};
 
-    use log::info;
+    use log::{info, warn};
     use x11rb::connection::Connection;
+    use x11rb::cookie::VoidCookie;
+    use x11rb::protocol::Event;
     use x11rb::protocol::screensaver::ConnectionExt as _;
+    use x11rb::protocol::xinput::{ConnectionExt as _, Device, EventMask, XIEventMask};
     use x11rb::protocol::xproto::{Atom, AtomEnum, ConnectionExt as _, Window};
     use x11rb::rust_connection::RustConnection;
 
@@ -131,6 +136,8 @@ mod imp {
             // desktop's own idle monitor is the better source.
             let strategy = if wayland_session() && gnome_idle().is_some() {
                 "gnome_dbus"
+            } else if raw_input().is_some() {
+                "x11_input"
             } else if x11().is_some_and(|x11| {
                 x11.lock()
                     .unwrap_or_else(PoisonError::into_inner)
@@ -155,9 +162,16 @@ mod imp {
     pub fn idle_duration() -> Option<Duration> {
         match idle_strategy() {
             "gnome_dbus" => gnome_idle(),
-            "x11" => x11()?.lock().unwrap_or_else(PoisonError::into_inner).idle(),
+            "x11_input" => raw_input()
+                .and_then(RawInput::idle)
+                .or_else(screensaver_idle),
+            "x11" => screensaver_idle(),
             _ => None,
         }
+    }
+
+    fn screensaver_idle() -> Option<Duration> {
+        x11()?.lock().unwrap_or_else(PoisonError::into_inner).idle()
     }
 
     fn wayland_session() -> bool {
@@ -226,6 +240,137 @@ mod imp {
                 .ok()?;
             Some(Duration::from_millis(u64::from(info.ms_since_user_input)))
         }
+    }
+
+    /// Keyboard and mouse input as `XInput2` raw events, on a connection of its
+    /// own. The idle counter of the screensaver extension is no help while a
+    /// game runs, because SDL resets it every 30 seconds.
+    struct RawInput {
+        connection: RustConnection,
+        root: Window,
+        last_input: Mutex<Instant>,
+        watching_motion: AtomicBool,
+        alive: AtomicBool,
+    }
+
+    impl RawInput {
+        fn connect() -> Option<Self> {
+            let (connection, screen) = x11rb::connect(None).ok()?;
+            let root = connection.setup().roots.get(screen)?.root;
+            let version = connection
+                .xinput_xi_query_version(2, 2)
+                .ok()?
+                .reply()
+                .ok()?;
+            // Raw events reach every client that asks for them since XInput 2.1.
+            if (version.major_version, version.minor_version) < (2, 1) {
+                return None;
+            }
+            // The screensaver counter is the best guess until the first event.
+            let idle = connection
+                .screensaver_query_info(root)
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+                .map_or(Duration::ZERO, |info| {
+                    Duration::from_millis(u64::from(info.ms_since_user_input))
+                });
+            let now = Instant::now();
+            let input = Self {
+                connection,
+                root,
+                last_input: Mutex::new(now.checked_sub(idle).unwrap_or(now)),
+                watching_motion: AtomicBool::new(true),
+                alive: AtomicBool::new(true),
+            };
+            input.select(true)?.check().ok()?;
+            Some(input)
+        }
+
+        fn select(&self, motion: bool) -> Option<VoidCookie<'_, RustConnection>> {
+            let mut mask = XIEventMask::RAW_KEY_PRESS
+                | XIEventMask::RAW_BUTTON_PRESS
+                | XIEventMask::RAW_TOUCH_BEGIN;
+            if motion {
+                mask |= XIEventMask::RAW_MOTION;
+            }
+            let cookie = self
+                .connection
+                .xinput_xi_select_events(
+                    self.root,
+                    &[EventMask {
+                        deviceid: Device::ALL.into(),
+                        mask: vec![mask],
+                    }],
+                )
+                .ok()?;
+            self.connection.flush().ok()?;
+            self.watching_motion.store(motion, Ordering::Relaxed);
+            Some(cookie)
+        }
+
+        /// Notes the time of every input until the connection ends. After a
+        /// mouse move, motion is left out until the next tracking tick, so a
+        /// moving mouse does not wake this thread a thousand times a second.
+        fn run(&self) {
+            loop {
+                match self.connection.wait_for_event() {
+                    Ok(Event::XinputRawMotion(_)) => {
+                        self.note_input();
+                        if let Some(cookie) = self.select(false) {
+                            cookie.ignore_error();
+                        }
+                    }
+                    Ok(
+                        Event::XinputRawKeyPress(_)
+                        | Event::XinputRawButtonPress(_)
+                        | Event::XinputRawTouchBegin(_),
+                    ) => self.note_input(),
+                    Ok(_) => {}
+                    Err(error) => {
+                        warn!("lost the X11 input events: {error}");
+                        self.alive.store(false, Ordering::Relaxed);
+                        return;
+                    }
+                }
+            }
+        }
+
+        fn note_input(&self) {
+            *self
+                .last_input
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = Instant::now();
+        }
+
+        fn idle(&self) -> Option<Duration> {
+            if !self.alive.load(Ordering::Relaxed) {
+                return None;
+            }
+            if !self.watching_motion.load(Ordering::Relaxed)
+                && let Some(cookie) = self.select(true)
+            {
+                cookie.ignore_error();
+            }
+            Some(
+                self.last_input
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .elapsed(),
+            )
+        }
+    }
+
+    fn raw_input() -> Option<&'static RawInput> {
+        static RAW_INPUT: OnceLock<Option<&'static RawInput>> = OnceLock::new();
+        *RAW_INPUT.get_or_init(|| {
+            let input: &'static RawInput = Box::leak(Box::new(RawInput::connect()?));
+            thread::Builder::new()
+                .name("vaultime-x11-input".into())
+                .spawn(|| input.run())
+                .ok()?;
+            info!("reading X11 input events");
+            Some(input)
+        })
     }
 
     fn x11() -> Option<&'static Mutex<X11>> {
@@ -349,6 +494,51 @@ mod tests {
         );
         assert_eq!(with_controller_input(Some(minute), None), Some(minute));
         assert_eq!(with_controller_input(None, Some(second)), None);
+    }
+
+    /// Screensaver resets, which SDL games send every 30 seconds, must not
+    /// hide that the user left. Needs an X server with `xdotool` and `xset`:
+    /// `xvfb-run cargo test -- --ignored --nocapture screensaver_resets`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "needs an X server with xdotool and xset"]
+    fn x11_idle_ignores_screensaver_resets() {
+        use std::process::Command;
+        use std::thread::sleep;
+
+        let run = |program: &str, args: &[&str]| {
+            assert!(Command::new(program).args(args).status().unwrap().success());
+        };
+        let idle = || capture_activity_snapshot().idle_for.unwrap();
+        let settle = Duration::from_millis(500);
+        let away = Duration::from_secs(3);
+        assert_eq!(idle_detection_strategy(), "x11_input");
+
+        run("xdotool", &["mousemove_relative", "20", "20"]);
+        sleep(settle);
+        assert!(idle() < away);
+
+        // Games that warp the pointer and SDL's screensaver resets are no input.
+        sleep(away);
+        run("xdotool", &["mousemove", "10", "10"]);
+        run("xset", &["s", "reset"]);
+        sleep(settle);
+        assert!(idle() >= away);
+
+        // The tick above turned motion back on after the first move.
+        run("xdotool", &["mousemove_relative", "20", "20"]);
+        sleep(settle);
+        assert!(idle() < away);
+
+        sleep(away);
+        run("xdotool", &["click", "1"]);
+        sleep(settle);
+        assert!(idle() < away);
+
+        sleep(away);
+        run("xdotool", &["key", "shift"]);
+        sleep(settle);
+        assert!(idle() < away);
     }
 
     #[test]

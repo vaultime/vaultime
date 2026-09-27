@@ -43,6 +43,7 @@ const FOREGROUND: Record<string, { title: string; description: string }> = {
 
 const IDLE: Record<string, { title: string; description: string }> = {
   win32_api: { title: "Windows last input", description: "The time since the last key press or mouse move." },
+  x11_input: { title: "X11 input events", description: "The time since the last key press, click or mouse move." },
   x11: { title: "X11 idle timer", description: "The idle time X11 reports for this session." },
   gnome_dbus: { title: "GNOME idle monitor", description: "The time since the last input, from GNOME." },
   macos_ioreg: { title: "macOS input timer", description: "The idle counter of the input devices." },
