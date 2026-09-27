@@ -3,6 +3,7 @@
 
 //! Queries for the `sessions` table. Every write also appends a session event.
 
+use log::warn;
 use rusqlite::{Connection, Row, params};
 use serde_json::json;
 
@@ -29,7 +30,8 @@ fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
 }
 
 fn attach_validated_status(conn: &Connection, mut session: Session) -> Result<Session> {
-    if integrity::validate_session_history(conn, &session)?.is_some() {
+    if let Some(reason) = integrity::validate_session_history(conn, &session)? {
+        warn!("session {} failed validation: {reason}", session.id);
         session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
     }
 
@@ -147,7 +149,7 @@ pub fn end_session(
 }
 
 /// Persists the latest timing counters for an open session.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn update_session_timing(
     db: &Database,
     session_id: &str,
