@@ -18,7 +18,7 @@ pub mod tracking;
 pub mod tray;
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use log::{LevelFilter, info};
@@ -26,7 +26,7 @@ use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
-use constants::{LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES};
+use constants::{DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES};
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -133,9 +133,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
 
     let db_path = app_dir.join("vaultime.db");
+    let device_id = device_id(&app_dir, db_path.exists());
     let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
 
-    let device_id = machine_id();
     let platform = std::env::consts::OS.to_string();
     let version = env!("CARGO_PKG_VERSION").to_string();
     devices::ensure_device(&database, &device_id, &platform, &version)
@@ -179,11 +179,48 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Identifier for this machine. The hostname is used so existing session rows
-/// keep matching, with a random id as the fallback.
-fn machine_id() -> String {
-    hostname::get().map_or_else(
-        |_| uuid::Uuid::new_v4().to_string(),
-        |h| h.to_string_lossy().into_owned(),
-    )
+/// Identifier for this PC, kept in a file next to the database. A backup
+/// restored from another PC therefore never brings that PC's id along, and a
+/// new hostname does not make a new device. Installs from before the file
+/// keep their hostname, which their sessions already use.
+fn device_id(app_dir: &Path, existing_install: bool) -> String {
+    let path = app_dir.join(DEVICE_ID_FILE);
+    if let Ok(saved) = fs::read_to_string(&path)
+        && !saved.trim().is_empty()
+    {
+        return saved.trim().to_owned();
+    }
+
+    let id = existing_install
+        .then(|| hostname::get().ok())
+        .flatten()
+        .map_or_else(
+            || uuid::Uuid::new_v4().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+    if let Err(error) = fs::write(&path, &id) {
+        log::warn!("could not save the device id: {error}");
+    }
+    id
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_id_is_created_once_and_kept() {
+        let dir =
+            std::env::temp_dir().join(format!("vaultime-device-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+
+        let fresh = device_id(&dir, false);
+        assert!(uuid::Uuid::parse_str(&fresh).is_ok());
+        assert_eq!(device_id(&dir, true), fresh);
+
+        fs::remove_file(dir.join(DEVICE_ID_FILE)).unwrap();
+        let existing = device_id(&dir, true);
+        assert_eq!(existing, hostname::get().unwrap().to_string_lossy());
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

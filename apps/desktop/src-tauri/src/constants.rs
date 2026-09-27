@@ -31,6 +31,11 @@ pub const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
 /// during sleep and on Linux it stops, so both clocks are checked.
 pub const MAX_TICK_GAP_MS: i64 = 60_000;
 
+// Device
+
+/// File next to the database that holds this PC's device id.
+pub const DEVICE_ID_FILE: &str = "device-id";
+
 // Logging
 
 /// Size at which the log file is rotated.
