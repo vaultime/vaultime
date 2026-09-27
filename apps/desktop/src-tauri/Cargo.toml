@@ -8,10 +8,9 @@ rust-version = "1.98"
 
 [lib]
 name = "vaultime_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.7", features = [] }
+tauri-build = "2.7"
 
 [dependencies]
 tauri = { version = "2.12", features = ["tray-icon"] }
@@ -25,8 +24,7 @@ tauri-plugin-updater = "2.13"
 argon2 = "0.6"
 base64 = "0.23"
 chacha20poly1305 = "0.11"
-chrono = { version = "0.4", features = ["serde"] }
-dirs = "7"
+chrono = "0.4"
 hostname = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
 keyring = "4.2"
@@ -36,10 +34,13 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-sysinfo = "0.39"
-uuid = { version = "1", features = ["v4", "serde"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
-zip = "8"
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(unix)'.dependencies]
+dirs = "7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.9"
@@ -55,7 +56,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [lints.rust]
-# MSVC prints "creating library" notes when linking the cdylib. They are not problems.
+# MSVC prints "creating library" notes when it links the app and test binaries. They are not problems.
 linker_messages = "allow"
 
 [lints.clippy]
