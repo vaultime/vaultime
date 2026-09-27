@@ -22,11 +22,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::{LevelFilter, info};
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
-use constants::{LOG_FILES_KEPT, LOG_MAX_FILE_BYTES};
+use constants::{LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES};
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -149,6 +149,21 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         device_id,
         app_version: version,
     });
+    // Existing Steam games pick up Steam's covers without a manual scan.
+    let backfill_db = Arc::clone(&database);
+    let backfill_assets = AssetManager::new(asset_cache_dir.clone());
+    let handle = app.handle().clone();
+    std::thread::spawn(move || {
+        match assets::backfill_steam_covers(&backfill_db, &backfill_assets) {
+            Ok(0) => {}
+            Ok(count) => {
+                info!("scanned {count} Steam games for their covers");
+                let _ = handle.emit(LIBRARY_CHANGED_EVENT, ());
+            }
+            Err(error) => log::warn!("artwork backfill failed: {error}"),
+        }
+    });
+
     app.manage(database);
     app.manage(AssetManager::new(asset_cache_dir));
     app.manage(engine);

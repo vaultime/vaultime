@@ -18,15 +18,16 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use crate::constants::{
-    ARTWORK_PENALTY_SCREENSHOT_PATH, ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO,
-    ARTWORK_SCORE_POSTER, ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER,
-    ARTWORK_SCORE_USER_PICKED, ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX, BANNER_WIDTH_PX,
-    CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX, ICON_MAX_SIZE_PX, MAX_LIBRARY_PREVIEWS,
-    MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
+    ARTWORK_BACKFILL_SETTING, ARTWORK_BACKFILL_VERSION, ARTWORK_PENALTY_SCREENSHOT_PATH,
+    ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO, ARTWORK_SCORE_POSTER,
+    ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER, ARTWORK_SCORE_USER_PICKED,
+    ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX, BANNER_WIDTH_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX,
+    COVER_WIDTH_PX, ICON_MAX_SIZE_PX, MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS,
+    SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
 };
 use crate::db::connection::Database;
 use crate::db::models::{Game, GameAsset, GameMetadata};
-use crate::db::repo::{game_assets, games};
+use crate::db::repo::{game_assets, games, settings};
 use crate::discovery::steam;
 use crate::error::{Result, VaultimeError};
 
@@ -172,6 +173,38 @@ pub fn scan_game_assets(
     )?;
 
     list_game_assets(db, game_id)
+}
+
+/// Scans every Steam game once for the covers Steam keeps, skipping games
+/// that already have one or an image the user added. Returns how many games
+/// were scanned. Runs again only when `ARTWORK_BACKFILL_VERSION` changes.
+pub fn backfill_steam_covers(db: &Database, asset_manager: &AssetManager) -> Result<usize> {
+    if settings::get_setting(db, ARTWORK_BACKFILL_SETTING)?.as_deref()
+        == Some(ARTWORK_BACKFILL_VERSION)
+    {
+        return Ok(0);
+    }
+
+    let mut scanned = 0;
+    for game in games::list_all_games(db)? {
+        if game.launcher_source.as_deref() != Some("steam") {
+            continue;
+        }
+        let assets = game_assets::list_assets_for_game(db, &game.id)?;
+        if assets
+            .iter()
+            .any(|asset| asset.source == "steam_cache" || asset.source == "user_picked")
+        {
+            continue;
+        }
+        match scan_game_assets(db, asset_manager, &game.id) {
+            Ok(_) => scanned += 1,
+            Err(error) => warn!("artwork backfill failed for {}: {error}", game.title),
+        }
+    }
+
+    settings::set_setting(db, ARTWORK_BACKFILL_SETTING, ARTWORK_BACKFILL_VERSION)?;
+    Ok(scanned)
 }
 
 pub fn import_game_asset(
@@ -646,6 +679,36 @@ mod tests {
             std::env::temp_dir().join(format!("vaultime-asset-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         AssetManager::new(dir)
+    }
+
+    #[test]
+    fn backfill_runs_once_and_skips_other_games() {
+        let db = Database::open_in_memory().unwrap();
+        create_game(&db);
+        let cache = test_cache();
+        assert_eq!(backfill_steam_covers(&db, &cache).unwrap(), 0);
+        assert_eq!(
+            settings::get_setting(&db, ARTWORK_BACKFILL_SETTING)
+                .unwrap()
+                .as_deref(),
+            Some(ARTWORK_BACKFILL_VERSION)
+        );
+
+        games::create_game(
+            &db,
+            &CreateGame {
+                title: "Steam Game".into(),
+                executable_path: None,
+                install_folder: None,
+                launcher_source: Some("steam".into()),
+            },
+        )
+        .unwrap();
+        // Already ran for this version, so nothing is scanned.
+        assert_eq!(backfill_steam_covers(&db, &cache).unwrap(), 0);
+        settings::set_setting(&db, ARTWORK_BACKFILL_SETTING, "0").unwrap();
+        assert_eq!(backfill_steam_covers(&db, &cache).unwrap(), 1);
+        fs::remove_dir_all(cache.cache_dir()).unwrap();
     }
 
     #[test]

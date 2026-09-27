@@ -26,6 +26,9 @@ export const SETTING_KEYS = {
   closeToTray: "close_to_tray",
 } as const;
 
+/** Event the core sends when games or covers changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
+export const LIBRARY_CHANGED_EVENT = "library-changed";
+
 // Tracking
 
 /** How often the UI asks for running sessions. Same as POLL_INTERVAL in constants.rs. */

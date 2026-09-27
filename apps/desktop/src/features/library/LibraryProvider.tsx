@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, SETTING_KEYS } from "@/lib/constants";
+import { listen } from "@tauri-apps/api/event";
+import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, LIBRARY_CHANGED_EVENT, SETTING_KEYS } from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import type { Game, Session } from "@/lib/types";
@@ -80,6 +81,16 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       clearInterval(timer);
+    };
+  }, [refresh]);
+
+  // The core reports changes it makes on its own, like covers found at startup.
+  useEffect(() => {
+    const stop = listen(LIBRARY_CHANGED_EVENT, () => {
+      refresh().catch(() => {});
+    });
+    return () => {
+      stop.then((unlisten) => unlisten()).catch(() => {});
     };
   }, [refresh]);
 

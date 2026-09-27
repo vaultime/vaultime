@@ -90,6 +90,13 @@ pub const ICON_MAX_SIZE_PX: u32 = 512;
 pub const SCREENSHOT_MAX_WIDTH_PX: u32 = 1280;
 /// Largest height of a cached screenshot.
 pub const SCREENSHOT_MAX_HEIGHT_PX: u32 = 720;
+/// Setting that records which artwork backfill already ran.
+pub const ARTWORK_BACKFILL_SETTING: &str = "artwork_backfill";
+/// Raise it to scan Steam games for artwork once more after an artwork change.
+pub const ARTWORK_BACKFILL_VERSION: &str = "1";
+/// Event that tells the frontend to reload the library. Same as
+/// `LIBRARY_CHANGED_EVENT` in `lib/constants.ts`.
+pub const LIBRARY_CHANGED_EVENT: &str = "library-changed";
 /// JPEG quality of cached covers, banners and screenshots. Icons stay PNG
 /// for their transparency.
 pub const CACHED_JPEG_QUALITY: u8 = 85;
