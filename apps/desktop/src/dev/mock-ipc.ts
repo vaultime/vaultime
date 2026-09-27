@@ -119,6 +119,19 @@ function coverAssets() {
   }));
 }
 
+/** A result of the discovery scan, for the discover dialog. */
+function discovered(title: string, path: string, source: string, alreadyAdded = false) {
+  return { title, executable_path: path, install_folder: null, source, source_id: null, already_added: alreadyAdded };
+}
+
+// ?scan=1 presses "Start the scan" in the discover dialog, open it with ?discover=1.
+if (new URLSearchParams(window.location.search).get("scan") === "1") {
+  setTimeout(() => {
+    const start = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Start the scan"));
+    start?.click();
+  }, 800);
+}
+
 // ?palette=1 opens the command palette once the app has rendered.
 if (new URLSearchParams(window.location.search).get("palette") === "1") {
   setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })), 500);
@@ -147,6 +160,20 @@ mockIPC((cmd, payload) => {
       return null;
     case "tray_available":
       return true;
+    case "discover_steam_games":
+      return [
+        discovered("Balatro", "C:/Steam/steamapps/common/Balatro/Balatro.exe", "steam", true),
+        discovered("Slay the Spire 2", "C:/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.exe", "steam"),
+      ];
+    case "discover_launcher_games":
+      return [
+        discovered("Alan Wake 2", "C:/Epic Games/AlanWake2/AlanWake2.exe", "epic"),
+        discovered("Stardew Valley", "C:/GOG Games/Stardew Valley/Stardew Valley.exe", "gog"),
+      ];
+    case "get_default_scan_paths":
+      return ["C:/Games"];
+    case "discover_games":
+      return [discovered("Some Indie Game", "C:/Games/Some Indie Game/Game.exe", "folder_scan")];
     case "list_game_assets":
       return scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === args.gameId) : [];
     case "list_preferred_game_assets":
