@@ -26,6 +26,7 @@ use crate::db::repo::{backup_snapshots, games, session_events, sessions, setting
 use crate::discovery::{self, DiscoveredGame};
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
+use crate::platform::controller;
 use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
 
@@ -347,6 +348,8 @@ pub struct TrackingDiagnostics {
     pub running: bool,
     pub foreground_detection: String,
     pub idle_detection: String,
+    pub controller_detection: String,
+    pub controllers_connected: usize,
     pub poll_interval_seconds: u64,
 }
 
@@ -365,6 +368,8 @@ pub fn get_tracking_diagnostics(
         running: engine.is_running(),
         foreground_detection: foreground_detection_strategy().into(),
         idle_detection: idle_detection_strategy().into(),
+        controller_detection: controller::detection_strategy().into(),
+        controllers_connected: controller::connected_count(),
         poll_interval_seconds: POLL_INTERVAL.as_secs(),
     })
 }

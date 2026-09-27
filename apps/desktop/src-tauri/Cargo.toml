@@ -41,6 +41,7 @@ walkdir = "2"
 zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 libloading = "0.9"
 x11rb = { version = "0.14", features = ["screensaver"] }
 zbus = "5"
@@ -48,10 +49,12 @@ zbus = "5"
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.100"
 windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
     "Win32_Storage_FileSystem",
     "Win32_System_SystemInformation",
     "Win32_System_WindowsProgramming",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Input_XboxController",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

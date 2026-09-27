@@ -83,6 +83,8 @@ export interface TrackingDiagnostics {
   running: boolean;
   foreground_detection: string;
   idle_detection: string;
+  controller_detection: string;
+  controllers_connected: number;
   poll_interval_seconds: number;
 }
 

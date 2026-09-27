@@ -5427,6 +5427,7 @@ dependencies = [
  "hostname",
  "image",
  "keyring",
+ "libc",
  "libloading 0.9.0",
  "log",
  "reqwest",

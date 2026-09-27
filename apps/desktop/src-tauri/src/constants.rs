@@ -30,6 +30,14 @@ pub const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
 /// That time is not counted. On Windows the monotonic clock keeps running
 /// during sleep and on Linux it stops, so both clocks are checked.
 pub const MAX_TICK_GAP_MS: i64 = 60_000;
+/// How often connected controllers are read on Windows. `XInput` only reports
+/// the current state, so this has to be short enough to catch a quick press.
+pub const CONTROLLER_SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
+/// A stick or trigger counts as controller input once it moves more than its
+/// range divided by this. Smaller moves are noise.
+pub const CONTROLLER_AXIS_MOVE_DIVISOR: u32 = 8;
+/// Input events read from a controller in one go on Linux.
+pub const CONTROLLER_EVENTS_PER_READ: usize = 64;
 
 // Device
 

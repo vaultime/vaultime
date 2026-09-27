@@ -48,6 +48,13 @@ const IDLE: Record<string, { title: string; description: string }> = {
   macos_ioreg: { title: "macOS input timer", description: "The idle counter of the input devices." },
 };
 
+const CONTROLLERS: Record<string, { title: string; description: string }> = {
+  xinput: { title: "XInput", description: "Buttons and sticks of Xbox and other XInput controllers count as input." },
+  evdev: { title: "Controller devices", description: "Buttons and sticks of every connected controller count as input." },
+};
+
+const NO_CONTROLLERS = { title: "Not read", description: "Only the keyboard and mouse count as input here." };
+
 const FALLBACK = {
   title: "Process activity",
   description: "No direct signal here, so Vaultime judges by what the game process does.",
@@ -199,6 +206,7 @@ export function SettingsPage() {
   const platform = PLATFORM_NAMES[diagnostics?.platform ?? ""] ?? "this system";
   const foreground = FOREGROUND[diagnostics?.foreground_detection ?? ""] ?? FALLBACK;
   const idle = IDLE[diagnostics?.idle_detection ?? ""] ?? FALLBACK;
+  const controllers = CONTROLLERS[diagnostics?.controller_detection ?? ""];
   const pollSeconds = diagnostics?.poll_interval_seconds;
 
   return (
@@ -229,7 +237,7 @@ export function SettingsPage() {
           <PageRow
             label="Count as idle after"
             htmlFor="idle-minutes"
-            hint="With no key press or mouse move for this long, time counts as idle instead of active."
+            hint="With no key press, mouse move or controller input for this long, time counts as idle instead of active."
           >
             <span className="flex items-center gap-2.5 text-sm text-faint">
               <Input
@@ -316,6 +324,16 @@ export function SettingsPage() {
           </PageRow>
           <PageRow label="Whether you are there" hint={idle.description}>
             <span className="text-soft">{idle.title}</span>
+          </PageRow>
+          <PageRow label="Controllers" hint={(controllers ?? NO_CONTROLLERS).description}>
+            <span className="text-soft">
+              {(controllers ?? NO_CONTROLLERS).title}
+              {controllers && diagnostics && (
+                <span className="text-faint">
+                  , <span className="font-mono">{diagnostics.controllers_connected}</span> connected
+                </span>
+              )}
+            </span>
           </PageRow>
           {pollSeconds && (
             <PageRow label="Checks every">

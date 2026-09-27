@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+use super::controller;
+
 /// Snapshot of activity-related platform signals.
 #[derive(Debug, Clone, Copy)]
 pub struct ActivitySnapshot {
@@ -16,11 +18,24 @@ pub struct ActivitySnapshot {
 
 /// Returns the best-effort activity snapshot for the current platform.
 pub fn capture_activity_snapshot() -> ActivitySnapshot {
+    let controller_idle = controller::idle_duration();
     ActivitySnapshot {
         foreground_pid: imp::foreground_pid(),
         foreground_supported: foreground_detection_strategy() != HEURISTIC,
-        idle_for: imp::idle_duration(),
+        idle_for: with_controller_input(imp::idle_duration(), controller_idle),
         idle_supported: idle_detection_strategy() != HEURISTIC,
+    }
+}
+
+/// The desktop idle time, cut short by later controller input. Controller
+/// input alone cannot tell idle time where the desktop reports none.
+fn with_controller_input(
+    desktop: Option<Duration>,
+    controller: Option<Duration>,
+) -> Option<Duration> {
+    match (desktop, controller) {
+        (Some(desktop), Some(controller)) => Some(desktop.min(controller)),
+        (desktop, _) => desktop,
     }
 }
 
@@ -319,6 +334,21 @@ mod tests {
         );
         println!("{:?}", capture_activity_snapshot());
         assert_ne!(idle_detection_strategy(), HEURISTIC);
+    }
+
+    #[test]
+    fn controller_input_shortens_idle_time() {
+        let (minute, second) = (Duration::from_secs(60), Duration::from_secs(1));
+        assert_eq!(
+            with_controller_input(Some(minute), Some(second)),
+            Some(second)
+        );
+        assert_eq!(
+            with_controller_input(Some(second), Some(minute)),
+            Some(second)
+        );
+        assert_eq!(with_controller_input(Some(minute), None), Some(minute));
+        assert_eq!(with_controller_input(None, Some(second)), None);
     }
 
     #[test]

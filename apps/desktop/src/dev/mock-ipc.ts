@@ -274,7 +274,7 @@ mockIPC((cmd, payload) => {
     case "list_settings":
       return [{ key: "idle_threshold_seconds", value: "300", updated_at: iso(now) }];
     case "get_tracking_diagnostics":
-      return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", poll_interval_seconds: 5 };
+      return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", controller_detection: "xinput", controllers_connected: 1, poll_interval_seconds: 5 };
     case "load_cloud_session_secure":
       return signedIn ? JSON.stringify(cloudSession()) : null;
     case "has_cloud_backup_key_secure":

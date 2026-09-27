@@ -4,4 +4,5 @@
 //! OS specific process, window and idle detection.
 
 pub mod activity;
+pub mod controller;
 pub mod process;
