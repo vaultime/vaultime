@@ -30,6 +30,12 @@ pub struct LogoutRequest {
     pub refresh_token: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
     pub access_token: String,

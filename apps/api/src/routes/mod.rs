@@ -27,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/auth/login", post(auth::login))
         .route("/v1/auth/refresh", post(auth::refresh))
         .route("/v1/auth/logout", post(auth::logout))
+        .route("/v1/auth/password", post(auth::change_password))
         .route("/v1/admin/invites", post(admin::create_invite))
         .route("/v1/devices/register", post(devices::register))
         .route(

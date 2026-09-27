@@ -10,13 +10,15 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::{
-    ParsedInviteCode, create_access_token, generate_refresh_token, hash_password,
-    hash_refresh_token, normalize_email, refresh_token_expiry, verify_invite_hash, verify_password,
+    AuthenticatedAccount, ParsedInviteCode, create_access_token, generate_refresh_token,
+    hash_password, hash_refresh_token, normalize_email, refresh_token_expiry, verify_invite_hash,
+    verify_password,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    AccountPasswordRow, AuthResponse, AuthUserResponse, InviteRow, LoginRequest, LogoutRequest,
-    LogoutResponse, RefreshRequest, RefreshTokenAccountRow, SignUpRequest,
+    AccountPasswordRow, AuthResponse, AuthUserResponse, ChangePasswordRequest, InviteRow,
+    LoginRequest, LogoutRequest, LogoutResponse, RefreshRequest, RefreshTokenAccountRow,
+    SignUpRequest,
 };
 
 pub async fn sign_up(
@@ -236,6 +238,73 @@ pub async fn logout(
     .await?;
 
     Ok(Json(LogoutResponse { success: true }))
+}
+
+/// Replaces the password and signs out every device. The caller gets a new session back so it
+/// stays signed in.
+pub async fn change_password(
+    State(state): State<AppState>,
+    account: AuthenticatedAccount,
+    headers: HeaderMap,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> AppResult<Json<AuthResponse>> {
+    let row = sqlx::query_as::<_, AccountPasswordRow>(
+        r#"
+        SELECT a.id, a.email, a.role, a.access_state, p.password_hash
+        FROM cloud_accounts a
+        JOIN cloud_account_passwords p ON p.account_id = a.id
+        WHERE a.id = $1
+        "#,
+    )
+    .bind(account.account_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::unauthorized("access token is invalid or expired"))?;
+
+    // Not 401, the client would take that for an expired access token.
+    if !verify_password(&payload.current_password, &row.password_hash)? {
+        return Err(AppError::forbidden("the current password is wrong"));
+    }
+    let password_hash = hash_password(&payload.new_password)?;
+
+    let refresh_token = generate_refresh_token()?;
+    let refresh_expires_at = refresh_token_expiry();
+    let mut tx = state.db.begin().await?;
+
+    sqlx::query(
+        "UPDATE cloud_account_passwords SET password_hash = $2, password_updated_at = NOW() WHERE account_id = $1",
+    )
+    .bind(row.id)
+    .bind(password_hash)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE cloud_refresh_tokens SET revoked_at = NOW() WHERE account_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(row.id)
+    .execute(&mut *tx)
+    .await?;
+
+    insert_refresh_token(
+        &mut *tx,
+        row.id,
+        &hash_refresh_token(&refresh_token, &state.config.refresh_token_pepper),
+        user_agent(&headers),
+        refresh_expires_at,
+    )
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(Json(auth_response(
+        &state,
+        row.id,
+        &row.email,
+        &row.role,
+        refresh_token,
+        refresh_expires_at,
+    )?))
 }
 
 async fn issue_session(
