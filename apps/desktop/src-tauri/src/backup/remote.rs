@@ -17,7 +17,9 @@ use zip::write::SimpleFileOptions;
 
 use crate::AppContext;
 use crate::assets::AssetManager;
-use crate::backup::{LocalBackupSummary, export_local_backup, hash_file, import_local_backup};
+use crate::backup::{
+    LocalBackupSummary, cleanup_staging_dir, export_local_backup, hash_file, import_local_backup,
+};
 use crate::constants::{
     ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, NONCE_BYTES, NONCE_PREFIX_BYTES,
 };
@@ -148,7 +150,7 @@ pub fn upload_remote_backup(
         })
     })();
 
-    let _ = cleanup_staging_dir(&staging_dir);
+    cleanup_staging_dir(&staging_dir);
     result
 }
 
@@ -209,7 +211,7 @@ pub fn restore_remote_backup(
         })
     })();
 
-    let _ = cleanup_staging_dir(&staging_dir);
+    cleanup_staging_dir(&staging_dir);
     result
 }
 
@@ -362,19 +364,6 @@ fn create_staging_dir(app_dir: &Path, operation: &str) -> Result<PathBuf> {
         .join(format!("{operation}-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&staging_dir).map_err(map_backup_io)?;
     Ok(staging_dir)
-}
-
-fn cleanup_staging_dir(staging_dir: &Path) -> Result<()> {
-    if !staging_dir.exists() {
-        return Ok(());
-    }
-
-    fs::remove_dir_all(staging_dir).map_err(|error| {
-        VaultimeError::Backup(format!(
-            "failed to clean staging directory {}: {error}",
-            staging_dir.display()
-        ))
-    })
 }
 
 fn create_archive(source_dir: &Path, destination_path: &Path) -> Result<()> {

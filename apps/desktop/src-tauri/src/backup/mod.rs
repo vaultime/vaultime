@@ -7,9 +7,10 @@ pub mod remote;
 
 use std::fmt::Write;
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
+use log::warn;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -162,10 +163,21 @@ pub fn import_local_backup(
     }
 
     let result = restore_from_staging(db, asset_manager, app_context, &backup_dir, &staging_dir);
-    let _ = fs::remove_dir_all(&staging_dir);
+    cleanup_staging_dir(&staging_dir);
     result?;
 
     Ok(summary_from_manifest(&manifest, &backup_dir, true))
+}
+
+/// Removes a staging folder. It can hold a decrypted backup, so a failure is logged.
+fn cleanup_staging_dir(staging_dir: &Path) {
+    match fs::remove_dir_all(staging_dir) {
+        Err(error) if error.kind() != ErrorKind::NotFound => warn!(
+            "failed to remove staging directory {}: {error}",
+            staging_dir.display()
+        ),
+        _ => {}
+    }
 }
 
 fn restore_from_staging(
