@@ -3,7 +3,9 @@
 
 // Sample data for previewing the UI in a plain browser, without the Rust core.
 // Only loaded when VITE_MOCK_IPC=1, never in real builds. Add ?mock=empty to
-// the URL for a fresh install, or ?mock=unplayed for games without sessions.
+// the URL for a fresh install, ?mock=unplayed for games without sessions or
+// ?mock=covers for artwork. Covers are not in the repo, copy portrait images
+// to dist-mock/covers/<n>.jpg (n = 1 to 7) after building to see them.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
@@ -14,7 +16,10 @@ const iso = (ms: number) => new Date(ms).toISOString();
 
 const scenario = new URLSearchParams(window.location.search).get("mock");
 
-const titles = ["Elden Ring", "Hades II", "Balatro", "Hollow Knight", "Celeste", "Stardew Valley", "Outer Wilds"];
+const titles =
+  scenario === "covers"
+    ? ["Balatro", "Hades II", "Slay the Spire 2", "Ghost of Tsushima Director's Cut", "Sun Haven", "Counter-Strike 2", "Crab Champions"]
+    : ["Elden Ring", "Hades II", "Balatro", "Hollow Knight", "Celeste", "Stardew Valley", "Outer Wilds"];
 
 const games: Game[] = titles.map((title, index) => ({
   id: `game-${index + 1}`,
@@ -95,7 +100,23 @@ const events: SessionEvent[] = allSessions.flatMap((session, index) => {
   if (index === 3) return [event("tracking_gap", { wall_gap_ms: 2 * HOUR_MS + 14 * MINUTE_MS })];
   return [];
 });
-const running = scenario ? [] : [live];
+const running = scenario === "empty" || scenario === "unplayed" ? [] : [live];
+
+/** One cover per game for ?mock=covers, served from dist-mock/covers. */
+function coverAssets() {
+  return allGames.map((game, index) => ({
+    id: `asset-${game.id}`,
+    game_id: game.id,
+    asset_type: "cover",
+    source: "scanned_local",
+    file_path: `covers/${index + 1}.jpg`,
+    cache_path: null,
+    hash: null,
+    created_at: iso(now),
+    preview_data_url: `/covers/${index + 1}.jpg`,
+    is_preferred: true,
+  }));
+}
 
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
@@ -120,6 +141,10 @@ mockIPC((cmd, payload) => {
       return null;
     case "tray_available":
       return true;
+    case "list_game_assets":
+      return scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === args.gameId) : [];
+    case "list_preferred_game_assets":
+      return scenario === "covers" ? coverAssets() : [];
     default:
       // Everything else answers with an empty result.
       return cmd.startsWith("list_") || cmd.startsWith("get_") ? [] : null;
