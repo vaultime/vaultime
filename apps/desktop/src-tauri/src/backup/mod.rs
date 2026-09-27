@@ -6,7 +6,8 @@
 pub mod remote;
 
 use std::fmt::Write;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
@@ -16,12 +17,13 @@ use walkdir::WalkDir;
 
 use crate::AppContext;
 use crate::assets::AssetManager;
-use crate::constants::BACKUP_VERSION;
+use crate::constants::{BACKUP_VERSION, HASH_BUFFER_BYTES};
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
 use crate::db::repo::devices;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
+use crate::platform::process::file_name;
 
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 const BACKUP_DB_FILE: &str = "vaultime.db";
@@ -319,8 +321,8 @@ fn rewrite_asset_cache_paths(db: &Database, cache_dir: &Path) -> Result<()> {
             })?;
 
         for (asset_id, game_id, old_path) in assets {
-            // The backup may come from another OS, so split on both separators.
-            let Some(file_name) = old_path.rsplit(['/', '\\']).find(|part| !part.is_empty()) else {
+            // The backup may come from another OS.
+            let Some(file_name) = file_name(&old_path) else {
                 continue;
             };
             let next_path = cache_dir
@@ -657,13 +659,28 @@ fn compute_overall_checksum(
     crate::hex::encode(&hasher.finalize())
 }
 
+/// Size and SHA-256 hex digest of a file, read in chunks.
 fn hash_file(path: &Path) -> Result<(u64, String)> {
-    let bytes = fs::read(path).map_err(|error| {
+    let read_error = |error: std::io::Error| {
         VaultimeError::Backup(format!("failed to read {}: {error}", path.display()))
-    })?;
+    };
+    let mut file = File::open(path).map_err(read_error)?;
     let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    Ok((bytes.len() as u64, crate::hex::encode(&hasher.finalize())))
+    let mut bytes = 0_u64;
+    let mut buffer = vec![0_u8; HASH_BUFFER_BYTES];
+
+    loop {
+        let read = file.read(&mut buffer).map_err(read_error)?;
+        if read == 0 {
+            break;
+        }
+
+        bytes += u64::try_from(read)
+            .map_err(|_| VaultimeError::Backup("backup file length overflow".into()))?;
+        hasher.update(&buffer[..read]);
+    }
+
+    Ok((bytes, crate::hex::encode(&hasher.finalize())))
 }
 
 fn summary_from_manifest(
@@ -715,11 +732,9 @@ mod tests {
     fn test_paths() -> AppContext {
         let root =
             std::env::temp_dir().join(format!("vaultime-backup-test-{}", uuid::Uuid::new_v4()));
-        let asset_cache_dir = root.join("asset-cache");
-        fs::create_dir_all(&asset_cache_dir).unwrap();
+        fs::create_dir_all(&root).unwrap();
         AppContext {
-            app_dir: root.clone(),
-            asset_cache_dir: asset_cache_dir.clone(),
+            app_dir: root,
             device_id: "test-device".into(),
             app_version: "0.1.0".into(),
         }
@@ -764,6 +779,7 @@ mod tests {
     #[test]
     fn export_and_import_roundtrip_restores_data() {
         let context = test_paths();
+        let asset_cache_dir = context.app_dir.join("asset-cache");
         let db = Database::open(&context.app_dir.join("vaultime.db")).unwrap();
         devices::ensure_device(&db, &context.device_id, "linux", &context.app_version).unwrap();
 
@@ -788,7 +804,7 @@ mod tests {
         )
         .unwrap();
 
-        let cached_asset_path = context.asset_cache_dir.join(&game.id).join("asset-1.png");
+        let cached_asset_path = asset_cache_dir.join(&game.id).join("asset-1.png");
         fs::create_dir_all(cached_asset_path.parent().unwrap()).unwrap();
         fs::write(&cached_asset_path, b"vaultime").unwrap();
         game_assets::create_asset(
@@ -804,7 +820,7 @@ mod tests {
 
         let exports_root = context.app_dir.join("exports");
         fs::create_dir_all(&exports_root).unwrap();
-        let asset_manager = AssetManager::new(context.asset_cache_dir.clone());
+        let asset_manager = AssetManager::new(asset_cache_dir.clone());
         let backup = export_local_backup(&db, &asset_manager, &context, &exports_root).unwrap();
 
         games::delete_game(&db, &game.id).unwrap();
@@ -823,7 +839,7 @@ mod tests {
         let restored_assets = game_assets::list_assets_for_game(&db, &game.id).unwrap();
         assert_eq!(restored_assets.len(), 1);
         let restored_path = restored_assets[0].cache_path.as_deref().unwrap();
-        assert!(restored_path.starts_with(&*context.asset_cache_dir.to_string_lossy()));
+        assert!(restored_path.starts_with(&*asset_cache_dir.to_string_lossy()));
         assert!(Path::new(restored_path).is_file());
         let staging_dir = context
             .app_dir

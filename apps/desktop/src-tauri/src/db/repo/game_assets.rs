@@ -7,7 +7,8 @@ use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::GameAsset;
-use crate::error::{Result, VaultimeError};
+use crate::db::repo::map_db;
+use crate::error::Result;
 
 fn row_to_asset(row: &Row) -> rusqlite::Result<GameAsset> {
     Ok(GameAsset {
@@ -20,10 +21,6 @@ fn row_to_asset(row: &Row) -> rusqlite::Result<GameAsset> {
         hash: row.get("hash")?,
         created_at: row.get("created_at")?,
     })
-}
-
-fn map_db(e: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{e}"))
 }
 
 pub fn create_asset(

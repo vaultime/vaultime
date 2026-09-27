@@ -92,7 +92,7 @@ pub const BACKUP_VERSION: u32 = 1;
 pub const BACKUP_HISTORY_LIMIT: usize = 8;
 /// Unix permissions of the files in a cloud backup archive.
 pub const ARCHIVE_FILE_MODE: u32 = 0o644;
-/// Read buffer size for hashing cloud backup archives.
+/// Read buffer size for hashing backup files.
 pub const HASH_BUFFER_BYTES: usize = 64 * 1024;
 /// Plaintext size of one encrypted cloud backup chunk.
 pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;

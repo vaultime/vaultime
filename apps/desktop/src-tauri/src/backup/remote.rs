@@ -11,17 +11,15 @@ use reqwest::blocking::{Body, Client, Response};
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
 
 use crate::AppContext;
 use crate::assets::AssetManager;
-use crate::backup::{LocalBackupSummary, export_local_backup, import_local_backup};
+use crate::backup::{LocalBackupSummary, export_local_backup, hash_file, import_local_backup};
 use crate::constants::{
-    ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, HASH_BUFFER_BYTES, NONCE_BYTES,
-    NONCE_PREFIX_BYTES,
+    ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, NONCE_BYTES, NONCE_PREFIX_BYTES,
 };
 use crate::db::connection::Database;
 use crate::error::{Result, VaultimeError};
@@ -108,8 +106,10 @@ struct ApiErrorBody {
     message: String,
 }
 
+#[expect(clippy::too_many_arguments)]
 pub fn upload_remote_backup(
     db: &Database,
+    asset_manager: &AssetManager,
     app_context: &AppContext,
     api_base_url: &str,
     access_token: &str,
@@ -123,8 +123,7 @@ pub fn upload_remote_backup(
         let export_root = staging_dir.join("export");
         fs::create_dir_all(&export_root).map_err(map_backup_io)?;
 
-        let asset_manager = AssetManager::new(app_context.asset_cache_dir.clone());
-        let local_summary = export_local_backup(db, &asset_manager, app_context, &export_root)?;
+        let local_summary = export_local_backup(db, asset_manager, app_context, &export_root)?;
         let archive_path = staging_dir.join(format!("{}.zip", local_summary.backup_id));
         create_archive(Path::new(&local_summary.backup_path), &archive_path)?;
         let encrypted_path = staging_dir.join(format!("{}.enc", local_summary.backup_id));
@@ -155,6 +154,7 @@ pub fn upload_remote_backup(
 
 pub fn restore_remote_backup(
     db: &Database,
+    asset_manager: &AssetManager,
     app_context: &AppContext,
     api_base_url: &str,
     access_token: &str,
@@ -201,8 +201,7 @@ pub fn restore_remote_backup(
         let extracted_dir = staging_dir.join("extracted");
         extract_archive(&decrypted_archive_path, &extracted_dir)?;
 
-        let asset_manager = AssetManager::new(app_context.asset_cache_dir.clone());
-        let local_summary = import_local_backup(db, &asset_manager, app_context, &extracted_dir)?;
+        let local_summary = import_local_backup(db, asset_manager, app_context, &extracted_dir)?;
 
         Ok(RemoteBackupRestoreResult {
             backup,
@@ -451,26 +450,6 @@ fn extract_archive(archive_path: &Path, destination_dir: &Path) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn hash_file(path: &Path) -> Result<(u64, String)> {
-    let mut file = File::open(path).map_err(map_backup_io)?;
-    let mut hasher = Sha256::new();
-    let mut bytes = 0_u64;
-    let mut buffer = vec![0_u8; HASH_BUFFER_BYTES];
-
-    loop {
-        let read = file.read(&mut buffer).map_err(map_backup_io)?;
-        if read == 0 {
-            break;
-        }
-
-        bytes += u64::try_from(read)
-            .map_err(|_| VaultimeError::Backup("backup file length overflow".into()))?;
-        hasher.update(&buffer[..read]);
-    }
-
-    Ok((bytes, crate::hex::encode(&hasher.finalize())))
 }
 
 fn encrypt_archive(

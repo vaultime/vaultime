@@ -7,7 +7,8 @@ use rusqlite::Row;
 
 use crate::db::connection::Database;
 use crate::db::models::SessionEvent;
-use crate::error::{Result, VaultimeError};
+use crate::db::repo::map_db;
+use crate::error::Result;
 
 pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
     Ok(SessionEvent {
@@ -22,10 +23,6 @@ pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> 
         hash_self: row.get("hash_self")?,
         signature: row.get("signature")?,
     })
-}
-
-fn map_db(error: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{error}"))
 }
 
 /// Returns all events for a game, newest first.

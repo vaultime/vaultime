@@ -7,6 +7,7 @@ use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game, GameMetadata, UpdateGame};
+use crate::db::repo::map_db;
 use crate::error::{Result, VaultimeError};
 
 fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
@@ -21,10 +22,6 @@ fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })
-}
-
-fn map_db(e: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{e}"))
 }
 
 /// Inserts a new game and returns it.

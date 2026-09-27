@@ -34,7 +34,6 @@ use tracking::engine::TrackingEngine;
 #[derive(Debug, Clone)]
 pub struct AppContext {
     pub app_dir: PathBuf,
-    pub asset_cache_dir: PathBuf,
     pub device_id: String,
     pub app_version: String,
 }
@@ -147,7 +146,6 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     app.manage(AppContext {
         app_dir,
-        asset_cache_dir: asset_cache_dir.clone(),
         device_id,
         app_version: version,
     });

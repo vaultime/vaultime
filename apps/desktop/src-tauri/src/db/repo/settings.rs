@@ -3,11 +3,12 @@
 
 //! Key value store for app settings.
 
-use rusqlite::{Row, params};
+use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::Setting;
-use crate::error::{Result, VaultimeError};
+use crate::db::repo::map_db;
+use crate::error::Result;
 
 fn row_to_setting(row: &Row) -> rusqlite::Result<Setting> {
     Ok(Setting {
@@ -15,10 +16,6 @@ fn row_to_setting(row: &Row) -> rusqlite::Result<Setting> {
         value: row.get("value")?,
         updated_at: row.get("updated_at")?,
     })
-}
-
-fn map_db(e: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{e}"))
 }
 
 /// Returns all settings.
@@ -36,13 +33,11 @@ pub fn list_settings(db: &Database) -> Result<Vec<Setting>> {
 /// Gets a single setting value by key.
 pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>> {
     db.with_conn(|conn| {
-        match conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
             row.get::<_, String>(0)
-        }) {
-            Ok(v) => Ok(Some(v)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(VaultimeError::Database(format!("{e}"))),
-        }
+        })
+        .optional()
+        .map_err(map_db)
     })
 }
 

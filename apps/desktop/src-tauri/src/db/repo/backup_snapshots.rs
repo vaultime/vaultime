@@ -7,7 +7,8 @@ use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::BackupSnapshot;
-use crate::error::{Result, VaultimeError};
+use crate::db::repo::map_db;
+use crate::error::Result;
 
 fn row_to_backup_snapshot(row: &Row) -> rusqlite::Result<BackupSnapshot> {
     Ok(BackupSnapshot {
@@ -18,10 +19,6 @@ fn row_to_backup_snapshot(row: &Row) -> rusqlite::Result<BackupSnapshot> {
         remote_path: row.get("remote_path")?,
         restore_point_label: row.get("restore_point_label")?,
     })
-}
-
-fn map_db(error: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{error}"))
 }
 
 pub fn create_snapshot(

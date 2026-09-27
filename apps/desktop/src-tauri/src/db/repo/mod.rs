@@ -10,3 +10,9 @@ pub mod games;
 pub mod session_events;
 pub mod sessions;
 pub mod settings;
+
+use crate::error::VaultimeError;
+
+pub(crate) fn map_db(error: rusqlite::Error) -> VaultimeError {
+    VaultimeError::Database(error.to_string())
+}

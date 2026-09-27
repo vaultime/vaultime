@@ -8,6 +8,7 @@ use serde_json::json;
 
 use crate::db::connection::Database;
 use crate::db::models::Session;
+use crate::db::repo::map_db;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
@@ -25,10 +26,6 @@ fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         integrity_status: row.get("integrity_status")?,
         closed_cleanly: row.get("closed_cleanly")?,
     })
-}
-
-fn map_db(e: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{e}"))
 }
 
 fn attach_validated_status(conn: &Connection, mut session: Session) -> Result<Session> {

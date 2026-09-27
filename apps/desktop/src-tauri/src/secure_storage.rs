@@ -5,34 +5,29 @@ use argon2::Argon2;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use keyring::Entry;
+use log::warn;
 
 use crate::constants::BACKUP_KEY_BYTES;
 use crate::error::{Result, VaultimeError};
 
+// Renaming the service or an account would lose the stored logins and keys.
 const KEYRING_SERVICE: &str = "de.codfish.vaultime";
 const CLOUD_SESSION_ACCOUNT: &str = "cloud-session";
 const CLOUD_BACKUP_KEY_ACCOUNT_PREFIX: &str = "cloud-backup-key:";
 const LEGACY_CLOUD_BACKUP_KEY_ACCOUNT: &str = "cloud-backup-key";
 
 pub fn store_cloud_session(session_json: &str) -> Result<()> {
-    cloud_session_entry()?
+    entry(CLOUD_SESSION_ACCOUNT)?
         .set_password(session_json)
         .map_err(map_keyring_error)
 }
 
 pub fn load_cloud_session() -> Result<Option<String>> {
-    match cloud_session_entry()?.get_password() {
-        Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(error) => Err(map_keyring_error(error)),
-    }
+    load_password(entry(CLOUD_SESSION_ACCOUNT)?)
 }
 
 pub fn clear_cloud_session() -> Result<()> {
-    match cloud_session_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(map_keyring_error(error)),
-    }
+    clear_keyring_entry(entry(CLOUD_SESSION_ACCOUNT)?)
 }
 
 pub fn has_cloud_backup_key(account_id: &str) -> Result<bool> {
@@ -42,10 +37,10 @@ pub fn has_cloud_backup_key(account_id: &str) -> Result<bool> {
 pub fn store_cloud_backup_key(account_id: &str, passphrase: &str) -> Result<()> {
     let key = derive_cloud_backup_key(account_id, passphrase)?;
     let encoded = STANDARD.encode(key);
-    cloud_backup_key_entry(account_id)?
+    entry(&backup_key_account(account_id))?
         .set_password(&encoded)
         .map_err(map_keyring_error)?;
-    let _ = clear_keyring_entry(legacy_cloud_backup_key_entry()?);
+    clear_legacy_backup_key();
     Ok(())
 }
 
@@ -67,8 +62,8 @@ pub fn load_cloud_backup_key(account_id: &str) -> Result<[u8; BACKUP_KEY_BYTES]>
 }
 
 pub fn clear_cloud_backup_key(account_id: &str) -> Result<()> {
-    clear_keyring_entry(cloud_backup_key_entry(account_id)?)?;
-    clear_keyring_entry(legacy_cloud_backup_key_entry()?)?;
+    clear_keyring_entry(entry(&backup_key_account(account_id))?)?;
+    clear_legacy_backup_key();
     Ok(())
 }
 
@@ -81,30 +76,29 @@ fn derive_cloud_backup_key(account_id: &str, passphrase: &str) -> Result<[u8; BA
     Ok(output)
 }
 
-fn cloud_session_entry() -> Result<Entry> {
-    Entry::new(KEYRING_SERVICE, CLOUD_SESSION_ACCOUNT)
+fn entry(account: &str) -> Result<Entry> {
+    Entry::new(KEYRING_SERVICE, account)
         .map_err(|error| VaultimeError::Cloud(format!("failed to access secure storage: {error}")))
 }
 
-fn cloud_backup_key_entry(account_id: &str) -> Result<Entry> {
-    Entry::new(
-        KEYRING_SERVICE,
-        &format!("{CLOUD_BACKUP_KEY_ACCOUNT_PREFIX}{account_id}"),
-    )
-    .map_err(|error| VaultimeError::Cloud(format!("failed to access secure storage: {error}")))
-}
-
-fn legacy_cloud_backup_key_entry() -> Result<Entry> {
-    Entry::new(KEYRING_SERVICE, LEGACY_CLOUD_BACKUP_KEY_ACCOUNT)
-        .map_err(|error| VaultimeError::Cloud(format!("failed to access secure storage: {error}")))
+fn backup_key_account(account_id: &str) -> String {
+    format!("{CLOUD_BACKUP_KEY_ACCOUNT_PREFIX}{account_id}")
 }
 
 fn load_cloud_backup_key_encoded(account_id: &str) -> Result<Option<String>> {
-    if let Some(encoded) = load_password(cloud_backup_key_entry(account_id)?)? {
+    if let Some(encoded) = load_password(entry(&backup_key_account(account_id))?)? {
         return Ok(Some(encoded));
     }
 
-    load_password(legacy_cloud_backup_key_entry()?)
+    load_password(entry(LEGACY_CLOUD_BACKUP_KEY_ACCOUNT)?)
+}
+
+/// Older versions stored a single backup key for all accounts. Removing it is
+/// cleanup only, so a failure must not block the user.
+fn clear_legacy_backup_key() {
+    if let Err(error) = entry(LEGACY_CLOUD_BACKUP_KEY_ACCOUNT).and_then(clear_keyring_entry) {
+        warn!("failed to remove the legacy cloud backup key: {error}");
+    }
 }
 
 fn load_password(entry: Entry) -> Result<Option<String>> {

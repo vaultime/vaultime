@@ -222,8 +222,10 @@ pub fn import_local_backup(
 }
 
 #[tauri::command(async)]
+#[expect(clippy::too_many_arguments)]
 pub fn upload_remote_backup(
     db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
     app_context: State<'_, AppContext>,
     api_base_url: String,
     access_token: String,
@@ -233,6 +235,7 @@ pub fn upload_remote_backup(
 ) -> Result<RemoteBackupUploadResult, VaultimeError> {
     let result = backup::remote::upload_remote_backup(
         &db,
+        &asset_manager,
         &app_context,
         &api_base_url,
         &access_token,
@@ -253,8 +256,10 @@ pub fn upload_remote_backup(
 }
 
 #[tauri::command(async)]
+#[expect(clippy::too_many_arguments)]
 pub fn restore_remote_backup(
     db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
     app_context: State<'_, AppContext>,
     engine: State<'_, TrackingEngine>,
     api_base_url: String,
@@ -265,6 +270,7 @@ pub fn restore_remote_backup(
     let result = with_tracking_paused(&db, &engine, || {
         backup::remote::restore_remote_backup(
             &db,
+            &asset_manager,
             &app_context,
             &api_base_url,
             &access_token,

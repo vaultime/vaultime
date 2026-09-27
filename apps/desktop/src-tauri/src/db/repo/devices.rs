@@ -7,7 +7,8 @@ use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::Device;
-use crate::error::{Result, VaultimeError};
+use crate::db::repo::map_db;
+use crate::error::Result;
 
 fn row_to_device(row: &Row) -> rusqlite::Result<Device> {
     Ok(Device {
@@ -17,10 +18,6 @@ fn row_to_device(row: &Row) -> rusqlite::Result<Device> {
         key_id: row.get("key_id")?,
         registered_at: row.get("registered_at")?,
     })
-}
-
-fn map_db(e: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(format!("{e}"))
 }
 
 /// Ensures a device record exists for this machine. Returns the device.

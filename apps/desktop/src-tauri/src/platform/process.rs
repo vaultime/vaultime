@@ -73,7 +73,7 @@ fn same_file(exe: &str, game_executable: &str) -> bool {
 }
 
 /// Last path segment, splitting on both separators so Windows paths parse on any OS.
-fn file_name(path: &str) -> Option<&str> {
+pub(crate) fn file_name(path: &str) -> Option<&str> {
     path.rsplit(['/', '\\']).find(|segment| !segment.is_empty())
 }
 
