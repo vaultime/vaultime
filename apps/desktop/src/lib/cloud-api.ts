@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { MIN_BACKUP_PASSPHRASE_CHARS } from "@/lib/constants";
+import { sentence } from "@/lib/words";
 
 const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim();
 
@@ -129,7 +130,8 @@ function extractErrorMessage(payload: unknown, status: number): string {
     "message" in payload.error &&
     typeof payload.error.message === "string"
   ) {
-    return payload.error.message;
+    // The server writes its messages in lowercase without a full stop.
+    return sentence(payload.error.message);
   }
 
   if (typeof payload === "string" && payload.trim().length > 0) {

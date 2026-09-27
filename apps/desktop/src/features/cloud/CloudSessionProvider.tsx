@@ -190,6 +190,19 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     setBackupKeyReady(true);
   }
 
+  // The server signs out every other device and returns a new session for this one.
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const next = await withAuthenticatedSession((current) =>
+      cloudPostJson<CloudAuthSession>(
+        "/v1/auth/password",
+        { current_password: currentPassword, new_password: newPassword },
+        current.access_token,
+      ),
+    );
+    await persistCloudSession(next);
+    applySession(next);
+  }
+
   async function logout() {
     const current = sessionRef.current;
     applyClearedSession();
@@ -450,6 +463,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     login,
     signUp,
     setBackupPassphrase,
+    changePassword,
     logout,
     refreshSession,
     registerCurrentDevice,

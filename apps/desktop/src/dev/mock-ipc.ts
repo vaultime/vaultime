@@ -6,16 +6,21 @@
 // the URL for a fresh install, ?mock=unplayed for games without sessions or
 // ?mock=covers for artwork. Covers are not in the repo, copy portrait images
 // to dist-mock/covers/<n>.jpg (n = 1 to 7) after building to see them.
-// ?palette=1 opens the command palette.
+// ?palette=1 opens the command palette. ?cloud=1 signs in to a fake cloud
+// account, and ?password=open|wrong|short|mismatch|ok drives the change
+// password dialog on the cloud page.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
-import type { Game, Session, SessionEvent } from "@/lib/types";
+import type { CloudAuthSession, CloudBackupRecord, CloudDevice, Game, Session, SessionEvent } from "@/lib/types";
 
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 
-const scenario = new URLSearchParams(window.location.search).get("mock");
+const params = new URLSearchParams(window.location.search);
+const scenario = params.get("mock");
+const signedIn = params.get("cloud") === "1" || params.has("password");
 
 const titles =
   scenario === "covers"
@@ -125,6 +130,119 @@ function discovered(title: string, path: string, source: string, alreadyAdded = 
   return { title, executable_path: path, install_folder: installFolder, source, source_id: null, already_added: alreadyAdded };
 }
 
+const MOCK_CLOUD_PASSWORD = "correct horse battery";
+
+function cloudSession(): CloudAuthSession {
+  return {
+    access_token: "preview",
+    refresh_token: "preview",
+    expires_at: iso(now + 15 * MINUTE_MS),
+    refresh_expires_at: iso(now + 30 * DAY_MS),
+    user: { id: "account-1", email: "player@example.com", role: "user" },
+  };
+}
+
+function cloudBackup(id: string, label: string, daysAgo: number, games: number, sessionCount: number): CloudBackupRecord {
+  const uploaded = iso(now - daysAgo * DAY_MS);
+  return {
+    id,
+    label,
+    storage_key: id,
+    checksum: "preview",
+    size_bytes: 180_000 + games * 9_000,
+    backup_created_at: uploaded,
+    uploaded_at: uploaded,
+    status: "complete",
+    client_device_id: "preview",
+    metadata_json: {
+      local_backup_id: id,
+      backup_version: 1,
+      created_at: uploaded,
+      app_version: "0.1.0",
+      source_device_id: "preview",
+      overall_checksum: "preview",
+      games_count: games,
+      sessions_count: sessionCount,
+      assets_count: games,
+      asset_file_count: games,
+      archive_format: "tar",
+      encryption: "chacha20poly1305",
+      archive_checksum: "preview",
+      archive_size_bytes: 180_000,
+    },
+  };
+}
+
+const cloudDevice: CloudDevice = {
+  id: "device-1",
+  client_device_id: "preview",
+  device_name: "Vaultime Windows Desktop",
+  platform: "windows",
+  app_version: "0.1.0",
+  registered_at: iso(now - 40 * DAY_MS),
+  last_seen_at: iso(now),
+};
+
+function cloudReply(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+// Answers the cloud API in the browser, so the preview never reaches a server.
+const realFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = new URL(input instanceof Request ? input.url : input.toString());
+  if (url.origin !== new URL(CLOUD_API_BASE_URL).origin) return realFetch(input, init);
+  const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, string>) : {};
+  switch (url.pathname) {
+    case "/v1/auth/refresh":
+    case "/v1/auth/login":
+      return cloudReply(200, cloudSession());
+    case "/v1/auth/password":
+      if (body.current_password !== MOCK_CLOUD_PASSWORD) {
+        return cloudReply(403, { error: { code: "forbidden", message: "the current password is wrong" } });
+      }
+      if ((body.new_password ?? "").length < 10) {
+        return cloudReply(400, { error: { code: "bad_request", message: "password must be at least 10 characters long" } });
+      }
+      return cloudReply(200, cloudSession());
+    case "/v1/devices/register":
+      return cloudReply(200, cloudDevice);
+    case "/v1/backups":
+      return cloudReply(200, [cloudBackup("backup-2", "Before the reinstall", 2, 7, 38), cloudBackup("backup-1", "Backup", 16, 6, 24)]);
+    default:
+      return cloudReply(404, { error: { code: "not_found", message: "not found" } });
+  }
+};
+
+/** Types into a React controlled input. */
+function typeInto(id: string, value: string) {
+  const input = document.getElementById(id);
+  if (!(input instanceof HTMLInputElement)) return;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function clickButton(text: string) {
+  [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === text)?.click();
+}
+
+const passwordStep = params.get("password");
+if (passwordStep) {
+  setTimeout(() => clickButton("Change password"), 800);
+  if (passwordStep !== "open") {
+    const next = passwordStep === "short" ? "short" : "a brand new passphrase";
+    setTimeout(() => {
+      typeInto("cloud-current-password", passwordStep === "wrong" ? "not my password" : MOCK_CLOUD_PASSWORD);
+      typeInto("cloud-new-password", next);
+      typeInto("cloud-new-password-confirm", passwordStep === "mismatch" ? `${next}!` : next);
+    }, 1200);
+    setTimeout(() => {
+      const dialog = document.querySelector("[role=dialog]");
+      [...(dialog?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.trim() === "Change password")?.click();
+    }, 1600);
+  }
+}
+
 // ?scan=1 presses "Start the scan" in the discover dialog, open it with ?discover=1.
 if (new URLSearchParams(window.location.search).get("scan") === "1") {
   setTimeout(() => {
@@ -158,7 +276,9 @@ mockIPC((cmd, payload) => {
     case "get_tracking_diagnostics":
       return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", poll_interval_seconds: 5 };
     case "load_cloud_session_secure":
-      return null;
+      return signedIn ? JSON.stringify(cloudSession()) : null;
+    case "has_cloud_backup_key_secure":
+      return signedIn;
     case "tray_available":
       return true;
     case "discover_steam_games":

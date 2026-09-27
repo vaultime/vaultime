@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { tintForTitle } from "./game-tint";
 import { normalizeIntegrityStatus } from "./integrity";
-import { capitalize, numberWords } from "./words";
+import { capitalize, numberWords, sentence } from "./words";
 
 describe("numberWords", () => {
   it("writes numbers up to 999 as words", () => {
@@ -24,6 +24,12 @@ describe("numberWords", () => {
 
   it("capitalizes the first letter", () => {
     expect(capitalize("twenty hours")).toBe("Twenty hours");
+  });
+
+  it("turns a message into a sentence once", () => {
+    expect(sentence("invalid email or password")).toBe("Invalid email or password.");
+    expect(sentence("Already done.")).toBe("Already done.");
+    expect(sentence("really? ")).toBe("Really?");
   });
 });
 

@@ -32,6 +32,7 @@ export interface CloudSessionContextValue {
     backupPassphrase: string,
   ) => Promise<CloudAuthSession>;
   setBackupPassphrase: (passphrase: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<CloudAuthSession | null>;
   registerCurrentDevice: () => Promise<CloudDevice | null>;

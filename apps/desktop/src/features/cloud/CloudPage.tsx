@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vaultime Contributors
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useEffectEvent, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type FormEvent } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
   ArchiveRestore,
@@ -26,8 +26,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
+import { Field } from "@/features/cloud/Field";
 import { BACKUP_PASSPHRASE_TOO_SHORT, INVITE_CODE_PREFIX } from "@/lib/cloud-api";
 import { BYTES_PER_KIB, MIN_BACKUP_PASSPHRASE_CHARS, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
@@ -137,6 +138,7 @@ export function CloudPage() {
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [remoteBackupBusy, setRemoteBackupBusy] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [backupKeyBusy, setBackupKeyBusy] = useState(false);
@@ -762,10 +764,14 @@ export function CloudPage() {
               <PageRow label="Email">{session.user.email}</PageRow>
               <PageRow label="Role">{capitalize(session.user.role)}</PageRow>
               <PageRow label="Signed in until">{formatTimestamp(session.refresh_expires_at)}</PageRow>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleRefreshSession} disabled={authBusy}>
                   {authBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                   Renew session
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPasswordDialogOpen(true)} disabled={authBusy}>
+                  <KeyRound className="size-3.5" />
+                  Change password
                 </Button>
                 <Button variant="ghost" size="sm" onClick={handleLogout} disabled={authBusy}>
                   <LogOut className="size-3.5" />
@@ -800,6 +806,15 @@ export function CloudPage() {
           </PageRow>
         </PageSection>
       </div>
+
+      <ChangePasswordDialog
+        open={passwordDialogOpen}
+        onOpenChange={setPasswordDialogOpen}
+        onChanged={() => {
+          setErrorMessage(null);
+          setStatusMessage("Password changed. Your other PCs are signed out.");
+        }}
+      />
 
       <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
         <DialogContent className="sm:max-w-xl">
@@ -951,15 +966,6 @@ export function CloudPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
     </div>
   );
 }

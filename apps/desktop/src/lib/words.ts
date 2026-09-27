@@ -24,6 +24,11 @@ export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** "invalid email or password" becomes "Invalid email or password." */
+export function sentence(text: string): string {
+  const trimmed = capitalize(text.trim());
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
 
 /** "1 game", "3 games". */
 export function plural(count: number, noun: string): string {

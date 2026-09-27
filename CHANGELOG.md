@@ -32,6 +32,7 @@ The first public release.
 
 - **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything.
 - **Invite-only cloud backup** on our own server. Free, with the same limits for every account. Backups are encrypted on your computer before upload, and at the limit a new backup replaces the oldest.
+- **Password change** on the Cloud page. Your other PCs are signed out, and the backup passphrase stays the same.
 
 ### Platforms
 
