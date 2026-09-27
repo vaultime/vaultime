@@ -90,9 +90,13 @@ pub fn update_game(
     games::update_game(&db, &id, &input)
 }
 
-#[tauri::command]
-pub fn delete_game(db: State<'_, Arc<Database>>, id: String) -> Result<bool, VaultimeError> {
-    games::delete_game(&db, &id)
+#[tauri::command(async)]
+pub fn delete_game(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    id: String,
+) -> Result<bool, VaultimeError> {
+    assets::delete_game(&db, &asset_manager, &id)
 }
 
 #[tauri::command(async)]
