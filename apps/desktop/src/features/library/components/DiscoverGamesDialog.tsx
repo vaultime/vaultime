@@ -28,6 +28,11 @@ const SOURCE_LABELS: Record<string, string> = {
   folder_scan: "Folder",
 };
 
+/** Lowercase path with forward slashes and no trailing one, for comparing paths. */
+function pathKey(path: string): string {
+  return path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+}
+
 export function DiscoverGamesDialog({
   open,
   onOpenChange,
@@ -81,10 +86,18 @@ export function DiscoverGamesDialog({
       const launcherGames = launcherResult.status === "fulfilled" ? launcherResult.value : [];
       const folderGames = folderResult.status === "fulfilled" ? folderResult.value : [];
 
-      // Launcher entries win over folder matches for the same executable.
+      // Launcher entries win over folder matches for the same executable, and a
+      // folder match inside a launcher game's install folder is the same game.
+      const launcherFolders = [...steamGames, ...launcherGames]
+        .map((game) => game.install_folder)
+        .filter((folder): folder is string => Boolean(folder))
+        .map(pathKey);
       const byPath = new Map<string, DiscoveredGame>();
       for (const game of [...steamGames, ...launcherGames, ...folderGames]) {
-        if (!byPath.has(game.executable_path)) byPath.set(game.executable_path, game);
+        const insideLauncherFolder =
+          game.source === "folder_scan" &&
+          launcherFolders.some((folder) => pathKey(game.executable_path).startsWith(`${folder}/`));
+        if (!insideLauncherFolder && !byPath.has(game.executable_path)) byPath.set(game.executable_path, game);
       }
       const merged = [...byPath.values()].sort((a, b) =>
         a.already_added !== b.already_added ? (a.already_added ? 1 : -1) : a.title.localeCompare(b.title),

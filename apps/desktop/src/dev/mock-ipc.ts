@@ -121,7 +121,8 @@ function coverAssets() {
 
 /** A result of the discovery scan, for the discover dialog. */
 function discovered(title: string, path: string, source: string, alreadyAdded = false) {
-  return { title, executable_path: path, install_folder: null, source, source_id: null, already_added: alreadyAdded };
+  const installFolder = source === "folder_scan" ? null : path.slice(0, path.lastIndexOf("/"));
+  return { title, executable_path: path, install_folder: installFolder, source, source_id: null, already_added: alreadyAdded };
 }
 
 // ?scan=1 presses "Start the scan" in the discover dialog, open it with ?discover=1.
@@ -173,7 +174,11 @@ mockIPC((cmd, payload) => {
     case "get_default_scan_paths":
       return ["C:/Games"];
     case "discover_games":
-      return [discovered("Some Indie Game", "C:/Games/Some Indie Game/Game.exe", "folder_scan")];
+      return [
+        discovered("Some Indie Game", "C:/Games/Some Indie Game/Game.exe", "folder_scan"),
+        // Inside the GOG game's folder, so the dialog leaves it out.
+        discovered("StardewModdingAPI", "C:/GOG Games/Stardew Valley/StardewModdingAPI.exe", "folder_scan"),
+      ];
     case "list_game_assets":
       return scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === args.gameId) : [];
     case "list_preferred_game_assets":
