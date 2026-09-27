@@ -60,7 +60,8 @@ export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
         : "text-[clamp(40px,4.2vw,60px)]";
   return (
     <h1
-      className={cn("font-display mt-3.5 leading-[0.95] font-medium tracking-[-0.03em] text-balance", size)}
+      // The size goes first, twMerge drops a line height that comes before a font size.
+      className={cn("font-display mt-3.5", size, "leading-[0.95] font-medium tracking-[-0.03em] text-balance")}
       style={{ color: tint.ink }}
     >
       {text}

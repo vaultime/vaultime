@@ -21,7 +21,8 @@ export function Cover({ title, src, variant = "card", className }: CoverProps) {
       <img
         src={src}
         alt=""
-        className={cn("shrink-0 rounded-md border border-white/5 object-cover", className)}
+        // Padding in className is for the typeset placeholder, never for artwork.
+        className={cn("shrink-0 rounded-md border border-white/5 object-cover", className, "p-0")}
       />
     );
   }
@@ -45,8 +46,10 @@ export function Cover({ title, src, variant = "card", className }: CoverProps) {
     <span
       aria-hidden="true"
       className={cn(
-        "font-display flex shrink-0 items-end overflow-hidden rounded-md border p-3 leading-none",
+        "font-display flex shrink-0 items-end overflow-hidden rounded-md border p-3",
         className,
+        // After className, a font size there would drop it otherwise.
+        "leading-none",
       )}
       style={{ background: tint.fill, borderColor: tint.edge, color: tint.ink }}
     >

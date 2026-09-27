@@ -10,14 +10,20 @@ export function DayBars({ points }: { points: ActivityPoint[] }) {
   const max = Math.max(1, ...points.map((point) => point.activeMs + point.idleMs));
   const height = (ms: number) => `${Math.max(CHART_MIN_BAR_PERCENT, (ms / max) * 100)}%`;
   const middle = points[Math.floor(points.length / 2)];
+  const empty = points.every((point) => point.activeMs + point.idleMs === 0);
 
   return (
     <figure className="flex flex-col gap-2.5">
       <div
         role="img"
         aria-label={`Active and idle time for each of the last ${points.length} days`}
-        className="flex h-[132px] items-end gap-2.5 border-b border-hairline"
+        className="relative flex h-[132px] items-end gap-2.5 border-b border-hairline"
       >
+        {empty && (
+          <p className="absolute inset-0 flex items-center justify-center text-sm text-faint">
+            Not played on any of these days.
+          </p>
+        )}
         {points.map((point) => (
           <div
             key={point.key}
