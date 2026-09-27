@@ -346,7 +346,10 @@ mod imp {
                 match self.connection.wait_for_event() {
                     Ok(Event::XinputRawMotion(_)) => {
                         self.note_input();
-                        if let Some(cookie) = self.select(false) {
+                        // Moves already queued still arrive, so one request to stop is enough.
+                        if self.watching_motion.load(Ordering::Relaxed)
+                            && let Some(cookie) = self.select(false)
+                        {
                             cookie.ignore_error();
                         }
                     }
