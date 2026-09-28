@@ -42,7 +42,7 @@ This data is processed to provide the cloud backup you signed up for (Art. 6(1)(
 
 ## 4. Third Parties
 
-Cloud backup runs on a server operated by the Vaultime maintainer, rented from Contabo GmbH, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host, which sees your IP address like any web server does.
+Cloud backup runs on a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host, which sees your IP address like any web server does.
 
 ## 5. Retention
 
