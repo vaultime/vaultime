@@ -9,19 +9,22 @@ import { useLibrary } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatHoursMinutes, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
+import { usePageVisible } from "@/lib/use-page-visible";
 
 /** The bar at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
   const { active, activePolledAt, games, covers, sessions, idleThresholdSeconds } = useLibrary();
   const [now, setNow] = useState(() => Date.now());
   const current = active[0];
+  const visible = usePageVisible();
 
-  // Tick every second while something runs, so the timer does not jump every poll.
+  // Tick every second while something runs and the window is seen, so the
+  // timer does not jump every poll.
   useEffect(() => {
-    if (!current) return;
+    if (!current || !visible) return;
     const timer = setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
     return () => clearInterval(timer);
-  }, [current]);
+  }, [current, visible]);
 
   const todayMs = useMemo(() => {
     const midnight = new Date();
@@ -82,7 +85,7 @@ export function LiveBar() {
             {active.length > 1 && <span className="ml-2 text-[13px] text-faint">and {active.length - 1} more</span>}
           </span>
           <span className="flex items-center gap-2 text-[13px] text-faint">
-            <span className="size-2 animate-live-ring rounded-full bg-violet" />
+            <span className="size-2 rounded-full bg-violet ring-3 ring-violet/25" />
             Tracking since {startedAt}, {trust}
           </span>
         </div>

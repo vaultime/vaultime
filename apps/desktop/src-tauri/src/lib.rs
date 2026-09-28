@@ -75,7 +75,7 @@ pub fn run() {
                 && tray::close_to_tray(window.app_handle())
             {
                 api.prevent_close();
-                let _ = window.hide();
+                tray::hide_main_window(window.app_handle());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -190,7 +190,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // The window starts hidden and a login item leaves it that way, in the tray
     // or without one. Opening Vaultime again shows the window of this instance.
     app.manage(tray::create(app.handle()));
-    if !std::env::args().any(|arg| arg == tray::MINIMIZED_ARG) {
+    if std::env::args().any(|arg| arg == tray::MINIMIZED_ARG) {
+        tray::hide_main_window(app.handle());
+    } else {
         tray::show_main_window(app.handle());
     }
 

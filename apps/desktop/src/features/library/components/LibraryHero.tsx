@@ -75,7 +75,7 @@ export function LibraryHero(props: HeroProps) {
       <div className="flex items-end gap-12">
         <div className="min-w-0 flex-1">
           <TintedOverline tint={tint}>
-            {playing && <span className="size-2 animate-live-ring rounded-full bg-violet" />}
+            {playing && <span className="size-2 rounded-full bg-violet ring-3 ring-violet/25" />}
             {playing ? "Playing now" : lastPlayedLine(summary.lastPlayedAt)}
           </TintedOverline>
           <TintedTitle tint={tint} text={game.title} />

@@ -152,7 +152,7 @@ function GamePage({ gameId }: { gameId: string }) {
               {playing && (
                 <>
                   <span aria-hidden="true">/</span>
-                  <span className="size-2 animate-live-ring rounded-full bg-violet" />
+                  <span className="size-2 rounded-full bg-violet ring-3 ring-violet/25" />
                   <span>Playing now</span>
                 </>
               )}

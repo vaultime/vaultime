@@ -8,6 +8,7 @@ import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import type { Game, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
+import { usePageVisible } from "@/lib/use-page-visible";
 import { LibraryContext, type GameSummary } from "./library-context";
 
 /** Games, sessions, covers and the live session, shared by the shell and pages. */
@@ -23,6 +24,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   // Ids of the running sessions at the last poll. Null until the first poll.
   const activeIds = useRef<string | null>(null);
+  const pageVisible = usePageVisible();
 
   const refresh = useCallback(async () => {
     try {
@@ -51,7 +53,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Polls only while the window is seen. The tracker runs in the core either way.
   useEffect(() => {
+    if (!pageVisible) return;
     let cancelled = false;
 
     function poll() {
@@ -81,8 +85,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       clearInterval(timer);
+      // Sessions may start and end unseen, so the next poll reloads the totals.
+      activeIds.current = null;
     };
-  }, [refresh]);
+  }, [refresh, pageVisible]);
 
   // The core reports changes it makes on its own, like covers found at startup.
   useEffect(() => {

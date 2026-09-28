@@ -175,19 +175,3 @@
   background: var(--idle);
   background-clip: padding-box;
 }
-
-@keyframes live-ring {
-  0% { box-shadow: 0 0 0 0 rgba(157, 124, 255, 0.5); }
-  70% { box-shadow: 0 0 0 6px rgba(157, 124, 255, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(157, 124, 255, 0); }
-}
-
-.animate-live-ring {
-  animation: live-ring 2s ease-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-live-ring {
-    animation: none;
-  }
-}

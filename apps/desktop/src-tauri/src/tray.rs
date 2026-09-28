@@ -6,7 +6,7 @@
 use log::{info, warn};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, Webview};
 
 use crate::db::connection::Database;
 use crate::db::repo::settings;
@@ -74,9 +74,22 @@ fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 /// Brings the main window back from the tray or the taskbar.
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
+        let webview: &Webview<R> = window.as_ref();
+        let _ = webview.show();
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+}
+
+/// Hides the main window into the tray. Hiding the window alone leaves the
+/// page running as if it were seen, so the webview is hidden too. It then
+/// stops drawing and the page pauses its timers.
+pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+        let webview: &Webview<R> = window.as_ref();
+        let _ = webview.hide();
     }
 }
 
