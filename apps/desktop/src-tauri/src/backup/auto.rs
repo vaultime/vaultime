@@ -70,7 +70,18 @@ pub fn back_up_if_due(
         return Ok(None);
     }
 
-    let summary = export_backup_to(db, asset_manager, app_context, &folder, AUTO_BACKUP_PREFIX)?;
+    let previous = automatic_backups(&folder)
+        .into_iter()
+        .rev()
+        .find(|backup| backup.join(BACKUP_MANIFEST_FILE).is_file());
+    let summary = export_backup_to(
+        db,
+        asset_manager,
+        app_context,
+        &folder,
+        AUTO_BACKUP_PREFIX,
+        previous.as_deref(),
+    )?;
     if let Err(error) = backup_snapshots::create_snapshot(
         db,
         Some(&app_context.device_id),
@@ -136,6 +147,7 @@ fn prune(folder: &Path, keep: usize) {
 
 #[cfg(test)]
 mod tests {
+    use super::super::BACKUP_ASSET_DIR;
     use super::*;
 
     fn backup(folder: &Path, name: &str, complete: bool) -> PathBuf {
@@ -188,6 +200,52 @@ mod tests {
             back_up_if_due(&db, &assets, &context, Duration::ZERO)
                 .unwrap()
                 .is_none()
+        );
+        drop(db);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unchanged_artwork_is_stored_once() {
+        let root =
+            std::env::temp_dir().join(format!("vaultime-auto-link-{}", uuid::Uuid::new_v4()));
+        let cache = root.join("asset-cache");
+        fs::create_dir_all(cache.join("game")).unwrap();
+        fs::write(cache.join("game/cover.jpg"), b"cover").unwrap();
+        fs::write(cache.join("game/banner.jpg"), b"banner").unwrap();
+        let context = AppContext {
+            app_dir: root.clone(),
+            device_id: "test-device".into(),
+            app_version: "0.1.0".into(),
+        };
+        let db = Database::open(&root.join("vaultime.db")).unwrap();
+        let assets = AssetManager::new(cache.clone());
+        let artwork = |backup: &LocalBackupSummary, name: &str| {
+            PathBuf::from(&backup.backup_path)
+                .join(BACKUP_ASSET_DIR)
+                .join("game")
+                .join(name)
+        };
+
+        let first = back_up_if_due(&db, &assets, &context, Duration::ZERO)
+            .unwrap()
+            .unwrap();
+        fs::write(cache.join("game/banner.jpg"), b"new banner").unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+        let second = back_up_if_due(&db, &assets, &context, Duration::ZERO)
+            .unwrap()
+            .unwrap();
+
+        // A write through the first backup shows in the second when both are one file.
+        fs::write(artwork(&first, "cover.jpg"), b"one file").unwrap();
+        assert_eq!(
+            fs::read(artwork(&second, "cover.jpg")).unwrap(),
+            b"one file"
+        );
+        assert_eq!(fs::read(artwork(&first, "banner.jpg")).unwrap(), b"banner");
+        assert_eq!(
+            fs::read(artwork(&second, "banner.jpg")).unwrap(),
+            b"new banner"
         );
         drop(db);
         fs::remove_dir_all(root).unwrap();

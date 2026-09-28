@@ -30,7 +30,7 @@ use crate::platform::process::file_name;
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 const BACKUP_DB_FILE: &str = "vaultime.db";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
-const BACKUP_ASSET_DIR: &str = "asset-cache";
+pub(crate) const BACKUP_ASSET_DIR: &str = "asset-cache";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalBackupSummary {
@@ -84,16 +84,20 @@ pub fn export_local_backup(
         app_context,
         destination_dir,
         BACKUP_DIR_PREFIX,
+        None,
     )
 }
 
 /// Writes a backup folder named `<prefix>-<timestamp>` into `destination_dir`.
+/// Artwork that `previous_backup` holds unchanged is hard linked from there,
+/// so it is stored once however many backups share it.
 pub(crate) fn export_backup_to(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
     destination_dir: &Path,
     prefix: &str,
+    previous_backup: Option<&Path>,
 ) -> Result<LocalBackupSummary> {
     if !destination_dir.exists() || !destination_dir.is_dir() {
         return Err(VaultimeError::Backup(
@@ -117,6 +121,9 @@ pub(crate) fn export_backup_to(
     copy_directory_contents(
         asset_manager.cache_dir(),
         &backup_dir.join(BACKUP_ASSET_DIR),
+        previous_backup
+            .map(|previous| previous.join(BACKUP_ASSET_DIR))
+            .as_deref(),
     )?;
 
     let schema_migrations = list_applied_migrations(db)?;
@@ -203,7 +210,7 @@ fn restore_from_staging(
     staging_dir: &Path,
 ) -> Result<()> {
     let staged_assets = staging_dir.join(BACKUP_ASSET_DIR);
-    copy_directory_contents(&backup_dir.join(BACKUP_ASSET_DIR), &staged_assets)?;
+    copy_directory_contents(&backup_dir.join(BACKUP_ASSET_DIR), &staged_assets, None)?;
 
     // Older backups are migrated on a copy first so their columns match ours.
     let staged_db = staging_dir.join(BACKUP_DB_FILE);
@@ -561,7 +568,14 @@ fn collect_backup_files(backup_dir: &Path) -> Result<Vec<BackupFileEntry>> {
     Ok(files)
 }
 
-fn copy_directory_contents(source_dir: &Path, destination_dir: &Path) -> Result<()> {
+/// Copies a directory tree. A file that `link_from` holds at the same place
+/// with the same content is hard linked from there instead. Where links do not
+/// work, for example across drives or on FAT, the file is copied.
+fn copy_directory_contents(
+    source_dir: &Path,
+    destination_dir: &Path,
+    link_from: Option<&Path>,
+) -> Result<()> {
     fs::create_dir_all(destination_dir).map_err(|error| {
         VaultimeError::Backup(format!(
             "failed to create directory {}: {error}",
@@ -606,6 +620,13 @@ fn copy_directory_contents(source_dir: &Path, destination_dir: &Path) -> Result<
                     parent.display()
                 ))
             })?;
+        }
+
+        if let Some(earlier) = link_from.map(|dir| dir.join(relative_path))
+            && same_content(entry.path(), &earlier)
+            && fs::hard_link(&earlier, &target_path).is_ok()
+        {
+            continue;
         }
 
         fs::copy(entry.path(), &target_path).map_err(|error| {
@@ -684,6 +705,14 @@ fn compute_overall_checksum(
     }
 
     crate::hex::encode(&hasher.finalize())
+}
+
+/// Whether two files hold the same bytes. Sizes are compared first, so most
+/// changed files are told apart without reading them.
+fn same_content(left: &Path, right: &Path) -> bool {
+    let size = |path: &Path| fs::metadata(path).map(|metadata| metadata.len()).ok();
+    size(left).is_some_and(|bytes| size(right) == Some(bytes))
+        && matches!((hash_file(left), hash_file(right)), (Ok(a), Ok(b)) if a == b)
 }
 
 /// Size and SHA-256 hex digest of a file, read in chunks.
