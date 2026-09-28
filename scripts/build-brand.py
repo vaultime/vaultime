@@ -16,6 +16,10 @@ The app icons come from vaultime-icon-source.svg. From apps/desktop, run
 `npx tauri icon ../../assets/vaultime-icon-source.svg -o <temp folder>` and copy
 32x32.png, 128x128.png, 128x128@2x.png, icon.png, icon.ico and icon.icns into
 src-tauri/icons. The favicon of docs/site is tile_svg(64).
+
+The tray and the taskbar show vaultime-icon-signed-in.svg while the PC is
+signed in to cloud backup, like the logo in the app. Render it at 256 px, the
+size Tauri takes from icon.ico, to src-tauri/icons/signed-in.png.
 """
 
 import io
@@ -66,7 +70,7 @@ def framed(size, margin, frame_width=FRAME_WIDTH):
     return scale, offset
 
 
-def tile_svg(size, margin=0.06, rounded=True):
+def tile_svg(size, margin=0.06, rounded=True, ink=LIGHT, pivot=VIOLET):
     """The mark on a square tile. Rounded tile corners follow the curve of the
     frame, so the margin stays even all the way around."""
     scale, offset = framed(size, margin)
@@ -74,7 +78,7 @@ def tile_svg(size, margin=0.06, rounded=True):
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
         f'<rect width="{size}" height="{size}" rx="{radius:.1f}" fill="{TILE}"/>'
-        f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(LIGHT, VIOLET)}</g>'
+        f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(ink, pivot)}</g>'
         "</svg>\n"
     )
 
@@ -127,6 +131,7 @@ def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
     (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
+    (ASSETS / "vaultime-icon-signed-in.svg").write_text(tile_svg(1024, ink=VIOLET, pivot=LIGHT), encoding="utf8")
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))
