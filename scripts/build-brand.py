@@ -11,6 +11,11 @@ Needs `npm ci` in apps/desktop first for the font file.
 
 vaultime-avatar.png is vaultime-avatar.svg rendered at 1024 px with resvg, for
 GitHub and other sites that round the corners of a square avatar themselves.
+
+The app icons come from vaultime-icon-source.svg. From apps/desktop, run
+`npx tauri icon ../../assets/vaultime-icon-source.svg -o <temp folder>` and copy
+32x32.png, 128x128.png, 128x128@2x.png, icon.png, icon.ico and icon.icns into
+src-tauri/icons. The favicon of docs/site is tile_svg(64).
 """
 
 import io
@@ -53,26 +58,22 @@ def mark(ink, pivot, frame_width=FRAME_WIDTH, hand_width=5.5):
     )
 
 
-def tile_svg(size):
-    scale = size * 0.75 / 64
-    offset = size * 0.125
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-        f'<rect width="{size}" height="{size}" rx="{size * 0.2227:.1f}" fill="{TILE}"/>'
-        f'<g transform="translate({offset} {offset}) scale({scale:.4f})">{mark(LIGHT, VIOLET)}</g>'
-        "</svg>\n"
-    )
-
-
-def avatar_svg(size, margin=0.06):
-    """The mark on a full-bleed square, the frame `margin` of the size from each edge."""
+def framed(size, margin, frame_width=FRAME_WIDTH):
+    """Scale and offset that put the outer edge of the frame `margin` of the size from each edge."""
     x, _, w, _, _ = FRAME
-    frame_outer = w + FRAME_WIDTH
-    scale = size * (1 - 2 * margin) / frame_outer
-    offset = size * margin - (x - FRAME_WIDTH / 2) * scale
+    scale = size * (1 - 2 * margin) / (w + frame_width)
+    offset = size * margin - (x - frame_width / 2) * scale
+    return scale, offset
+
+
+def tile_svg(size, margin=0.06, rounded=True):
+    """The mark on a square tile. Rounded tile corners follow the curve of the
+    frame, so the margin stays even all the way around."""
+    scale, offset = framed(size, margin)
+    radius = (FRAME[4] + FRAME_WIDTH / 2) * scale + size * margin if rounded else 0
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-        f'<rect width="{size}" height="{size}" fill="{TILE}"/>'
+        f'<rect width="{size}" height="{size}" rx="{radius:.1f}" fill="{TILE}"/>'
         f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(LIGHT, VIOLET)}</g>'
         "</svg>\n"
     )
@@ -106,22 +107,18 @@ def wordmark_outline(text="Vaultime", tracking=-0.02):
     return path_pen.getCommands(), bounds_pen.bounds
 
 
-def lockup_svg(ink, pivot):
+def lockup_svg(ink, pivot, frame_width=4, hand_width=6):
     path, (x0, y0, x1, y1) = wordmark_outline()
     height = y1 - y0
-    # The mark is as tall as the wordmark's full height, then a gap.
-    mark_size = height * 1.12
+    # The frame is as tall as the wordmark, then a gap.
     gap = height * 0.34
-    scale = mark_size / 64
-    text_x = mark_size + gap - x0
-    top = min(y0, y0 - (mark_size - height) / 2)
-    width = mark_size + gap + (x1 - x0)
-    total = max(height, mark_size)
-    mark_y = y0 - (mark_size - height) / 2 - top
+    scale, offset = framed(height, 0, frame_width)
+    text_x = height + gap - x0
+    width = height + gap + (x1 - x0)
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {total:.0f}" width="{width / 8:.0f}" height="{total / 8:.0f}">'
-        f'<g transform="translate(0 {mark_y:.1f}) scale({scale:.4f})">{mark(ink, pivot, 4, 6)}</g>'
-        f'<path transform="translate({text_x:.1f} {-top:.1f})" fill="{ink}" d="{path}"/>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width / 8:.0f}" height="{height / 8:.0f}">'
+        f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(ink, pivot, frame_width, hand_width)}</g>'
+        f'<path transform="translate({text_x:.1f} {-y0:.1f})" fill="{ink}" d="{path}"/>'
         "</svg>\n"
     )
 
@@ -129,7 +126,7 @@ def lockup_svg(ink, pivot):
 def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
-    (ASSETS / "vaultime-avatar.svg").write_text(avatar_svg(1024), encoding="utf8")
+    (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))
