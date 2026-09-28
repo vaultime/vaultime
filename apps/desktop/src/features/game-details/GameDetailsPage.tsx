@@ -32,6 +32,10 @@ import { cn } from "@/lib/utils";
 const SOURCE_LABELS: Record<string, string> = {
   steam: "Steam",
   epic: "Epic Games",
+  battlenet: "Battle.net",
+  riot: "Riot",
+  hoyoplay: "HoYoPlay",
+  ubisoft: "Ubisoft Connect",
   gog: "GOG",
   heroic: "Heroic",
   lutris: "Lutris",

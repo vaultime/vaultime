@@ -359,7 +359,16 @@ fn observe_games(
             // in it counts, whichever build or launcher step is running.
             let own_folder = if matches!(
                 game.launcher_source.as_deref(),
-                Some("steam" | "epic" | "gog" | "heroic")
+                Some(
+                    "steam"
+                        | "epic"
+                        | "gog"
+                        | "heroic"
+                        | "battlenet"
+                        | "riot"
+                        | "hoyoplay"
+                        | "ubisoft"
+                )
             ) {
                 game.install_folder.as_deref()
             } else {

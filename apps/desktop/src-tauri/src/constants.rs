@@ -55,16 +55,18 @@ pub const LOG_FILES_KEPT: usize = 3;
 
 /// Folder depth searched for game executables in a folder scan.
 pub const DISCOVERY_SCAN_DEPTH: usize = 4;
-/// Folder depth searched for the main executable of a Steam game.
-pub const STEAM_EXECUTABLE_SCAN_DEPTH: usize = 5;
-/// Size head start for executables in the top folder of a Steam game.
-pub const STEAM_TOP_LEVEL_BONUS_BYTES: u64 = 100_000_000;
+/// Registry levels searched below a launcher key for the games it installed.
+pub const REGISTRY_SEARCH_DEPTH: usize = 6;
+/// Folder depth searched for the main executable of a launcher game.
+pub const EXECUTABLE_SCAN_DEPTH: usize = 5;
+/// Size head start for executables in the top folder of a launcher game.
+pub const TOP_LEVEL_BONUS_BYTES: u64 = 100_000_000;
 /// Head start for an executable named like the game, bigger than any top
 /// folder bonus but smaller than a whole game binary.
-pub const STEAM_TITLE_MATCH_BONUS_BYTES: u64 = 500_000_000;
+pub const TITLE_MATCH_BONUS_BYTES: u64 = 500_000_000;
 /// Head start for an Unreal Engine `-Shipping` build, which is always the
 /// game itself, so it wins against everything else.
-pub const STEAM_SHIPPING_BONUS_BYTES: u64 = 1_000_000_000_000;
+pub const SHIPPING_BONUS_BYTES: u64 = 1_000_000_000_000;
 /// Shortest title word that counts when matching executable names.
 pub const TITLE_WORD_MIN_CHARS: usize = 3;
 

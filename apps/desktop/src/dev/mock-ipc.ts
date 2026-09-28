@@ -303,6 +303,8 @@ mockIPC((cmd, payload) => {
       return [
         discovered("Alan Wake 2", "C:/Epic Games/AlanWake2/AlanWake2.exe", "epic"),
         discovered("Stardew Valley", "C:/GOG Games/Stardew Valley/Stardew Valley.exe", "gog"),
+        discovered("Diablo IV", "D:/BlizzardLibrary/Diablo IV/Diablo IV.exe", "battlenet"),
+        discovered("Genshin Impact", "C:/Program Files/HoYoPlay/games/Genshin Impact game/GenshinImpact.exe", "hoyoplay"),
       ];
     case "get_default_scan_paths":
       return ["C:/Games"];

@@ -22,6 +22,10 @@ import { plural } from "@/lib/words";
 const SOURCE_LABELS: Record<string, string> = {
   steam: "Steam",
   epic: "Epic Games",
+  battlenet: "Battle.net",
+  riot: "Riot",
+  hoyoplay: "HoYoPlay",
+  ubisoft: "Ubisoft Connect",
   gog: "GOG",
   heroic: "Heroic",
   lutris: "Lutris",
@@ -154,7 +158,8 @@ export function DiscoverGamesDialog({
         <DialogHeader>
           <DialogTitle>Discover games</DialogTitle>
           <DialogDescription>
-            Reads Steam, Epic, GOG Galaxy, Heroic and Lutris, and looks through the usual install folders on every drive.
+            Reads what Steam, Epic, GOG Galaxy, Battle.net, Riot, HoYoPlay, Ubisoft Connect, Heroic and Lutris have installed,
+            and looks through the usual install folders on every drive.
           </DialogDescription>
         </DialogHeader>
 
