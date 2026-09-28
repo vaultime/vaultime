@@ -72,6 +72,17 @@ pub const DEFAULT_MIN_BACKUP_INTERVAL_SECS: i64 = 15 * SECS_PER_MINUTE;
 /// the artwork it just uploaded.
 pub const DEFAULT_STALE_PENDING_BACKUP_SECS: i64 = 60 * SECS_PER_MINUTE;
 
+// Beta applications
+
+/// Longest email address a beta application takes, the limit of the address format.
+pub const BETA_EMAIL_MAX_CHARS: usize = 254;
+/// Longest note on a beta application.
+pub const BETA_NOTE_MAX_CHARS: usize = 500;
+/// Applications taken per hour from everyone together. Only stops floods.
+pub const BETA_APPLICATIONS_PER_HOUR: i64 = 30;
+/// Days after which an unanswered application is deleted.
+pub const BETA_APPLICATION_RETENTION_DAYS: i32 = 90;
+
 // Artwork blobs
 
 /// Most blob ids a client may ask about or refer to in one request.

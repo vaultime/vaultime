@@ -85,6 +85,15 @@ pub struct CreateBackupRequest {
     pub blob_ids: Vec<String>,
 }
 
+#[derive(Debug, Serialize, FromRow)]
+pub struct BetaApplicationResponse {
+    pub id: Uuid,
+    pub email: String,
+    pub platform: String,
+    pub note: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct MissingBlobsRequest {
     pub ids: Vec<String>,

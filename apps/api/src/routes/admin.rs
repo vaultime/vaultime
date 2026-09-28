@@ -67,7 +67,7 @@ pub async fn create_invite(
     ))
 }
 
-fn require_admin(auth: &AuthenticatedAccount) -> AppResult<()> {
+pub(super) fn require_admin(auth: &AuthenticatedAccount) -> AppResult<()> {
     if auth.role != "admin" {
         return Err(AppError::forbidden("admin access is required"));
     }
