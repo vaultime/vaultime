@@ -41,8 +41,8 @@ apps/api/         Self-hosted cloud backup API
 deploy/vps/       Server install script, systemd unit and admin tools
 docs/             Legal pages and landing page (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
-scripts/          Dev helpers: Linux checks, packaging, API and site deploy, release
-                  upload, logo, UI screenshots
+scripts/          Dev helpers: Linux checks, packaging, cloud round trip, API and
+                  site deploy, release upload, logo, UI screenshots
 assets/           Brand assets
 ```
 
@@ -71,6 +71,9 @@ From a Windows machine, with Docker:
 - `bash scripts/linux-check.sh` runs the Linux CI checks for both crates.
 - `bash scripts/linux-package.sh` builds the Linux packages on Ubuntu 22.04
   and installs and starts them on Debian, Ubuntu, Fedora, Arch and openSUSE.
+- `bash scripts/cloud-e2e.sh` runs the API with PostgreSQL in Docker and a
+  cloud backup round trip of the desktop core against it. Run it after
+  changes to the backup format or the backup API.
 
 Run the checks for everything you touched before calling work done, on both
 Windows and Linux when platform code changed. CI treats warnings as errors.
