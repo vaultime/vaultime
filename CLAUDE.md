@@ -30,6 +30,8 @@ service that runs on our own VPS.
 - Windows uses Win32 APIs for foreground and idle detection. Linux talks to
   the X server directly (x11rb, XWayland included) and reads GNOME's idle
   monitor over D-Bus on Wayland, with a CPU heuristic as the fallback.
+- Controller input counts as activity: XInput on Windows, the evdev devices
+  of controllers on Linux. Never open keyboards or mice directly.
 
 ## Layout
 

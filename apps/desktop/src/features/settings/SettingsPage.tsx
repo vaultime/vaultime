@@ -330,9 +330,7 @@ export function SettingsPage() {
             <span className="text-soft">
               {(controllers ?? NO_CONTROLLERS).title}
               {controllers && diagnostics && (
-                <span className="text-faint">
-                  , <span className="font-mono">{diagnostics.controllers_connected}</span> connected
-                </span>
+                <span className="text-faint tabular-nums">, {diagnostics.controllers_connected} connected</span>
               )}
             </span>
           </PageRow>
