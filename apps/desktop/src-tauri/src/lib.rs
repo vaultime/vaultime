@@ -189,6 +189,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 fn enable_autostart(app: &tauri::AppHandle) {
     use tauri_plugin_autostart::ManagerExt;
 
+    // The autostart library creates ~/.config/autostart but not ~/.config.
+    #[cfg(target_os = "linux")]
+    if let Some(home) = dirs::home_dir() {
+        let _ = fs::create_dir_all(home.join(".config").join("autostart"));
+    }
+
     match app.autolaunch().enable() {
         Ok(()) => info!("new install, starts with the system from now on"),
         Err(error) => log::warn!("could not turn on starting with the system: {error}"),
