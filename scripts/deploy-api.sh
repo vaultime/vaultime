@@ -32,7 +32,8 @@ MSYS_NO_PATHCONV=1 docker run --rm \
     cp /target/release/vaultime-api /out/
   '
 
-tools=(install-api.sh vaultime-api.service bootstrap-admin-account.py generate-cloud-invite.py)
+tools=(install-api.sh vaultime-api.service vaultime-db-backup.service vaultime-db-backup.timer
+  bootstrap-admin-account.py generate-cloud-invite.py)
 for file in "${tools[@]}"; do cp "$repo/deploy/vps/$file" "$stage/"; done
 
 "$ssh_cmd" "$host" 'rm -rf /tmp/vaultime-deploy && mkdir -p /tmp/vaultime-deploy'

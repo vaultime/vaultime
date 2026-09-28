@@ -12,12 +12,35 @@ ExecStart=/srv/vaultime/api/current/vaultime-api
 Restart=on-failure
 RestartSec=5
 
-# The service only needs its backup folders. Everything else is read-only.
+# The API only needs the network, PostgreSQL and its two data folders.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
 ReadWritePaths=/srv/vaultime/backups /srv/vaultime/tmp
+UMask=0077
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target

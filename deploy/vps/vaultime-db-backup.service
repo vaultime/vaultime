@@ -1,0 +1,20 @@
+[Unit]
+Description=Vaultime database dump
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+UMask=0077
+# One custom format dump per day, the last 14 days are kept.
+ExecStart=/bin/sh -c 'pg_dump --format=custom --file=/var/backups/vaultime/vaultime-$(date +%%Y-%%m-%%d).dump vaultime'
+ExecStartPost=/usr/bin/find /var/backups/vaultime -name 'vaultime-*.dump' -mtime +14 -delete
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/backups/vaultime

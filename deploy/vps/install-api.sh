@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Installs or updates the Vaultime API on Ubuntu 24.04. Run as root with the
-# release binary and vaultime-api.service next to this script. Running it
-# again updates the binary and keeps the database and secrets. Caddy has to
+# release binary and the systemd units (vaultime-api.service and the
+# vaultime-db-backup service and timer) next to this script. Running it again
+# updates the binary and keeps the database and secrets. Caddy has to
 # be installed already. The script adds a site to its config.
 #
 #   install-api.sh <domain>     the public API host, for example api.example.com
@@ -60,9 +61,18 @@ EOF
   chmod 0640 "$env_file"
 fi
 
-install -m 0755 "$here/vaultime-api" /srv/vaultime/api/current/vaultime-api.new
-mv -f /srv/vaultime/api/current/vaultime-api.new /srv/vaultime/api/current/vaultime-api
-install -m 0644 "$here/vaultime-api.service" /etc/systemd/system/vaultime-api.service
+# Keep the running version, so a release that does not come up is rolled back.
+binary=/srv/vaultime/api/current/vaultime-api
+unit=/etc/systemd/system/vaultime-api.service
+[ -f "$binary" ] && cp -f "$binary" "$binary.previous"
+[ -f "$unit" ] && cp -f "$unit" "$unit.previous"
+install -m 0755 "$here/vaultime-api" "$binary.new"
+mv -f "$binary.new" "$binary"
+install -m 0644 "$here/vaultime-api.service" "$unit"
+
+# Nightly database dumps, readable by root and postgres only.
+install -d -o postgres -g postgres -m 0700 /var/backups/vaultime
+install -m 0644 "$here/vaultime-db-backup.service" "$here/vaultime-db-backup.timer" /etc/systemd/system/
 
 # Admin tools for creating the first admin account and invites.
 install -d -o root -g root -m 0700 /srv/vaultime/tools
@@ -70,15 +80,28 @@ for tool in bootstrap-admin-account.py generate-cloud-invite.py; do
   if [ -f "$here/$tool" ]; then install -m 0700 "$here/$tool" /srv/vaultime/tools/; fi
 done
 systemctl daemon-reload
+systemctl enable --now vaultime-db-backup.timer >/dev/null
 systemctl enable vaultime-api >/dev/null
 systemctl restart vaultime-api
 
-for _ in $(seq 1 20); do
-  curl -fsS http://127.0.0.1:9005/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
-curl -fsS http://127.0.0.1:9005/healthz >/dev/null \
-  || { journalctl -u vaultime-api -n 30 --no-pager; exit 1; }
+healthy() {
+  for _ in $(seq 1 20); do
+    curl -fsS http://127.0.0.1:9005/healthz >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+if ! healthy; then
+  journalctl -u vaultime-api -n 30 --no-pager
+  if [ -f "$binary.previous" ]; then
+    mv -f "$binary.previous" "$binary"
+    [ -f "$unit.previous" ] && mv -f "$unit.previous" "$unit"
+    systemctl daemon-reload
+    systemctl restart vaultime-api
+    healthy && echo "The new release did not come up, the previous one runs again" >&2
+  fi
+  exit 1
+fi
 echo "API is up on 127.0.0.1:9005"
 
 # Add the site to Caddy once. Other sites on the box stay untouched, and a
