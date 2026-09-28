@@ -176,11 +176,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         enable_autostart(app.handle());
     }
 
-    // The window starts hidden. A login item starts in the tray, when there is one.
-    let tray = tray::create(app.handle());
-    let start_in_tray = tray.available && std::env::args().any(|arg| arg == tray::MINIMIZED_ARG);
-    app.manage(tray);
-    if !start_in_tray {
+    // The window starts hidden and a login item leaves it that way, in the tray
+    // or without one. Opening Vaultime again shows the window of this instance.
+    app.manage(tray::create(app.handle()));
+    if !std::env::args().any(|arg| arg == tray::MINIMIZED_ARG) {
         tray::show_main_window(app.handle());
     }
 
