@@ -12,6 +12,7 @@
   --mono: "JetBrains Mono", ui-monospace, monospace;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 html { background: var(--ink); color-scheme: dark; }
 body { font-family: var(--sans); color: var(--text); background: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
@@ -64,6 +65,23 @@ section.doc .lead { margin-top: 10px; font-size: 14px; color: var(--faint); }
 .buttons { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 8px; }
 .row h3 { font-size: 15px; font-weight: 500; }
 .row p { margin-top: 4px; max-width: 560px; font-size: 14px; color: var(--faint); }
+.release { margin-top: 14px; max-width: 260px; font-size: 14px; color: var(--soft); }
+
+/* Beta application */
+.apply { display: flex; flex-direction: column; gap: 22px; max-width: 560px; }
+.field { display: flex; flex-direction: column; gap: 8px; border: 0; }
+.field input, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid var(--hairline); border-radius: 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 15px; }
+.field textarea { resize: vertical; min-height: 88px; }
+.field input:focus, .field textarea:focus { outline: 2px solid var(--violet); outline-offset: 1px; border-color: transparent; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 15px; }
+.choices label, .consent { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.consent { align-items: flex-start; font-size: 14px; color: var(--soft); }
+.consent input { margin-top: 4px; }
+.consent a { color: var(--violet); }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--violet); width: 16px; height: 16px; }
+.bot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.button { border: 0; cursor: pointer; font-family: inherit; }
 
 /* Text pages: the legal pages and the changelog. */
 .page { padding: 64px 0 80px; border-bottom: 1px solid var(--rule); }
@@ -85,7 +103,7 @@ footer nav { gap: 20px; font-size: 13px; }
 
 @media (max-width: 760px) {
   .wrap { padding: 0 16px; }
-  nav.top a:not(:last-child) { display: none; }
+  nav.top a:nth-child(-n+2) { display: none; }
   .hero { padding: 56px 0 48px; }
   .day, section.doc { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }

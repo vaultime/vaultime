@@ -152,6 +152,11 @@ if [ -f "$caddy_site" ]; then cp "$caddy_site" "$caddy_site.before-vaultime"; fi
 cat >"$caddy_site" <<EOF
 $domain {
 	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+	}
 
 	handle /v1/* {
 		reverse_proxy 127.0.0.1:9005
@@ -170,12 +175,24 @@ $domain {
 
 	handle {
 		root * $site_root
-		header {
-			X-Content-Type-Options nosniff
-			Referrer-Policy no-referrer
-			Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
-		}
 		file_server
+	}
+
+	# Missing files get pages of the site, a download before the first
+	# release its own. Errors of the API pass through as they are.
+	handle_errors {
+		@missing_download expression \`{err.status_code} == 404 && {http.request.orig_uri.path}.startsWith("/downloads/")\`
+		@missing expression \`{err.status_code} == 404\`
+		handle @missing_download {
+			root * $site_root
+			rewrite * /download-soon.html
+			file_server
+		}
+		handle @missing {
+			root * $site_root
+			rewrite * /404.html
+			file_server
+		}
 	}
 }
 EOF

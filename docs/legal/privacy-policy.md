@@ -34,22 +34,26 @@ The server does not store IP addresses in its database.
 
 This data is processed to provide the cloud backup you signed up for (Art. 6(1)(b) GDPR).
 
+**Beta applications.** If you apply for cloud access on the website, the server stores the email address, the platform and the note you enter, and when you applied. They are used only to answer you and to send an invite (Art. 6(1)(b) GDPR, steps you ask for before an account exists).
+
 ## 3. Data We Do Not Collect
 
 - No analytics or telemetry.
 - No crash reports.
 - No advertising identifiers or behavioral profiling.
+- No cookies and no tracking on the website. It loads nothing from other services, its fonts come from the same server.
 - No data from other programs. To detect games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It notices that input happened, never which key or button, and keeps only the resulting active and idle time.
 
 ## 4. Third Parties
 
-Cloud backup runs on a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host, which sees your IP address like any web server does.
+Cloud backup runs on a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. The website, the downloads and app updates come from the same server over HTTPS. Like any web server it sees your IP address while it answers a request, and it keeps no access logs.
 
 ## 5. Retention
 
 - **Local data** stays until you delete it or the app's data folder.
 - **Cloud backups** stay until you delete them in the app. When your account reaches the backup limit, a new upload replaces the oldest backup. Unfinished uploads are removed after about an hour.
 - **Accounts** stay until you ask for deletion.
+- **Beta applications** are deleted once answered, and after 90 days at the latest.
 
 ## 6. Deletion
 

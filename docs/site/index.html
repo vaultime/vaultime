@@ -7,6 +7,7 @@
   <meta name="description" content="A local-first game playtime tracker for Windows and Linux. Active and idle time apart, sessions written like a journal, honest trust labels and optional encrypted cloud backup." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2221.5%22 fill=%22%231A1230%22/%3E%3Cg transform=%22translate(-1.7 -1.7) scale(1.0527)%22%3E%3Crect x=%227%22 y=%227%22 width=%2250%22 height=%2250%22 rx=%2215%22 fill=%22none%22 stroke=%22%23F1EBFA%22 stroke-width=%223.5%22/%3E%3Cpath d=%22M25.5 21.3L32 32.5L41 17%22 fill=%22none%22 stroke=%22%23F1EBFA%22 stroke-width=%225.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 44.5v3.5%22 fill=%22none%22 stroke=%22%23F1EBFA%22 stroke-width=%223.5%22 stroke-linecap=%22round%22/%3E%3Ccircle cx=%2232%22 cy=%2232.5%22 r=%223.4%22 fill=%22%239D7CFF%22/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="site.css" />
+  <script src="site.js" defer></script>
 </head>
 <body>
   <header>
@@ -24,6 +25,7 @@
         <a href="#counting">How it counts</a>
         <a href="#features">What you get</a>
         <a href="#download">Download</a>
+        <a href="#beta">Cloud beta</a>
       </nav>
     </div>
   </header>
@@ -117,6 +119,7 @@
         <div>
           <h2 class="display">Download</h2>
           <p class="lead">Free, for Windows and Linux.</p>
+          <p class="release" id="release" hidden></p>
         </div>
         <div>
           <div class="row">
@@ -135,6 +138,37 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="doc" id="beta">
+        <div>
+          <h2 class="display">Cloud beta</h2>
+          <p class="lead">Cloud backup is invite-only while it is tested. Tell us where to send an invite.</p>
+        </div>
+        <form class="apply" method="post" action="/v1/beta/apply">
+          <label class="field">
+            <span class="caps">Email</span>
+            <input type="email" name="email" required maxlength="254" autocomplete="email" />
+          </label>
+          <fieldset class="field">
+            <legend class="caps">You play on</legend>
+            <div class="choices">
+              <label><input type="radio" name="platform" value="windows" required checked /> Windows</label>
+              <label><input type="radio" name="platform" value="linux" /> Linux</label>
+              <label><input type="radio" name="platform" value="both" /> Both</label>
+            </div>
+          </fieldset>
+          <label class="field">
+            <span class="caps">Anything we should know, optional</span>
+            <textarea name="note" rows="3" maxlength="500"></textarea>
+          </label>
+          <label class="bot" aria-hidden="true">Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
+          <label class="consent">
+            <input type="checkbox" name="consent" value="yes" required />
+            <span>Vaultime may keep my email and note to answer this application, as the <a href="/privacy.html">privacy policy</a> describes.</span>
+          </label>
+          <div><button class="button solid" type="submit">Apply</button></div>
+        </form>
       </section>
     </div>
   </main>
