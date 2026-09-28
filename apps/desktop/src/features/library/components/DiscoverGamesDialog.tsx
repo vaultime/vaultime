@@ -30,6 +30,7 @@ const SOURCE_LABELS: Record<string, string> = {
   rockstar: "Rockstar",
   xbox: "Xbox",
   amazon: "Amazon Games",
+  itch: "itch.io",
   gog: "GOG",
   heroic: "Heroic",
   lutris: "Lutris",
@@ -162,8 +163,8 @@ export function DiscoverGamesDialog({
         <DialogHeader>
           <DialogTitle>Discover games</DialogTitle>
           <DialogDescription>
-            Reads what Steam, Epic, GOG Galaxy, Battle.net, Riot, HoYoPlay, Ubisoft Connect, Heroic and Lutris have installed,
-            and looks through the usual install folders on every drive.
+            Reads what Steam, Xbox, Epic, GOG, EA, Ubisoft, Battle.net, Riot, Rockstar, Amazon, itch.io and other
+            launchers have installed, and looks through the usual install folders on every drive.
           </DialogDescription>
         </DialogHeader>
 

@@ -9,8 +9,10 @@ pub mod amazon;
 #[cfg(windows)]
 pub mod ea;
 pub mod epic;
+mod fuel;
 pub mod gog;
 pub mod heroic;
+pub mod itch;
 #[cfg(target_os = "linux")]
 pub mod lutris;
 pub mod metadata;
@@ -59,6 +61,7 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     let mut games = epic::discover(&existing);
     games.extend(gog::discover(&existing));
     games.extend(heroic::discover(&existing));
+    games.extend(itch::discover(&existing));
     #[cfg(windows)]
     {
         games.extend(registry::discover(&existing));

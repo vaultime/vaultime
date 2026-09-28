@@ -372,6 +372,7 @@ fn observe_games(
                         | "rockstar"
                         | "xbox"
                         | "amazon"
+                        | "itch"
                 )
             ) {
                 game.install_folder.as_deref()

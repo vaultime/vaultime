@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 //! Games that launchers register with Windows instead of keeping library
-//! files: Battle.net, Rockstar, Riot, `HoYoPlay` and Ubisoft Connect. The
-//! registry is read first, the program of each game is looked up on disk
-//! afterwards.
+//! files: Battle.net, Rockstar, Riot, `HoYoPlay`, Ubisoft Connect, Legacy Games
+//! and Big Fish. The registry is read first, the program of each game is
+//! looked up on disk afterwards.
 
 use std::collections::HashSet;
 use std::fs;
@@ -54,6 +54,10 @@ const UNINSTALL_32: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersi
 /// The global launcher and the one for mainland China.
 const HOYOPLAY: [&str; 2] = [r"Software\Cognosphere\HYP", r"Software\miHoYo\HYP"];
 const UBISOFT_INSTALLS: &str = r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs";
+const LEGACY_GAMES: &str = r"Software\Legacy Games";
+const BIG_FISH_GAMES: &str = r"SOFTWARE\WOW6432Node\Big Fish Games\Persistence\GameDB";
+/// The Big Fish client lists itself among its games.
+const BIG_FISH_CLIENT: &str = "F7315T1L1";
 
 /// Games of launchers that register them under their publisher name. Their
 /// uninstall entries often name the game program as icon.
@@ -331,7 +335,61 @@ fn candidates() -> Vec<Candidate> {
     candidates.extend(riot(&programs, &riot_products()));
     candidates.extend(hoyoplay(&hoyoplay_installs(), &programs));
     candidates.extend(ubisoft(&ubisoft_installs(), &programs));
+    candidates.extend(legacy_games());
+    candidates.extend(big_fish_games());
     candidates
+}
+
+/// Legacy Games keeps a key per game with its title, folder and program.
+fn legacy_games() -> Vec<Candidate> {
+    let Ok(games) = CURRENT_USER.open(LEGACY_GAMES) else {
+        return Vec::new();
+    };
+    subkeys(&games)
+        .into_iter()
+        .filter_map(|id| {
+            let game = games.open(&id).ok()?;
+            let folder = text(&game, "InstDir");
+            let program = text(&game, "GameExe");
+            (!folder.is_empty() && !program.is_empty()).then(|| Candidate {
+                title: text(&game, "ProductName"),
+                program: Some(
+                    Path::new(&folder)
+                        .join(program)
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                folder: clean_folder(&folder),
+                source: "legacy",
+                source_id: id,
+            })
+        })
+        .filter(|candidate| !candidate.title.is_empty())
+        .collect()
+}
+
+/// Big Fish keeps a key per game with its title and program.
+fn big_fish_games() -> Vec<Candidate> {
+    let Ok(games) = LOCAL_MACHINE.open(BIG_FISH_GAMES) else {
+        return Vec::new();
+    };
+    subkeys(&games)
+        .into_iter()
+        .filter(|sku| sku != BIG_FISH_CLIENT)
+        .filter_map(|sku| {
+            let game = games.open(&sku).ok()?;
+            let program = text(&game, "ExecutablePath");
+            let folder = Path::new(&program).parent()?.to_string_lossy().into_owned();
+            let title = text(&game, "Name");
+            (!title.is_empty()).then_some(Candidate {
+                title,
+                folder,
+                program: Some(program),
+                source: "bigfish",
+                source_id: sku,
+            })
+        })
+        .collect()
 }
 
 fn text(key: &Key, name: &str) -> String {

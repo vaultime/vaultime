@@ -40,6 +40,7 @@ const SOURCE_LABELS: Record<string, string> = {
   rockstar: "Rockstar",
   xbox: "Xbox",
   amazon: "Amazon Games",
+  itch: "itch.io",
   gog: "GOG",
   heroic: "Heroic",
   lutris: "Lutris",
