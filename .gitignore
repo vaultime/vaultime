@@ -31,9 +31,10 @@ PLAN.md
 __pycache__/
 *.pyc
 
-# Output of scripts/linux-package.sh and scripts/deploy-api.sh
+# Output of scripts/linux-package.sh, scripts/deploy-api.sh and scripts/build-site.py
 dist-linux/
 dist-api/
+dist-site/
 
 # Local Claude Code settings
 .claude/settings.local.json
