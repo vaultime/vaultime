@@ -44,6 +44,7 @@ import type {
   CloudCreateAdminInviteInput,
   CloudDevice,
 } from "@/lib/types";
+import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError } from "@/lib/utils";
 import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
 
@@ -61,6 +62,18 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef<CloudAuthSession | null>(null);
   const bootstrappedRef = useRef(false);
   const appVersionRef = useRef<string | null>(null);
+  const [refreshWithToken] = useState(() =>
+    createTokenRefresher<CloudAuthSession>(
+      (refreshToken) =>
+        cloudPostJson<CloudAuthSession>("/v1/auth/refresh", {
+          refresh_token: refreshToken,
+        }),
+      () => sessionRef.current,
+      (next) => {
+        sessionRef.current = next;
+      },
+    ),
+  );
   const restoreDeviceRegistration = useEffectEvent(
     async (activeSession: CloudAuthSession) => {
       await tryRegisterDeviceForSession(activeSession);
@@ -100,11 +113,11 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
   const accountId = session?.user.id ?? null;
   useEffect(() => {
-    if (!accountId || !backupKeyReady || !autoBackup) return;
+    if (initializing || !accountId || !backupKeyReady || !autoBackup) return;
     void backUpIfDue();
     const timer = window.setInterval(() => void backUpIfDue(), CLOUD_AUTO_BACKUP_CHECK_MS);
     return () => window.clearInterval(timer);
-  }, [accountId, backupKeyReady, autoBackup]);
+  }, [initializing, accountId, backupKeyReady, autoBackup]);
 
   async function setAutoBackup(enabled: boolean) {
     setAutoBackupState(enabled);
@@ -175,7 +188,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshWithToken]);
 
   function applySession(next: CloudAuthSession) {
     sessionRef.current = next;
@@ -427,12 +440,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
       throw error;
     }
-  }
-
-  async function refreshWithToken(refreshToken: string) {
-    return cloudPostJson<CloudAuthSession>("/v1/auth/refresh", {
-      refresh_token: refreshToken,
-    });
   }
 
   async function registerDeviceForSession(activeSession: CloudAuthSession) {
