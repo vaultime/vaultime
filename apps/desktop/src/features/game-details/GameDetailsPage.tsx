@@ -250,18 +250,24 @@ function GamePage({ gameId }: { gameId: string }) {
                 No executable set, so this game is not tracked yet. Edit it to pick one.
               </p>
             )}
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => setEditing(game)}>
                 <Pencil className="size-3.5" />
                 Edit
               </Button>
               <Button variant="ghost" size="sm" className="text-faint" onClick={() => void setHidden(!game.is_hidden)}>
                 {game.is_hidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                {game.is_hidden ? "Show in library" : "Hide"}
+                {game.is_hidden ? "Unhide" : "Hide"}
               </Button>
-              <Button variant="ghost" size="sm" className="text-faint" onClick={() => setDeleting(game)}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-faint"
+                aria-label="Delete"
+                title="Delete"
+                onClick={() => setDeleting(game)}
+              >
                 <Trash2 className="size-3.5" />
-                Delete
               </Button>
             </div>
           </AsideSection>
