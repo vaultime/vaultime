@@ -12,6 +12,9 @@ use std::time::Duration;
 pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// Grace period so a quick alt-tab does not count as idle.
 pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
+/// How long the tracker reuses install folders with their links resolved
+/// before it asks the file system again.
+pub const INSTALL_FOLDER_REFRESH: Duration = Duration::from_mins(10);
 /// Idle threshold when the `idle_threshold_seconds` setting is missing or invalid.
 /// Same as `DEFAULT_IDLE_THRESHOLD_SECONDS` in `lib/constants.ts`.
 pub const DEFAULT_IDLE_THRESHOLD_SECS: u64 = 300;

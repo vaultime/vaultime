@@ -15,8 +15,8 @@ use sysinfo::System;
 
 use crate::constants::{
     CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS,
-    DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE, MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS,
-    POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD,
+    DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS,
+    MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
@@ -25,7 +25,7 @@ use crate::discovery::metadata::is_likely_game_executable;
 use crate::integrity;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{
-    RunningProcess, matches_executable, refresh_running_processes, runs_from_folder,
+    InstallFolder, RunningProcess, cpu_usage, matches_executable, refresh_running_processes,
 };
 
 /// Tracks a currently running game session.
@@ -204,7 +204,8 @@ fn poll_loop(
     tick_lock: &Mutex<()>,
 ) {
     let mut active: HashMap<String, ActiveSession> = HashMap::new();
-    let mut system = System::new_all();
+    let mut system = System::new();
+    let mut folders = FolderCache::default();
 
     close_orphaned_sessions(db);
 
@@ -213,7 +214,7 @@ fn poll_loop(
             let _tick = tick_lock.lock().unwrap_or_else(PoisonError::into_inner);
             // Checked again because `pause` may have won the race for the lock.
             if !paused.load(Ordering::SeqCst)
-                && let Err(e) = poll_tick(db, device_id, &mut system, &mut active)
+                && let Err(e) = poll_tick(db, device_id, &mut system, &mut folders, &mut active)
             {
                 error!("tracking poll error: {e}");
             }
@@ -246,6 +247,7 @@ fn poll_tick(
     db: &Database,
     device_id: &str,
     system: &mut System,
+    folders: &mut FolderCache,
     active: &mut HashMap<String, ActiveSession>,
 ) -> crate::error::Result<()> {
     let now = Instant::now();
@@ -254,7 +256,14 @@ fn poll_tick(
     let processes = refresh_running_processes(system);
     let activity_snapshot = capture_activity_snapshot();
 
-    let observed_games = observe_games(&tracked_games, &processes, &activity_snapshot);
+    folders.expire();
+    let observed_games = observe_games(
+        &tracked_games,
+        &processes,
+        &activity_snapshot,
+        system,
+        folders,
+    );
 
     for (game_id, observation) in &observed_games {
         if observation.is_running && !active.contains_key(game_id) {
@@ -351,59 +360,120 @@ fn observe_games(
     games: &[Game],
     processes: &[RunningProcess],
     activity_snapshot: &ActivitySnapshot,
+    system: &mut System,
+    folders: &mut FolderCache,
 ) -> HashMap<String, GameObservation> {
-    let mut observed_games = HashMap::new();
-    for game in games {
-        if let Some(ref exe_path) = game.executable_path {
-            // Launchers give every game a folder of its own, so any game program
-            // in it counts, whichever build or launcher step is running.
-            let own_folder = if matches!(
-                game.launcher_source.as_deref(),
-                Some(
-                    "steam"
-                        | "epic"
-                        | "gog"
-                        | "heroic"
-                        | "battlenet"
-                        | "riot"
-                        | "hoyoplay"
-                        | "ubisoft"
-                        | "ea"
-                        | "rockstar"
-                        | "xbox"
-                        | "amazon"
-                        | "itch"
-                )
-            ) {
-                game.install_folder.as_deref()
-            } else {
-                None
-            };
-            observed_games.insert(
-                game.id.clone(),
-                observe_game_processes(processes, exe_path, own_folder, activity_snapshot),
-            );
+    let matched: Vec<(&str, Vec<&RunningProcess>)> = games
+        .iter()
+        .filter_map(|game| Some((game.id.as_str(), game_processes(game, processes, folders)?)))
+        .collect();
+
+    // CPU usage only stands in where the foreground window or input cannot be
+    // read, so it is measured there only and for the game processes alone.
+    let cpu = if activity_snapshot.foreground_supported && activity_snapshot.idle_supported {
+        HashMap::new()
+    } else {
+        let pids: Vec<u32> = matched
+            .iter()
+            .flat_map(|(_, found)| found.iter().map(|process| process.pid))
+            .collect();
+        cpu_usage(system, &pids)
+    };
+
+    matched
+        .into_iter()
+        .map(|(game_id, found)| {
+            (
+                game_id.to_owned(),
+                observe_game_processes(&found, activity_snapshot, &cpu),
+            )
+        })
+        .collect()
+}
+
+/// The running processes of a game, or `None` for a game without an
+/// executable.
+fn game_processes<'a>(
+    game: &Game,
+    processes: &'a [RunningProcess],
+    folders: &mut FolderCache,
+) -> Option<Vec<&'a RunningProcess>> {
+    let exe_path = game.executable_path.as_deref()?;
+    // Launchers give every game a folder of its own, so any game program
+    // in it counts, whichever build or launcher step is running.
+    let own_folder = if matches!(
+        game.launcher_source.as_deref(),
+        Some(
+            "steam"
+                | "epic"
+                | "gog"
+                | "heroic"
+                | "battlenet"
+                | "riot"
+                | "hoyoplay"
+                | "ubisoft"
+                | "ea"
+                | "rockstar"
+                | "xbox"
+                | "amazon"
+                | "itch"
+        )
+    ) {
+        game.install_folder
+            .as_deref()
+            .map(|folder| folders.get(folder))
+    } else {
+        None
+    };
+    Some(
+        processes
+            .iter()
+            .filter(|process| {
+                matches_executable(process, exe_path)
+                    || own_folder.as_ref().is_some_and(|folder| {
+                        folder.contains(process) && is_likely_game_executable(&process.name)
+                    })
+            })
+            .collect(),
+    )
+}
+
+/// Install folders with their links resolved, so a tick needs no file
+/// system calls. Links are resolved again after `INSTALL_FOLDER_REFRESH`.
+struct FolderCache {
+    folders: HashMap<String, InstallFolder>,
+    resolved_at: Instant,
+}
+
+impl Default for FolderCache {
+    fn default() -> Self {
+        Self {
+            folders: HashMap::new(),
+            resolved_at: Instant::now(),
         }
     }
-    observed_games
+}
+
+impl FolderCache {
+    fn expire(&mut self) {
+        if self.resolved_at.elapsed() >= INSTALL_FOLDER_REFRESH {
+            self.folders.clear();
+            self.resolved_at = Instant::now();
+        }
+    }
+
+    fn get(&mut self, folder: &str) -> &InstallFolder {
+        self.folders
+            .entry(folder.to_owned())
+            .or_insert_with(|| InstallFolder::new(folder))
+    }
 }
 
 fn observe_game_processes(
-    processes: &[RunningProcess],
-    executable_path: &str,
-    own_folder: Option<&str>,
+    matched_processes: &[&RunningProcess],
     activity_snapshot: &ActivitySnapshot,
+    cpu: &HashMap<u32, f32>,
 ) -> GameObservation {
-    let matched_processes: Vec<&RunningProcess> = processes
-        .iter()
-        .filter(|process| {
-            matches_executable(process, executable_path)
-                || own_folder.is_some_and(|folder| {
-                    runs_from_folder(process, folder) && is_likely_game_executable(&process.name)
-                })
-        })
-        .collect();
-
     if matched_processes.is_empty() {
         return GameObservation::default();
     }
@@ -416,9 +486,10 @@ fn observe_game_processes(
                 .any(|process| process.pid == foreground_pid)
         });
 
-    let has_process_activity = matched_processes
-        .iter()
-        .any(|process| process.cpu_usage >= PROCESS_ACTIVITY_CPU_THRESHOLD);
+    let has_process_activity = matched_processes.iter().any(|process| {
+        cpu.get(&process.pid)
+            .is_some_and(|usage| *usage >= PROCESS_ACTIVITY_CPU_THRESHOLD)
+    });
 
     GameObservation {
         is_running: true,
@@ -645,7 +716,7 @@ mod tests {
         let _ = child.wait();
         let mut system = System::new();
         for process in refresh_running_processes(&mut system) {
-            if runs_from_folder(&process, &folder)
+            if crate::platform::process::runs_from_folder(&process, &folder)
                 && let Some(running) = system.process(sysinfo::Pid::from_u32(process.pid))
             {
                 running.kill();

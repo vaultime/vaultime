@@ -3,7 +3,9 @@
 
 //! Process enumeration and game executable matching.
 
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use std::collections::HashMap;
+
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// A snapshot of a running process relevant for game matching.
 #[derive(Debug, Clone)]
@@ -17,19 +19,17 @@ pub struct RunningProcess {
     /// First word of the command line. Wine puts the Windows path of the game
     /// there, while the executable path is Wine's own.
     pub command: Option<String>,
-    /// Percent CPU usage since the previous refresh.
-    pub cpu_usage: f32,
 }
 
 /// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
 pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
     // Paths and command lines do not change while a process runs, so they are
-    // read once per process.
+    // read once per process. CPU usage is left out, reading it for every
+    // process costs twice as much as the whole list.
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
         ProcessRefreshKind::nothing()
-            .with_cpu()
             .with_exe(UpdateKind::OnlyIfNotSet)
             .with_cmd(UpdateKind::OnlyIfNotSet),
     );
@@ -44,8 +44,21 @@ pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
                 .cmd()
                 .first()
                 .map(|arg| arg.to_string_lossy().into_owned()),
-            cpu_usage: p.cpu_usage(),
         })
+        .collect()
+}
+
+/// CPU usage in percent of the given processes since their previous
+/// measurement. A process measured for the first time reads 0.
+pub fn cpu_usage(sys: &mut System, pids: &[u32]) -> HashMap<u32, f32> {
+    let pids: Vec<Pid> = pids.iter().copied().map(Pid::from_u32).collect();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&pids),
+        false,
+        ProcessRefreshKind::nothing().with_cpu(),
+    );
+    pids.iter()
+        .filter_map(|pid| Some((pid.as_u32(), sys.process(*pid)?.cpu_usage())))
         .collect()
 }
 
@@ -64,12 +77,12 @@ pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bo
     let Some(exe) = &process.exe_path else {
         return names_equal(&process.name, game_name);
     };
-    if paths_equal(exe, game_executable) {
-        return true;
-    }
 
+    // Names first, they rule out almost every process without allocating.
     match file_name(exe) {
-        Some(exe_name) if names_equal(exe_name, game_name) => same_file(exe, game_executable),
+        Some(exe_name) if names_equal(exe_name, game_name) => {
+            paths_equal(exe, game_executable) || same_file(exe, game_executable)
+        }
         // A loader such as Wine. Linux cuts process names to 15 characters,
         // so the Windows path at the start of the command line is checked too.
         Some(exe_name) if !names_equal(exe_name, &process.name) => {
@@ -85,24 +98,44 @@ pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bo
 }
 
 /// Whether the process runs a program from inside `folder`, at any depth.
-/// The folder is also compared with links resolved, so a library behind a
-/// junction or symlink still counts.
 pub fn runs_from_folder(process: &RunningProcess, folder: &str) -> bool {
-    let Some(exe) = &process.exe_path else {
-        return false;
-    };
-    let exe = path_key(exe);
-    let resolved = std::fs::canonicalize(folder)
-        .ok()
-        .map(|path| strip_verbatim_prefix(&path.to_string_lossy()).to_owned());
-    std::iter::once(folder.to_owned())
-        .chain(resolved)
-        .any(|candidate| is_inside(&exe, &path_key(&candidate)))
+    InstallFolder::new(folder).contains(process)
+}
+
+/// A game's install folder, resolved once, so checking many processes
+/// against it needs no file system calls. It is also compared with links
+/// resolved, so a library behind a junction or symlink still counts.
+pub struct InstallFolder {
+    keys: Vec<String>,
+}
+
+impl InstallFolder {
+    pub fn new(folder: &str) -> Self {
+        let resolved = std::fs::canonicalize(folder)
+            .ok()
+            .map(|path| strip_verbatim_prefix(&path.to_string_lossy()).to_owned());
+        let mut keys: Vec<String> = Vec::new();
+        for candidate in std::iter::once(folder).chain(resolved.as_deref()) {
+            let key = path_key(candidate).trim_end_matches(['/', '\\']).to_owned();
+            if !key.is_empty() && !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        Self { keys }
+    }
+
+    /// Whether the process runs a program from inside the folder, at any depth.
+    pub fn contains(&self, process: &RunningProcess) -> bool {
+        let Some(exe) = &process.exe_path else {
+            return false;
+        };
+        let exe = path_key(exe);
+        self.keys.iter().any(|folder| is_inside(&exe, folder))
+    }
 }
 
 /// True when `path` lies below `folder`, both given as path keys.
 fn is_inside(path: &str, folder: &str) -> bool {
-    let folder = folder.trim_end_matches(['/', '\\']);
     !folder.is_empty()
         && path.len() > folder.len()
         && path.starts_with(folder)
@@ -153,9 +186,12 @@ pub fn path_key(path: &str) -> String {
     path.to_owned()
 }
 
+/// Ignores case like `path_key`, without allocating.
 #[cfg(windows)]
 fn names_equal(a: &str, b: &str) -> bool {
-    a.eq_ignore_ascii_case(b)
+    a.chars()
+        .flat_map(char::to_lowercase)
+        .eq(b.chars().flat_map(char::to_lowercase))
 }
 
 #[cfg(not(windows))]
@@ -174,7 +210,6 @@ mod tests {
             name: "game".into(),
             exe_path: Some("/opt/games/cool-game/game".into()),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
@@ -186,7 +221,6 @@ mod tests {
             name: "game".into(),
             exe_path: None,
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
@@ -198,7 +232,6 @@ mod tests {
             name: "firefox".into(),
             exe_path: Some("/usr/bin/firefox".into()),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, "/opt/games/cool-game/game"));
     }
@@ -228,7 +261,6 @@ mod tests {
             name: "game".into(),
             exe_path: Some(second),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, &first));
         std::fs::remove_dir_all(root).unwrap();
@@ -241,7 +273,6 @@ mod tests {
             name: "game".into(),
             exe_path: Some("/container/only/game".into()),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
@@ -253,7 +284,6 @@ mod tests {
             name: "SomeVeryLongGam".into(),
             exe_path: Some("/usr/bin/wine64-preloader".into()),
             command: Some(r"Z:\home\me\Games\SomeVeryLongGameName.exe".into()),
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(
             &proc,
@@ -269,7 +299,6 @@ mod tests {
             name: "game.exe".into(),
             exe_path: Some("/usr/bin/wine64-preloader".into()),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, "/home/me/Games/Cool/game.exe"));
     }
@@ -281,7 +310,6 @@ mod tests {
             name: "firefox".into(),
             exe_path: Some("/usr/bin/firefox".into()),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(!matches_executable(&proc, "/opt/games/firefox-game/game"));
     }
@@ -297,7 +325,6 @@ mod tests {
             name: "game".into(),
             exe_path: Some(first),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(
             &proc,
@@ -324,7 +351,6 @@ mod tests {
             name: "game".into(),
             exe_path: Some(first),
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(
             &proc,
@@ -339,7 +365,6 @@ mod tests {
             name: file_name(exe).unwrap().into(),
             exe_path: Some(exe.into()),
             command: None,
-            cpu_usage: 0.0,
         }
     }
 
@@ -381,7 +406,6 @@ mod tests {
             name: "game.exe".into(),
             exe_path: None,
             command: None,
-            cpu_usage: 0.0,
         };
         assert!(matches_executable(&proc, r"C:\Games\Cool\game.exe"));
     }
@@ -393,6 +417,8 @@ mod tests {
             r"C:\Games\Cool\Game.exe",
             "c:/games//cool/game.EXE"
         ));
+        assert!(names_equal("Ärger.exe", "äRGER.EXE"));
+        assert!(!names_equal("Ärger.exe", "Arger.exe"));
     }
 
     #[test]
