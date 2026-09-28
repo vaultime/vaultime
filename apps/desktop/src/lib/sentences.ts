@@ -118,6 +118,12 @@ function sessionShape(session: Session): string {
   return `A marathon ${words.noun}`;
 }
 
+/** "Elden Ring and Hades II ran side by side for 1 h 40." */
+export function sideBySideSentence(titles: string[], ms: number): string {
+  const names = titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : (titles[0] ?? "");
+  return `${names} ran side by side for ${formatHoursMinutes(ms)}.`;
+}
+
 /** "1 h 12 in all, 1 h 05 active, 7 min idle". */
 export function sessionAmounts(session: Session): string {
   return [

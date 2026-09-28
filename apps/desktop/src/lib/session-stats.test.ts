@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
 import { at, session } from "@/test/sessions";
-import { buildDailyActivity, summarizeRecentPlay } from "./session-stats";
+import { buildDailyActivity, playedMs, sideBySide, summarizeRecentPlay } from "./session-stats";
 
 describe("buildDailyActivity", () => {
   beforeEach(() => {
@@ -76,5 +76,83 @@ describe("summarizeRecentPlay", () => {
     expect(recent.runtimeByGame.get("a")).toBe(90 * MINUTE_MS);
     expect(recent.runtimeByGame.has("c")).toBe(false);
     expect(recent.longest?.game_id).toBe("b");
+  });
+
+  it("counts games that ran side by side once", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 16, 0), 250, { game_id: "a" }),
+      session(at(2026, 9, 29, 18, 30), 190, { game_id: "b" }),
+    ];
+    const recent = summarizeRecentPlay(sessions, 7, now);
+    expect(recent.runtimeMs).toBe(440 * MINUTE_MS);
+    expect(recent.playedMs).toBe(340 * MINUTE_MS);
+  });
+});
+
+describe("playedMs", () => {
+  const now = new Date(2026, 8, 29, 23, 0);
+
+  it("adds sessions that do not overlap", () => {
+    const sessions = [session(at(2026, 9, 29, 10, 0), 60), session(at(2026, 9, 29, 12, 0), 30, { game_id: "b" })];
+    expect(playedMs(sessions, now)).toBe(90 * MINUTE_MS);
+  });
+
+  it("counts a game inside another once", () => {
+    const sessions = [session(at(2026, 9, 29, 10, 0), 120), session(at(2026, 9, 29, 10, 30), 30, { game_id: "b" })];
+    expect(playedMs(sessions, now)).toBe(120 * MINUTE_MS);
+  });
+
+  it("leaves out a sleep that both games slept through", () => {
+    // Two hours on the clock, one of them asleep, so each ran an hour.
+    const sleepy = (game: string) =>
+      session(at(2026, 9, 29, 10, 0), 60, {
+        game_id: game,
+        ended_at_wall: new Date(2026, 8, 29, 12, 0).toISOString(),
+      });
+    expect(playedMs([sleepy("a"), sleepy("b")], now)).toBe(60 * MINUTE_MS);
+  });
+
+  it("gives a single session exactly its runtime", () => {
+    const odd = session(at(2026, 9, 29, 10, 0), 61, {
+      runtime_ms: 61 * MINUTE_MS - 7,
+      ended_at_wall: new Date(2026, 8, 29, 11, 13).toISOString(),
+    });
+    expect(playedMs([odd], now)).toBe(61 * MINUTE_MS - 7);
+  });
+
+  it("runs a live session up to now", () => {
+    const live = session(at(2026, 9, 29, 22, 0), 60, { ended_at_wall: null });
+    const other = session(at(2026, 9, 29, 22, 30), 30, { game_id: "b" });
+    expect(playedMs([live, other], now)).toBe(60 * MINUTE_MS);
+  });
+});
+
+describe("sideBySide", () => {
+  const now = new Date(2026, 8, 29, 23, 0);
+
+  it("finds the stretch two games shared, in start order", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 18, 30), 190, { game_id: "b" }),
+      session(at(2026, 9, 29, 16, 0), 250, { game_id: "a" }),
+    ];
+    const [shared, ...rest] = sideBySide(sessions, now);
+    expect(rest).toHaveLength(0);
+    expect(shared.gameIds).toEqual(["a", "b"]);
+    expect(shared.start).toEqual(new Date(2026, 8, 29, 18, 30));
+    expect(shared.end).toEqual(new Date(2026, 8, 29, 20, 10));
+  });
+
+  it("joins a stretch while the same games run and splits when a third joins", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 10, 0), 120, { game_id: "a" }),
+      session(at(2026, 9, 29, 10, 30), 60, { game_id: "b" }),
+      session(at(2026, 9, 29, 11, 0), 15, { game_id: "c" }),
+    ];
+    expect(sideBySide(sessions, now).map((stretch) => stretch.gameIds.join(""))).toEqual(["ab", "abc", "ab"]);
+  });
+
+  it("finds nothing when games take turns", () => {
+    const sessions = [session(at(2026, 9, 29, 10, 0), 60), session(at(2026, 9, 29, 11, 0), 60, { game_id: "b" })];
+    expect(sideBySide(sessions, now)).toEqual([]);
   });
 });

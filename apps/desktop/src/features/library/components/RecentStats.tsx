@@ -27,7 +27,7 @@ export function RecentStats({ recent, summaries }: { recent: RecentPlay; summari
   const stats = [
     {
       label: `Past ${RECENT_DAYS} days`,
-      value: formatHoursMinutes(recent.runtimeMs),
+      value: formatHoursMinutes(recent.playedMs),
       note: gamesCount > 0 ? `across ${numberWords(gamesCount)} game${gamesCount === 1 ? "" : "s"}` : "Nothing played yet",
     },
     {
