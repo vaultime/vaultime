@@ -4,6 +4,8 @@
 
 Vaultime is a local-first desktop application for tracking PC game playtime. This policy explains what data it keeps, where, and why.
 
+The controller responsible for this data under the GDPR is Dominik Schwimmbeck, reachable at [vaultime@outlook.de](mailto:vaultime@outlook.de).
+
 ## 1. Data on Your Device
 
 Everything below stays on your device unless you choose to use cloud backup:
@@ -29,6 +31,8 @@ Cloud backup is invite-only and free. If you create an account, the server store
 
 The server does not store IP addresses in its database.
 
+This data is processed to provide the cloud backup you signed up for (Art. 6(1)(b) GDPR).
+
 ## 3. Data We Do Not Collect
 
 - No analytics or telemetry.
@@ -38,7 +42,7 @@ The server does not store IP addresses in its database.
 
 ## 4. Third Parties
 
-Cloud backup runs on a server operated by the Vaultime maintainer. No third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host, which sees your IP address like any web server does.
+Cloud backup runs on a server operated by the Vaultime maintainer, rented from Contabo GmbH, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. App updates are downloaded over HTTPS from the project's release host, which sees your IP address like any web server does.
 
 ## 5. Retention
 
@@ -50,7 +54,7 @@ Cloud backup runs on a server operated by the Vaultime maintainer. No third-part
 
 - Delete local data by removing Vaultime's data folder.
 - Delete individual cloud backups from the Cloud page in the app.
-- To delete your cloud account with all its devices and backups, contact the maintainer.
+- To delete your cloud account with all its devices and backups, email [vaultime@outlook.de](mailto:vaultime@outlook.de).
 
 ## 7. Security
 
@@ -67,6 +71,10 @@ Vaultime is not directed at children under 16. We do not knowingly collect data 
 
 We may update this policy as the product evolves. Material changes are noted in the changelog.
 
-## 10. Contact
+## 10. Your Rights
 
-For privacy questions or deletion requests, open an issue at [github.com/schwimmbeck/vaultime](https://github.com/schwimmbeck/vaultime) or email the project maintainer.
+You can ask for a copy of the data the cloud server holds about you, have it corrected or deleted, restrict its processing, receive it in a portable format and object to its processing. Write to [vaultime@outlook.de](mailto:vaultime@outlook.de). You can also complain to a data protection supervisory authority.
+
+## 11. Contact
+
+For privacy questions or deletion requests, email Dominik Schwimmbeck at [vaultime@outlook.de](mailto:vaultime@outlook.de).

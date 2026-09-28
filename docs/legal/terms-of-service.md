@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Effective date:** September 29, 2026
+**Effective date:** September 30, 2026
 
 These terms govern your use of the Vaultime desktop application and its optional invite-only cloud backup service.
 
@@ -55,4 +55,4 @@ We may update these terms as the product evolves. Continued use after a change m
 
 ## 11. Contact
 
-For questions about these terms, open an issue at [github.com/schwimmbeck/vaultime](https://github.com/schwimmbeck/vaultime) or email the project maintainer.
+For questions about these terms, email [vaultime@outlook.de](mailto:vaultime@outlook.de).
