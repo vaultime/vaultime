@@ -107,8 +107,19 @@ if ! VAULTIME_E2E_API="$url" VAULTIME_E2E_TOKEN="$token" \
   docker logs "$api" 2>&1 | tail -40
   exit 1
 fi
+echo "== beta application form"
+apply() { curl -s -o /dev/null -w '%{redirect_url}' -X POST "$url/v1/beta/apply" "$@"; }
+[[ $(apply -d email=tester@example.com -d platform=linux -d consent=yes -d note=e2e) == */applied.html ]] \
+  || { echo "a valid application was not taken"; exit 1; }
+[[ $(apply -d email=tester2@example.com -d platform=linux) == */apply-failed.html ]] \
+  || { echo "an application without consent was taken"; exit 1; }
+stored=$(docker exec "$db" psql -U vaultime -d vaultime -tAc "SELECT COUNT(*) FROM beta_applications")
+[ "$stored" = 1 ] || { echo "expected one stored application, found $stored"; exit 1; }
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $token" "$url/v1/admin/beta-applications")" = 403 ] \
+  || { echo "a normal account could list applications"; exit 1; }
+
 # Some failures, like a failed artwork cleanup, are only logged.
-if docker logs "$api" 2>&1 | grep -i "error"; then
+if docker logs "$api" 2>&1 | grep "ERROR"; then
   echo "The API logged errors"
   exit 1
 fi

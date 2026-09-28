@@ -173,6 +173,16 @@ export interface CloudBackupPayloadSummary {
   artwork_bytes?: number;
 }
 
+/** An application for cloud beta access from the website. */
+export interface BetaApplication {
+  id: string;
+  email: string;
+  /** "windows", "linux" or "both". */
+  platform: string;
+  note: string | null;
+  created_at: string;
+}
+
 /** Cloud space of the signed in account. */
 export interface CloudStorage {
   backup_bytes: number;

@@ -3,6 +3,7 @@
 
 import { createContext, useContext } from "react";
 import type {
+  BetaApplication,
   CloudAdminInvite,
   CloudAuthSession,
   CloudBackupRecord,
@@ -42,6 +43,8 @@ export interface CloudSessionContextValue {
   registerCurrentDevice: () => Promise<CloudDevice | null>;
   listBackups: () => Promise<CloudBackupRecord[]>;
   getStorage: () => Promise<CloudStorage>;
+  listBetaApplications: () => Promise<BetaApplication[]>;
+  deleteBetaApplication: (applicationId: string) => Promise<void>;
   uploadRemoteBackup: (label?: string | null) => Promise<CloudBackupUploadResult>;
   restoreRemoteBackup: (backupId: string) => Promise<CloudBackupRestoreResult>;
   deleteBackup: (backupId: string) => Promise<void>;

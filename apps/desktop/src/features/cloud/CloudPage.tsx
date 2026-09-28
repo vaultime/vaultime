@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { Field } from "@/features/cloud/Field";
@@ -831,6 +832,7 @@ export function CloudPage() {
                 </Button>
               </PageSection>
             )}
+            {isAdmin && <BetaApplications onError={setErrorMessage} />}
           </>
         )}
 
@@ -839,7 +841,7 @@ export function CloudPage() {
             <span className="font-mono text-sm">{formatApiHostname(apiBaseUrl)}</span>
           </PageRow>
           <PageRow label="Encryption" hint="With your backup passphrase, before anything leaves this PC.">
-            ChaCha20-Poly1305
+            XChaCha20-Poly1305
           </PageRow>
           <PageRow label="Checksums" hint="The server checks every upload before it accepts it.">
             SHA-256

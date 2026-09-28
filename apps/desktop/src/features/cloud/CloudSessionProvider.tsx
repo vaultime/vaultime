@@ -38,6 +38,7 @@ import {
   uploadRemoteBackup as uploadRemoteBackupCommand,
 } from "@/lib/tauri";
 import type {
+  BetaApplication,
   CloudAdminInvite,
   CloudAuthSession,
   CloudBackupRecord,
@@ -331,6 +332,18 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  async function listBetaApplications() {
+    return withAuthenticatedSession((current) =>
+      cloudGetJson<BetaApplication[]>("/v1/admin/beta-applications", current.access_token),
+    );
+  }
+
+  async function deleteBetaApplication(applicationId: string) {
+    await withAuthenticatedSession((current) =>
+      cloudDelete(`/v1/admin/beta-applications/${encodeURIComponent(applicationId)}`, current.access_token),
+    );
+  }
+
   async function getStorage() {
     return withAuthenticatedSession((current) =>
       cloudGetJson<CloudStorage>("/v1/storage", current.access_token),
@@ -540,6 +553,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     registerCurrentDevice,
     listBackups,
     getStorage,
+    listBetaApplications,
+    deleteBetaApplication,
     uploadRemoteBackup,
     restoreRemoteBackup,
     deleteBackup,

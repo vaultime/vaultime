@@ -139,7 +139,7 @@ function cloudSession(): CloudAuthSession {
     refresh_token: "preview",
     expires_at: iso(now + 15 * MINUTE_MS),
     refresh_expires_at: iso(now + 30 * DAY_MS),
-    user: { id: "account-1", email: "player@example.com", role: "user" },
+    user: { id: "account-1", email: "player@example.com", role: params.get("admin") === "1" ? "admin" : "user" },
   };
 }
 
@@ -211,6 +211,11 @@ window.fetch = async (input, init) => {
       return cloudReply(200, cloudDevice);
     case "/v1/backups":
       return cloudReply(200, [cloudBackup("backup-2", "Before the reinstall", 2, 7, 38), cloudBackup("backup-1", "Backup", 16, 6, 24)]);
+    case "/v1/admin/beta-applications":
+      return cloudReply(200, [
+        { id: "application-1", email: "sam@example.com", platform: "linux", note: "I play mostly through Heroic and Lutris.", created_at: iso(now - 2 * DAY_MS) },
+        { id: "application-2", email: "robin@example.org", platform: "windows", note: null, created_at: iso(now - 5 * HOUR_MS) },
+      ]);
     case "/v1/storage":
       return cloudReply(200, { backup_bytes: 480_000, artwork_bytes: 8_700_000, limit_bytes: 2048 * 1024 * 1024 });
     default:
