@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 //! Games that launchers register with Windows instead of keeping library
-//! files: Battle.net, Riot, `HoYoPlay` and Ubisoft Connect. The registry is read
-//! first, the program of each game is looked up on disk afterwards.
+//! files: Battle.net, Rockstar, Riot, `HoYoPlay` and Ubisoft Connect. The
+//! registry is read first, the program of each game is looked up on disk
+//! afterwards.
 
 use std::collections::HashSet;
+use std::fs;
 use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path, PathBuf};
 
 use windows_registry::{CURRENT_USER, Key, LOCAL_MACHINE};
@@ -22,6 +24,7 @@ pub(crate) struct InstalledProgram {
     pub(crate) publisher: String,
     pub(crate) folder: String,
     pub(crate) icon: String,
+    pub(crate) uninstall: String,
 }
 
 /// A game a launcher registered, before its program is looked up on disk.
@@ -37,22 +40,19 @@ pub(crate) struct Candidate {
 
 /// Launchers that register their games under their own publisher name, with
 /// the launcher's own entries to skip and the source label.
-const PUBLISHERS: &[(&str, &[&str], &str)] = &[
-    ("Blizzard Entertainment", &["Battle.net"], "battlenet"),
-    ("Electronic Arts", &["EA app", "Origin"], "ea"),
-    (
-        "Rockstar Games",
-        &["Rockstar Games Launcher", "Rockstar Games Social Club"],
-        "rockstar",
-    ),
-];
+const PUBLISHERS: &[(&str, &[&str], &str)] =
+    &[("Blizzard Entertainment", &["Battle.net"], "battlenet")];
+const ROCKSTAR_LAUNCHER: &str = "rockstar games";
+const ROCKSTAR_UNINSTALL: &str = "uninstall=";
+const ROCKSTAR_LAUNCHER_ID: &str = "launcher";
 const RIOT_GAME: &str = "Riot Game ";
-const RIOT_CLIENT: &str = "Riot_Client";
+const RIOT_CLIENT: &str = "riot";
 const UBISOFT_INSTALL: &str = "Uplay Install ";
 
 const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 const UNINSTALL_32: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
-const HOYOPLAY: &str = r"Software\Cognosphere\HYP";
+/// The global launcher and the one for mainland China.
+const HOYOPLAY: [&str; 2] = [r"Software\Cognosphere\HYP", r"Software\miHoYo\HYP"];
 const UBISOFT_INSTALLS: &str = r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs";
 
 /// Games of launchers that register them under their publisher name. Their
@@ -89,21 +89,127 @@ fn is_game_program_in(program: &str, folder: &str) -> bool {
             .is_some_and(|name| metadata::is_likely_game_executable(&name.to_string_lossy()))
 }
 
-/// Riot games, registered per product as "Riot Game <product>.<patchline>".
-pub(crate) fn riot(programs: &[InstalledProgram]) -> Vec<Candidate> {
+/// Rockstar Games Launcher games. Their uninstall command runs the launcher
+/// with `uninstall=<title id>`, and the launcher's own id is `launcher`.
+pub(crate) fn rockstar(programs: &[InstalledProgram]) -> Vec<Candidate> {
     programs
         .iter()
         .filter_map(|program| {
-            let product = program.key.strip_prefix(RIOT_GAME)?;
-            (!product.starts_with(RIOT_CLIENT) && !program.folder.is_empty()).then(|| Candidate {
+            let id = rockstar_title_id(&program.uninstall)?;
+            let folder = clean_folder(program.folder.trim().trim_matches('"'));
+            if id == ROCKSTAR_LAUNCHER_ID || folder.is_empty() {
+                return None;
+            }
+            Some(Candidate {
                 title: program.name.clone(),
+                program: icon_program(&program.icon)
+                    .filter(|icon| is_game_program_in(icon, &folder)),
+                folder,
+                source: "rockstar",
+                source_id: id.to_owned(),
+            })
+        })
+        .collect()
+}
+
+/// `"...\Rockstar Games\Launcher\Launcher.exe" -uninstall=gta5` gives `gta5`.
+fn rockstar_title_id(uninstall: &str) -> Option<&str> {
+    // ASCII lowercase keeps every byte where it is, so the indexes carry over.
+    let lower = uninstall.to_ascii_lowercase();
+    if !lower.contains(ROCKSTAR_LAUNCHER) {
+        return None;
+    }
+    let start = lower.rfind(ROCKSTAR_UNINSTALL)? + ROCKSTAR_UNINSTALL.len();
+    let id = uninstall[start..].trim().trim_matches('"');
+    (!id.is_empty()).then_some(id)
+}
+
+/// What the Riot Client keeps about one installed product.
+#[derive(Debug, Default)]
+pub(crate) struct RiotProduct {
+    pub(crate) id: String,
+    pub(crate) folder: String,
+    pub(crate) shortcut: Option<String>,
+}
+
+/// Riot games from their uninstall entries, "Riot Game <product>.<patchline>",
+/// and from the Riot Client's product settings, since the uninstall entry can
+/// be turned off.
+pub(crate) fn riot(programs: &[InstalledProgram], products: &[RiotProduct]) -> Vec<Candidate> {
+    let mut candidates: Vec<Candidate> = programs
+        .iter()
+        .filter_map(|program| {
+            let product = program.key.strip_prefix(RIOT_GAME)?;
+            (!is_riot_client(product) && !program.folder.is_empty()).then(|| Candidate {
+                title: program.name.trim().to_owned(),
                 folder: clean_folder(&program.folder),
                 program: None,
                 source: "riot",
                 source_id: product.to_owned(),
             })
         })
-        .collect()
+        .collect();
+    let known: HashSet<String> = candidates
+        .iter()
+        .map(|game| game.source_id.clone())
+        .collect();
+    let titles: Vec<(String, String)> = candidates
+        .iter()
+        .map(|game| (product_base(&game.source_id).to_owned(), game.title.clone()))
+        .collect();
+    candidates.extend(
+        products
+            .iter()
+            .filter(|product| {
+                !known.contains(&product.id)
+                    && !is_riot_client(&product.id)
+                    && !product.folder.is_empty()
+            })
+            .map(|product| Candidate {
+                title: riot_title(product, &titles),
+                folder: clean_folder(&product.folder),
+                program: None,
+                source: "riot",
+                source_id: product.id.clone(),
+            }),
+    );
+    candidates
+}
+
+/// The shortcut name, else the title of another patchline of the same game
+/// with this one's name, "Teamfight Tactics (PBE)", else the product id.
+fn riot_title(product: &RiotProduct, titles: &[(String, String)]) -> String {
+    if let Some(stem) = product
+        .shortcut
+        .as_deref()
+        .and_then(|name| Path::new(name).file_stem())
+        .filter(|stem| !stem.is_empty())
+    {
+        return stem.to_string_lossy().into_owned();
+    }
+    let base = product_base(&product.id);
+    let patchline = product.id[base.len()..].trim_start_matches('.');
+    titles.iter().find(|(other, _)| other == base).map_or_else(
+        || product.id.clone(),
+        |(_, title)| format!("{title} ({})", patchline.to_uppercase()),
+    )
+}
+
+/// `league_of_legends.pbe` gives `league_of_legends`.
+fn product_base(product: &str) -> &str {
+    product.split_once('.').map_or(product, |(base, _)| base)
+}
+
+fn is_riot_client(product: &str) -> bool {
+    product.to_ascii_lowercase().starts_with(RIOT_CLIENT)
+}
+
+/// A top level `key: "value"` line of a YAML file.
+fn yaml_value(text: &str, key: &str) -> Option<String> {
+    text.lines()
+        .find_map(|line| line.strip_prefix(key)?.strip_prefix(':'))
+        .map(|value| value.trim().trim_matches('"').to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 /// `HoYoPlay` games from their game ids and install folders. The title comes
@@ -221,7 +327,8 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
 fn candidates() -> Vec<Candidate> {
     let programs = installed_programs();
     let mut candidates = by_publisher(&programs);
-    candidates.extend(riot(&programs));
+    candidates.extend(rockstar(&programs));
+    candidates.extend(riot(&programs, &riot_products()));
     candidates.extend(hoyoplay(&hoyoplay_installs(), &programs));
     candidates.extend(ubisoft(&ubisoft_installs(), &programs));
     candidates
@@ -235,7 +342,7 @@ fn subkeys(key: &Key) -> Vec<String> {
     key.keys().map(Iterator::collect).unwrap_or_default()
 }
 
-fn installed_programs() -> Vec<InstalledProgram> {
+pub(crate) fn installed_programs() -> Vec<InstalledProgram> {
     [
         (LOCAL_MACHINE, UNINSTALL),
         (LOCAL_MACHINE, UNINSTALL_32),
@@ -253,6 +360,7 @@ fn installed_programs() -> Vec<InstalledProgram> {
                     publisher: text(&entry, "Publisher"),
                     folder: text(&entry, "InstallLocation"),
                     icon: text(&entry, "DisplayIcon"),
+                    uninstall: text(&entry, "UninstallString"),
                     key: name,
                 })
             })
@@ -265,10 +373,40 @@ fn installed_programs() -> Vec<InstalledProgram> {
 /// key, test builds of standalone launchers a few levels deeper.
 fn hoyoplay_installs() -> Vec<(String, String)> {
     let mut found = Vec::new();
-    if let Ok(root) = CURRENT_USER.open(HOYOPLAY) {
-        collect_game_paths(&root, "", REGISTRY_SEARCH_DEPTH, &mut found);
+    for key in HOYOPLAY {
+        if let Ok(root) = CURRENT_USER.open(key) {
+            collect_game_paths(&root, "", REGISTRY_SEARCH_DEPTH, &mut found);
+        }
     }
     found
+}
+
+/// The product settings the Riot Client writes for every install, in
+/// `ProgramData\Riot Games\Metadata\<product>\<product>.product_settings.yaml`.
+fn riot_products() -> Vec<RiotProduct> {
+    let Some(program_data) = std::env::var_os("ProgramData") else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(
+        PathBuf::from(program_data)
+            .join("Riot Games")
+            .join("Metadata"),
+    ) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let id = entry.file_name().to_string_lossy().into_owned();
+            let settings = entry.path().join(format!("{id}.product_settings.yaml"));
+            let text = fs::read_to_string(settings).ok()?;
+            Some(RiotProduct {
+                folder: yaml_value(&text, "product_install_full_path")?,
+                shortcut: yaml_value(&text, "shortcut_name"),
+                id,
+            })
+        })
+        .collect()
 }
 
 fn collect_game_paths(key: &Key, name: &str, depth: usize, found: &mut Vec<(String, String)>) {
@@ -316,7 +454,13 @@ mod tests {
             publisher: publisher.into(),
             folder: folder.into(),
             icon: icon.into(),
+            uninstall: String::new(),
         }
+    }
+
+    fn with_uninstall(mut program: InstalledProgram, uninstall: &str) -> InstalledProgram {
+        program.uninstall = uninstall.into();
+        program
     }
 
     fn sample() -> Vec<InstalledProgram> {
@@ -393,23 +537,107 @@ mod tests {
     fn publishers_list_games_but_not_their_launchers() {
         let games = by_publisher(&sample());
         let titles: Vec<&str> = games.iter().map(|game| game.title.as_str()).collect();
-        assert_eq!(titles, ["Some EA Game", "Diablo IV"]);
-        assert_eq!(games[0].source, "ea");
-        assert_eq!(games[0].program, None, "an uninstaller is no game program");
-        assert_eq!(games[1].source, "battlenet");
+        assert_eq!(titles, ["Diablo IV"]);
+        assert_eq!(games[0].source, "battlenet");
         assert_eq!(
-            games[1].program.as_deref(),
+            games[0].program.as_deref(),
             Some(r"E:\BlizzardLibrary\Diablo IV\Diablo IV.exe")
         );
     }
 
     #[test]
     fn riot_skips_the_client_and_anti_cheat() {
-        let games = riot(&sample());
+        let games = riot(&sample(), &[]);
         assert_eq!(games.len(), 1);
         assert_eq!(games[0].title, "VALORANT");
         assert_eq!(games[0].source_id, "valorant.live");
         assert!(!games[0].folder.ends_with(MAIN_SEPARATOR));
+    }
+
+    #[test]
+    fn riot_adds_installs_without_an_uninstall_entry() {
+        let products = [
+            RiotProduct {
+                id: "valorant.live".into(),
+                folder: "E:/RiotLibrary/Riot Games/VALORANT/live".into(),
+                shortcut: Some("VALORANT.lnk".into()),
+            },
+            RiotProduct {
+                id: "league_of_legends.pbe".into(),
+                folder: "E:/RiotLibrary/Riot Games/League of Legends (PBE)".into(),
+                shortcut: Some("League of Legends (PBE).lnk".into()),
+            },
+            RiotProduct {
+                id: "valorant.pbe".into(),
+                folder: "C:/Riot Games/VALORANT/pbe".into(),
+                shortcut: None,
+            },
+            RiotProduct {
+                id: "Riot Client".into(),
+                folder: "C:/Riot Games/Riot Client".into(),
+                shortcut: None,
+            },
+        ];
+        let games = riot(&sample(), &products);
+        let titles: Vec<&str> = games.iter().map(|game| game.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            ["VALORANT", "League of Legends (PBE)", "VALORANT (PBE)"]
+        );
+    }
+
+    #[test]
+    fn reads_top_level_yaml_values() {
+        let yaml = "patching_policy: \"manual\"\nproduct_install_full_path: \"E:/Riot/VALORANT/live\"\nsettings:\n    create_uninstall_key: true\n";
+        assert_eq!(
+            yaml_value(yaml, "product_install_full_path").as_deref(),
+            Some("E:/Riot/VALORANT/live")
+        );
+        assert_eq!(
+            yaml_value(yaml, "create_uninstall_key"),
+            None,
+            "nested keys are no top level keys"
+        );
+    }
+
+    #[test]
+    fn rockstar_reads_the_title_id_from_the_uninstall_command() {
+        let launcher = r#""C:\Program Files\Rockstar Games\Launcher\Launcher.exe""#;
+        let programs = [
+            with_uninstall(
+                program(
+                    "Rockstar Games Launcher",
+                    "Rockstar Games Launcher",
+                    "",
+                    r"C:\Program Files\Rockstar Games\Launcher",
+                    "",
+                ),
+                &format!("{launcher} -uninstall=launcher"),
+            ),
+            with_uninstall(
+                program(
+                    "{5EFC6C07-6B87-43FC-9524-F9E967241741}",
+                    "Grand Theft Auto V",
+                    "Rockstar Games",
+                    r#""D:\Games\GTAV""#,
+                    r#""D:\Games\GTAV\PlayGTAV.exe""#,
+                ),
+                &format!("{launcher} -uninstall=gta5"),
+            ),
+            with_uninstall(
+                program("Other", "Other App", "Someone", r"C:\Other", ""),
+                r"C:\Other\uninstall.exe /uninstall=other",
+            ),
+        ];
+        let games = rockstar(&programs);
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].title, "Grand Theft Auto V");
+        assert_eq!(games[0].source_id, "gta5");
+        assert_eq!(games[0].folder, r"D:\Games\GTAV");
+        assert_eq!(
+            games[0].program.as_deref(),
+            Some(r"D:\Games\GTAV\PlayGTAV.exe")
+        );
     }
 
     #[test]

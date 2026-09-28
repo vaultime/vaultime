@@ -91,13 +91,35 @@ fn game(
     })
 }
 
-/// The program `fuel.json` starts, relative to the game folder.
+/// The program `fuel.json` starts, relative to the game folder. The file is
+/// not always strict JSON, so the `Command` value is also looked up by hand.
 fn fuel_command(json: &str) -> Option<String> {
     serde_json::from_str::<Fuel>(json)
-        .ok()?
-        .main?
-        .command
+        .ok()
+        .and_then(|fuel| fuel.main?.command)
+        .or_else(|| lenient_command(json))
         .filter(|command| !command.is_empty())
+}
+
+/// The string after the first `"Command":`, with its escapes undone.
+fn lenient_command(json: &str) -> Option<String> {
+    const KEY: &str = "\"Command\"";
+    let rest = &json[json.find(KEY)? + KEY.len()..];
+    let mut chars = rest
+        .trim_start()
+        .strip_prefix(':')?
+        .trim_start()
+        .strip_prefix('"')?
+        .chars();
+    let mut value = String::new();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => return Some(value),
+            '\\' => value.push(chars.next()?),
+            c => value.push(c),
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -110,6 +132,13 @@ mod tests {
         assert_eq!(fuel_command(json).as_deref(), Some("Bin/Game.exe"));
         assert_eq!(fuel_command(r#"{"Main": {"Command": ""}}"#), None);
         assert_eq!(fuel_command("not json"), None);
+
+        // Comments and trailing commas, which strict JSON does not allow.
+        let loose = r#"{
+            // Launch settings
+            "Main": { "Command": "Bin\\Game.exe", },
+        }"#;
+        assert_eq!(fuel_command(loose).as_deref(), Some(r"Bin\Game.exe"));
     }
 
     #[test]

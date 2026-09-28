@@ -2,23 +2,25 @@
 // SPDX-License-Identifier: MIT
 
 //! Games from the Xbox app and PC Game Pass. A drive that holds such games has
-//! a `.GamingRoot` file naming its library folders, and every game keeps a
-//! `MicrosoftGame.config` in its `Content` folder.
+//! a `.GamingRoot` file naming its library folders, older installs sit in
+//! `Program Files\ModifiableWindowsApps`. Every game keeps a
+//! `MicrosoftGame.config`, usually in its `Content` folder.
 
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::xml::{attribute, read_text, tags};
 use super::{DiscoveredGame, find_main_executable, metadata, scanner};
 use crate::platform::process::path_key;
 
 const GAMING_ROOT: &str = ".GamingRoot";
 const GAMING_ROOT_MAGIC: &[u8] = b"RGBX";
+const MODIFIABLE_APPS: &str = r"Program Files\ModifiableWindowsApps";
 const CONTENT: &str = "Content";
 const CONFIG: &str = "MicrosoftGame.config";
 /// Localized names point into resource files, the folder name is used instead.
 const RESOURCE_PREFIX: &str = "ms-resource:";
-const UTF16_BOM: [u8; 2] = [0xFF, 0xFE];
 
 pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
     let games: Vec<DiscoveredGame> = scanner::fixed_drives()
@@ -34,12 +36,14 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
 }
 
 fn library_folders(drive: &Path) -> Vec<PathBuf> {
-    fs::read(drive.join(GAMING_ROOT))
+    let mut folders: Vec<PathBuf> = fs::read(drive.join(GAMING_ROOT))
         .map(|bytes| parse_gaming_root(&bytes))
         .unwrap_or_default()
         .into_iter()
         .map(|folder| drive.join(folder.trim_start_matches(['\\', '/'])))
-        .collect()
+        .collect();
+    folders.push(drive.join(MODIFIABLE_APPS));
+    folders
 }
 
 /// Library folders from a `.GamingRoot` file: `RGBX`, a 32 bit count, then
@@ -66,7 +70,10 @@ fn parse_gaming_root(bytes: &[u8]) -> Vec<String> {
 }
 
 fn game_from_folder(folder: &Path, existing: &HashSet<String>) -> Option<DiscoveredGame> {
-    let content = folder.join(CONTENT);
+    // Program names in the config are relative to the folder that holds it.
+    let content = [folder.join(CONTENT), folder.to_path_buf()]
+        .into_iter()
+        .find(|base| base.join(CONFIG).is_file())?;
     let config = parse_config(&read_text(&content.join(CONFIG))?);
     let title = config.title.unwrap_or_else(|| {
         folder
@@ -74,7 +81,7 @@ fn game_from_folder(folder: &Path, existing: &HashSet<String>) -> Option<Discove
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default()
     });
-    // Many games name a launch helper here, the scorer then finds the game.
+    // Some games name a launch helper here, the scorer then finds the game.
     let program = config
         .executable
         .map(|name| content.join(name))
@@ -96,21 +103,6 @@ fn game_from_folder(folder: &Path, existing: &HashSet<String>) -> Option<Discove
     })
 }
 
-/// The config is UTF-8, some games ship it as UTF-16.
-fn read_text(path: &Path) -> Option<String> {
-    let bytes = fs::read(path).ok()?;
-    if let Some(text) = bytes.strip_prefix(&UTF16_BOM) {
-        let units: Vec<u16> = text
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|pair| u16::from_le_bytes(*pair))
-            .collect();
-        return Some(String::from_utf16_lossy(&units));
-    }
-    Some(String::from_utf8_lossy(&bytes).into_owned())
-}
-
 #[derive(Debug, Default, PartialEq, Eq)]
 struct GameConfig {
     title: Option<String>,
@@ -119,9 +111,9 @@ struct GameConfig {
 }
 
 fn parse_config(xml: &str) -> GameConfig {
-    let executables = elements(xml, "Executable");
+    let executables = tags(xml, "Executable");
     GameConfig {
-        title: elements(xml, "ShellVisuals")
+        title: tags(xml, "ShellVisuals")
             .first()
             .and_then(|tag| attribute(tag, "DefaultDisplayName"))
             .filter(|title| !title.is_empty() && !title.starts_with(RESOURCE_PREFIX)),
@@ -130,42 +122,10 @@ fn parse_config(xml: &str) -> GameConfig {
             .find(|tag| attribute(tag, "Id").as_deref() == Some("Game"))
             .or(executables.first())
             .and_then(|tag| attribute(tag, "Name")),
-        identity: elements(xml, "Identity")
+        identity: tags(xml, "Identity")
             .first()
             .and_then(|tag| attribute(tag, "Name")),
     }
-}
-
-/// The attributes of every `<name ...>` tag, `<ExecutableList>` is no `<Executable>`.
-fn elements<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
-    let open = format!("<{name}");
-    xml.match_indices(&open)
-        .filter_map(|(start, _)| {
-            let rest = &xml[start + open.len()..];
-            if !rest.starts_with(|c: char| c.is_whitespace() || c == '/' || c == '>') {
-                return None;
-            }
-            Some(&rest[..rest.find('>')?])
-        })
-        .collect()
-}
-
-/// The value of `name="..."` in a tag's attributes, with XML escapes undone.
-fn attribute(tag: &str, name: &str) -> Option<String> {
-    let key = format!("{name}=\"");
-    let (start, _) = tag
-        .match_indices(&key)
-        .find(|(index, _)| tag[..*index].ends_with(char::is_whitespace))?;
-    let value = &tag[start + key.len()..];
-    let value = &value[..value.find('"')?];
-    Some(
-        value
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&amp;", "&"),
-    )
 }
 
 #[cfg(test)]
@@ -226,6 +186,10 @@ mod tests {
 
         let game = game_from_folder(&folder, &HashSet::new()).unwrap();
         assert_eq!(game.title, "Some Game", "the folder names localized games");
+        assert!(
+            game_from_folder(&folder.join(CONTENT), &HashSet::new()).is_some(),
+            "a config in the root counts too"
+        );
         assert!(game.executable_path.ends_with("SomeGame.exe"));
         assert_eq!(game.source, "xbox");
         fs::remove_dir_all(folder.parent().unwrap()).unwrap();

@@ -6,6 +6,8 @@
 
 #[cfg(windows)]
 pub mod amazon;
+#[cfg(windows)]
+pub mod ea;
 pub mod epic;
 pub mod gog;
 pub mod heroic;
@@ -18,6 +20,8 @@ pub mod scanner;
 pub mod steam;
 #[cfg(windows)]
 pub mod xbox;
+#[cfg(windows)]
+mod xml;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -59,6 +63,7 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     {
         games.extend(registry::discover(&existing));
         games.extend(xbox::discover(&existing));
+        games.extend(ea::discover(&existing));
         games.extend(amazon::discover(&existing));
     }
     #[cfg(target_os = "linux")]
