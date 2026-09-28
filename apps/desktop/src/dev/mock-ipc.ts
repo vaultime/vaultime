@@ -285,6 +285,19 @@ mockIPC((cmd, payload) => {
       return [
         discovered("Balatro", "C:/Steam/steamapps/common/Balatro/Balatro.exe", "steam", true),
         discovered("Slay the Spire 2", "C:/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.exe", "steam"),
+        // Real Steam paths get long, the list has to cut them.
+        discovered(
+          "Warhammer 40,000: Space Marine 2",
+          "D:/SteamLibrary/steamapps/common/Space Marine 2/client_pc/root/bin/pc/Warhammer 40000 Space Marine 2 - Retail.exe",
+          "steam",
+        ),
+        discovered("Ghost of Tsushima DIRECTOR'S CUT", "D:/SteamLibrary/steamapps/common/Ghost of Tsushima DIRECTOR'S CUT/GhostOfTsushima.exe", "steam"),
+        discovered("Hades II", "D:/SteamLibrary/steamapps/common/Hades II/Ship/Hades2.exe", "steam"),
+        discovered("Crab Champions", "D:/SteamLibrary/steamapps/common/Crab Champions/CrabChampions/Binaries/Win64/CrabChampions-Win64-Shipping.exe", "steam"),
+        discovered("Counter-Strike 2", "D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive/game/bin/win64/cs2.exe", "steam"),
+        discovered("Sun Haven", "D:/SteamLibrary/steamapps/common/Sun Haven/Sun Haven.exe", "steam"),
+        discovered("Baldur's Gate 3", "D:/SteamLibrary/steamapps/common/Baldurs Gate 3/bin/bg3.exe", "steam"),
+        discovered("Cyberpunk 2077", "D:/SteamLibrary/steamapps/common/Cyberpunk 2077/bin/x64/Cyberpunk2077.exe", "steam"),
       ];
     case "discover_launcher_games":
       return [

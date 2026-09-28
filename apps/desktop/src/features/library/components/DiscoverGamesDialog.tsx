@@ -195,7 +195,7 @@ export function DiscoverGamesDialog({
               </div>
             </div>
 
-            <ul className="max-h-80 overflow-y-auto border-y border-rule">
+            <ul className="max-h-[min(20rem,calc(100dvh-21rem))] overflow-y-auto border-y border-rule">
               {results.map((game) => {
                 const isSelected = selected.has(game.executable_path);
                 const added = game.already_added;
