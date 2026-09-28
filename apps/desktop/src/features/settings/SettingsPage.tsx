@@ -29,10 +29,13 @@ import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
 import { capitalize, numberWords, plural } from "@/lib/words";
 
+const SITE_URL = "https://vaultime.codfishcloud.de";
+
 const LINKS = [
-  { label: "Source code", url: "https://github.com/schwimmbeck/vaultime" },
-  { label: "Privacy policy", url: "https://github.com/schwimmbeck/vaultime/blob/main/docs/legal/privacy-policy.md" },
-  { label: "Terms of service", url: "https://github.com/schwimmbeck/vaultime/blob/main/docs/legal/terms-of-service.md" },
+  { label: "Website", url: SITE_URL },
+  { label: "Changelog", url: `${SITE_URL}/changelog.html` },
+  { label: "Privacy policy", url: `${SITE_URL}/privacy.html` },
+  { label: "Terms of service", url: `${SITE_URL}/terms.html` },
 ];
 
 const PLATFORM_NAMES: Record<string, string> = { windows: "Windows", linux: "Linux", macos: "macOS" };

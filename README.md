@@ -39,11 +39,11 @@ Vaultime keeps track of how long you really play your PC games, no matter which 
 
 ## Download
 
-Get the latest version from the [Releases page](https://github.com/schwimmbeck/vaultime/releases/latest). Vaultime updates itself when a new version is out.
+Get the latest version from [vaultime.codfishcloud.de](https://vaultime.codfishcloud.de/#download). Vaultime updates itself when a new version is out.
 
 ### Windows
 
-Windows 10 and 11 are supported. Download `Vaultime_x.y.z_x64-setup.exe` and run it. No admin rights are needed. The `.msi` package is there for managed installs.
+Windows 10 and 11 are supported. Download `Vaultime-setup.exe` and run it. No admin rights are needed. The `.msi` package is there for managed installs.
 
 ### Linux
 
@@ -53,7 +53,7 @@ Windows 10 and 11 are supported. Download `Vaultime_x.y.z_x64-setup.exe` and run
 | Fedora | `.rpm` |
 | Arch, openSUSE and any other | `.AppImage` |
 
-For the AppImage, make it executable (`chmod +x Vaultime_*.AppImage`) and start it.
+For the AppImage, make it executable (`chmod +x Vaultime.AppImage`) and start it.
 
 On X11 Vaultime asks the X server which window is in front and when you last used the keyboard or mouse, nothing extra to install. Games that keep the screensaver off still turn idle when you leave. On Wayland the same works for games that run through XWayland, which is most of them, and GNOME also reports how long you have been away from any window.
 
