@@ -12,7 +12,7 @@ The first public release.
 ### Tracking
 
 - **Automatic tracking.** Start a game however you usually do and Vaultime records the session. Runtime, active playtime and idle time are counted apart.
-- **Keeps running in the tray.** Closing the window keeps tracking, and Vaultime can start with Windows or when you log in on Linux.
+- **Keeps running in the tray.** Closing the window keeps tracking, and Vaultime starts with Windows or when you log in on Linux. Both can be turned off in Settings.
 - **Sleep aware.** Time while your computer sleeps is not counted.
 - **Controller play counts.** Buttons and sticks count as input, so a game played on a controller does not turn idle. On Windows this covers Xbox controllers and controllers that act as one.
 - **Nothing extra to install on Linux.** Vaultime asks the X server directly which window is in front and when you last used the keyboard or mouse, and GNOME on Wayland. Games that keep the screensaver off still turn idle when you leave.

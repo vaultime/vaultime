@@ -134,7 +134,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
 
     let db_path = app_dir.join("vaultime.db");
-    let device_id = device_id(&app_dir, db_path.exists());
+    let first_start = !db_path.exists();
+    let device_id = device_id(&app_dir, !first_start);
     let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
 
     let platform = std::env::consts::OS.to_string();
@@ -169,6 +170,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(AssetManager::new(asset_cache_dir));
     app.manage(engine);
 
+    // New installs start with the system, so the first game of the day counts.
+    // Development builds leave the login items alone.
+    if first_start && !cfg!(debug_assertions) {
+        enable_autostart(app.handle());
+    }
+
     // The window starts hidden. A login item starts in the tray, when there is one.
     let tray = tray::create(app.handle());
     let start_in_tray = tray.available && std::env::args().any(|arg| arg == tray::MINIMIZED_ARG);
@@ -178,6 +185,15 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn enable_autostart(app: &tauri::AppHandle) {
+    use tauri_plugin_autostart::ManagerExt;
+
+    match app.autolaunch().enable() {
+        Ok(()) => info!("new install, starts with the system from now on"),
+        Err(error) => log::warn!("could not turn on starting with the system: {error}"),
+    }
 }
 
 /// Identifier for this PC, kept in a file next to the database. A backup
