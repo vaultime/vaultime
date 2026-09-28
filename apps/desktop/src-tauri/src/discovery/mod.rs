@@ -4,6 +4,8 @@
 //! Game discovery through folder scans, the Steam library and the data of
 //! other launchers.
 
+#[cfg(windows)]
+pub mod amazon;
 pub mod epic;
 pub mod gog;
 pub mod heroic;
@@ -14,6 +16,8 @@ pub mod metadata;
 pub mod registry;
 pub mod scanner;
 pub mod steam;
+#[cfg(windows)]
+pub mod xbox;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -52,7 +56,11 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     games.extend(gog::discover(&existing));
     games.extend(heroic::discover(&existing));
     #[cfg(windows)]
-    games.extend(registry::discover(&existing));
+    {
+        games.extend(registry::discover(&existing));
+        games.extend(xbox::discover(&existing));
+        games.extend(amazon::discover(&existing));
+    }
     #[cfg(target_os = "linux")]
     games.extend(lutris::discover(&existing));
     Ok(games)

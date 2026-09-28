@@ -10,7 +10,7 @@ use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path, PathBuf};
 
 use windows_registry::{CURRENT_USER, Key, LOCAL_MACHINE};
 
-use super::{DiscoveredGame, find_main_executable};
+use super::{DiscoveredGame, find_main_executable, metadata};
 use crate::constants::REGISTRY_SEARCH_DEPTH;
 use crate::platform::process::path_key;
 
@@ -35,8 +35,17 @@ pub(crate) struct Candidate {
     pub(crate) source_id: String,
 }
 
-const BLIZZARD: &str = "Blizzard Entertainment";
-const BATTLE_NET: &str = "Battle.net";
+/// Launchers that register their games under their own publisher name, with
+/// the launcher's own entries to skip and the source label.
+const PUBLISHERS: &[(&str, &[&str], &str)] = &[
+    ("Blizzard Entertainment", &["Battle.net"], "battlenet"),
+    ("Electronic Arts", &["EA app", "Origin"], "ea"),
+    (
+        "Rockstar Games",
+        &["Rockstar Games Launcher", "Rockstar Games Social Club"],
+        "rockstar",
+    ),
+];
 const RIOT_GAME: &str = "Riot Game ";
 const RIOT_CLIENT: &str = "Riot_Client";
 const UBISOFT_INSTALL: &str = "Uplay Install ";
@@ -46,23 +55,38 @@ const UNINSTALL_32: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersi
 const HOYOPLAY: &str = r"Software\Cognosphere\HYP";
 const UBISOFT_INSTALLS: &str = r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs";
 
-/// Battle.net games. Their uninstall entries name the game program as icon.
-pub(crate) fn battlenet(programs: &[InstalledProgram]) -> Vec<Candidate> {
+/// Games of launchers that register them under their publisher name. Their
+/// uninstall entries often name the game program as icon.
+pub(crate) fn by_publisher(programs: &[InstalledProgram]) -> Vec<Candidate> {
     programs
         .iter()
-        .filter(|program| {
-            program.publisher == BLIZZARD
-                && program.name != BATTLE_NET
-                && !program.folder.is_empty()
-        })
-        .map(|program| Candidate {
-            title: program.name.clone(),
-            folder: clean_folder(&program.folder),
-            program: icon_program(&program.icon),
-            source: "battlenet",
-            source_id: program.key.clone(),
+        .filter_map(|program| {
+            let (_, launchers, source) = PUBLISHERS
+                .iter()
+                .find(|(publisher, _, _)| program.publisher.starts_with(publisher))?;
+            if launchers.contains(&program.name.as_str()) || program.folder.is_empty() {
+                return None;
+            }
+            let folder = clean_folder(&program.folder);
+            Some(Candidate {
+                title: program.name.clone(),
+                program: icon_program(&program.icon)
+                    .filter(|icon| is_game_program_in(icon, &folder)),
+                folder,
+                source,
+                source_id: program.key.clone(),
+            })
         })
         .collect()
+}
+
+/// Uninstallers make good icons too, only a game program in the folder counts.
+fn is_game_program_in(program: &str, folder: &str) -> bool {
+    let path = Path::new(program);
+    path_key(program).starts_with(&path_key(folder))
+        && path
+            .file_name()
+            .is_some_and(|name| metadata::is_likely_game_executable(&name.to_string_lossy()))
 }
 
 /// Riot games, registered per product as "Riot Game <product>.<patchline>".
@@ -196,7 +220,7 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
 /// Every registered game, read from the registry only.
 fn candidates() -> Vec<Candidate> {
     let programs = installed_programs();
-    let mut candidates = battlenet(&programs);
+    let mut candidates = by_publisher(&programs);
     candidates.extend(riot(&programs));
     candidates.extend(hoyoplay(&hoyoplay_installs(), &programs));
     candidates.extend(ubisoft(&ubisoft_installs(), &programs));
@@ -298,16 +322,37 @@ mod tests {
     fn sample() -> Vec<InstalledProgram> {
         vec![
             program(
+                "{EA-APP}",
+                "EA app",
+                "Electronic Arts",
+                r"C:\Program Files\Electronic Arts\EA Desktop",
+                "",
+            ),
+            program(
+                "{SOME-EA-GAME}",
+                "Some EA Game",
+                "Electronic Arts",
+                r"D:\EA Games\Some EA Game",
+                r"D:\EA Games\Some EA Game\unins000.exe",
+            ),
+            program(
+                "Rockstar Games Launcher",
+                "Rockstar Games Launcher",
+                "Rockstar Games",
+                r"C:\Program Files\Rockstar Games\Launcher",
+                "",
+            ),
+            program(
                 "Battle.net",
                 "Battle.net",
-                BLIZZARD,
+                "Blizzard Entertainment",
                 r"C:\Program Files (x86)\Battle.net",
                 "",
             ),
             program(
                 "Diablo IV",
                 "Diablo IV",
-                BLIZZARD,
+                "Blizzard Entertainment",
                 r"E:\BlizzardLibrary\Diablo IV",
                 r#""E:\BlizzardLibrary\Diablo IV\Diablo IV.exe",0"#,
             ),
@@ -345,12 +390,15 @@ mod tests {
     }
 
     #[test]
-    fn battlenet_lists_games_but_not_the_launcher() {
-        let games = battlenet(&sample());
-        assert_eq!(games.len(), 1);
-        assert_eq!(games[0].title, "Diablo IV");
+    fn publishers_list_games_but_not_their_launchers() {
+        let games = by_publisher(&sample());
+        let titles: Vec<&str> = games.iter().map(|game| game.title.as_str()).collect();
+        assert_eq!(titles, ["Some EA Game", "Diablo IV"]);
+        assert_eq!(games[0].source, "ea");
+        assert_eq!(games[0].program, None, "an uninstaller is no game program");
+        assert_eq!(games[1].source, "battlenet");
         assert_eq!(
-            games[0].program.as_deref(),
+            games[1].program.as_deref(),
             Some(r"E:\BlizzardLibrary\Diablo IV\Diablo IV.exe")
         );
     }

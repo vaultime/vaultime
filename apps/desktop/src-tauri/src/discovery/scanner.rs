@@ -97,7 +97,7 @@ fn candidate_paths() -> Vec<PathBuf> {
 
 /// Roots of the local fixed drives, skipping removable and network drives.
 #[cfg(windows)]
-fn fixed_drives() -> Vec<PathBuf> {
+pub(crate) fn fixed_drives() -> Vec<PathBuf> {
     use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 

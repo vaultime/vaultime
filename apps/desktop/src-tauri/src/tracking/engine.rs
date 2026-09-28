@@ -368,6 +368,10 @@ fn observe_games(
                         | "riot"
                         | "hoyoplay"
                         | "ubisoft"
+                        | "ea"
+                        | "rockstar"
+                        | "xbox"
+                        | "amazon"
                 )
             ) {
                 game.install_folder.as_deref()
