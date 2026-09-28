@@ -20,7 +20,7 @@ const PAGES = [
 ] as const;
 
 export function Rail({ onSearch }: { onSearch: () => void }) {
-  const { summaries, active } = useLibrary();
+  const { visible: summaries, active } = useLibrary();
   const { session } = useCloudSession();
   const location = useLocation();
   const [appVersion, setAppVersion] = useState("");

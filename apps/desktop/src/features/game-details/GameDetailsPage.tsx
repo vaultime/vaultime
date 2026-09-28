@@ -4,8 +4,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { ImagePlus, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Eye, EyeOff, ImagePlus, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { DayBars, DayBarsLegend } from "@/components/charts/DayBars";
+import { Notice } from "@/components/layout/Page";
 import {
   TintedHeader,
   TintedOverline,
@@ -27,7 +28,7 @@ import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
 import { capitalize, numberWords } from "@/lib/words";
-import { cn } from "@/lib/utils";
+import { cn, describeError } from "@/lib/utils";
 
 const SOURCE_LABELS: Record<string, string> = {
   steam: "Steam",
@@ -61,6 +62,7 @@ function GamePage({ gameId }: { gameId: string }) {
   const [showAll, setShowAll] = useState(false);
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
+  const [hideError, setHideError] = useState<string | null>(null);
 
   const summary = summaries.find((entry) => entry.game.id === gameId);
   const sessions = useMemo(
@@ -126,6 +128,16 @@ function GamePage({ gameId }: { gameId: string }) {
     refresh().catch(() => {});
   }
 
+  async function setHidden(hidden: boolean) {
+    try {
+      setHideError(null);
+      await api.updateGame(game.id, { is_hidden: hidden });
+      await refresh();
+    } catch (error) {
+      setHideError(describeError(error));
+    }
+  }
+
   return (
     <div className="pb-16">
       <TintedHeader tint={tint} backdrop={cover} className="pt-9 pb-9">
@@ -161,6 +173,22 @@ function GamePage({ gameId }: { gameId: string }) {
 
       <div className="grid xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-10 px-8 pt-8 xl:pr-10 xl:pl-14">
+          {(game.is_hidden || hideError) && (
+            <div className="-mb-4 flex flex-col gap-3">
+              {game.is_hidden && (
+                <Notice>
+                  Hidden from the library. Vaultime still tracks it, and its sessions count in the journal and your
+                  totals.
+                  <Button variant="outline" size="sm" onClick={() => void setHidden(false)}>
+                    <Eye className="size-3.5" />
+                    Show in library
+                  </Button>
+                </Notice>
+              )}
+              {hideError && <Notice tone="warning">{hideError}</Notice>}
+            </div>
+          )}
+
           <section aria-labelledby="days-title" className="flex flex-col gap-3.5">
             <div className="flex items-baseline justify-between">
               <h2 id="days-title" className="font-display text-[30px]">
@@ -226,6 +254,10 @@ function GamePage({ gameId }: { gameId: string }) {
               <Button variant="outline" size="sm" onClick={() => setEditing(game)}>
                 <Pencil className="size-3.5" />
                 Edit
+              </Button>
+              <Button variant="ghost" size="sm" className="text-faint" onClick={() => void setHidden(!game.is_hidden)}>
+                {game.is_hidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                {game.is_hidden ? "Show in library" : "Hide"}
               </Button>
               <Button variant="ghost" size="sm" className="text-faint" onClick={() => setDeleting(game)}>
                 <Trash2 className="size-3.5" />

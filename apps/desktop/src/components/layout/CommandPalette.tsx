@@ -33,7 +33,7 @@ const FIXED: Command[] = [
 
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
-  const { summaries } = useLibrary();
+  const { visible: summaries } = useLibrary();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
 

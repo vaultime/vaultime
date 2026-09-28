@@ -47,19 +47,6 @@ pub fn create_game(db: &Database, input: &CreateGame) -> Result<Game> {
     })
 }
 
-/// Returns all non-hidden games, ordered by title.
-pub fn list_games(db: &Database) -> Result<Vec<Game>> {
-    db.with_conn(|conn| {
-        let mut stmt = conn
-            .prepare("SELECT * FROM games WHERE is_hidden = 0 ORDER BY title COLLATE NOCASE")
-            .map_err(map_db)?;
-
-        let rows = stmt.query_map([], row_to_game).map_err(map_db)?;
-
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
-    })
-}
-
 /// Returns all games including hidden, ordered by title.
 pub fn list_all_games(db: &Database) -> Result<Vec<Game>> {
     db.with_conn(|conn| {
@@ -172,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn list_excludes_hidden() {
+    fn hidden_games_stay_listed_with_their_flag() {
         let db = test_db();
         let g1 = create_game(
             &db,
@@ -209,12 +196,15 @@ mod tests {
         )
         .unwrap();
 
-        let visible = list_games(&db).unwrap();
-        assert_eq!(visible.len(), 1);
-        assert_eq!(visible[0].id, g1.id);
-
         let all = list_all_games(&db).unwrap();
         assert_eq!(all.len(), 2);
+        let hidden: Vec<&str> = all
+            .iter()
+            .filter(|game| game.is_hidden)
+            .map(|game| game.id.as_str())
+            .collect();
+        assert_eq!(hidden, [g2.id.as_str()]);
+        assert!(all.iter().any(|game| game.id == g1.id && !game.is_hidden));
     }
 
     #[test]

@@ -74,7 +74,7 @@ pub fn list_game_assets(db: &Database, game_id: &str) -> Result<Vec<GameAssetVie
 pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
     let mut views = Vec::new();
 
-    for game in games::list_games(db)? {
+    for game in games::list_all_games(db)? {
         let assets = game_assets::list_assets_for_game(db, &game.id)?;
         let preferred = resolve_preferred(&assets, preferred_asset_id(&game).as_deref());
         let is_preferred = |asset: &GameAsset| preferred.is_some_and(|p| p.id == asset.id);

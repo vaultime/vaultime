@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   disable as disableAutostart,
@@ -10,7 +11,7 @@ import {
 } from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArchiveRestore, Download, ExternalLink, Loader2, RotateCcw, Upload } from "lucide-react";
+import { ArchiveRestore, Download, ExternalLink, Eye, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,7 @@ const FALLBACK = {
 };
 
 export function SettingsPage() {
-  const { refresh } = useLibrary();
+  const { refresh, summaries } = useLibrary();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idleMinutes, setIdleMinutes] = useState(String(DEFAULT_IDLE_THRESHOLD_SECONDS / SECONDS_PER_MINUTE));
@@ -204,6 +205,17 @@ export function SettingsPage() {
 
   if (!loaded) return null;
 
+  const hidden = summaries.filter((summary) => summary.game.is_hidden);
+
+  async function showInLibrary(gameId: string) {
+    try {
+      await api.updateGame(gameId, { is_hidden: false });
+      await refresh();
+    } catch (showError) {
+      setError(String(showError));
+    }
+  }
+
   const platform = PLATFORM_NAMES[diagnostics?.platform ?? ""] ?? "this system";
   const foreground = FOREGROUND[diagnostics?.foreground_detection ?? ""] ?? FALLBACK;
   const idle = IDLE[diagnostics?.idle_detection ?? ""] ?? FALLBACK;
@@ -308,6 +320,29 @@ export function SettingsPage() {
             <Switch id="autostart" checked={autostart} onCheckedChange={(checked) => void changeAutostart(checked)} />
           </PageRow>
         </PageSection>
+
+        {hidden.length > 0 && (
+          <PageSection
+            title="Hidden games"
+            description="Still tracked, and their sessions count in the journal and your totals. Only the library leaves them out."
+          >
+            {hidden.map(({ game }) => (
+              <PageRow
+                key={game.id}
+                label={
+                  <Link to={`/library/${game.id}`} className="hover:underline">
+                    {game.title}
+                  </Link>
+                }
+              >
+                <Button variant="outline" size="sm" onClick={() => void showInLibrary(game.id)}>
+                  <Eye className="size-3.5" />
+                  Show in library
+                </Button>
+              </PageRow>
+            ))}
+          </PageSection>
+        )}
 
         <PageSection
           title="Detection"

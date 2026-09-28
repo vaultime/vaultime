@@ -72,9 +72,11 @@ pub fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, Vaultim
     Ok(true)
 }
 
+/// Every game, hidden ones too. Hidden games are still tracked and their
+/// sessions count, only the library views leave them out.
 #[tauri::command]
 pub fn list_games(db: State<'_, Arc<Database>>) -> Result<Vec<Game>, VaultimeError> {
-    games::list_games(&db)
+    games::list_all_games(&db)
 }
 
 #[tauri::command]

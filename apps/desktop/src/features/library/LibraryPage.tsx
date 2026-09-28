@@ -18,7 +18,7 @@ import { useLibrary } from "./library-context";
 type LibraryDialog = "add" | "discover";
 
 export function LibraryPage() {
-  const { summaries, sessions, active, loaded, error, refresh } = useLibrary();
+  const { summaries, visible, sessions, active, loaded, error, refresh } = useLibrary();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
@@ -35,16 +35,14 @@ export function LibraryPage() {
   const recent = useMemo(() => summarizeRecentPlay(sessions), [sessions]);
 
   const featured =
-    summaries.find((summary) => playing.has(summary.game.id)) ??
-    summaries.find((summary) => summary.lastPlayedAt) ??
-    null;
-  const shelf = summaries.filter((summary) => summary.lastPlayedAt && summary !== featured);
+    visible.find((summary) => playing.has(summary.game.id)) ?? visible.find((summary) => summary.lastPlayedAt) ?? null;
+  const shelf = visible.filter((summary) => summary.lastPlayedAt && summary !== featured);
 
   if (!loaded) return null;
 
   return (
     <div className="pb-16">
-      {summaries.length === 0 ? (
+      {visible.length === 0 ? (
         <LibraryHero kind="welcome" onDiscover={openDiscover} onAdd={openAdd} />
       ) : featured ? (
         <LibraryHero
@@ -54,7 +52,7 @@ export function LibraryPage() {
           weekRuntimeMs={recent.runtimeByGame.get(featured.game.id) ?? 0}
         />
       ) : (
-        <LibraryHero kind="unplayed" gameCount={summaries.length} onDiscover={openDiscover} onAdd={openAdd} />
+        <LibraryHero kind="unplayed" gameCount={visible.length} onDiscover={openDiscover} onAdd={openAdd} />
       )}
 
       {error && (
@@ -69,14 +67,14 @@ export function LibraryPage() {
         <Shelf
           games={shelf}
           playing={playing}
-          totalCount={summaries.length}
+          totalCount={visible.length}
           onShowAll={() => document.getElementById("all-games")?.scrollIntoView({ behavior: "smooth" })}
         />
       )}
 
-      {summaries.length > 0 && (
+      {visible.length > 0 && (
         <GameGrid
-          summaries={summaries}
+          summaries={visible}
           playing={playing}
           onDiscover={openDiscover}
           onAdd={openAdd}

@@ -836,7 +836,7 @@ mod tests {
         let backup = export_local_backup(&db, &asset_manager, &context, &exports_root).unwrap();
 
         games::delete_game(&db, &game.id).unwrap();
-        assert!(games::list_games(&db).unwrap().is_empty());
+        assert!(games::list_all_games(&db).unwrap().is_empty());
 
         import_local_backup(
             &db,
@@ -846,7 +846,7 @@ mod tests {
         )
         .unwrap();
 
-        let restored_games = games::list_games(&db).unwrap();
+        let restored_games = games::list_all_games(&db).unwrap();
         assert_eq!(restored_games.len(), 1);
         let restored_assets = game_assets::list_assets_for_game(&db, &game.id).unwrap();
         assert_eq!(restored_assets.len(), 1);

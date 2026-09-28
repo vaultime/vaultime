@@ -28,6 +28,9 @@ export interface LibraryState {
   idleThresholdSeconds: number;
   /** Every game with its totals, most recently played first. */
   summaries: GameSummary[];
+  /** The games the library shows, without hidden ones. Hidden games are still
+   * tracked, and their sessions count in the journal and the totals. */
+  visible: GameSummary[];
   loaded: boolean;
   /** Why the last load failed, null when it worked. */
   error: string | null;

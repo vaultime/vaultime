@@ -6,7 +6,8 @@
 // the URL for a fresh install, ?mock=unplayed for games without sessions or
 // ?mock=covers for artwork. Covers are not in the repo, copy portrait images
 // to dist-mock/covers/<n>.jpg (n = 1 to 7) after building to see them.
-// ?palette=1 opens the command palette. ?cloud=1 signs in to a fake cloud
+// ?palette=1 opens the command palette. ?hidden=1 hides Celeste from the
+// library. ?cloud=1 signs in to a fake cloud
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
 // password dialog on the cloud page.
 
@@ -34,7 +35,7 @@ const games: Game[] = titles.map((title, index) => ({
   install_folder: `C:\\Games\\${title}`,
   launcher_source: index < 4 ? "steam" : "folder_scan",
   metadata_json: "{}",
-  is_hidden: false,
+  is_hidden: params.get("hidden") === "1" && title === "Celeste",
   created_at: iso(now - 90 * DAY_MS),
   updated_at: iso(now - 90 * DAY_MS),
 }));
@@ -263,6 +264,12 @@ mockIPC((cmd, payload) => {
       return "0.1.0";
     case "list_games":
       return allGames;
+    case "update_game": {
+      const game = allGames.find((candidate) => candidate.id === args.id);
+      const input = (args.input ?? {}) as { is_hidden?: boolean | null };
+      if (game && typeof input.is_hidden === "boolean") game.is_hidden = input.is_hidden;
+      return game ?? null;
+    }
     case "list_sessions":
       return allSessions;
     case "get_session_events_for_game": {

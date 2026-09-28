@@ -147,6 +147,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     });
   }, [games, sessions, covers, artTints]);
 
+  const visible = useMemo(() => summaries.filter((summary) => !summary.game.is_hidden), [summaries]);
+
   const value = useMemo(
     () => ({
       games,
@@ -156,11 +158,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       activePolledAt,
       idleThresholdSeconds,
       summaries,
+      visible,
       loaded,
       error,
       refresh,
     }),
-    [games, sessions, covers, active, activePolledAt, idleThresholdSeconds, summaries, loaded, error, refresh],
+    [games, sessions, covers, active, activePolledAt, idleThresholdSeconds, summaries, visible, loaded, error, refresh],
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;

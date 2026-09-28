@@ -28,6 +28,7 @@ The first public release.
 - **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest.
 - **Steam covers.** Steam games get the cover art Steam already keeps on your PC.
 - **Artwork.** Picks up cover art from your game folders, or add your own.
+- **Hidden games.** Hide a game from the library without losing it. It stays tracked, its sessions still count in the journal and your totals, and Settings lists hidden games to bring them back.
 
 ### Backups
 
