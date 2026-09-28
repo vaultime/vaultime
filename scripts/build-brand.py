@@ -8,6 +8,9 @@ files look the same everywhere, with or without the font installed.
     python scripts/build-brand.py
 
 Needs `npm ci` in apps/desktop first for the font file.
+
+vaultime-avatar.png is vaultime-avatar.svg rendered at 1024 px with resvg, for
+GitHub and other sites that round the corners of a square avatar themselves.
 """
 
 import io
@@ -49,12 +52,13 @@ def mark(ink, pivot, frame_width=3.5, hand_width=5.5):
     )
 
 
-def tile_svg(size):
+def tile_svg(size, rounded=True):
     scale = size * 0.75 / 64
     offset = size * 0.125
+    radius = size * 0.2227 if rounded else 0
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-        f'<rect width="{size}" height="{size}" rx="{size * 0.2227:.1f}" fill="{TILE}"/>'
+        f'<rect width="{size}" height="{size}" rx="{radius:.1f}" fill="{TILE}"/>'
         f'<g transform="translate({offset} {offset}) scale({scale:.4f})">{mark(LIGHT, VIOLET)}</g>'
         "</svg>\n"
     )
@@ -111,6 +115,7 @@ def lockup_svg(ink, pivot):
 def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
+    (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))
