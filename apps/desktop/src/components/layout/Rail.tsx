@@ -6,6 +6,7 @@ import { NavLink, useLocation } from "react-router";
 import { BookOpen, Cloud, LibraryBig, Search, SlidersHorizontal } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
+import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
 import * as api from "@/lib/tauri";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
@@ -20,6 +21,7 @@ const PAGES = [
 
 export function Rail({ onSearch }: { onSearch: () => void }) {
   const { summaries, active } = useLibrary();
+  const { session } = useCloudSession();
   const location = useLocation();
   const [appVersion, setAppVersion] = useState("");
   const playing = new Set(active.map((session) => session.game_id));
@@ -30,7 +32,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
 
   return (
     <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 xl:px-5">
-      <Logo className="px-2" />
+      <Logo className="px-2" signedIn={session !== null} />
 
       <button
         type="button"
