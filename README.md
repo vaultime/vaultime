@@ -35,7 +35,7 @@ Vaultime keeps track of how long you really play your PC games, no matter which 
 - **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
 - **Game pages in the game's colors.** The last two weeks at a glance, totals, and the cover you pick.
 - **Always in view.** A live bar shows the running game and its timer, and Ctrl+K jumps to any game or page.
-- **Backups.** Export and restore your whole library locally, or use the optional encrypted cloud backup.
+- **Backups.** Automatic local backups every day, restore with a preview, and optional encrypted cloud backup.
 
 ## Download
 
@@ -81,7 +81,7 @@ These labels detect changes, they cannot prevent them. They are hints, not proof
 
 ## Backups
 
-- **Local backups** are folders you can keep anywhere. Create one with Save a backup under Settings, Local backups. Restore from a backup shows what is inside before anything is replaced.
+- **Local backups** are folders you can keep anywhere. Vaultime makes one by itself once a day and when it quits, and keeps the newest seven. Pick their folder under Settings, Local backups, ideally on another drive or in a folder that syncs. Save a backup makes one by hand, and Restore from a backup shows what is inside before anything is replaced.
 - **Cloud backup** is free and invite-only. Backups are encrypted on your computer with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe, without it a backup cannot be restored. When you reach the backup limit, a new upload replaces your oldest one. You can also delete backups yourself.
 
 ## Your data

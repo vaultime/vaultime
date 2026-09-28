@@ -24,7 +24,15 @@ export const SETTING_KEYS = {
   idleThreshold: "idle_threshold_seconds",
   backgroundActive: "treat_background_as_active",
   closeToTray: "close_to_tray",
+  /** Same as AUTO_BACKUP_ENABLED_SETTING in constants.rs. */
+  autoBackup: "auto_backup_enabled",
+  /** Same as AUTO_BACKUP_FOLDER_SETTING in constants.rs. */
+  autoBackupFolder: "auto_backup_folder",
+  cloudAutoBackup: "cloud_auto_backup_enabled",
 } as const;
+
+/** Automatic local backups kept. Same as AUTO_BACKUP_KEEP in constants.rs. */
+export const AUTO_BACKUP_KEEP = 7;
 
 /** Event the core sends when games or covers changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
 export const LIBRARY_CHANGED_EVENT = "library-changed";
@@ -47,6 +55,10 @@ export const MIN_IDLE_THRESHOLD_SECONDS = 5;
 
 /** Refresh the access token when it expires within this window. */
 export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;
+/** Age of the newest cloud backup at which the daily automatic one is due. */
+export const CLOUD_AUTO_BACKUP_INTERVAL_MS = DAY_MS;
+/** How often a signed in app checks whether the daily cloud backup is due. */
+export const CLOUD_AUTO_BACKUP_CHECK_MS = HOUR_MS;
 
 /** Shortest backup passphrase the app accepts. */
 export const MIN_BACKUP_PASSPHRASE_CHARS = 12;

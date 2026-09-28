@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import {
+  AUTO_BACKUP_KEEP,
   DEFAULT_IDLE_THRESHOLD_SECONDS,
   MIN_IDLE_THRESHOLD_SECONDS,
   SECONDS_PER_MINUTE,
@@ -79,6 +80,8 @@ export function SettingsPage() {
   const [restartRequired, setRestartRequired] = useState(false);
   const [trayAvailable, setTrayAvailable] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
+  const [autoBackup, setAutoBackup] = useState(true);
+  const [autoBackupFolder, setAutoBackupFolder] = useState("");
   const [autostart, setAutostart] = useState(false);
 
   useEffect(() => {
@@ -91,12 +94,15 @@ export function SettingsPage() {
       // Optional extras. Failing here must not hide the tracking rules.
       api.trayAvailable().catch(() => false),
       autostartEnabled().catch(() => false),
+      api.getAutoBackupFolder().catch(() => ""),
     ])
-      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin]) => {
+      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder]) => {
         if (cancelled) return;
         const values = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
         setTrayAvailable(Boolean(tray));
         setCloseToTray(values[SETTING_KEYS.closeToTray] !== "false");
+        setAutoBackup(values[SETTING_KEYS.autoBackup] !== "false");
+        setAutoBackupFolder(backupFolder);
         setAutostart(Boolean(startsAtLogin));
         const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECONDS);
         setIdleMinutes(String(seconds / SECONDS_PER_MINUTE));
@@ -147,6 +153,16 @@ export function SettingsPage() {
     }
   }
 
+  async function changeAutoBackup(next: boolean) {
+    setAutoBackup(next);
+    try {
+      await api.setSetting(SETTING_KEYS.autoBackup, String(next));
+    } catch (saveError) {
+      setAutoBackup(!next);
+      setError(String(saveError));
+    }
+  }
+
   async function changeAutostart(next: boolean) {
     setAutostart(next);
     try {
@@ -183,6 +199,14 @@ export function SettingsPage() {
       setBackupMessage(`Saved to ${summary.backup_path}`);
       setRestorePreview(null);
       setSnapshots(await api.listBackupSnapshots());
+    });
+
+  const changeAutoBackupFolder = () =>
+    runBackupTask(async () => {
+      const folder = await chooseFolder("Choose where automatic backups go");
+      if (!folder) return;
+      await api.setSetting(SETTING_KEYS.autoBackupFolder, folder);
+      setAutoBackupFolder(await api.getAutoBackupFolder());
     });
 
   const chooseRestore = () =>
@@ -380,7 +404,26 @@ export function SettingsPage() {
           title="Local backups"
           description="A backup is a folder with the database, the cached artwork and a checksum for every file."
         >
-          <div className="flex flex-wrap gap-3">
+          <PageRow
+            label="Back up automatically"
+            htmlFor="auto-backup"
+            hint={`Once a day and when Vaultime quits. The newest ${numberWords(AUTO_BACKUP_KEEP)} are kept, backups you save yourself are never deleted.`}
+          >
+            <Switch id="auto-backup" checked={autoBackup} onCheckedChange={(checked) => void changeAutoBackup(checked)} />
+          </PageRow>
+          <PageRow
+            label="Automatic backups go to"
+            hint="A folder on another drive or one that syncs keeps them safe if this drive fails."
+          >
+            <span className="flex max-w-[420px] items-center gap-3">
+              <span className="min-w-0 font-mono text-xs break-all text-soft">{autoBackupFolder || "Not set"}</span>
+              <Button variant="outline" size="sm" onClick={changeAutoBackupFolder} disabled={backupBusy}>
+                Change
+              </Button>
+            </span>
+          </PageRow>
+
+          <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={exportBackup} disabled={backupBusy}>
               {backupBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
               Save a backup

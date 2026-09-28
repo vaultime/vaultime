@@ -26,7 +26,10 @@ use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
-use constants::{DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES};
+use constants::{
+    AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL, AUTO_BACKUP_ON_QUIT_MIN_AGE, DEVICE_ID_FILE,
+    LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
+};
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
@@ -96,6 +99,7 @@ pub fn run() {
             commands::get_active_sessions,
             commands::get_session_events_for_game,
             commands::list_backup_snapshots,
+            commands::get_auto_backup_folder,
             commands::export_local_backup,
             commands::inspect_local_backup,
             commands::import_local_backup,
@@ -114,10 +118,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Vaultime")
         .run(|app, event| {
-            if let RunEvent::Exit = event
-                && let Some(engine) = app.try_state::<TrackingEngine>()
-            {
-                engine.shutdown();
+            if let RunEvent::Exit = event {
+                if let Some(engine) = app.try_state::<TrackingEngine>() {
+                    engine.shutdown();
+                }
+                back_up_on_quit(app);
             }
         });
 }
@@ -151,6 +156,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         device_id,
         app_version: version,
     });
+    start_automatic_backups(
+        Arc::clone(&database),
+        AssetManager::new(asset_cache_dir.clone()),
+        app.state::<AppContext>().inner().clone(),
+    );
+
     // Existing Steam games pick up Steam's covers without a manual scan.
     let backfill_db = Arc::clone(&database);
     let backfill_assets = AssetManager::new(asset_cache_dir.clone());
@@ -184,6 +195,41 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Checks every hour whether the daily automatic backup is due.
+fn start_automatic_backups(database: Arc<Database>, assets: AssetManager, context: AppContext) {
+    let spawned = std::thread::Builder::new()
+        .name("vaultime-auto-backup".into())
+        .spawn(move || {
+            loop {
+                if let Err(error) =
+                    backup::auto::back_up_if_due(&database, &assets, &context, AUTO_BACKUP_INTERVAL)
+                {
+                    log::warn!("automatic backup failed: {error}");
+                }
+                std::thread::sleep(AUTO_BACKUP_CHECK_INTERVAL);
+            }
+        });
+    if let Err(error) = spawned {
+        log::warn!("could not start automatic backups: {error}");
+    }
+}
+
+/// Quitting saves the day's play, unless a backup was made within the hour.
+fn back_up_on_quit(app: &tauri::AppHandle) {
+    let (Some(database), Some(assets), Some(context)) = (
+        app.try_state::<Arc<Database>>(),
+        app.try_state::<AssetManager>(),
+        app.try_state::<AppContext>(),
+    ) else {
+        return;
+    };
+    if let Err(error) =
+        backup::auto::back_up_if_due(&database, &assets, &context, AUTO_BACKUP_ON_QUIT_MIN_AGE)
+    {
+        log::warn!("automatic backup on quit failed: {error}");
+    }
 }
 
 fn enable_autostart(app: &tauri::AppHandle) {

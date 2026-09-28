@@ -10,6 +10,7 @@
       "allow": [{ "url": "https://*" }]
     },
     "dialog:allow-open",
+    "log:allow-log",
     "updater:allow-check",
     "updater:allow-download-and-install",
     "process:allow-restart",

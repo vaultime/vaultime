@@ -19,6 +19,9 @@ export interface CloudSessionContextValue {
   device: CloudDevice | null;
   deviceError: string | null;
   backupKeyReady: boolean;
+  /** Whether a signed in PC uploads a backup once a day. */
+  autoBackup: boolean;
+  setAutoBackup: (enabled: boolean) => Promise<void>;
   isAdmin: boolean;
   login: (
     email: string,

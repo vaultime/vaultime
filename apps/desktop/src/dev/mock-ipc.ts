@@ -288,6 +288,8 @@ mockIPC((cmd, payload) => {
       return signedIn;
     case "tray_available":
       return true;
+    case "get_auto_backup_folder":
+      return "C:/Users/you/AppData/Roaming/com.vaultime.app/backups";
     case "discover_steam_games":
       return [
         discovered("Balatro", "C:/Steam/steamapps/common/Balatro/Balatro.exe", "steam", true),

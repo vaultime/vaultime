@@ -163,6 +163,17 @@ pub fn get_session_events_for_game(
     session_events::list_events_for_game(&db, &game_id)
 }
 
+/// The folder automatic backups go to right now.
+#[tauri::command]
+pub fn get_auto_backup_folder(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+) -> String {
+    backup::auto::folder(&db, &app_context.app_dir)
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[tauri::command]
 pub fn list_backup_snapshots(
     db: State<'_, Arc<Database>>,

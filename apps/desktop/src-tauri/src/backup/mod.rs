@@ -3,6 +3,7 @@
 
 //! Local backup export, inspection and restore.
 
+pub mod auto;
 pub mod remote;
 
 use std::fmt::Write;
@@ -28,7 +29,7 @@ use crate::platform::process::file_name;
 
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 const BACKUP_DB_FILE: &str = "vaultime.db";
-const BACKUP_MANIFEST_FILE: &str = "manifest.json";
+pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 const BACKUP_ASSET_DIR: &str = "asset-cache";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +78,23 @@ pub fn export_local_backup(
     app_context: &AppContext,
     destination_dir: &Path,
 ) -> Result<LocalBackupSummary> {
+    export_backup_to(
+        db,
+        asset_manager,
+        app_context,
+        destination_dir,
+        BACKUP_DIR_PREFIX,
+    )
+}
+
+/// Writes a backup folder named `<prefix>-<timestamp>` into `destination_dir`.
+pub(crate) fn export_backup_to(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    destination_dir: &Path,
+    prefix: &str,
+) -> Result<LocalBackupSummary> {
     if !destination_dir.exists() || !destination_dir.is_dir() {
         return Err(VaultimeError::Backup(
             "backup destination must be an existing directory".into(),
@@ -85,10 +103,7 @@ pub fn export_local_backup(
 
     let backup_id = uuid::Uuid::new_v4().to_string();
     let created_at = integrity::now_timestamp();
-    let backup_dir = destination_dir.join(format!(
-        "{BACKUP_DIR_PREFIX}-{}",
-        compact_timestamp(&created_at)
-    ));
+    let backup_dir = destination_dir.join(format!("{prefix}-{}", compact_timestamp(&created_at)));
 
     fs::create_dir_all(&backup_dir).map_err(|error| {
         VaultimeError::Backup(format!(

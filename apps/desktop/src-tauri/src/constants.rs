@@ -126,6 +126,25 @@ pub const COVER_HEIGHT_PX: u32 = 960;
 pub const BACKUP_VERSION: u32 = 1;
 /// Entries shown in the backup history.
 pub const BACKUP_HISTORY_LIMIT: usize = 8;
+/// Folder in Vaultime's data folder for automatic backups, unless the user
+/// picks another one.
+pub const AUTO_BACKUP_DIR: &str = "backups";
+/// Setting with the folder the user picked for automatic backups. Same as
+/// `SETTING_KEYS.autoBackupFolder` in `lib/constants.ts`.
+pub const AUTO_BACKUP_FOLDER_SETTING: &str = "auto_backup_folder";
+/// Setting that turns automatic backups off with `false`. Same as
+/// `SETTING_KEYS.autoBackup` in `lib/constants.ts`.
+pub const AUTO_BACKUP_ENABLED_SETTING: &str = "auto_backup_enabled";
+/// Folder name prefix of automatic backups, so pruning never touches others.
+pub const AUTO_BACKUP_PREFIX: &str = "vaultime-auto";
+/// Automatic backups kept, older ones are deleted.
+pub const AUTO_BACKUP_KEEP: usize = 7;
+/// Age of the newest automatic backup at which the daily one is due.
+pub const AUTO_BACKUP_INTERVAL: Duration = Duration::from_hours(24);
+/// Quitting makes a backup only when the last one is at least this old.
+pub const AUTO_BACKUP_ON_QUIT_MIN_AGE: Duration = Duration::from_hours(1);
+/// How often the running app checks whether the daily backup is due.
+pub const AUTO_BACKUP_CHECK_INTERVAL: Duration = Duration::from_hours(1);
 /// Unix permissions of the files in a cloud backup archive.
 pub const ARCHIVE_FILE_MODE: u32 = 0o644;
 /// Read buffer size for hashing backup files.

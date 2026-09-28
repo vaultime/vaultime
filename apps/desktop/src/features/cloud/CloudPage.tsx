@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { Field } from "@/features/cloud/Field";
@@ -113,6 +114,7 @@ function persistCachedRemoteBackups(
 export function CloudPage() {
   const {
     apiBaseUrl,
+    autoBackup,
     backupKeyReady,
     createAdminInvite,
     deleteBackup,
@@ -128,6 +130,7 @@ export function CloudPage() {
     restoreRemoteBackup,
     setBackupPassphrase,
     session,
+    setAutoBackup,
     signUp,
     uploadRemoteBackup,
   } = useCloudSession();
@@ -659,7 +662,21 @@ export function CloudPage() {
                 </form>
               )}
 
-              <div className="flex flex-wrap gap-3">
+              <PageRow
+                label="Back up every day"
+                htmlFor="cloud-auto-backup"
+                hint="While this PC is signed in and its backups are unlocked. At the limit, the oldest backup makes room."
+              >
+                <Switch
+                  id="cloud-auto-backup"
+                  checked={autoBackup}
+                  onCheckedChange={(checked) =>
+                    setAutoBackup(checked).catch((error: unknown) => setErrorMessage(describeError(error)))
+                  }
+                />
+              </PageRow>
+
+              <div className="mt-6 flex flex-wrap gap-3">
                 <Button onClick={() => void handleCreateRemoteBackup()} disabled={remoteBackupBusy || !backupKeyReady}>
                   {remoteBackupBusy ? <Loader2 className="size-4 animate-spin" /> : <HardDriveUpload className="size-4" />}
                   Back up now

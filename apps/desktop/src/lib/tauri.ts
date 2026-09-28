@@ -123,6 +123,10 @@ export async function getSessionEventsForGame(
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
 }
 
+export async function getAutoBackupFolder(): Promise<string> {
+  return invoke<string>("get_auto_backup_folder");
+}
+
 export async function listBackupSnapshots(): Promise<BackupSnapshot[]> {
   return invoke<BackupSnapshot[]>("list_backup_snapshots");
 }

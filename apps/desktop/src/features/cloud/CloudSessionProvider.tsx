@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { info, warn } from "@tauri-apps/plugin-log";
 import {
   CLOUD_API_BASE_URL,
   CloudApiError,
@@ -15,14 +16,22 @@ import {
   cloudGetJson,
   cloudPostJson,
 } from "@/lib/cloud-api";
-import { MIN_BACKUP_PASSPHRASE_CHARS, TOKEN_REFRESH_MARGIN_MS } from "@/lib/constants";
+import {
+  CLOUD_AUTO_BACKUP_CHECK_MS,
+  CLOUD_AUTO_BACKUP_INTERVAL_MS,
+  MIN_BACKUP_PASSPHRASE_CHARS,
+  SETTING_KEYS,
+  TOKEN_REFRESH_MARGIN_MS,
+} from "@/lib/constants";
 import { BACKUP_PASSPHRASE_TOO_SHORT } from "@/lib/cloud-api";
 import {
   clearCloudBackupKeySecure,
   clearCloudSessionSecure,
   getAppVersion,
   hasCloudBackupKeySecure,
+  listSettings,
   loadCloudSessionSecure,
+  setSetting,
   restoreRemoteBackup as restoreRemoteBackupCommand,
   storeCloudBackupKeySecure,
   storeCloudSessionSecure,
@@ -48,6 +57,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
+  const [autoBackup, setAutoBackupState] = useState(true);
   const sessionRef = useRef<CloudAuthSession | null>(null);
   const bootstrappedRef = useRef(false);
   const appVersionRef = useRef<string | null>(null);
@@ -60,6 +70,51 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    listSettings()
+      .then((settings) => {
+        const value = settings.find((setting) => setting.key === SETTING_KEYS.cloudAutoBackup)?.value;
+        setAutoBackupState(value !== "false");
+      })
+      .catch(() => {});
+  }, []);
+
+  // Uploads a backup when the newest one on the server is a day old. Runs
+  // while this PC is signed in with its backups unlocked.
+  const backUpIfDue = useEffectEvent(async () => {
+    try {
+      const backups = await listBackups();
+      const newest = backups
+        .filter((backup) => backup.status === "complete")
+        .reduce((latest, backup) => Math.max(latest, Date.parse(backup.uploaded_at)), 0);
+      if (Date.now() - newest >= CLOUD_AUTO_BACKUP_INTERVAL_MS) {
+        await uploadRemoteBackup("Automatic");
+        void info("automatic cloud backup uploaded");
+      }
+    } catch (error) {
+      // The next check tries again, the app works without the cloud.
+      void warn(`automatic cloud backup failed: ${describeError(error)}`);
+    }
+  });
+
+  const accountId = session?.user.id ?? null;
+  useEffect(() => {
+    if (!accountId || !backupKeyReady || !autoBackup) return;
+    void backUpIfDue();
+    const timer = window.setInterval(() => void backUpIfDue(), CLOUD_AUTO_BACKUP_CHECK_MS);
+    return () => window.clearInterval(timer);
+  }, [accountId, backupKeyReady, autoBackup]);
+
+  async function setAutoBackup(enabled: boolean) {
+    setAutoBackupState(enabled);
+    try {
+      await setSetting(SETTING_KEYS.cloudAutoBackup, String(enabled));
+    } catch (error) {
+      setAutoBackupState(!enabled);
+      throw error;
+    }
+  }
 
   useEffect(() => {
     if (bootstrappedRef.current) {
@@ -459,6 +514,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     device,
     deviceError,
     backupKeyReady,
+    autoBackup,
+    setAutoBackup,
     isAdmin: session?.user.role === "admin",
     login,
     signUp,
