@@ -36,12 +36,13 @@ VIOLET_ON_LIGHT = "#7A55F0"
 # past eleven, which form a V, pivoting in violet at the center of the dial.
 # The tick at six o'clock keeps it reading as a dial, not a checkbox.
 FRAME = (7, 7, 50, 50, 15)
+FRAME_WIDTH = 3.5
 HANDS = "M25.5 21.3L32 32.5L41 17"
 TICK = "M32 44.5v3.5"
 PIVOT = (32, 32.5, 3.4)
 
 
-def mark(ink, pivot, frame_width=3.5, hand_width=5.5):
+def mark(ink, pivot, frame_width=FRAME_WIDTH, hand_width=5.5):
     x, y, w, h, r = FRAME
     cx, cy, pr = PIVOT
     return (
@@ -52,14 +53,27 @@ def mark(ink, pivot, frame_width=3.5, hand_width=5.5):
     )
 
 
-def tile_svg(size, rounded=True):
+def tile_svg(size):
     scale = size * 0.75 / 64
     offset = size * 0.125
-    radius = size * 0.2227 if rounded else 0
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-        f'<rect width="{size}" height="{size}" rx="{radius:.1f}" fill="{TILE}"/>'
+        f'<rect width="{size}" height="{size}" rx="{size * 0.2227:.1f}" fill="{TILE}"/>'
         f'<g transform="translate({offset} {offset}) scale({scale:.4f})">{mark(LIGHT, VIOLET)}</g>'
+        "</svg>\n"
+    )
+
+
+def avatar_svg(size, margin=0.06):
+    """The mark on a full-bleed square, the frame `margin` of the size from each edge."""
+    x, _, w, _, _ = FRAME
+    frame_outer = w + FRAME_WIDTH
+    scale = size * (1 - 2 * margin) / frame_outer
+    offset = size * margin - (x - FRAME_WIDTH / 2) * scale
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
+        f'<rect width="{size}" height="{size}" fill="{TILE}"/>'
+        f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(LIGHT, VIOLET)}</g>'
         "</svg>\n"
     )
 
@@ -115,7 +129,7 @@ def lockup_svg(ink, pivot):
 def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
-    (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
+    (ASSETS / "vaultime-avatar.svg").write_text(avatar_svg(1024), encoding="utf8")
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))
