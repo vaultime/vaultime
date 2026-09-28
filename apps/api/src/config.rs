@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use crate::constants::{
-    DEFAULT_MAX_BACKUP_BYTES, DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT,
+    DEFAULT_MAX_ACCOUNT_BYTES, DEFAULT_MAX_BACKUP_BYTES, DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT,
     DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT, DEFAULT_MIN_BACKUP_INTERVAL_SECS,
     DEFAULT_STALE_PENDING_BACKUP_SECS,
 };
@@ -22,6 +22,8 @@ pub struct Config {
     pub access_token_secret: String,
     pub refresh_token_pepper: String,
     pub max_backup_bytes: i64,
+    /// Backups and artwork of one account together.
+    pub max_account_bytes: i64,
     pub max_pending_backups_per_account: i64,
     /// Older complete backups beyond this count are rotated out after each new upload.
     pub max_complete_backups_per_account: i64,
@@ -41,6 +43,7 @@ impl Config {
             access_token_secret: env_var("VAULTIME_ACCESS_TOKEN_SECRET")?,
             refresh_token_pepper: env_var("VAULTIME_REFRESH_TOKEN_PEPPER")?,
             max_backup_bytes: env_i64("VAULTIME_MAX_BACKUP_BYTES", DEFAULT_MAX_BACKUP_BYTES, 1)?,
+            max_account_bytes: env_i64("VAULTIME_MAX_ACCOUNT_BYTES", DEFAULT_MAX_ACCOUNT_BYTES, 1)?,
             max_pending_backups_per_account: env_i64(
                 "VAULTIME_MAX_PENDING_BACKUPS_PER_ACCOUNT",
                 DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT,

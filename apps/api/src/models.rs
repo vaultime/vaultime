@@ -79,6 +79,27 @@ pub struct CreateBackupRequest {
     pub backup_created_at: DateTime<Utc>,
     pub metadata_json: Option<Value>,
     pub client_device_id: Option<String>,
+    /// Artwork blobs the backup needs. Older clients put artwork into the
+    /// backup itself and send none.
+    #[serde(default)]
+    pub blob_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MissingBlobsRequest {
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MissingBlobsResponse {
+    pub missing: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StorageResponse {
+    pub backup_bytes: i64,
+    pub artwork_bytes: i64,
+    pub limit_bytes: i64,
 }
 
 #[derive(Debug, Serialize, FromRow)]

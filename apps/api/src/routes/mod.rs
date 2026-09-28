@@ -4,6 +4,7 @@
 mod admin;
 mod auth;
 mod backups;
+mod blobs;
 mod devices;
 
 use axum::http::{Method, header};
@@ -46,6 +47,12 @@ pub fn router(state: AppState) -> Router {
             "/v1/backups/{backup_id}/download",
             get(backups::download_backup),
         )
+        .route("/v1/blobs/missing", post(blobs::missing_blobs))
+        .route(
+            "/v1/blobs/{blob_id}",
+            get(blobs::download_blob).put(blobs::upload_blob),
+        )
+        .route("/v1/storage", get(blobs::storage))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

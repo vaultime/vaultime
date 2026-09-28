@@ -21,6 +21,13 @@ pub enum AppError {
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
+    /// A backup refers to artwork the server does not hold. The client
+    /// uploads it and tries again.
+    #[error("{0}")]
+    MissingArtwork(String),
+    /// The account has no room left for the upload.
+    #[error("{0}")]
+    StorageFull(String),
     #[error("{0}")]
     Configuration(String),
     /// The message is only logged. Clients get a generic one.
@@ -49,6 +56,14 @@ impl AppError {
         Self::Conflict(message.into())
     }
 
+    pub fn missing_artwork(message: impl Into<String>) -> Self {
+        Self::MissingArtwork(message.into())
+    }
+
+    pub fn storage_full(message: impl Into<String>) -> Self {
+        Self::StorageFull(message.into())
+    }
+
     pub fn configuration(message: impl Into<String>) -> Self {
         Self::Configuration(message.into())
     }
@@ -66,6 +81,8 @@ impl IntoResponse for AppError {
             Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, "not_found", message),
             Self::Conflict(message) => (StatusCode::CONFLICT, "conflict", message),
+            Self::MissingArtwork(message) => (StatusCode::CONFLICT, "missing_artwork", message),
+            Self::StorageFull(message) => (StatusCode::PAYLOAD_TOO_LARGE, "storage_full", message),
             Self::Configuration(detail) | Self::Internal(detail) => {
                 tracing::error!(error = %detail, "request failed");
                 (

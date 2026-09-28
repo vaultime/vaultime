@@ -19,6 +19,9 @@ use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
+use super::blobs::{
+    account_usage, attach_blobs, collect_unreferenced_blobs, storage_full, validate_blob_ids,
+};
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
 use crate::constants::{BYTES_PER_MIB, SECS_PER_MINUTE};
@@ -64,6 +67,8 @@ pub async fn create_backup(
         ));
     }
 
+    let blob_ids = validate_blob_ids(&payload.blob_ids)?;
+
     prune_stale_pending_backups(&state, auth.account_id).await?;
     enforce_backup_limits(&state, auth.account_id).await?;
 
@@ -98,6 +103,8 @@ pub async fn create_backup(
         .filter(|value| !value.is_empty());
     let metadata_json = payload.metadata_json.unwrap_or_default();
 
+    // The backup and its references to artwork appear together or not at all.
+    let mut transaction = state.db.begin().await?;
     let row = sqlx::query_as::<_, BackupRecordResponse>(AssertSqlSafe(format!(
         "WITH b AS (
              INSERT INTO cloud_backups (
@@ -125,8 +132,10 @@ pub async fn create_backup(
     .bind(checksum)
     .bind(payload.backup_created_at)
     .bind(metadata_json)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *transaction)
     .await?;
+    attach_blobs(&mut transaction, auth.account_id, backup_id, &blob_ids).await?;
+    transaction.commit().await?;
 
     Ok((StatusCode::CREATED, Json(row)))
 }
@@ -152,11 +161,16 @@ pub async fn upload_backup_content(
     }
 
     let max_backup_bytes = state.config.max_backup_bytes;
-    let received = receive_body(request.into_body(), &temp_path, max_backup_bytes).await;
+    let room = state.config.max_account_bytes - account_usage(&state, auth.account_id).await?;
+    let limit = room.clamp(0, max_backup_bytes);
+    let received = receive_body(request.into_body(), &temp_path, limit).await;
     let (size_bytes, actual_checksum) = match received {
         Ok(Some(received)) => received,
         Ok(None) => {
             remove_backup(&state, auth.account_id, backup_id, &backup.storage_key).await?;
+            if limit < max_backup_bytes {
+                return Err(storage_full(state.config.max_account_bytes));
+            }
             return Err(AppError::bad_request(format!(
                 "backup exceeds the current {} MiB size limit",
                 max_backup_bytes / BYTES_PER_MIB
@@ -204,6 +218,9 @@ pub async fn upload_backup_content(
 
     if let Err(error) = rotate_complete_backups(&state, auth.account_id, backup_id).await {
         tracing::error!(account_id = %auth.account_id, error = %error, "backup rotation failed");
+    }
+    if let Err(error) = collect_unreferenced_blobs(&state, auth.account_id).await {
+        tracing::error!(account_id = %auth.account_id, error = %error, "artwork cleanup failed");
     }
 
     Ok(Json(row))
@@ -267,6 +284,9 @@ pub async fn delete_backup(
 ) -> AppResult<StatusCode> {
     let backup = find_backup(&state, auth.account_id, backup_id).await?;
     remove_backup(&state, auth.account_id, backup.id, &backup.storage_key).await?;
+    if let Err(error) = collect_unreferenced_blobs(&state, auth.account_id).await {
+        tracing::error!(account_id = %auth.account_id, error = %error, "artwork cleanup failed");
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -289,7 +309,11 @@ async fn find_backup(
 
 /// Streams the body to `path` and returns its size and SHA-256 hex digest. Returns `None` as soon
 /// as the body grows past `max_bytes`.
-async fn receive_body(body: Body, path: &Path, max_bytes: i64) -> AppResult<Option<(i64, String)>> {
+pub(super) async fn receive_body(
+    body: Body,
+    path: &Path,
+    max_bytes: i64,
+) -> AppResult<Option<(i64, String)>> {
     let mut writer = BufWriter::new(File::create(path).await?);
     let mut stream = body.into_data_stream();
     let mut hasher = Sha256::new();
@@ -430,7 +454,7 @@ async fn remove_backup_files(
     remove_file_if_present(&final_path).await
 }
 
-async fn remove_file_if_present(path: &Path) -> std::io::Result<()> {
+pub(super) async fn remove_file_if_present(path: &Path) -> std::io::Result<()> {
     match fs::remove_file(path).await {
         Err(error) if error.kind() != ErrorKind::NotFound => Err(error),
         _ => Ok(()),
@@ -445,7 +469,7 @@ fn temporary_backup_path(final_path: &Path, backup_id: Uuid) -> PathBuf {
     final_path.with_file_name(format!("{backup_id}.part"))
 }
 
-fn is_sha256_hex(value: &str) -> bool {
+pub(super) fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 

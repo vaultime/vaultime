@@ -267,6 +267,7 @@ mod tests {
             access_token_secret: ACCESS_SECRET.into(),
             refresh_token_pepper: "test-pepper".into(),
             max_backup_bytes: 1024,
+            max_account_bytes: 4096,
             max_pending_backups_per_account: 1,
             max_complete_backups_per_account: 30,
             min_backup_interval_seconds: 900,

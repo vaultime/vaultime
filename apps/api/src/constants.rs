@@ -57,13 +57,22 @@ pub const INVITE_CODE_GROUP_LENGTH: usize = 4;
 //
 // Defaults for the `VAULTIME_*` backup settings. They only exist to stop abuse.
 
-/// Largest accepted backup upload in bytes.
+/// Largest accepted backup upload in bytes. Also the largest artwork blob.
 pub const DEFAULT_MAX_BACKUP_BYTES: i64 = 512 * BYTES_PER_MIB;
+/// Storage one account may use for backups and artwork together, in bytes.
+pub const DEFAULT_MAX_ACCOUNT_BYTES: i64 = 2048 * BYTES_PER_MIB;
 /// Unfinished uploads allowed per account at the same time.
 pub const DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT: i64 = 1;
 /// Complete backups kept per account before the oldest are rotated out.
 pub const DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT: i64 = 30;
 /// Shortest time between two backups of an account, in seconds.
 pub const DEFAULT_MIN_BACKUP_INTERVAL_SECS: i64 = 15 * SECS_PER_MINUTE;
-/// Age in seconds after which an unfinished upload is removed.
+/// Age in seconds after which an unfinished upload is removed. Artwork that no
+/// backup refers to is kept this long too, so a backup being assembled keeps
+/// the artwork it just uploaded.
 pub const DEFAULT_STALE_PENDING_BACKUP_SECS: i64 = 60 * SECS_PER_MINUTE;
+
+// Artwork blobs
+
+/// Most blob ids a client may ask about or refer to in one request.
+pub const MAX_BLOB_IDS_PER_REQUEST: usize = 10_000;
