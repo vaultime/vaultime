@@ -24,7 +24,7 @@ The first public release.
 
 - **Library home.** Opens on the game you play right now or last, in colors taken from its cover, with the last seven days in numbers, a shelf of recent games and every game below.
 - **Game pages.** The last two weeks at a glance, every session as a sentence, totals and the cover you pick.
-- **Journal.** Your play week by week, with a 24 hour strip for each day.
+- **Journal.** Your play week by week, with a 24 hour strip for each day. Games that ran side by side are hatched on the strip and count once in the day and week totals.
 - **Live bar and search.** The running game and its timer stay at the bottom of every page, and Ctrl+K jumps to any game, page or action.
 - **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest.
 - **Steam covers.** Steam games get the cover art Steam already keeps on your PC.
