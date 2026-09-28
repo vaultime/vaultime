@@ -33,7 +33,7 @@ import { Field } from "@/features/cloud/Field";
 import { BACKUP_PASSPHRASE_TOO_SHORT, INVITE_CODE_PREFIX } from "@/lib/cloud-api";
 import { BYTES_PER_KIB, MIN_BACKUP_PASSPHRASE_CHARS, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
-import type { CloudAdminInvite, CloudBackupRecord } from "@/lib/types";
+import type { CloudAdminInvite, CloudBackupRecord, CloudStorage } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { capitalize, plural } from "@/lib/words";
 
@@ -46,6 +46,11 @@ function formatTimestamp(value: string | null | undefined) {
   } catch {
     return value;
   }
+}
+
+/** What a backup restores. Newer backups keep their artwork apart, stored once for all of them. */
+function backupSize(backup: CloudBackupRecord) {
+  return formatByteSize(backup.size_bytes + (backup.metadata_json?.artwork_bytes ?? 0));
 }
 
 function formatByteSize(bytes: number) {
@@ -123,6 +128,7 @@ export function CloudPage() {
     initializing,
     isAdmin,
     listBackups,
+    getStorage,
     login,
     logout,
     refreshSession,
@@ -139,6 +145,7 @@ export function CloudPage() {
   const [authBusy, setAuthBusy] = useState(false);
   const [deviceBusy, setDeviceBusy] = useState(false);
   const [backupsLoading, setBackupsLoading] = useState(false);
+  const [storage, setStorage] = useState<CloudStorage | null>(null);
   const [remoteBackupBusy, setRemoteBackupBusy] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -169,6 +176,9 @@ export function CloudPage() {
   const [inviteNote, setInviteNote] = useState("");
 
   function requestBackups(accountId: string) {
+    getStorage()
+      .then(setStorage)
+      .catch(() => setStorage(null));
     return listBackups()
       .then((backups) => {
         setRemoteBackups(backups);
@@ -203,6 +213,7 @@ export function CloudPage() {
   if (backupsAccountId !== accountId) {
     setBackupsAccountId(accountId);
     setRemoteBackups([]);
+    setStorage(null);
     setBackupsLoading(accountId !== null);
   }
 
@@ -676,6 +687,18 @@ export function CloudPage() {
                 />
               </PageRow>
 
+              {storage && (
+                <PageRow
+                  label="Space used"
+                  hint="Artwork is stored once for all backups, so a new backup adds little more than your history."
+                >
+                  <span className="font-mono text-sm">
+                    {formatByteSize(storage.backup_bytes + storage.artwork_bytes)} of{" "}
+                    {formatByteSize(storage.limit_bytes)}
+                  </span>
+                </PageRow>
+              )}
+
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button onClick={() => void handleCreateRemoteBackup()} disabled={remoteBackupBusy || !backupKeyReady}>
                   {remoteBackupBusy ? <Loader2 className="size-4 animate-spin" /> : <HardDriveUpload className="size-4" />}
@@ -714,7 +737,7 @@ export function CloudPage() {
                           {[
                             backup.metadata_json && plural(backup.metadata_json.games_count, "game"),
                             backup.metadata_json && plural(backup.metadata_json.sessions_count, "session"),
-                            formatByteSize(backup.size_bytes),
+                            backupSize(backup),
                             backup.metadata_json?.source_device_id ?? backup.client_device_id,
                           ]
                             .filter(Boolean)
@@ -962,7 +985,7 @@ export function CloudPage() {
           <DialogHeader>
             <DialogTitle>Delete this backup?</DialogTitle>
             <DialogDescription>
-              {deleteTarget?.label ?? "The backup"}, {deleteTarget ? formatByteSize(deleteTarget.size_bytes) : ""},
+              {deleteTarget?.label ?? "The backup"}, {deleteTarget ? backupSize(deleteTarget) : ""},
               is removed from the server. Nothing on this PC changes.
             </DialogDescription>
           </DialogHeader>

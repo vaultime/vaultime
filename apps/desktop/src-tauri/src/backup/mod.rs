@@ -4,6 +4,7 @@
 //! Local backup export, inspection and restore.
 
 pub mod auto;
+mod crypto;
 pub mod remote;
 
 use std::fmt::Write;

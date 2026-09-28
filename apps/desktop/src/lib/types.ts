@@ -169,6 +169,15 @@ export interface CloudBackupPayloadSummary {
   encryption: string;
   archive_checksum: string;
   archive_size_bytes: number;
+  /** Artwork the backup restores, stored once for all backups. Missing on older backups. */
+  artwork_bytes?: number;
+}
+
+/** Cloud space of the signed in account. */
+export interface CloudStorage {
+  backup_bytes: number;
+  artwork_bytes: number;
+  limit_bytes: number;
 }
 
 export interface CloudBackupRecord {
@@ -205,6 +214,8 @@ export interface CloudAdminInvite {
 export interface CloudBackupUploadResult {
   backup: CloudBackupRecord;
   payload_summary: CloudBackupPayloadSummary;
+  /** Artwork files that were new to the server. */
+  artwork_uploaded: number;
 }
 
 export interface CloudBackupRestoreSummary {

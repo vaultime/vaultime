@@ -156,7 +156,6 @@ pub const HASH_BUFFER_BYTES: usize = 64 * 1024;
 pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 /// Cloud backup key length, as `ChaCha20Poly1305` requires.
 pub const BACKUP_KEY_BYTES: usize = 32;
-/// Nonce length, as `ChaCha20Poly1305` requires.
-pub const NONCE_BYTES: usize = 12;
-/// Random nonce prefix per archive. The rest of the nonce is the chunk index.
-pub const NONCE_PREFIX_BYTES: usize = 4;
+/// Most artwork ids asked about in one request. Same as
+/// `MAX_BLOB_IDS_PER_REQUEST` in the API's `constants.rs`.
+pub const MAX_ARTWORK_IDS_PER_REQUEST: usize = 10_000;

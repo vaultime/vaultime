@@ -170,6 +170,7 @@ function cloudBackup(id: string, label: string, daysAgo: number, games: number, 
       encryption: "chacha20poly1305",
       archive_checksum: "preview",
       archive_size_bytes: 180_000,
+      artwork_bytes: games * 1_200_000,
     },
   };
 }
@@ -210,6 +211,8 @@ window.fetch = async (input, init) => {
       return cloudReply(200, cloudDevice);
     case "/v1/backups":
       return cloudReply(200, [cloudBackup("backup-2", "Before the reinstall", 2, 7, 38), cloudBackup("backup-1", "Backup", 16, 6, 24)]);
+    case "/v1/storage":
+      return cloudReply(200, { backup_bytes: 480_000, artwork_bytes: 8_700_000, limit_bytes: 2048 * 1024 * 1024 });
     default:
       return cloudReply(404, { error: { code: "not_found", message: "not found" } });
   }

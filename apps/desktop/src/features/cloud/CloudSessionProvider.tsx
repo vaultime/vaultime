@@ -43,6 +43,7 @@ import type {
   CloudBackupRecord,
   CloudCreateAdminInviteInput,
   CloudDevice,
+  CloudStorage,
 } from "@/lib/types";
 import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError } from "@/lib/utils";
@@ -330,6 +331,12 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  async function getStorage() {
+    return withAuthenticatedSession((current) =>
+      cloudGetJson<CloudStorage>("/v1/storage", current.access_token),
+    );
+  }
+
   async function uploadRemoteBackup(label?: string | null) {
     return withAuthenticatedSession(async (current) => {
       await ensureBackupKeyForSession(current);
@@ -532,6 +539,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     refreshSession,
     registerCurrentDevice,
     listBackups,
+    getStorage,
     uploadRemoteBackup,
     restoreRemoteBackup,
     deleteBackup,

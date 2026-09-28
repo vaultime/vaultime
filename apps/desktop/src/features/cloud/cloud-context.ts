@@ -10,6 +10,7 @@ import type {
   CloudBackupUploadResult,
   CloudCreateAdminInviteInput,
   CloudDevice,
+  CloudStorage,
 } from "@/lib/types";
 
 export interface CloudSessionContextValue {
@@ -40,6 +41,7 @@ export interface CloudSessionContextValue {
   refreshSession: () => Promise<CloudAuthSession | null>;
   registerCurrentDevice: () => Promise<CloudDevice | null>;
   listBackups: () => Promise<CloudBackupRecord[]>;
+  getStorage: () => Promise<CloudStorage>;
   uploadRemoteBackup: (label?: string | null) => Promise<CloudBackupUploadResult>;
   restoreRemoteBackup: (backupId: string) => Promise<CloudBackupRestoreResult>;
   deleteBackup: (backupId: string) => Promise<void>;
