@@ -3,7 +3,11 @@
 # release binary and the systemd units (vaultime-api.service and the
 # vaultime-db-backup service and timer) next to this script. Running it again
 # updates the binary and keeps the database and secrets. Caddy has to
-# be installed already. The script adds a site to its config.
+# be installed already. The script writes the site to its own file and
+# imports it from the Caddyfile.
+#
+# Optional files next to the script: site.tar.gz replaces the website, and
+# release-upload.pub is the key the release workflow uploads installers with.
 #
 #   install-api.sh <domain>     the public API host, for example api.example.com
 set -euo pipefail
@@ -84,6 +88,41 @@ systemctl enable --now vaultime-db-backup.timer >/dev/null
 systemctl enable vaultime-api >/dev/null
 systemctl restart vaultime-api
 
+# The website, replaced as a whole.
+site_root=/srv/vaultime-site
+if [ -f "$here/site.tar.gz" ]; then
+  rm -rf "$site_root.new" "$site_root.old"
+  install -d -m 0755 "$site_root.new"
+  tar -xzf "$here/site.tar.gz" -C "$site_root.new" --no-same-owner --no-same-permissions
+  chmod -R u=rwX,go=rX "$site_root.new"
+  [ -d "$site_root" ] && mv "$site_root" "$site_root.old"
+  mv "$site_root.new" "$site_root"
+  rm -rf "$site_root.old"
+fi
+install -d -m 0755 "$site_root"
+
+# Installers and the updater manifest. The release workflow signs in as
+# vaultime-release, and its key may only run rrsync inside this folder. Links
+# it uploads are made harmless, so Caddy cannot be pointed outside the folder.
+downloads=/srv/vaultime-downloads
+release_home=/var/lib/vaultime-release
+id vaultime-release >/dev/null 2>&1 \
+  || useradd --system --create-home --home-dir "$release_home" --shell /bin/sh vaultime-release
+# No password can match "*", and unlike a locked account it still takes keys.
+usermod -p '*' vaultime-release
+install -d -o vaultime-release -g vaultime-release -m 0755 "$downloads"
+if [ -f "$here/release-upload.pub" ]; then
+  key=$(tr -d '\r' <"$here/release-upload.pub" | head -n 1)
+  case $key in
+    ssh-ed25519\ *) ;;
+    *) echo "release-upload.pub is not an ed25519 public key" >&2; exit 1 ;;
+  esac
+  install -d -o vaultime-release -g vaultime-release -m 0700 "$release_home/.ssh"
+  printf 'command="/usr/bin/rrsync -munge %s",restrict %s\n' "$downloads" "$key" >"$release_home/.ssh/authorized_keys"
+  chown vaultime-release:vaultime-release "$release_home/.ssh/authorized_keys"
+  chmod 0600 "$release_home/.ssh/authorized_keys"
+fi
+
 healthy() {
   for _ in $(seq 1 20); do
     curl -fsS http://127.0.0.1:9005/healthz >/dev/null 2>&1 && return 0
@@ -104,18 +143,70 @@ if ! healthy; then
 fi
 echo "API is up on 127.0.0.1:9005"
 
-# Add the site to Caddy once. Other sites on the box stay untouched, and a
-# config that does not validate is rolled back.
+# The Caddy site lives in its own file that the Caddyfile imports. Other sites
+# on the box stay untouched, and a config that does not validate is rolled back.
 caddyfile=/etc/caddy/Caddyfile
-if ! grep -q "^$domain {" "$caddyfile"; then
-  cp "$caddyfile" "$caddyfile.before-vaultime"
-  printf '\n%s {\n\tencode zstd gzip\n\treverse_proxy 127.0.0.1:9005\n}\n' "$domain" >>"$caddyfile"
-  if caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null 2>&1; then
-    systemctl reload caddy
-    echo "Caddy now serves $domain"
-  else
-    mv -f "$caddyfile.before-vaultime" "$caddyfile"
-    echo "Caddy config did not validate, restored the previous one" >&2
-    exit 1
-  fi
+caddy_site=/etc/caddy/vaultime.caddy
+cp "$caddyfile" "$caddyfile.before-vaultime"
+if [ -f "$caddy_site" ]; then cp "$caddy_site" "$caddy_site.before-vaultime"; fi
+cat >"$caddy_site" <<EOF
+$domain {
+	encode zstd gzip
+
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:9005
+	}
+	handle /healthz {
+		reverse_proxy 127.0.0.1:9005
+	}
+
+	# Installers change behind the same latest links, so browsers and the
+	# updater always ask again.
+	handle_path /downloads/* {
+		root * $downloads
+		header Cache-Control no-cache
+		file_server
+	}
+
+	handle {
+		root * $site_root
+		header {
+			X-Content-Type-Options nosniff
+			Referrer-Policy no-referrer
+			Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+		}
+		file_server
+	}
+}
+EOF
+chmod 0644 "$caddy_site"
+if ! grep -qxF "import $caddy_site" "$caddyfile"; then
+  # Earlier installs wrote the site into the Caddyfile itself.
+  {
+    awk -v start="$domain {" '$0 == start { skip = 1; next } skip { if ($0 == "}") skip = 0; next } { print }' \
+      "$caddyfile.before-vaultime"
+    printf '\nimport %s\n' "$caddy_site"
+  } | cat -s >"$caddyfile"
 fi
+
+restore_caddy() {
+  mv -f "$caddyfile.before-vaultime" "$caddyfile"
+  if [ -f "$caddy_site.before-vaultime" ]; then
+    mv -f "$caddy_site.before-vaultime" "$caddy_site"
+  else
+    rm -f "$caddy_site"
+  fi
+}
+if ! caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null 2>&1; then
+  restore_caddy
+  echo "Caddy config did not validate, restored the previous one" >&2
+  exit 1
+fi
+if cmp -s "$caddyfile" "$caddyfile.before-vaultime" \
+  && cmp -s "$caddy_site" "$caddy_site.before-vaultime"; then
+  echo "Caddy config unchanged"
+else
+  systemctl reload caddy
+  echo "Caddy now serves $domain"
+fi
+rm -f "$caddyfile.before-vaultime" "$caddy_site.before-vaultime"

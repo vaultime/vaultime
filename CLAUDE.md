@@ -41,7 +41,8 @@ apps/api/         Self-hosted cloud backup API
 deploy/vps/       Server install script, systemd unit and admin tools
 docs/             Legal pages and landing page (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
-scripts/          Dev helpers: Linux checks, packaging, API deploy, logo, UI screenshots
+scripts/          Dev helpers: Linux checks, packaging, API and site deploy, release
+                  upload, logo, UI screenshots
 assets/           Brand assets
 ```
 

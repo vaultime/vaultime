@@ -1,9 +1,10 @@
 name: Release
 
 # A version tag runs the CI checks, builds the Windows and Linux installers
-# into a draft release, installs the Linux packages on several distros and
-# publishes the release once everything passed. A manual run builds and tests
-# without publishing and keeps the installers as workflow artifacts.
+# into a draft release, installs the Linux packages on several distros, then
+# uploads the installers to the download server and publishes the release
+# once everything passed. A manual run builds and tests without publishing
+# and keeps the installers as workflow artifacts.
 
 on:
   push:
@@ -209,7 +210,36 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      # Public host key of the download server.
+      KNOWN_HOST: vaultime.codfishcloud.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEwdueLrdL1ZgF5dR8eOO48VWq/Zi46bFk7uBLJZ/8Is
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+
+      - name: Download the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir release
+
+      # Installed apps look for updates on the download server, so a release
+      # is only published once its files are there.
+      - name: Upload to the download server
+        env:
+          SSH_KEY: ${{ secrets.VAULTIME_RELEASE_SSH_KEY }}
+        run: |
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::Add the VAULTIME_RELEASE_SSH_KEY secret before tagging a release."
+            exit 1
+          fi
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/release
+          chmod 0600 ~/.ssh/release
+          printf '%s\n' "$KNOWN_HOST" > ~/.ssh/known_hosts
+          export RSYNC_RSH="ssh -i $HOME/.ssh/release -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          bash scripts/publish-downloads.sh "$GITHUB_REF_NAME" release
+
       - name: Publish the draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
