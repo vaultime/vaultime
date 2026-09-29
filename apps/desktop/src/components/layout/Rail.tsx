@@ -78,7 +78,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
           <p className="px-3 text-[13px] text-faint">Games you add show up here.</p>
         )}
         <ul className="no-scrollbar -mr-2 flex min-h-0 flex-col gap-0.5 overflow-y-auto pr-2">
-          {summaries.map(({ game, cover, runtimeMs, lastPlayedAt }) => {
+          {summaries.map(({ game, cover, totalMs, lastPlayedAt }) => {
             const selected = location.pathname === `/library/${game.id}`;
             return (
               <li key={game.id}>
@@ -101,8 +101,8 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
                           : "Not played yet"}
                     </span>
                   </span>
-                  {runtimeMs > 0 && (
-                    <span className="text-xs text-faint tabular-nums">{formatHoursShort(runtimeMs)}</span>
+                  {totalMs > 0 && (
+                    <span className="text-xs text-faint tabular-nums">{formatHoursShort(totalMs)}</span>
                   )}
                 </NavLink>
               </li>

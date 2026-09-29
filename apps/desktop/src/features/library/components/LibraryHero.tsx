@@ -80,7 +80,7 @@ export function LibraryHero(props: HeroProps) {
           </TintedOverline>
           <TintedTitle tint={tint} text={game.title} />
           <TintedSentence tint={tint}>
-            <PhraseText phrase={libraryPlaytime(summary.runtimeMs, weekRuntimeMs)} />
+            <PhraseText phrase={libraryPlaytime(summary.totalMs, weekRuntimeMs)} />
           </TintedSentence>
           <div className="mt-7 flex flex-wrap gap-3">
             <TintedButton tint={tint} solid to={`/library/${game.id}`}>

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
+import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import {
   AUTO_BACKUP_KEEP,
   DEFAULT_IDLE_THRESHOLD_SECONDS,
@@ -370,6 +371,8 @@ export function SettingsPage() {
             ))}
           </PageSection>
         )}
+
+        <EarlierPlaytimeSection onError={setError} />
 
         <PageSection
           title="Detection"

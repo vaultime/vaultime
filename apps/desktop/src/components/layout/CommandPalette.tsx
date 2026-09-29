@@ -44,10 +44,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     const games: Command[] = summaries
       .filter(({ game }) => matches(game.title))
       .slice(0, needle ? PALETTE_GAMES_SEARCHING : PALETTE_GAMES_IDLE)
-      .map(({ game, cover, runtimeMs }) => ({
+      .map(({ game, cover, totalMs }) => ({
         id: `game-${game.id}`,
         label: game.title,
-        hint: runtimeMs > 0 ? `${formatHoursShort(runtimeMs)} played` : "Not played yet",
+        hint: totalMs > 0 ? `${formatHoursShort(totalMs)} played` : "Not played yet",
         kind: "Game",
         to: `/library/${game.id}`,
         cover: { title: game.title, src: cover },

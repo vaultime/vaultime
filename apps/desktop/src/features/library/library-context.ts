@@ -3,15 +3,20 @@
 
 import { createContext, useContext } from "react";
 import type { GameTint } from "@/lib/game-tint";
-import type { Game, Session } from "@/lib/types";
+import type { EarlierPlaytime, Game, Session } from "@/lib/types";
 
 export interface GameSummary {
   game: Game;
   cover: string | null;
   /** From the cover art when there is some, otherwise from the title. */
   tint: GameTint;
+  /** Tracked by Vaultime. */
   runtimeMs: number;
   activeMs: number;
+  /** Playtime from before Vaultime, when it was imported. */
+  earlier: EarlierPlaytime | null;
+  /** Tracked and earlier playtime together. */
+  totalMs: number;
   sessionsCount: number;
   suspiciousCount: number;
   recoveredCount: number;

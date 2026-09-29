@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, LIBRARY_CHANGED_EVENT, SETTING_KEYS } from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
-import type { Game, Session } from "@/lib/types";
+import type { EarlierPlaytime, Game, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { LibraryContext, type GameSummary } from "./library-context";
@@ -15,6 +15,7 @@ import { LibraryContext, type GameSummary } from "./library-context";
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [earlier, setEarlier] = useState<EarlierPlaytime[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
   const [activePolledAt, setActivePolledAt] = useState(() => Date.now());
@@ -28,14 +29,16 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextGames, nextSessions, assets, settings] = await Promise.all([
+      const [nextGames, nextSessions, assets, settings, nextEarlier] = await Promise.all([
         api.listGames(),
         api.listSessions(),
         api.listPreferredGameAssets(),
         api.listSettings(),
+        api.listEarlierPlaytime(),
       ]);
       setGames(nextGames);
       setSessions(nextSessions);
+      setEarlier(nextEarlier);
       setCovers(
         Object.fromEntries(
           assets
@@ -126,6 +129,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         tint: artTints[game.id] ?? tintForTitle(game.title),
         runtimeMs: 0,
         activeMs: 0,
+        earlier: null,
+        totalMs: 0,
         sessionsCount: 0,
         suspiciousCount: 0,
         recoveredCount: 0,
@@ -145,13 +150,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         summary.lastPlayedAt = session.started_at_wall;
       }
     }
+    for (const entry of earlier) {
+      const summary = byGame.get(entry.game_id);
+      if (summary) summary.earlier = entry;
+    }
+    for (const summary of byGame.values()) {
+      summary.totalMs = summary.runtimeMs + (summary.earlier?.earlier_ms ?? 0);
+    }
     return [...byGame.values()].sort((a, b) => {
       if (a.lastPlayedAt && b.lastPlayedAt) return b.lastPlayedAt.localeCompare(a.lastPlayedAt);
       if (a.lastPlayedAt) return -1;
       if (b.lastPlayedAt) return 1;
       return a.game.title.localeCompare(b.game.title);
     });
-  }, [games, sessions, covers, artTints]);
+  }, [games, sessions, covers, artTints, earlier]);
 
   const visible = useMemo(() => summaries.filter((summary) => !summary.game.is_hidden), [summaries]);
 

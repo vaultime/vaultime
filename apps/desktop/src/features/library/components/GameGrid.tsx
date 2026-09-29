@@ -47,7 +47,7 @@ export function GameGrid({
     if (sort === "recent") return summaries;
     const copy = [...summaries];
     if (sort === "title") copy.sort((a, b) => a.game.title.localeCompare(b.game.title));
-    if (sort === "played") copy.sort((a, b) => b.runtimeMs - a.runtimeMs);
+    if (sort === "played") copy.sort((a, b) => b.totalMs - a.totalMs);
     return copy;
   }, [summaries, sort]);
 
@@ -114,7 +114,7 @@ function GameTile({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const { game, cover, runtimeMs, lastPlayedAt, suspiciousCount, recoveredCount } = summary;
+  const { game, cover, totalMs, lastPlayedAt, suspiciousCount, recoveredCount } = summary;
 
   return (
     <li className="group relative">
@@ -154,9 +154,9 @@ function GameTile({
                 <span className="size-1.5 rounded-full bg-violet" />
                 <span className="text-violet">Playing now</span>
               </>
-            ) : runtimeMs > 0 ? (
+            ) : totalMs > 0 ? (
               <>
-                <span className="tabular-nums">{formatHoursShort(runtimeMs)}</span>
+                <span className="tabular-nums">{formatHoursShort(totalMs)}</span>
                 {lastPlayedAt && <span aria-hidden="true">·</span>}
                 {lastPlayedAt && <span className="truncate">{formatRelativeDay(lastPlayedAt)}</span>}
               </>

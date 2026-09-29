@@ -20,13 +20,13 @@ import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS } from "@/lib/constants";
+import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
 import { buildDailyActivity } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
-import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
+import type { EarlierPlaytime, Game, GameAssetView, SessionEvent } from "@/lib/types";
 import { capitalize, numberWords } from "@/lib/words";
 import { cn, describeError } from "@/lib/utils";
 
@@ -227,13 +227,16 @@ function GamePage({ gameId }: { gameId: string }) {
           className="flex flex-col gap-8 border-rule px-8 pt-10 xl:border-l xl:pt-8 xl:pr-14 xl:pl-8"
         >
           <AsideSection title="Totals">
-            <TotalRow label="Runtime" value={formatHoursMinutes(summary.runtimeMs)} />
+            {summary.earlier && <TotalRow label="In all" value={formatHoursMinutes(summary.totalMs)} />}
+            <TotalRow label={summary.earlier ? "Tracked here" : "Runtime"} value={formatHoursMinutes(summary.runtimeMs)} />
             <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
             <TotalRow label="Idle" value={formatHoursMinutes(idleMs)} />
             <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
             <TotalRow label="Longest" value={formatHoursMinutes(longest)} />
             <TotalRow label="First played" value={firstPlayed ? formatCalendarDay(firstPlayed) : "Not yet"} />
           </AsideSection>
+
+          {summary.earlier && <EarlierSection earlier={summary.earlier} />}
 
           <CoverPicker gameId={gameId} assets={assets} onChanged={onAssetsChanged} />
 
@@ -293,6 +296,26 @@ function AsideSection({ title, children }: { title: string; children: ReactNode 
       <h2 className="label-caps mb-2.5">{title}</h2>
       {children}
     </section>
+  );
+}
+
+/** Playtime from before Vaultime, and what it is made of. */
+function EarlierSection({ earlier }: { earlier: EarlierPlaytime }) {
+  const launcherMs = earlier.launcher_minutes * MINUTE_MS;
+  return (
+    <AsideSection title="Before Vaultime">
+      <TotalRow label="From Steam" value={formatHoursMinutes(earlier.earlier_ms)} />
+      {earlier.last_played_at && (
+        <TotalRow label="Last played on Steam" value={formatCalendarDay(earlier.last_played_at)} />
+      )}
+      <p className="mt-2.5 text-[13px] leading-relaxed text-faint">
+        Steam counted {formatHoursMinutes(launcherMs)} by {formatCalendarDay(earlier.imported_at)}
+        {earlier.tracked_before_ms > 0
+          ? `, of which ${formatHoursMinutes(Math.min(earlier.tracked_before_ms, launcherMs))} were tracked here too and count once`
+          : ""}
+        . It has no sessions, so the journal and the stats leave it out.
+      </p>
+    </AsideSection>
   );
 }
 

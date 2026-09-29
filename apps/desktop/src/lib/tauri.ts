@@ -16,6 +16,8 @@ import type {
   DiscoveredGame,
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
+  EarlierPlaytime,
+  SteamPlaytimePreview,
 } from "@/lib/types";
 
 export async function getAppVersion(): Promise<string> {
@@ -121,6 +123,24 @@ export async function getSessionEventsForGame(
   gameId: string,
 ): Promise<SessionEvent[]> {
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
+}
+
+export async function listEarlierPlaytime(): Promise<EarlierPlaytime[]> {
+  return invoke<EarlierPlaytime[]>("list_earlier_playtime");
+}
+
+/** What an import from Steam would add, without storing anything. */
+export async function previewSteamPlaytime(): Promise<SteamPlaytimePreview> {
+  return invoke<SteamPlaytimePreview>("preview_steam_playtime");
+}
+
+export async function importSteamPlaytime(): Promise<SteamPlaytimePreview> {
+  return invoke<SteamPlaytimePreview>("import_steam_playtime");
+}
+
+/** Removes all playtime imported from Steam. Returns how many games had some. */
+export async function removeSteamPlaytime(): Promise<number> {
+  return invoke<number>("remove_steam_playtime");
 }
 
 /** Turns the tray and taskbar icon violet while signed in to cloud backup. */

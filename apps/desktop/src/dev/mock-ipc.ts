@@ -14,7 +14,16 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
-import type { CloudAuthSession, CloudBackupRecord, CloudDevice, Game, Session, SessionEvent } from "@/lib/types";
+import type {
+  CloudAuthSession,
+  CloudBackupRecord,
+  CloudDevice,
+  EarlierPlaytime,
+  Game,
+  Session,
+  SessionEvent,
+  SteamPlaytimePreview,
+} from "@/lib/types";
 
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -96,6 +105,38 @@ const live: Session = {
 const played = scenario === "empty" || scenario === "unplayed" ? [] : [live, ...sessions];
 const allSessions = played.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
 const allGames = scenario === "empty" ? [] : games;
+
+// Steam's own count for three games. Balatro ran less on Steam than Vaultime
+// tracked, so it adds nothing.
+const trackedMs = (gameId: string) =>
+  allSessions.filter((session) => session.game_id === gameId).reduce((sum, session) => sum + session.runtime_ms, 0);
+const steamPreview: SteamPlaytimePreview = {
+  found: true,
+  account: "Player",
+  games: [
+    { gameId: "game-1", minutes: 38_000 },
+    { gameId: "game-2", minutes: 16_500 },
+    { gameId: "game-3", minutes: 900 },
+  ]
+    .map(({ gameId, minutes }) => {
+      const tracked = trackedMs(gameId);
+      return {
+        game_id: gameId,
+        title: games.find((game) => game.id === gameId)?.title ?? "",
+        launcher_minutes: minutes,
+        tracked_before_ms: tracked,
+        earlier_ms: Math.max(0, minutes * MINUTE_MS - tracked),
+        last_played_at: iso(now - 400 * DAY_MS),
+      };
+    })
+    .sort((a, b) => b.earlier_ms - a.earlier_ms),
+};
+const toEarlier = (candidate: SteamPlaytimePreview["games"][number]): EarlierPlaytime => ({
+  ...candidate,
+  source: "steam",
+  imported_at: iso(now - 2 * DAY_MS),
+});
+let earlierPlaytime: EarlierPlaytime[] = params.get("earlier") === "1" ? steamPreview.games.map(toEarlier) : [];
 
 // Flagged and recovered sessions explain themselves, and one skipped a sleep.
 const events: SessionEvent[] = allSessions.flatMap((session, index) => {
@@ -281,6 +322,18 @@ mockIPC((cmd, payload) => {
       return "0.1.0";
     case "list_games":
       return allGames;
+    case "list_earlier_playtime":
+      return earlierPlaytime;
+    case "preview_steam_playtime":
+      return steamPreview;
+    case "import_steam_playtime":
+      earlierPlaytime = steamPreview.games.map(toEarlier);
+      return steamPreview;
+    case "remove_steam_playtime": {
+      const removed = earlierPlaytime.length;
+      earlierPlaytime = [];
+      return removed;
+    }
     case "update_game": {
       const game = allGames.find((candidate) => candidate.id === args.id);
       const input = (args.input ?? {}) as { is_hidden?: boolean | null };

@@ -57,7 +57,7 @@ export function Shelf({
                       ? formatRelativeDay(summary.lastPlayedAt)
                       : ""}
                 </span>
-                <span className="shrink-0 tabular-nums">{formatHoursShort(summary.runtimeMs)}</span>
+                <span className="shrink-0 tabular-nums">{formatHoursShort(summary.totalMs)}</span>
               </span>
             </Link>
           </li>

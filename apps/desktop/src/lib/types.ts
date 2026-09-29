@@ -173,6 +173,38 @@ export interface CloudBackupPayloadSummary {
   artwork_bytes?: number;
 }
 
+/** Playtime a game had before Vaultime, read once from a launcher. */
+export interface EarlierPlaytime {
+  game_id: string;
+  /** "steam". */
+  source: string;
+  /** The launcher's total at the import. */
+  launcher_minutes: number;
+  /** Runtime Vaultime had tracked for the game before the import. */
+  tracked_before_ms: number;
+  /** The launcher's total without the part Vaultime had tracked. */
+  earlier_ms: number;
+  last_played_at: string | null;
+  imported_at: string;
+}
+
+/** A library game and the playtime Steam counted for it. */
+export interface EarlierCandidate {
+  game_id: string;
+  title: string;
+  launcher_minutes: number;
+  tracked_before_ms: number;
+  earlier_ms: number;
+  last_played_at: string | null;
+}
+
+export interface SteamPlaytimePreview {
+  /** Whether a Steam install with playtime was found at all. */
+  found: boolean;
+  account: string | null;
+  games: EarlierCandidate[];
+}
+
 /** An application for cloud beta access from the website. */
 export interface BetaApplication {
   id: string;
