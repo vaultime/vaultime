@@ -20,10 +20,13 @@ use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{BACKUP_HISTORY_LIMIT, POLL_INTERVAL};
 use crate::db::connection::Database;
 use crate::db::models::{
-    BackupSnapshot, CreateGame, Game, Session, SessionEvent, Setting, UpdateGame,
+    BackupSnapshot, CreateGame, EarlierPlaytime, Game, Session, SessionEvent, Setting, UpdateGame,
 };
-use crate::db::repo::{backup_snapshots, games, session_events, sessions, settings};
+use crate::db::repo::{
+    backup_snapshots, earlier_playtime, games, session_events, sessions, settings,
+};
 use crate::discovery::{self, DiscoveredGame};
+use crate::earlier;
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::platform::controller;
@@ -399,6 +402,35 @@ pub fn discover_games(
     paths: Vec<String>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
     discovery::scanner::scan_folders(&db, &paths)
+}
+
+/// Playtime from before Vaultime, per game.
+#[tauri::command]
+pub fn list_earlier_playtime(
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<EarlierPlaytime>, VaultimeError> {
+    earlier_playtime::list_earlier_playtime(&db)
+}
+
+/// What an import from Steam would add, without storing anything.
+#[tauri::command(async)]
+pub fn preview_steam_playtime(
+    db: State<'_, Arc<Database>>,
+) -> Result<earlier::SteamPlaytimePreview, VaultimeError> {
+    earlier::preview_steam(&db)
+}
+
+#[tauri::command(async)]
+pub fn import_steam_playtime(
+    db: State<'_, Arc<Database>>,
+) -> Result<earlier::SteamPlaytimePreview, VaultimeError> {
+    earlier::import_steam(&db)
+}
+
+/// Removes all playtime imported from Steam. Returns how many games had some.
+#[tauri::command]
+pub fn remove_steam_playtime(db: State<'_, Arc<Database>>) -> Result<usize, VaultimeError> {
+    earlier_playtime::clear_earlier_playtime(&db, earlier::STEAM_SOURCE)
 }
 
 #[tauri::command(async)]

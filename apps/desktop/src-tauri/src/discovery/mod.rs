@@ -20,6 +20,7 @@ pub mod metadata;
 pub mod registry;
 pub mod scanner;
 pub mod steam;
+mod vdf;
 #[cfg(windows)]
 pub mod xbox;
 #[cfg(windows)]

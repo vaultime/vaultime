@@ -252,6 +252,7 @@ fn ensure_schema_supported(backup_migrations: &[String]) -> Result<()> {
 const RESTORE_TABLES: &[&str] = &[
     "devices",
     "games",
+    "earlier_playtime",
     "game_assets",
     "sessions",
     "session_events",
@@ -282,19 +283,6 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
     let backup_db = backup_db_path.to_string_lossy().to_string();
 
     db.with_conn(|conn| {
-        let mut statements = String::from("PRAGMA foreign_keys=OFF;\nBEGIN IMMEDIATE;\n");
-        for table in RESTORE_TABLES.iter().rev() {
-            let _ = writeln!(statements, "DELETE FROM {table};");
-        }
-        for table in RESTORE_TABLES {
-            let columns = table_columns(conn, table)?.join(", ");
-            let _ = writeln!(
-                statements,
-                "INSERT INTO {table} ({columns}) SELECT {columns} FROM backup_restore.{table};"
-            );
-        }
-        statements.push_str("COMMIT;\nPRAGMA foreign_keys=ON;");
-
         conn.execute_batch(&format!(
             "ATTACH DATABASE '{}' AS backup_restore;",
             sqlite_string_literal(&backup_db)
@@ -306,29 +294,58 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
             ))
         })?;
 
-        let restore_result = conn.execute_batch(&statements);
+        let restore_result = restore_statements(conn).and_then(|statements| {
+            conn.execute_batch(&statements).map_err(|error| {
+                VaultimeError::Backup(format!(
+                    "failed to restore database tables from backup: {error}"
+                ))
+            })
+        });
         if restore_result.is_err() {
             let _ = conn.execute_batch("ROLLBACK; PRAGMA foreign_keys=ON;");
         }
         let detach_result = conn.execute_batch("DETACH DATABASE backup_restore;");
 
-        restore_result.map_err(|error| {
-            VaultimeError::Backup(format!(
-                "failed to restore database tables from backup: {error}"
-            ))
-        })?;
+        restore_result?;
         detach_result.map_err(|error| {
             VaultimeError::Backup(format!("failed to detach backup database: {error}"))
         })
     })
 }
 
-fn table_columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
+/// Replaces every restored table with the backup's rows. Tables and columns
+/// that a backup predates stay empty or take their defaults, so backups of
+/// older versions restore too.
+fn restore_statements(conn: &Connection) -> Result<String> {
+    let mut statements = String::from("PRAGMA foreign_keys=OFF;\nBEGIN IMMEDIATE;\n");
+    for table in RESTORE_TABLES.iter().rev() {
+        let _ = writeln!(statements, "DELETE FROM {table};");
+    }
+    for table in RESTORE_TABLES {
+        let in_backup = table_columns(conn, "backup_restore", table)?;
+        let columns: Vec<String> = table_columns(conn, "main", table)?
+            .into_iter()
+            .filter(|column| in_backup.contains(column))
+            .collect();
+        if columns.is_empty() {
+            continue;
+        }
+        let columns = columns.join(", ");
+        let _ = writeln!(
+            statements,
+            "INSERT INTO {table} ({columns}) SELECT {columns} FROM backup_restore.{table};"
+        );
+    }
+    statements.push_str("COMMIT;\nPRAGMA foreign_keys=ON;");
+    Ok(statements)
+}
+
+fn table_columns(conn: &Connection, schema: &str, table: &str) -> Result<Vec<String>> {
     let mut stmt = conn
-        .prepare("SELECT name FROM pragma_table_info(?1)")
+        .prepare("SELECT name FROM pragma_table_info(?1, ?2)")
         .map_err(|error| VaultimeError::Backup(format!("failed to read columns: {error}")))?;
     let columns = stmt
-        .query_map([table], |row| row.get::<_, String>(0))
+        .query_map([table, schema], |row| row.get::<_, String>(0))
         .and_then(Iterator::collect::<rusqlite::Result<Vec<_>>>)
         .map_err(|error| VaultimeError::Backup(format!("failed to read columns: {error}")))?;
     Ok(columns)
@@ -785,6 +802,53 @@ mod tests {
     use super::*;
     use crate::db::models::CreateGame;
     use crate::db::repo::{devices, game_assets, games, sessions};
+
+    #[test]
+    fn restores_a_backup_that_predates_a_table() {
+        let context = test_paths();
+        let db = Database::open(&context.app_dir.join("vaultime.db")).unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Old Game".into(),
+                executable_path: Some("/games/old.exe".into()),
+                install_folder: None,
+                launcher_source: Some("steam".into()),
+            },
+        )
+        .unwrap();
+        crate::db::repo::earlier_playtime::replace_earlier_playtime(
+            &db,
+            &[crate::db::models::EarlierPlaytime {
+                game_id: game.id.clone(),
+                source: "steam".into(),
+                launcher_minutes: 60,
+                tracked_before_ms: 0,
+                earlier_ms: 0,
+                last_played_at: None,
+                imported_at: "2026-09-30T10:00:00Z".into(),
+            }],
+        )
+        .unwrap();
+
+        // A backup from before the table existed.
+        let old_path = context.app_dir.join("old.db");
+        export_database_snapshot(&db, &old_path).unwrap();
+        Connection::open(&old_path)
+            .unwrap()
+            .execute_batch("DROP TABLE earlier_playtime;")
+            .unwrap();
+
+        restore_database_snapshot(&db, &old_path).unwrap();
+        assert_eq!(games::list_all_games(&db).unwrap().len(), 1);
+        assert!(
+            crate::db::repo::earlier_playtime::list_earlier_playtime(&db)
+                .unwrap()
+                .is_empty()
+        );
+        drop(db);
+        fs::remove_dir_all(&context.app_dir).ok();
+    }
 
     fn test_paths() -> AppContext {
         let root =

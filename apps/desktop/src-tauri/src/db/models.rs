@@ -18,6 +18,22 @@ pub struct Game {
     pub updated_at: String,
 }
 
+/// Playtime from before Vaultime, imported from a launcher.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EarlierPlaytime {
+    pub game_id: String,
+    /// Where it came from, `steam`.
+    pub source: String,
+    /// The launcher's total at the import.
+    pub launcher_minutes: i64,
+    /// Runtime Vaultime had tracked for the game before the import.
+    pub tracked_before_ms: i64,
+    /// The launcher's total without the part Vaultime had tracked.
+    pub earlier_ms: i64,
+    pub last_played_at: Option<String>,
+    pub imported_at: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GameMetadata {
     pub preferred_cover_asset_id: Option<String>,

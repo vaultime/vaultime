@@ -30,6 +30,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0004_drop_cloud_sync",
         include_str!("../../migrations/0004_drop_cloud_sync.sql"),
     ),
+    (
+        "0005_earlier_playtime",
+        include_str!("../../migrations/0005_earlier_playtime.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.

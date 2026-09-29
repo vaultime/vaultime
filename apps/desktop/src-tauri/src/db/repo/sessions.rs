@@ -348,6 +348,21 @@ pub fn get_active_sessions(db: &Database) -> Result<Vec<Session>> {
     })
 }
 
+/// Tracked runtime per game id, over all sessions.
+pub fn runtime_by_game(db: &Database) -> Result<std::collections::HashMap<String, i64>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare("SELECT game_id, SUM(runtime_ms) FROM sessions GROUP BY game_id")
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(map_db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+    })
+}
+
 /// Returns all sessions for a specific game, newest first.
 #[cfg(test)]
 pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Session>> {

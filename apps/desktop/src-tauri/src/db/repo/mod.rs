@@ -5,6 +5,7 @@
 
 pub mod backup_snapshots;
 pub mod devices;
+pub mod earlier_playtime;
 pub mod game_assets;
 pub mod games;
 pub mod session_events;

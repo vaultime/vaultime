@@ -7,7 +7,7 @@
 //! `appmanifest_*.acf` inside them. Both are simple key-value text files, so a
 //! small parser is enough.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -17,7 +17,106 @@ use crate::db::connection::Database;
 use crate::error::Result;
 use crate::platform::process::path_key;
 
+use super::vdf::{self, Vdf};
 use super::{DiscoveredGame, find_main_executable, library_executables};
+
+/// Difference between a 64 bit Steam id and the account id that names the
+/// `userdata` folders, fixed by Steam's id format.
+const STEAM_ID64_BASE: u64 = 76_561_197_960_265_728;
+
+/// Playtime the Steam client counted for one app.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppPlaytime {
+    pub minutes: i64,
+    /// Unix seconds.
+    pub last_played: Option<i64>,
+}
+
+/// Steam's own playtime per app id, for one account.
+#[derive(Debug, Clone)]
+pub struct SteamPlaytime {
+    /// Display name of the account, when Steam says which one it is.
+    pub account: Option<String>,
+    pub apps: HashMap<String, AppPlaytime>,
+}
+
+/// The playtime of the account that signed in to Steam last, or of the
+/// account whose config changed last when Steam does not say.
+pub(crate) fn steam_playtime() -> Option<SteamPlaytime> {
+    playtime_in(&find_steam_root()?)
+}
+
+fn playtime_in(root: &Path) -> Option<SteamPlaytime> {
+    let users = fs::read_to_string(root.join("config").join("loginusers.vdf"))
+        .map_or(Vdf::Block(Vec::new()), |text| vdf::parse(&text));
+    let recent = users.get("users").and_then(|users| {
+        users
+            .entries()
+            .iter()
+            .find(|(_, user)| user.get("MostRecent").and_then(Vdf::text) == Some("1"))
+    });
+    let userdata = root.join("userdata");
+    let recent_config = recent
+        .and_then(|(id, _)| id.parse::<u64>().ok()?.checked_sub(STEAM_ID64_BASE))
+        .map(|account_id| localconfig(&userdata.join(account_id.to_string())))
+        .filter(|path| path.is_file());
+
+    let (config, account) = match recent_config {
+        Some(config) => (
+            config,
+            recent
+                .and_then(|(_, user)| user.get("PersonaName").and_then(Vdf::text))
+                .map(str::to_owned),
+        ),
+        None => (newest_localconfig(&userdata)?, None),
+    };
+    let text = fs::read_to_string(config).ok()?;
+    Some(SteamPlaytime {
+        account,
+        apps: read_apps(&text),
+    })
+}
+
+fn localconfig(account_dir: &Path) -> PathBuf {
+    account_dir.join("config").join("localconfig.vdf")
+}
+
+fn newest_localconfig(userdata: &Path) -> Option<PathBuf> {
+    fs::read_dir(userdata)
+        .ok()?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| localconfig(&entry.path()))
+        .filter(|path| path.is_file())
+        .max_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok())
+}
+
+fn read_apps(localconfig: &str) -> HashMap<String, AppPlaytime> {
+    let root = vdf::parse(localconfig);
+    let Some(apps) = root.path(&["UserLocalConfigStore", "Software", "Valve", "Steam", "apps"])
+    else {
+        return HashMap::new();
+    };
+    apps.entries()
+        .iter()
+        .filter_map(|(app_id, app)| {
+            let minutes = app.get("Playtime")?.text()?.trim().parse::<i64>().ok()?;
+            let last_played = app
+                .get("LastPlayed")
+                .and_then(Vdf::text)
+                .and_then(|seconds| seconds.trim().parse::<i64>().ok())
+                .filter(|seconds| *seconds > 0);
+            (minutes > 0).then(|| {
+                (
+                    app_id.clone(),
+                    AppPlaytime {
+                        minutes,
+                        last_played,
+                    },
+                )
+            })
+        })
+        .collect()
+}
 
 /// Finds every installed Steam game with a launchable executable.
 pub fn discover_steam_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
@@ -194,7 +293,7 @@ pub(crate) fn cached_cover(install_folder: &Path) -> Option<PathBuf> {
 
 /// Finds the app id through the manifests of the library that holds the
 /// folder, `steamapps/common/<installdir>`.
-fn app_id_for_install_folder(install_folder: &Path) -> Option<String> {
+pub(crate) fn app_id_for_install_folder(install_folder: &Path) -> Option<String> {
     let install_dir = install_folder.file_name()?.to_string_lossy().into_owned();
     let steamapps = install_folder.parent()?.parent()?;
     find_app_manifests(steamapps)
@@ -277,6 +376,60 @@ fn extract_acf_field(content: &str, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn write(path: &Path, text: &str) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+
+    fn app_config(minutes: &str) -> String {
+        format!(
+            "\"UserLocalConfigStore\" {{ \"Software\" {{ \"Valve\" {{ \"Steam\" {{ \"apps\" {{ \"730\" {{ \"Playtime\" \"{minutes}\" \"LastPlayed\" \"1727600000\" }} \"440\" {{ \"Playtime\" \"0\" }} }} }} }} }} }}"
+        )
+    }
+
+    #[test]
+    fn reads_the_playtime_of_the_account_that_signed_in_last() {
+        let root = std::env::temp_dir().join(format!("vaultime-steam-{}", uuid::Uuid::new_v4()));
+        write(
+            &root.join("config/loginusers.vdf"),
+            "\"users\" { \"76561197960265729\" { \"PersonaName\" \"Old\" \"MostRecent\" \"0\" } \"76561197960265730\" { \"PersonaName\" \"Player\" \"MostRecent\" \"1\" } }",
+        );
+        write(
+            &root.join("userdata/1/config/localconfig.vdf"),
+            &app_config("5"),
+        );
+        write(
+            &root.join("userdata/2/config/localconfig.vdf"),
+            &app_config("12345"),
+        );
+
+        let playtime = playtime_in(&root).unwrap();
+        assert_eq!(playtime.account.as_deref(), Some("Player"));
+        assert_eq!(
+            playtime.apps.get("730"),
+            Some(&AppPlaytime {
+                minutes: 12345,
+                last_played: Some(1_727_600_000)
+            })
+        );
+        assert!(
+            !playtime.apps.contains_key("440"),
+            "apps without playtime are left out"
+        );
+
+        // Without the login list, the config that changed last counts, without a name.
+        fs::remove_file(root.join("config/loginusers.vdf")).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write(
+            &root.join("userdata/1/config/localconfig.vdf"),
+            &app_config("77"),
+        );
+        let fallback = playtime_in(&root).unwrap();
+        assert_eq!(fallback.account, None);
+        assert_eq!(fallback.apps.get("730").map(|app| app.minutes), Some(77));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn finds_the_app_id_and_the_cached_cover() {

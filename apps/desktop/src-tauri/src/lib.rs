@@ -9,6 +9,7 @@ pub mod commands;
 pub mod constants;
 pub mod db;
 pub mod discovery;
+pub mod earlier;
 pub mod error;
 pub mod hex;
 pub mod integrity;
@@ -115,6 +116,10 @@ pub fn run() {
             commands::discover_launcher_games,
             commands::get_default_scan_paths,
             commands::import_discovered_games,
+            commands::list_earlier_playtime,
+            commands::preview_steam_playtime,
+            commands::import_steam_playtime,
+            commands::remove_steam_playtime,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Vaultime")
