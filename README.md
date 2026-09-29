@@ -14,15 +14,12 @@
   <a href="https://github.com/vaultime/vaultime/actions/workflows/ci.yml"><img src="https://github.com/vaultime/vaultime/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/vaultime/vaultime/actions/workflows/release.yml"><img src="https://github.com/vaultime/vaultime/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-7a5ea6" alt="GPL-3.0 license"></a>
-  <img src="https://img.shields.io/badge/Tauri-2-24c8db" alt="Tauri 2">
-  <img src="https://img.shields.io/badge/Rust-1.98-b7410e" alt="Rust 1.98">
-  <img src="https://img.shields.io/badge/React-19-61dafb" alt="React 19">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-555" alt="Windows and Linux">
 </p>
 
 ---
 
-Vaultime keeps track of how long you really play your PC games, no matter which launcher they come from. It tells apart the time a game was open, the time you actually played and the time it sat idle in the background. Everything stays on your computer, and your library looks like a library, with the artwork from your own game folders.
+Vaultime keeps track of how long you play your PC games, no matter which launcher they come from. It tells apart the time a game was open, the time you actually played and the time it sat idle in the background. Everything stays on your computer, and your library looks like a library, with the artwork from your own game folders.
 
 ## Features
 

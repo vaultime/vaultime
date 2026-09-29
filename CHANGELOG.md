@@ -16,7 +16,7 @@ The first public release.
 - **Light on your PC.** A check for running games takes a few milliseconds every five seconds, and the window stops drawing while it sits in the tray.
 - **Sleep aware.** Time while your computer sleeps is not counted.
 - **Controller play counts.** Buttons and sticks count as input, so a game played on a controller does not turn idle. On Windows this covers Xbox controllers and controllers that act as one.
-- **Nothing extra to install on Linux.** Vaultime asks the X server directly which window is in front and when you last used the keyboard or mouse, and GNOME on Wayland. Games that keep the screensaver off still turn idle when you leave.
+- **Nothing extra to install on Linux.** Vaultime asks the X server directly which window is in front and when you last used the keyboard or mouse. On Wayland, GNOME reports the idle time. Games that keep the screensaver off still turn idle when you leave.
 - **Careful matching.** Games are matched by their full path, so two games with the same file name stay apart. Libraries behind junctions or symlinks and games that run through Wine still match.
 - **Honest trust labels.** Every session keeps a hash-linked event log. Sessions with a clock jump are marked Suspicious, sessions rebuilt after an unclean exit Recovered, and both say what happened. The library marks a game for such sessions from the last 30 days, and its page counts all of them.
 
@@ -39,9 +39,9 @@ The first public release.
 
 ### Backups
 
-- **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything.
+- **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything. A restore only takes what a backup may hold and keeps the backup folder of this PC. Damaged artwork is left out instead of stopping it.
 - **Automatic backups** once a day and when Vaultime quits, the newest seven kept, in Vaultime's data folder or a folder you pick. Artwork that did not change is stored once for all of them. Signed in PCs also back up to the cloud once a day.
-- **Invite-only cloud backup** on our own server. Free, with the same limits for every account. Backups are encrypted on your computer before upload, artwork is uploaded once and shared by every backup, and at the limit a new backup replaces the oldest.
+- **Invite-only cloud backup** on our own server. Free, with the same limits for every account. Backups are encrypted on your computer before upload, artwork is uploaded once and shared by every backup, and at the limit a new backup replaces the oldest. A wrong backup passphrase is refused before it can start backups nobody can open. The server slows down password guessing and ends a session whose sign-in was copied.
 - **Signed in at a glance.** The logo, the tray icon and the taskbar icon turn violet while the PC is signed in to cloud backup.
 - **Password change** on the Cloud page. Your other PCs are signed out, and the backup passphrase stays the same.
 - **Export.** Save every finished session as CSV for a spreadsheet or as JSON for other tools, with notes, trust labels and, in JSON, each game's status and earlier playtime.

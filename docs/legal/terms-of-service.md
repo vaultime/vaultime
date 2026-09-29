@@ -37,7 +37,7 @@ Your data is handled as described in the [Privacy Policy](privacy-policy.md). In
 
 ## 7. Integrity Labels
 
-Vaultime labels sessions as Local, Suspicious or Recovered. These labels are heuristic and informational. They are not proof of tampering or fraud and should not be treated as authoritative evidence.
+Vaultime labels sessions as Local, Suspicious, Recovered, Edited or Manual. These labels are heuristic and informational. They are not proof of tampering or fraud and should not be treated as authoritative evidence.
 
 ## 8. Disclaimer of Warranties
 
