@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Runs the Linux CI checks locally in Docker, useful when developing on Windows.
 # Build output and the cargo registry live in Docker volumes, so reruns are fast.
 set -euo pipefail

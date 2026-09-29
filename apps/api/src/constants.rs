@@ -23,8 +23,9 @@ pub const ACCESS_TOKEN_TTL_MINUTES: i64 = 15;
 pub const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
 /// Random bytes in a refresh token, before base64url encoding.
 pub const REFRESH_TOKEN_BYTES: usize = 32;
-/// Shortest accepted password length.
-pub const MIN_PASSWORD_LENGTH: usize = 10;
+/// Shortest accepted password, in characters. Same as `MIN_PASSWORD_CHARS` in
+/// `deploy/vps/bootstrap-admin-account.py`.
+pub const MIN_PASSWORD_CHARS: usize = 10;
 
 // Abuse limits
 //
@@ -58,8 +59,13 @@ pub const MAINTENANCE_INTERVAL_SECS: u64 = 60 * 60;
 /// Redemptions of an admin invite when the request sets none.
 pub const DEFAULT_INVITE_MAX_REDEMPTIONS: i32 = 1;
 
-// Invite codes. The VPS and Node invite generators use the same values. Changing the scrypt
+// Invite codes. `deploy/vps/generate-cloud-invite.py` and
+// `bootstrap-admin-account.py` use the same values. Changing the scrypt
 // settings breaks every stored invite hash.
+
+/// Prefix of invite codes when the request sets none. Also in
+/// `lib/cloud-api.ts` of the desktop app and in `scripts/cloud-e2e.sh`.
+pub const INVITE_PREFIX: &str = "VTLINV";
 
 /// scrypt cost as log2 of N.
 pub const INVITE_SCRYPT_LOG_N: u8 = 14;
@@ -74,11 +80,11 @@ pub const INVITE_SALT_BYTES: usize = 16;
 /// Random bytes drawn for an invite code body, before base64url encoding.
 pub const INVITE_BODY_RANDOM_BYTES: usize = 18;
 /// Characters in an invite code body, without the prefix and dashes.
-pub const INVITE_BODY_LENGTH: usize = 24;
+pub const INVITE_BODY_CHARS: usize = 24;
 /// Leading body characters stored in plain text to look an invite up.
-pub const INVITE_LOOKUP_KEY_LENGTH: usize = 12;
+pub const INVITE_LOOKUP_KEY_CHARS: usize = 12;
 /// Characters per dash separated group in an invite code.
-pub const INVITE_CODE_GROUP_LENGTH: usize = 4;
+pub const INVITE_CODE_GROUP_CHARS: usize = 4;
 
 // Backup limits
 //
@@ -101,9 +107,11 @@ pub const DEFAULT_STALE_PENDING_BACKUP_SECS: i64 = 60 * SECS_PER_MINUTE;
 
 // Beta applications
 
-/// Longest email address a beta application takes, the limit of the address format.
+/// Longest email address a beta application takes, the limit of the address
+/// format. Same as the `maxlength` of the email field in `docs/site/index.html`.
 pub const BETA_EMAIL_MAX_CHARS: usize = 254;
-/// Longest note on a beta application.
+/// Longest note on a beta application. Same as the `maxlength` of the note
+/// field in `docs/site/index.html`.
 pub const BETA_NOTE_MAX_CHARS: usize = 500;
 /// Applications taken per hour from everyone together. Only stops floods.
 pub const BETA_APPLICATIONS_PER_HOUR: i64 = 30;
@@ -112,5 +120,6 @@ pub const BETA_APPLICATION_RETENTION_DAYS: i32 = 90;
 
 // Artwork blobs
 
-/// Most blob ids a client may ask about or refer to in one request.
+/// Most blob ids a client may ask about or refer to in one request. Same as
+/// `MAX_ARTWORK_IDS_PER_REQUEST` in the desktop core's `constants.rs`.
 pub const MAX_BLOB_IDS_PER_REQUEST: usize = 10_000;

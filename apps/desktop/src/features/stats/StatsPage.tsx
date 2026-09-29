@@ -14,8 +14,6 @@ import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import {
-  HOUR_MS,
-  MINUTE_MS,
   SESSION_LONG_MAX_MS,
   SESSION_PLAIN_MAX_MS,
   SESSION_QUICK_MAX_MS,
@@ -36,17 +34,12 @@ import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape 
 import { formatDayAndMonth, formatDayRange, formatHoursMinutes, formatHoursShort, parseVaultimeDate } from "@/lib/time";
 import { numberWords } from "@/lib/words";
 
-/** "20 min", "2 h". */
-function limit(ms: number): string {
-  return ms < HOUR_MS ? `${ms / MINUTE_MS} min` : `${ms / HOUR_MS} h`;
-}
-
 const SHAPES: Record<SessionShape, { label: string; range: string }> = {
-  quick: { label: "Quick looks", range: `under ${limit(SESSION_QUICK_MAX_MS)}` },
-  short: { label: "Short", range: `${limit(SESSION_QUICK_MAX_MS)} to ${limit(SESSION_SHORT_MAX_MS)}` },
-  plain: { label: "Medium", range: `${limit(SESSION_SHORT_MAX_MS)} to ${limit(SESSION_PLAIN_MAX_MS)}` },
-  long: { label: "Long", range: `${limit(SESSION_PLAIN_MAX_MS)} to ${limit(SESSION_LONG_MAX_MS)}` },
-  marathon: { label: "Marathons", range: `${limit(SESSION_LONG_MAX_MS)} and more` },
+  quick: { label: "Quick looks", range: `under ${formatHoursShort(SESSION_QUICK_MAX_MS)}` },
+  short: { label: "Short", range: `${formatHoursShort(SESSION_QUICK_MAX_MS)} to ${formatHoursShort(SESSION_SHORT_MAX_MS)}` },
+  plain: { label: "Medium", range: `${formatHoursShort(SESSION_SHORT_MAX_MS)} to ${formatHoursShort(SESSION_PLAIN_MAX_MS)}` },
+  long: { label: "Long", range: `${formatHoursShort(SESSION_PLAIN_MAX_MS)} to ${formatHoursShort(SESSION_LONG_MAX_MS)}` },
+  marathon: { label: "Marathons", range: `${formatHoursShort(SESSION_LONG_MAX_MS)} and more` },
 };
 
 function percent(part: number, whole: number): number {

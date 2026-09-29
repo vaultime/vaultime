@@ -19,6 +19,9 @@ import {
 import {
   CLOUD_AUTO_BACKUP_CHECK_MS,
   CLOUD_AUTO_BACKUP_INTERVAL_MS,
+  CLOUD_DEVICE_ID_STORAGE_KEY,
+  CLOUD_SESSION_STORAGE_KEY,
+  FALLBACK_DEVICE_ID_CHARS,
   MIN_BACKUP_PASSPHRASE_CHARS,
   SETTING_KEYS,
   TOKEN_REFRESH_MARGIN_MS,
@@ -50,10 +53,6 @@ import type {
 import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError } from "@/lib/utils";
 import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
-
-const CLOUD_SESSION_STORAGE_KEY = "vaultime.cloud.session";
-const CLOUD_DEVICE_ID_STORAGE_KEY = "vaultime.cloud.device-id";
-
 
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
@@ -186,7 +185,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
             applyClearedSession();
             void forgetStoredSession();
           } else {
-            setDeviceError(`Cloud API unavailable: ${describeError(error)}`);
+            setDeviceError(`The cloud server is not reachable: ${describeError(error)}`);
           }
         }
       } finally {
@@ -333,7 +332,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      setDeviceError(`Cloud API unavailable: ${describeError(error)}`);
+      setDeviceError(`The cloud server is not reachable: ${describeError(error)}`);
       return current;
     }
   }
@@ -425,7 +424,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   async function ensureAuthenticatedSession() {
     const current = sessionRef.current;
     if (!current) {
-      throw new Error("Sign in to use remote backup.");
+      throw new Error("Sign in to use cloud backup.");
     }
 
     if (isExpired(current.refresh_expires_at, 0)) {
@@ -454,7 +453,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        throw new Error(`Cloud API unavailable: ${describeError(error)}`, {
+        throw new Error(`The cloud server is not reachable: ${describeError(error)}`, {
           cause: error,
         });
       }
@@ -597,9 +596,10 @@ async function loadPersistedSession(): Promise<CloudAuthSession | null> {
       return parseStoredSession(secureRaw);
     }
   } catch {
-    // Fallback for older local builds that persisted the session in localStorage.
+    // Falls through to the older storage.
   }
 
+  // Older builds kept the session in localStorage.
   const legacyRaw = window.localStorage.getItem(CLOUD_SESSION_STORAGE_KEY);
   if (!legacyRaw) {
     return null;
@@ -659,7 +659,7 @@ async function ensureBackupKeyForSession(
   const ready = await hasCloudBackupKeySecure(session.user.id);
   if (!ready) {
     throw new Error(
-      "Set or unlock your backup passphrase on this device before using remote backups.",
+      "Set or unlock your backup passphrase on this PC before using cloud backups.",
     );
   }
 }
@@ -691,10 +691,11 @@ function getOrCreateClientDeviceId() {
     return existing;
   }
 
+  // The fallback skips the "0." that Math.random().toString(36) starts with.
   const created =
     typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
-      : `vaultime-${Math.random().toString(36).slice(2, 12)}`;
+      : `vaultime-${Math.random().toString(36).slice(2, 2 + FALLBACK_DEVICE_ID_CHARS)}`;
   window.localStorage.setItem(CLOUD_DEVICE_ID_STORAGE_KEY, created);
   return created;
 }

@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -52,9 +54,9 @@
         </div>
         <div>
           <div class="strip" aria-hidden="true">
-            <span style="left: 59%; width: 4.5%; background: #d9a0ae"></span>
-            <span style="left: 77.8%; width: 17%; background: #c9b38a"></span>
-            <span style="left: 96.2%; width: 3.3%; background: #a6c8d4"></span>
+            <span class="hades" style="left: 59%; width: 4.5%"></span>
+            <span class="elden-ring" style="left: 77.8%; width: 17%"></span>
+            <span class="balatro" style="left: 96.2%; width: 3.3%"></span>
           </div>
           <div class="ticks mono" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
           <div class="entry">
@@ -63,7 +65,7 @@
               <div class="line display">An afternoon session in Hades II</div>
               <div class="meta">1 h 05 in all, 58 min active, 7 min idle.</div>
             </div>
-            <span class="badge" style="color: var(--faint)">Local</span>
+            <span class="badge local">Local</span>
           </div>
           <div class="entry">
             <span class="when mono">18:40 to 22:45</span>
@@ -71,7 +73,7 @@
               <div class="line display">A marathon evening in Elden Ring</div>
               <div class="meta">4 h 05 in all, 3 h 41 active, 24 min idle.</div>
             </div>
-            <span class="badge" style="color: var(--faint)">Local</span>
+            <span class="badge local">Local</span>
           </div>
           <div class="entry">
             <span class="when mono">23:05 to 23:53</span>
@@ -79,7 +81,7 @@
               <div class="line display">A short session late at night in Balatro</div>
               <div class="meta">48 min in all, 41 min active, 7 min idle. <b>The system clock jumped during it.</b></div>
             </div>
-            <span class="badge" style="color: var(--amber)">Suspicious</span>
+            <span class="badge suspicious">Suspicious</span>
           </div>
         </div>
       </div>
@@ -148,6 +150,7 @@
         <form class="apply" method="post" action="/v1/beta/apply">
           <label class="field">
             <span class="caps">Email</span>
+            <!-- Same as BETA_EMAIL_MAX_CHARS in apps/api/src/constants.rs. -->
             <input type="email" name="email" required maxlength="254" autocomplete="email" />
           </label>
           <fieldset class="field">
@@ -160,6 +163,7 @@
           </fieldset>
           <label class="field">
             <span class="caps">Anything we should know, optional</span>
+            <!-- Same as BETA_NOTE_MAX_CHARS in apps/api/src/constants.rs. -->
             <textarea name="note" rows="3" maxlength="500"></textarea>
           </label>
           <label class="bot" aria-hidden="true">Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" /></label>

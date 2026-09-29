@@ -32,7 +32,12 @@ import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { Field } from "@/components/ui/field";
 import { BACKUP_PASSPHRASE_TOO_SHORT, INVITE_CODE_PREFIX } from "@/lib/cloud-api";
-import { BYTES_PER_KIB, MIN_BACKUP_PASSPHRASE_CHARS, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
+import {
+  BYTES_PER_KIB,
+  CLOUD_BACKUPS_CACHE_KEY_PREFIX,
+  MIN_BACKUP_PASSPHRASE_CHARS,
+  SIZE_ONE_DECIMAL_BELOW,
+} from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { CloudAdminInvite, CloudBackupRecord, CloudStorage } from "@/lib/types";
 import { describeError } from "@/lib/utils";
@@ -90,7 +95,7 @@ function formatApiHostname(value: string) {
 }
 
 function remoteBackupCacheKey(accountId: string) {
-  return `vaultime.cloud.backups.${accountId}`;
+  return `${CLOUD_BACKUPS_CACHE_KEY_PREFIX}${accountId}`;
 }
 
 function loadCachedRemoteBackups(accountId: string): CloudBackupRecord[] | null {
@@ -190,7 +195,7 @@ export function CloudPage() {
         if (cached) {
           setRemoteBackups(cached);
           setStatusMessage(
-            "Cloud API unavailable. Showing the last cached remote backup list.",
+            "The cloud server is not reachable. Showing the cloud backups it listed last time.",
           );
         } else {
           setErrorMessage(describeError(error));
@@ -297,7 +302,7 @@ export function CloudPage() {
     try {
       const registered = await registerCurrentDevice();
       if (registered) {
-        setStatusMessage(`Device registered as ${registered.device_name}.`);
+        setStatusMessage(`This PC is registered as ${registered.device_name}.`);
       }
     } catch (error) {
       setErrorMessage(describeError(error));
@@ -338,7 +343,7 @@ export function CloudPage() {
       await setBackupPassphrase(deviceBackupPassphrase);
       setDeviceBackupPassphrase("");
       setDeviceBackupPassphraseConfirm("");
-      setStatusMessage("Backup passphrase unlocked for this device.");
+      setStatusMessage("Backup passphrase unlocked for this PC.");
     } catch (error) {
       setErrorMessage(describeError(error));
     } finally {
@@ -416,7 +421,7 @@ export function CloudPage() {
         return next;
       });
       setStatusMessage(
-        `Remote backup uploaded with ${result.payload_summary.games_count} games and ${result.payload_summary.sessions_count} sessions.`,
+        `Cloud backup uploaded with ${result.payload_summary.games_count} games and ${result.payload_summary.sessions_count} sessions.`,
       );
     } catch (error) {
       setErrorMessage(describeError(error));
@@ -444,7 +449,7 @@ export function CloudPage() {
       const result = await restoreRemoteBackup(restoreTarget.id);
       setRestoreDialogOpen(false);
       setRestoreTarget(null);
-      setStatusMessage("Remote backup restored.");
+      setStatusMessage("Cloud backup restored.");
       if (result.restored_summary.restart_required) {
         setRestartRequired(true);
       }
@@ -472,7 +477,7 @@ export function CloudPage() {
         persistCachedRemoteBackups(session.user.id, next);
         return next;
       });
-      setStatusMessage("Remote backup deleted.");
+      setStatusMessage("Cloud backup deleted.");
     } catch (error) {
       setErrorMessage(describeError(error));
     } finally {

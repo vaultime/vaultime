@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the website into dist-site: the landing page, its styles, the fonts
 the app ships and HTML versions of the legal pages and the changelog.
 

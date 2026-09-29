@@ -12,7 +12,7 @@ export const CLOUD_API_BASE_URL = (
     : "https://vaultime.codfishcloud.de"
 ).replace(/\/+$/, "");
 
-/** Prefix of invite codes, the server uses the same default. */
+/** Prefix of invite codes. Same as INVITE_PREFIX in apps/api/src/constants.rs. */
 export const INVITE_CODE_PREFIX = "VTLINV";
 
 /** Shown when a backup passphrase is shorter than the minimum. */
@@ -138,5 +138,5 @@ function extractErrorMessage(payload: unknown, status: number): string {
     return payload;
   }
 
-  return `Cloud API request failed with status ${status}.`;
+  return `The cloud server answered with error ${status}.`;
 }

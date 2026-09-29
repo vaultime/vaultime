@@ -7,11 +7,10 @@ use chrono::{DateTime, Utc};
 
 use crate::auth::{chunk_code, hash_invite_code, random_bytes};
 use crate::constants::{
-    INVITE_BODY_LENGTH, INVITE_BODY_RANDOM_BYTES, INVITE_LOOKUP_KEY_LENGTH, INVITE_SALT_BYTES,
+    INVITE_BODY_CHARS, INVITE_BODY_RANDOM_BYTES, INVITE_LOOKUP_KEY_CHARS, INVITE_PREFIX,
+    INVITE_SALT_BYTES,
 };
 use crate::error::{AppError, AppResult};
-
-const DEFAULT_PREFIX: &str = "VTLINV";
 
 #[derive(Debug, Clone)]
 pub struct GeneratedInvite {
@@ -40,7 +39,7 @@ pub fn generate_invite(
     let prefix = normalize_prefix(prefix)?;
     let body = generate_body_token()?;
     let code = format!("{prefix}-{}", chunk_code(&body));
-    let lookup_key = body[..INVITE_LOOKUP_KEY_LENGTH].to_string();
+    let lookup_key = body[..INVITE_LOOKUP_KEY_CHARS].to_string();
     let salt = hex::encode(random_bytes::<INVITE_SALT_BYTES>()?);
     let code_hash = hash_invite_code(&code, &salt)?;
     let note = note
@@ -62,7 +61,7 @@ pub fn generate_invite(
 }
 
 fn normalize_prefix(raw: Option<&str>) -> AppResult<String> {
-    let value = raw.unwrap_or(DEFAULT_PREFIX).trim().to_ascii_uppercase();
+    let value = raw.unwrap_or(INVITE_PREFIX).trim().to_ascii_uppercase();
     if value.is_empty() {
         return Err(AppError::bad_request("invite prefix cannot be empty"));
     }
@@ -86,8 +85,8 @@ fn generate_body_token() -> AppResult<String> {
             .map(|ch| ch.to_ascii_uppercase())
             .collect::<String>();
 
-        if token.len() >= INVITE_BODY_LENGTH {
-            return Ok(token[..INVITE_BODY_LENGTH].to_string());
+        if token.len() >= INVITE_BODY_CHARS {
+            return Ok(token[..INVITE_BODY_CHARS].to_string());
         }
     }
 }

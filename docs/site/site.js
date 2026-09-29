@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Shows the released version next to the downloads, or says there is none
 // yet and hides the buttons, which would lead nowhere.
 (async () => {

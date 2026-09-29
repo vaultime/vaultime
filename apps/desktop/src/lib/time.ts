@@ -159,7 +159,6 @@ export function isoWeekNumber(date: Date): number {
   return Math.floor(calendarDaysAgo(firstOfYear, thursday) / DAYS_PER_WEEK) + 1;
 }
 
-/** "14:10", in the regional clock. */
 /** A local time as the value of a datetime-local input, "2026-09-30T20:15". */
 export function toLocalInput(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -185,6 +184,7 @@ export function formatDayRange(start: Date, end: Date): string {
   return `${sameMonth ? String(start.getDate()) : formatDayAndMonth(start)} to ${formatDayAndMonth(end)}`;
 }
 
+/** "14:10", in the regional clock. */
 export function formatClockTime(value: Date): string {
   return value.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
 }

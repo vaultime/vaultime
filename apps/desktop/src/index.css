@@ -1,3 +1,6 @@
+/* SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@fontsource-variable/fraunces/full.css";
@@ -85,7 +88,7 @@
   --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
-  /* Named palette, used directly by the redesigned screens. */
+  /* Named palette. */
   --color-ink: var(--ink);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
@@ -102,17 +105,13 @@
   --color-idle: var(--idle);
   --color-amber: var(--amber);
   --color-sky: var(--sky);
+  --color-scrim: var(--scrim);
+  --color-glint: var(--glint);
 
   /* shadcn roles used by the ui primitives, mapped onto the palette. */
   --color-ring: var(--ring);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 
@@ -140,15 +139,13 @@
   --idle: #4a4060;
   --amber: #f0b45a;
   --sky: #7fb0ff;
+  /* Shadows under covers and floating panels. */
+  --scrim: #000000;
+  /* Faint light washes on hover and around covers. */
+  --glint: #ffffff;
 
   --background: var(--ink);
   --foreground: var(--text);
-  --primary: var(--violet);
-  --primary-foreground: var(--violet-ink);
-  --muted: var(--raised);
-  --muted-foreground: var(--faint);
-  --accent: #221b30;
-  --accent-foreground: var(--text);
   --destructive: #ff7a85;
   --border: var(--hairline);
   --ring: var(--violet);

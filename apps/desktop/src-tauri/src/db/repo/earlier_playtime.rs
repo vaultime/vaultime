@@ -3,6 +3,8 @@
 
 //! Playtime from before Vaultime, imported from a launcher.
 
+use std::time::Duration;
+
 use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
@@ -10,7 +12,8 @@ use crate::db::models::EarlierPlaytime;
 use crate::db::repo::map_db;
 use crate::error::Result;
 
-const MS_PER_MINUTE: i64 = 60_000;
+/// Launchers count playtime in whole minutes.
+const MS_PER_MINUTE: i64 = Duration::from_mins(1).as_millis() as i64;
 
 fn row_to_earlier(row: &Row) -> rusqlite::Result<EarlierPlaytime> {
     let launcher_minutes: i64 = row.get("launcher_minutes")?;

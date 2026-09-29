@@ -225,7 +225,7 @@ pub(super) async fn collect_unreferenced_blobs(
          RETURNING b.storage_key",
     )
     .bind(account_id)
-    .bind(state.config.stale_pending_backup_seconds)
+    .bind(state.config.stale_pending_backup_secs)
     .fetch_all(&state.db)
     .await?;
 

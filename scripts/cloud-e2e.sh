@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Runs the cloud backup round trip of the desktop core against the real API.
 # PostgreSQL and the API run in Docker, the desktop test runs on this machine.
 #
@@ -90,6 +93,7 @@ def psql_in_container(command, *args, **kwargs):
 
 
 invite.subprocess.run = psql_in_container
+# Same as INVITE_PREFIX in apps/api/src/constants.rs.
 created = invite.generate_invite("VTLINV", 1, None, "e2e")
 invite.insert_invite("", created)
 print(created["code"])

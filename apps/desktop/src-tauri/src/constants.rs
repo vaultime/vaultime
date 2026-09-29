@@ -13,7 +13,8 @@ pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// Longest note on a session, in characters. Same as `SESSION_NOTE_MAX_CHARS`
 /// in `lib/constants.ts`.
 pub const SESSION_NOTE_MAX_CHARS: usize = 280;
-/// Longest session a player can add by hand.
+/// Longest session a player can add by hand. Same as
+/// `MANUAL_SESSION_MAX_HOURS` in `lib/constants.ts`.
 pub const MANUAL_SESSION_MAX: Duration = Duration::from_hours(24);
 /// Grace period so a quick alt-tab does not count as idle.
 pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
@@ -21,13 +22,13 @@ pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// before it asks the file system again.
 pub const INSTALL_FOLDER_REFRESH: Duration = Duration::from_mins(10);
 /// Idle threshold when the `idle_threshold_seconds` setting is missing or invalid.
-/// Same as `DEFAULT_IDLE_THRESHOLD_SECONDS` in `lib/constants.ts`.
+/// Same as `DEFAULT_IDLE_THRESHOLD_SECS` in `lib/constants.ts`.
 pub const DEFAULT_IDLE_THRESHOLD_SECS: u64 = 300;
 /// Lowest idle threshold the setting can choose. Same as
-/// `MIN_IDLE_THRESHOLD_SECONDS` in `lib/constants.ts`.
+/// `MIN_IDLE_THRESHOLD_SECS` in `lib/constants.ts`.
 pub const MIN_IDLE_THRESHOLD_SECS: u64 = 5;
 /// CPU usage in percent at or above which a game process counts as active.
-pub const PROCESS_ACTIVITY_CPU_THRESHOLD: f32 = 0.5;
+pub const PROCESS_ACTIVITY_CPU_PERCENT: f32 = 0.5;
 /// A wall clock step back by more than this within one tick flags the session.
 pub const CLOCK_BACKWARDS_TOLERANCE_MS: i64 = 1_000;
 /// Allowed difference between wall and monotonic time within one tick.
@@ -50,6 +51,14 @@ pub const CONTROLLER_SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
 pub const CONTROLLER_AXIS_MOVE_DIVISOR: u32 = 8;
 /// Input events read from a controller in one go on Linux.
 pub const CONTROLLER_EVENTS_PER_READ: usize = 64;
+
+// Data folder
+
+/// The database in Vaultime's data folder, under the same name in backups.
+pub const DATABASE_FILE: &str = "vaultime.db";
+/// Folder of cached artwork in Vaultime's data folder, under the same name
+/// in backups.
+pub const ASSET_CACHE_DIR: &str = "asset-cache";
 
 // Device
 
@@ -81,6 +90,9 @@ pub const TITLE_MATCH_BONUS_BYTES: u64 = 500_000_000;
 pub const SHIPPING_BONUS_BYTES: u64 = 1_000_000_000_000;
 /// Shortest title word that counts when matching executable names.
 pub const TITLE_WORD_MIN_CHARS: usize = 3;
+/// Launcher source of Steam games and of playtime read from Steam. Same as
+/// `STEAM_LAUNCHER` in `lib/constants.ts`.
+pub const STEAM_SOURCE: &str = "steam";
 
 // Artwork
 
@@ -178,7 +190,8 @@ pub const PAGE_SETTINGS: &[&str] = &[
 ];
 /// Folder name prefix of automatic backups, so pruning never touches others.
 pub const AUTO_BACKUP_PREFIX: &str = "vaultime-auto";
-/// Automatic backups kept, older ones are deleted.
+/// Automatic backups kept, older ones are deleted. Same as `AUTO_BACKUP_KEEP`
+/// in `lib/constants.ts`.
 pub const AUTO_BACKUP_KEEP: usize = 7;
 /// Age of the newest automatic backup at which the daily one is due.
 pub const AUTO_BACKUP_INTERVAL: Duration = Duration::from_hours(24);
@@ -199,6 +212,8 @@ pub const CLOUD_TRANSFER_TIMEOUT: Duration = Duration::from_mins(30);
 pub const BACKUP_KEY_BYTES: usize = 32;
 /// How often the tray menu updates the running game and today's play.
 pub const TRAY_STATUS_INTERVAL: Duration = Duration::from_secs(20);
+/// Less play today than this reads "Nothing played today" in the tray menu.
+pub const TRAY_TODAY_MIN_PLAYED_MS: i64 = 60_000;
 /// Name of the JSON session export, so tools can tell it apart.
 pub const EXPORT_FORMAT_NAME: &str = "vaultime-sessions";
 /// Version of the JSON session export, raised when its fields change.

@@ -30,7 +30,7 @@ export interface GameSummary {
   lastPlayedAt: string | null;
 }
 
-export interface LibraryState {
+interface LibraryState {
   games: Game[];
   sessions: Session[];
   covers: Record<string, string>;

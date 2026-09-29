@@ -22,7 +22,7 @@ export function Cover({ title, src, variant = "card", className }: CoverProps) {
         src={src}
         alt=""
         // Padding in className is for the typeset placeholder, never for artwork.
-        className={cn("shrink-0 rounded-md border border-white/5 object-cover", className, "p-0")}
+        className={cn("shrink-0 rounded-md border border-glint/5 object-cover", className, "p-0")}
       />
     );
   }

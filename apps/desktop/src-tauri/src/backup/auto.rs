@@ -147,8 +147,8 @@ fn prune(folder: &Path, keep: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::BACKUP_ASSET_DIR;
     use super::*;
+    use crate::constants::ASSET_CACHE_DIR;
 
     fn backup(folder: &Path, name: &str, complete: bool) -> PathBuf {
         let path = folder.join(name);
@@ -222,7 +222,7 @@ mod tests {
         let assets = AssetManager::new(cache.clone());
         let artwork = |backup: &LocalBackupSummary, name: &str| {
             PathBuf::from(&backup.backup_path)
-                .join(BACKUP_ASSET_DIR)
+                .join(ASSET_CACHE_DIR)
                 .join("game")
                 .join(name)
         };

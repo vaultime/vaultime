@@ -111,7 +111,7 @@ Vaultime has no analytics and no telemetry. Details are in the [privacy policy](
 
 ## License
 
-Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server in `apps/api` and its install tools in `deploy` are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
+Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its install tools are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
 
 The name Vaultime and the logo are not covered by these licenses. A modified version needs its own name and logo.
 

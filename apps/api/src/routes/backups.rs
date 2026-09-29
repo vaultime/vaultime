@@ -357,13 +357,13 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
         ));
     }
 
-    let min_interval_seconds = state.config.min_backup_interval_seconds;
+    let min_interval_secs = state.config.min_backup_interval_secs;
     if let Some(last_complete_at) = last_complete_at
-        && last_complete_at + Duration::seconds(min_interval_seconds) > Utc::now()
+        && last_complete_at + Duration::seconds(min_interval_secs) > Utc::now()
     {
         return Err(AppError::conflict(format!(
             "wait at least {} minutes between remote backups",
-            min_interval_seconds / SECS_PER_MINUTE
+            min_interval_secs / SECS_PER_MINUTE
         )));
     }
 
@@ -384,7 +384,7 @@ pub(super) async fn prune_stale_pending_backups(
         "#,
     )
     .bind(account_id)
-    .bind(state.config.stale_pending_backup_seconds)
+    .bind(state.config.stale_pending_backup_secs)
     .fetch_all(&state.db)
     .await?;
 

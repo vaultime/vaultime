@@ -57,7 +57,9 @@ fn apply_pending(conn: &Connection) -> Result<()> {
             applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
     )
-    .map_err(|e| VaultimeError::Database(format!("failed to create _migrations table: {e}")))?;
+    .map_err(|error| {
+        VaultimeError::Database(format!("failed to create _migrations table: {error}"))
+    })?;
 
     for &(name, sql) in MIGRATIONS {
         let applied: bool = conn
@@ -66,8 +68,8 @@ fn apply_pending(conn: &Connection) -> Result<()> {
                 [name],
                 |row| row.get(0),
             )
-            .map_err(|e| {
-                VaultimeError::Database(format!("failed to check migration {name}: {e}"))
+            .map_err(|error| {
+                VaultimeError::Database(format!("failed to check migration {name}: {error}"))
             })?;
 
         if applied {
@@ -79,9 +81,9 @@ fn apply_pending(conn: &Connection) -> Result<()> {
         conn.execute_batch(&format!(
             "BEGIN;\n{sql}\nINSERT INTO _migrations (name) VALUES ('{escaped_name}');\nCOMMIT;"
         ))
-        .map_err(|e| {
+        .map_err(|error| {
             let _ = conn.execute_batch("ROLLBACK;");
-            VaultimeError::Database(format!("migration {name} failed: {e}"))
+            VaultimeError::Database(format!("migration {name} failed: {error}"))
         })?;
     }
 

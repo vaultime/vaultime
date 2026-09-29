@@ -442,7 +442,7 @@ pub fn launcher_runtime_by_game(
     })
 }
 
-/// Returns all sessions for a specific game, newest first.
+/// Newest first.
 #[cfg(test)]
 pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Session>> {
     db.with_conn(|conn| {
@@ -463,7 +463,7 @@ pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Sessio
     })
 }
 
-/// Returns all sessions, newest first.
+/// Newest first.
 pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
     db.with_conn(|conn| {
         let mut stmt = conn

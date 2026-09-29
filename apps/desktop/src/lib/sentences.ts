@@ -12,6 +12,8 @@ import {
   SESSION_PLAIN_MAX_MS,
   SESSION_QUICK_MAX_MS,
   SESSION_SHORT_MAX_MS,
+  WEEKEND_DAYS_PER_WEEK,
+  WORKING_DAYS_PER_WEEK,
 } from "@/lib/constants";
 import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/session-stats";
@@ -267,8 +269,6 @@ const PART_PLURALS: Record<DayPart, string> = {
   evening: "evenings",
   night: "late nights",
 };
-const WEEKEND_DAYS = 2;
-const WORKING_DAYS = 5;
 
 /**
  * "Your time to play is *weekend afternoons*." Weekdays and weekends are
@@ -278,10 +278,10 @@ const WORKING_DAYS = 5;
 export function rhythmSentence(weekClock: number[][]): Phrase | null {
   const totals = new Map<string, number>();
   weekClock.forEach((hours, weekday) => {
-    const weekend = weekday >= WORKING_DAYS;
+    const weekend = weekday >= WORKING_DAYS_PER_WEEK;
     hours.forEach((ms, hour) => {
       const key = `${weekend ? "weekend" : "weekday"} ${PART_PLURALS[dayPartOf(new Date(2000, 0, 1, hour))]}`;
-      totals.set(key, (totals.get(key) ?? 0) + ms / (weekend ? WEEKEND_DAYS : WORKING_DAYS));
+      totals.set(key, (totals.get(key) ?? 0) + ms / (weekend ? WEEKEND_DAYS_PER_WEEK : WORKING_DAYS_PER_WEEK));
     });
   });
   const [best, ms] = [...totals.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];

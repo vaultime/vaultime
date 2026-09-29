@@ -20,7 +20,7 @@ fn row_to_device(row: &Row) -> rusqlite::Result<Device> {
     })
 }
 
-/// Ensures a device record exists for this machine. Returns the device.
+/// Registers this PC on its first start and keeps its app version current.
 pub fn ensure_device(db: &Database, id: &str, platform: &str, app_version: &str) -> Result<Device> {
     db.with_conn(|conn| {
         conn.execute(
@@ -30,7 +30,6 @@ pub fn ensure_device(db: &Database, id: &str, platform: &str, app_version: &str)
         )
         .map_err(map_db)?;
 
-        // Update version on subsequent launches.
         conn.execute(
             "UPDATE devices SET app_version = ?1 WHERE id = ?2",
             params![app_version, id],

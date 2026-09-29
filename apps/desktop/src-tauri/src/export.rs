@@ -99,12 +99,13 @@ pub fn export_sessions(
                 games: exported_games(db)?,
                 sessions,
             };
-            serde_json::to_string_pretty(&export)
-                .map_err(|e| VaultimeError::Invalid(format!("could not build the export: {e}")))?
+            serde_json::to_string_pretty(&export).map_err(|error| {
+                VaultimeError::Invalid(format!("could not build the export: {error}"))
+            })?
         }
     };
     fs::write(path, contents)
-        .map_err(|e| VaultimeError::Invalid(format!("could not save the export: {e}")))?;
+        .map_err(|error| VaultimeError::Invalid(format!("could not save the export: {error}")))?;
     Ok(count)
 }
 

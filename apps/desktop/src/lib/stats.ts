@@ -7,6 +7,7 @@ import {
   DAYS_PER_WEEK,
   HOUR_MS,
   HOURS_PER_DAY,
+  MONTHS_PER_YEAR,
   SESSION_LONG_MAX_MS,
   SESSION_PLAIN_MAX_MS,
   SESSION_QUICK_MAX_MS,
@@ -19,8 +20,6 @@ import type { Session } from "@/lib/types";
 /** Session lengths from a quick look to a marathon, shortest first. */
 export const SESSION_SHAPES = ["quick", "short", "plain", "long", "marathon"] as const;
 export type SessionShape = (typeof SESSION_SHAPES)[number];
-
-const MONTHS_PER_YEAR = 12;
 
 export interface GameYear {
   gameId: string;
@@ -36,7 +35,7 @@ export interface Streak {
   end: Date;
 }
 
-export interface YearStats {
+interface YearStats {
   year: number;
   /** Time with a game running, games side by side counted once. */
   playedMs: number;

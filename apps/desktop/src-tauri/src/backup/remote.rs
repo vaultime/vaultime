@@ -24,11 +24,11 @@ use super::crypto::{self, ArtworkNamer};
 use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::backup::{
-    BACKUP_ASSET_DIR, LocalBackupSummary, cleanup_staging_dir, export_local_backup, hash_file,
-    import_local_backup,
+    LocalBackupSummary, cleanup_staging_dir, export_local_backup, hash_file, import_local_backup,
 };
 use crate::constants::{
-    ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, CLOUD_TRANSFER_TIMEOUT, MAX_ARTWORK_IDS_PER_REQUEST,
+    ARCHIVE_FILE_MODE, ASSET_CACHE_DIR, BACKUP_KEY_BYTES, CLOUD_TRANSFER_TIMEOUT,
+    MAX_ARTWORK_IDS_PER_REQUEST,
 };
 use crate::db::connection::Database;
 use crate::error::{Result, VaultimeError};
@@ -208,7 +208,7 @@ fn upload_with_key(
 
         let archive_path = staging_dir.join(format!("{}.zip", local_summary.backup_id));
         create_archive(&backup_dir, &archive_path, |path| {
-            !path.starts_with(&format!("{BACKUP_ASSET_DIR}/"))
+            !path.starts_with(&format!("{ASSET_CACHE_DIR}/"))
         })?;
         let encrypted_path = staging_dir.join(format!("{}.enc", local_summary.backup_id));
         crypto::encrypt_file(&archive_path, &encrypted_path, backup_key)?;
@@ -409,7 +409,7 @@ impl<'a> Api<'a> {
 
 /// Names every artwork file of a backup folder by its content.
 fn index_artwork(backup_dir: &Path, namer: &ArtworkNamer) -> Result<Vec<ArtworkFile>> {
-    let asset_dir = backup_dir.join(BACKUP_ASSET_DIR);
+    let asset_dir = backup_dir.join(ASSET_CACHE_DIR);
     let mut artwork = Vec::new();
     if !asset_dir.exists() {
         return Ok(artwork);
@@ -552,7 +552,7 @@ fn artwork_target(extracted_dir: &Path, path: &str) -> Result<PathBuf> {
     let plain = relative
         .components()
         .all(|component| matches!(component, Component::Normal(_)));
-    if !plain || !relative.starts_with(BACKUP_ASSET_DIR) {
+    if !plain || !relative.starts_with(ASSET_CACHE_DIR) {
         return Err(VaultimeError::Backup(format!(
             "the artwork index names an unsafe path: {path}"
         )));

@@ -24,7 +24,6 @@ fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
     })
 }
 
-/// Inserts a new game and returns it.
 pub fn create_game(db: &Database, input: &CreateGame) -> Result<Game> {
     let id = uuid::Uuid::new_v4().to_string();
 
@@ -47,7 +46,7 @@ pub fn create_game(db: &Database, input: &CreateGame) -> Result<Game> {
     })
 }
 
-/// Returns all games including hidden, ordered by title.
+/// Hidden games included, ordered by title.
 pub fn list_all_games(db: &Database) -> Result<Vec<Game>> {
     db.with_conn(|conn| {
         let mut stmt = conn
@@ -60,7 +59,6 @@ pub fn list_all_games(db: &Database) -> Result<Vec<Game>> {
     })
 }
 
-/// Returns a single game by ID.
 pub fn get_game(db: &Database, id: &str) -> Result<Game> {
     db.with_conn(|conn| {
         conn.query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
@@ -68,7 +66,7 @@ pub fn get_game(db: &Database, id: &str) -> Result<Game> {
     })
 }
 
-/// Updates a game in place. Only provided fields are changed.
+/// Only the fields set in `input` change.
 pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> {
     db.with_conn(|conn| {
         let current = conn
@@ -104,7 +102,7 @@ pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> 
     })
 }
 
-/// Deletes a game by ID. Returns `true` if a row was removed.
+/// Returns `false` when there was no such game.
 pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
     db.with_conn(|conn| {
         let count = conn
@@ -114,10 +112,9 @@ pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
     })
 }
 
-/// Updates the metadata JSON blob for a game.
 pub fn set_metadata(db: &Database, id: &str, metadata: &GameMetadata) -> Result<Game> {
     let metadata_json = serde_json::to_string(metadata)
-        .map_err(|e| VaultimeError::Database(format!("invalid metadata json: {e}")))?;
+        .map_err(|error| VaultimeError::Database(format!("invalid metadata json: {error}")))?;
 
     db.with_conn(|conn| {
         conn.execute(

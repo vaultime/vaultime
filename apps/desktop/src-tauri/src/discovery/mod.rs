@@ -47,8 +47,7 @@ pub struct DiscoveredGame {
     pub executable_path: String,
     /// Install folder, either reported by the launcher or the executable's parent.
     pub install_folder: Option<String>,
-    /// Where the candidate came from: `steam`, `epic`, `gog`, `heroic`,
-    /// `lutris` or `folder_scan`.
+    /// Where the candidate came from, a launcher such as `steam`, or `folder_scan`.
     pub source: String,
     /// Launcher app id, for example the Steam app id.
     pub source_id: Option<String>,

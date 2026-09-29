@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use chrono::{SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -44,9 +44,14 @@ const STATUS_EVENTS: [&str; 7] = [
     "added_manually",
 ];
 
-/// Returns the canonical wall timestamp format used for session and event rows.
+/// A wall time in the format of session and event rows.
+pub fn format_timestamp(time: DateTime<Utc>) -> String {
+    time.to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+/// The current wall time in the format of session and event rows.
 pub fn now_timestamp() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+    format_timestamp(Utc::now())
 }
 
 /// Appends a session event while maintaining the per-session hash chain.
@@ -86,7 +91,9 @@ pub fn append_session_event(
             hash_self,
         ],
     )
-    .map_err(|e| VaultimeError::Integrity(format!("failed to append session event: {e}")))?;
+    .map_err(|error| {
+        VaultimeError::Integrity(format!("failed to append session event: {error}"))
+    })?;
 
     Ok(())
 }
@@ -225,7 +232,9 @@ pub fn validate_session_history_cached(
             [&session.id],
             |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
         )
-        .map_err(|e| VaultimeError::Integrity(format!("failed to read the event chain: {e}")))?;
+        .map_err(|error| {
+            VaultimeError::Integrity(format!("failed to read the event chain: {error}"))
+        })?;
     let state = CheckedState {
         events,
         last_hash,
@@ -272,7 +281,9 @@ fn next_sequence_and_previous_hash(
             |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
         )
         .optional()
-        .map_err(|e| VaultimeError::Integrity(format!("failed to query event chain: {e}")))?;
+        .map_err(|error| {
+            VaultimeError::Integrity(format!("failed to query event chain: {error}"))
+        })?;
 
     Ok(match row {
         Some((last_sequence, last_hash)) => (last_sequence + 1, last_hash),
@@ -402,16 +413,19 @@ fn load_session_events(conn: &Connection, session_id: &str) -> Result<Vec<Sessio
              WHERE session_id = ?1
              ORDER BY sequence ASC",
         )
-        .map_err(|e| {
-            VaultimeError::Integrity(format!("failed to prepare session event query: {e}"))
+        .map_err(|error| {
+            VaultimeError::Integrity(format!("failed to prepare session event query: {error}"))
         })?;
 
     let rows = stmt
         .query_map([session_id], row_to_session_event)
-        .map_err(|e| VaultimeError::Integrity(format!("failed to query session events: {e}")))?;
+        .map_err(|error| {
+            VaultimeError::Integrity(format!("failed to query session events: {error}"))
+        })?;
 
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|e| VaultimeError::Integrity(format!("failed to collect session events: {e}")))
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|error| {
+        VaultimeError::Integrity(format!("failed to collect session events: {error}"))
+    })
 }
 
 fn parse_payload(payload_json: &str) -> Option<Value> {

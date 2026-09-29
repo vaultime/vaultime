@@ -5,18 +5,19 @@
 
 use std::sync::Arc;
 
-use chrono::{DateTime, Local, SecondsFormat, TimeDelta, Utc};
+use chrono::{DateTime, Local, TimeDelta, Utc};
 use log::{debug, info, warn};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime, Webview};
 
-use crate::constants::{CLOSE_TO_TRAY_SETTING, TRAY_STATUS_INTERVAL};
+use crate::constants::{CLOSE_TO_TRAY_SETTING, TRAY_STATUS_INTERVAL, TRAY_TODAY_MIN_PLAYED_MS};
 use crate::db::connection::Database;
 use crate::db::repo::sessions::{self, SessionSpan};
 use crate::db::repo::settings;
 use crate::error::Result;
+use crate::integrity;
 
 /// Passed by the login item, so Vaultime starts in the tray.
 pub const MINIMIZED_ARG: &str = "--minimized";
@@ -45,8 +46,8 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> TrayState {
             start_status_updates(app.clone(), playing, today);
             TrayState { available: true }
         }
-        Err(e) => {
-            warn!("failed to create the tray icon: {e}");
+        Err(error) => {
+            warn!("failed to create the tray icon: {error}");
             TrayState { available: false }
         }
     }
@@ -106,19 +107,19 @@ fn start_status_updates<R: Runtime>(app: AppHandle<R>, playing: MenuItem<R>, tod
                         shown = lines;
                     }
                     Ok(_) => {}
-                    Err(e) => debug!("tray status not updated: {e}"),
+                    Err(error) => debug!("tray status not updated: {error}"),
                 }
                 std::thread::sleep(TRAY_STATUS_INTERVAL);
             }
         });
-    if let Err(e) = spawned {
-        warn!("could not start the tray status: {e}");
+    if let Err(error) = spawned {
+        warn!("could not start the tray status: {error}");
     }
 }
 
 fn status_lines(db: &Database, now: DateTime<Utc>) -> Result<(String, String)> {
     let day_start = local_day_start(now);
-    let since = day_start.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let since = integrity::format_timestamp(day_start);
     let spans = sessions::spans_since(db, &since)?;
     Ok(describe_status(&spans, now, day_start))
 }
@@ -172,7 +173,7 @@ fn describe_status(
         })
         .collect();
     let played = played_ms(&timed);
-    let today = if played < TimeDelta::minutes(1).num_milliseconds() {
+    let today = if played < TRAY_TODAY_MIN_PLAYED_MS {
         NOTHING_TODAY.to_string()
     } else {
         format!("{} played today", format_hours_minutes(played))
@@ -245,7 +246,7 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 pub fn show_cloud_state<R: Runtime>(app: &AppHandle<R>, signed_in: bool) {
     let icon = if signed_in {
         Image::from_bytes(SIGNED_IN_ICON)
-            .inspect_err(|e| warn!("failed to load the signed in icon: {e}"))
+            .inspect_err(|error| warn!("failed to load the signed in icon: {error}"))
             .ok()
     } else {
         app.default_window_icon().cloned()
@@ -329,8 +330,8 @@ mod tests {
     ) -> SessionSpan {
         SessionSpan {
             game_title: title.into(),
-            started_at_wall: start.to_rfc3339_opts(SecondsFormat::Millis, true),
-            ended_at_wall: end.map(|end| end.to_rfc3339_opts(SecondsFormat::Millis, true)),
+            started_at_wall: integrity::format_timestamp(start),
+            ended_at_wall: end.map(integrity::format_timestamp),
             runtime_ms: minutes * MINUTE_MS,
         }
     }

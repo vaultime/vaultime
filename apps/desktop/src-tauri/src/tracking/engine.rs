@@ -17,7 +17,7 @@ use crate::constants::{
     BACKGROUND_ACTIVE_SETTING, CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS,
     CLOCK_TOTAL_DRIFT_TOLERANCE_MS, DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE,
     IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS,
-    POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD, SUSPEND_DETECT_MS,
+    POLL_INTERVAL, PROCESS_ACTIVITY_CPU_PERCENT, SUSPEND_DETECT_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
@@ -219,9 +219,9 @@ fn poll_loop(
             let _tick = tick_lock.lock().unwrap_or_else(PoisonError::into_inner);
             // Checked again because `pause` may have won the race for the lock.
             if !paused.load(Ordering::SeqCst)
-                && let Err(e) = poll_tick(db, device_id, &mut system, &mut folders, &mut active)
+                && let Err(error) = poll_tick(db, device_id, &mut system, &mut folders, &mut active)
             {
-                error!("tracking poll error: {e}");
+                error!("tracking poll error: {error}");
             }
         }
 
@@ -229,7 +229,7 @@ fn poll_loop(
     }
 
     for session in active.into_values() {
-        if let Err(e) = sessions::end_session(
+        if let Err(error) = sessions::end_session(
             db,
             &session.session_id,
             session.runtime_ms,
@@ -238,7 +238,7 @@ fn poll_loop(
             &session.integrity_status,
         ) {
             error!(
-                "failed to close session {} on shutdown: {e}",
+                "failed to close session {} on shutdown: {error}",
                 session.session_id
             );
         }
@@ -247,7 +247,6 @@ fn poll_loop(
     info!("tracking engine stopped");
 }
 
-/// A single tick of the poll loop.
 fn poll_tick(
     db: &Database,
     device_id: &str,
@@ -287,8 +286,8 @@ fn poll_tick(
                     }
                     active.insert(game_id.clone(), active_session);
                 }
-                Err(e) => {
-                    error!("failed to start session for game {game_id}: {e}");
+                Err(error) => {
+                    error!("failed to start session for game {game_id}: {error}");
                 }
             }
         }
@@ -345,9 +344,9 @@ fn poll_tick(
                         game_id, ended.id, session.runtime_ms, session.active_ms, session.idle_ms
                     );
                 }
-                Err(e) => {
+                Err(error) => {
                     error!(
-                        "failed to end session {} for game {}: {e}",
+                        "failed to end session {} for game {}: {error}",
                         session.session_id, game_id
                     );
                 }
@@ -502,7 +501,7 @@ fn observe_game_processes(
 
     let has_process_activity = matched_processes.iter().any(|process| {
         cpu.get(&process.pid)
-            .is_some_and(|usage| *usage >= PROCESS_ACTIVITY_CPU_THRESHOLD)
+            .is_some_and(|usage| *usage >= PROCESS_ACTIVITY_CPU_PERCENT)
     });
 
     GameObservation {
@@ -682,7 +681,7 @@ fn parse_wall_timestamp(value: &str) -> DateTime<Utc> {
         .map_or_else(|_| Utc::now(), |timestamp| timestamp.with_timezone(&Utc))
 }
 
-/// Closes any sessions left open from a previous run (crash recovery).
+/// Closes any sessions left open from a previous run, for example after a crash.
 fn close_orphaned_sessions(db: &Database) {
     match sessions::get_active_sessions(db) {
         Ok(orphans) if !orphans.is_empty() => {
@@ -691,15 +690,16 @@ fn close_orphaned_sessions(db: &Database) {
                 orphans.len()
             );
             for session in orphans {
-                if let Err(e) = sessions::recover_session(db, &session.id, "startup_orphan_cleanup")
+                if let Err(error) =
+                    sessions::recover_session(db, &session.id, "startup_orphan_cleanup")
                 {
-                    error!("failed to close orphaned session {}: {e}", session.id);
+                    error!("failed to close orphaned session {}: {error}", session.id);
                 }
             }
         }
         Ok(_) => {}
-        Err(e) => {
-            error!("failed to check for orphaned sessions: {e}");
+        Err(error) => {
+            error!("failed to check for orphaned sessions: {error}");
         }
     }
 }

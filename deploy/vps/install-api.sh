@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Installs or updates the Vaultime API on Ubuntu 24.04. Run as root with the
 # release binary and the systemd units (vaultime-api.service and the
 # vaultime-db-backup service and timer) next to this script. Running it again
@@ -14,6 +17,9 @@ set -euo pipefail
 
 domain=${1:?usage: install-api.sh <domain>}
 here=$(cd "$(dirname "$0")" && pwd)
+# Where the API listens. DEFAULT_API_BASE_URL in bootstrap-admin-account.py
+# points here too.
+api_addr=127.0.0.1:9005
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 [ -f "$here/vaultime-api" ] || { echo "vaultime-api binary missing next to this script" >&2; exit 1; }
@@ -56,7 +62,7 @@ if [ ! -f "$env_file" ]; then
   (
     umask 027
     cat >"$env_file" <<EOF
-VAULTIME_API_BIND=127.0.0.1:9005
+VAULTIME_API_BIND=$api_addr
 VAULTIME_PUBLIC_BASE_URL=https://$domain
 VAULTIME_DATABASE_URL=postgres://vaultime:$db_password@127.0.0.1:5432/vaultime
 VAULTIME_BACKUP_ROOT=/srv/vaultime/backups
@@ -128,7 +134,7 @@ fi
 
 healthy() {
   for _ in $(seq 1 20); do
-    curl -fsS http://127.0.0.1:9005/healthz >/dev/null 2>&1 && return 0
+    curl -fsS "http://$api_addr/healthz" >/dev/null 2>&1 && return 0
     sleep 1
   done
   return 1
@@ -144,7 +150,7 @@ if ! healthy; then
   fi
   exit 1
 fi
-echo "API is up on 127.0.0.1:9005"
+echo "API is up on $api_addr"
 
 # The Caddy site lives in its own file that the Caddyfile imports. Other sites
 # on the box stay untouched, and a config that does not validate is rolled back.
@@ -163,10 +169,10 @@ $domain {
 	}
 
 	handle /v1/* {
-		reverse_proxy 127.0.0.1:9005
+		reverse_proxy $api_addr
 	}
 	handle /healthz {
-		reverse_proxy 127.0.0.1:9005
+		reverse_proxy $api_addr
 	}
 
 	# Installers change behind the same latest links, so browsers and the

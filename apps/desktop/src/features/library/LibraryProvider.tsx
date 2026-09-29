@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { listen } from "@tauri-apps/api/event";
 import {
   ACTIVE_POLL_MS,
-  DEFAULT_IDLE_THRESHOLD_SECONDS,
+  DEFAULT_IDLE_THRESHOLD_SECS,
   LIBRARY_CHANGED_EVENT,
   SETTING_KEYS,
   TRUST_BADGE_RECENT_DAYS,
@@ -16,6 +16,7 @@ import { countsAsPlay } from "@/lib/session-stats";
 import type { EarlierPlaytime, Game, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
+import { describeError } from "@/lib/utils";
 import { LibraryContext, type GameSummary } from "./library-context";
 
 /** Games, sessions, covers and the live session, shared by the shell and pages. */
@@ -28,7 +29,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
   const [activePolledAt, setActivePolledAt] = useState(() => Date.now());
-  const [idleThresholdSeconds, setIdleThresholdSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECONDS);
+  const [idleThresholdSeconds, setIdleThresholdSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
   const [artTints, setArtTints] = useState<Record<string, GameTint>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (Number.isFinite(threshold) && threshold > 0) setIdleThresholdSeconds(threshold);
       setError(null);
     } catch (loadError) {
-      setError(String(loadError));
+      setError(describeError(loadError));
     } finally {
       setLoaded(true);
     }

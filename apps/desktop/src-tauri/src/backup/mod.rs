@@ -20,7 +20,9 @@ use walkdir::WalkDir;
 
 use crate::AppContext;
 use crate::assets::{AssetManager, is_plain_name};
-use crate::constants::{AUTO_BACKUP_FOLDER_SETTING, BACKUP_VERSION, HASH_BUFFER_BYTES};
+use crate::constants::{
+    ASSET_CACHE_DIR, AUTO_BACKUP_FOLDER_SETTING, BACKUP_VERSION, DATABASE_FILE, HASH_BUFFER_BYTES,
+};
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
 use crate::db::repo::{devices, sessions};
@@ -29,9 +31,7 @@ use crate::integrity;
 use crate::platform::process::file_name;
 
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
-const BACKUP_DB_FILE: &str = "vaultime.db";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
-pub(crate) const BACKUP_ASSET_DIR: &str = "asset-cache";
 /// Settings that belong to this PC. A restore keeps the local values, so a
 /// backup cannot send the daily backups to a folder of its choosing.
 const DEVICE_SETTINGS: &[&str] = &[AUTO_BACKUP_FOLDER_SETTING];
@@ -122,13 +122,13 @@ pub(crate) fn export_backup_to(
         ))
     })?;
 
-    let backup_db_path = backup_dir.join(BACKUP_DB_FILE);
+    let backup_db_path = backup_dir.join(DATABASE_FILE);
     export_database_snapshot(db, &backup_db_path)?;
     copy_directory_contents(
         asset_manager.cache_dir(),
-        &backup_dir.join(BACKUP_ASSET_DIR),
+        &backup_dir.join(ASSET_CACHE_DIR),
         previous_backup
-            .map(|previous| previous.join(BACKUP_ASSET_DIR))
+            .map(|previous| previous.join(ASSET_CACHE_DIR))
             .as_deref(),
     )?;
 
@@ -219,7 +219,7 @@ fn restore_from_staging(
     staging_dir: &Path,
     artwork: &[String],
 ) -> Result<()> {
-    let staged_assets = staging_dir.join(BACKUP_ASSET_DIR);
+    let staged_assets = staging_dir.join(ASSET_CACHE_DIR);
     create_dir(&staged_assets)?;
     for relative_path in artwork {
         let target = staging_dir.join(relative_path);
@@ -232,8 +232,8 @@ fn restore_from_staging(
     }
 
     // Older backups are migrated on a copy first so their columns match ours.
-    let staged_db = staging_dir.join(BACKUP_DB_FILE);
-    fs::copy(backup_dir.join(BACKUP_DB_FILE), &staged_db).map_err(|error| {
+    let staged_db = staging_dir.join(DATABASE_FILE);
+    fs::copy(backup_dir.join(DATABASE_FILE), &staged_db).map_err(|error| {
         VaultimeError::Backup(format!("failed to stage backup database: {error}"))
     })?;
     drop(Database::open(&staged_db)?);
@@ -609,11 +609,7 @@ fn validate_manifest_files(
     backup_dir: &Path,
     manifest: &LocalBackupManifest,
 ) -> Result<Vec<String>> {
-    if !manifest
-        .files
-        .iter()
-        .any(|file| file.path == BACKUP_DB_FILE)
-    {
+    if !manifest.files.iter().any(|file| file.path == DATABASE_FILE) {
         return Err(VaultimeError::Backup(
             "backup manifest does not list the database".into(),
         ));
@@ -624,7 +620,7 @@ fn validate_manifest_files(
         let intact = fs::symlink_metadata(&resolved_path).is_ok_and(|meta| meta.is_file())
             && hash_file(&resolved_path)
                 .is_ok_and(|(bytes, sha256)| bytes == file.bytes && sha256 == file.sha256);
-        if file.path == BACKUP_DB_FILE {
+        if file.path == DATABASE_FILE {
             if !intact {
                 return Err(VaultimeError::Backup(
                     "the backup database does not match its checksum".into(),
@@ -644,7 +640,7 @@ fn is_artwork_path(relative_path: &str) -> bool {
     let mut parts = relative_path.split('/');
     matches!(
         (parts.next(), parts.next(), parts.next(), parts.next()),
-        (Some(BACKUP_ASSET_DIR), Some(game_id), Some(name), None)
+        (Some(ASSET_CACHE_DIR), Some(game_id), Some(name), None)
             if is_plain_name(game_id) && is_plain_name(name)
     )
 }
@@ -870,7 +866,7 @@ fn summary_from_manifest(
     let asset_file_count = manifest
         .files
         .iter()
-        .filter(|file| file.path.starts_with(&format!("{BACKUP_ASSET_DIR}/")))
+        .filter(|file| file.path.starts_with(&format!("{ASSET_CACHE_DIR}/")))
         .count();
 
     LocalBackupSummary {
@@ -1141,7 +1137,7 @@ mod tests {
             let manifest_path = self.backup_dir.join(BACKUP_MANIFEST_FILE);
             let mut manifest: LocalBackupManifest =
                 serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
-            let conn = Connection::open(self.backup_dir.join(BACKUP_DB_FILE)).unwrap();
+            let conn = Connection::open(self.backup_dir.join(DATABASE_FILE)).unwrap();
             change(&mut manifest, &conn);
             drop(conn);
             manifest.files = collect_backup_files(&self.backup_dir)
@@ -1257,7 +1253,7 @@ mod tests {
         let fixture = Fixture::new().back_up();
         let cover = fixture
             .backup_dir
-            .join(BACKUP_ASSET_DIR)
+            .join(ASSET_CACHE_DIR)
             .join(&fixture.game_id)
             .join("cover.png");
         fs::write(&cover, b"damaged").unwrap();

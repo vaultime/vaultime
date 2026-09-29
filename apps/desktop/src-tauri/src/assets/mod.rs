@@ -489,15 +489,15 @@ fn cache_candidate(
     let source_hash = crate::hex::encode(&Sha256::digest(&source_bytes));
     let reader = ImageReader::new(Cursor::new(&source_bytes))
         .with_guessed_format()
-        .map_err(|e| {
+        .map_err(|error| {
             VaultimeError::Asset(format!(
-                "failed to detect image format {}: {e}",
+                "failed to detect image format {}: {error}",
                 candidate.path.display()
             ))
         })?;
-    let image = reader.decode().map_err(|e| {
+    let image = reader.decode().map_err(|error| {
         VaultimeError::Asset(format!(
-            "failed to decode image {}: {e}",
+            "failed to decode image {}: {error}",
             candidate.path.display()
         ))
     })?;
@@ -510,9 +510,9 @@ fn cache_candidate(
     let processed = process_image(image, asset_type);
 
     let game_cache_dir = asset_manager.cache_dir().join(&game.id);
-    fs::create_dir_all(&game_cache_dir).map_err(|e| {
+    fs::create_dir_all(&game_cache_dir).map_err(|error| {
         VaultimeError::Asset(format!(
-            "failed to create game asset cache {}: {e}",
+            "failed to create game asset cache {}: {error}",
             game_cache_dir.display()
         ))
     })?;
@@ -537,9 +537,9 @@ fn cache_candidate(
     } else {
         processed.save_with_format(&cache_path, ImageFormat::Png)
     };
-    written.map_err(|e| {
+    written.map_err(|error| {
         VaultimeError::Asset(format!(
-            "failed to write cached image {}: {e}",
+            "failed to write cached image {}: {error}",
             cache_path.display()
         ))
     })?;

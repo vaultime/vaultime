@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Build image for the Linux bundles, the same base the release workflow uses.
 FROM ubuntu:22.04
 

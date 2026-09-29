@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Builds the Linux bundles on Ubuntu 22.04 in Docker, then installs and starts
 # them on several distros. Output lands in dist-linux/.
 #

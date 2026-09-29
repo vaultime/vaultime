@@ -177,7 +177,7 @@ function GamePage({ gameId }: { gameId: string }) {
             title={game.title}
             src={cover}
             variant="card"
-            className="hidden h-[240px] w-[180px] p-4 text-[30px] shadow-2xl shadow-black/40 lg:flex"
+            className="hidden h-[240px] w-[180px] p-4 text-[30px] shadow-2xl shadow-scrim/40 lg:flex"
           />
         </div>
       </TintedHeader>
@@ -386,7 +386,7 @@ function CoverPicker({
       const next = await task();
       if (next) onChanged(next);
     } catch (taskError) {
-      setError(`${failure}: ${String(taskError)}`);
+      setError(`${failure}: ${describeError(taskError)}`);
     } finally {
       setBusy(false);
     }

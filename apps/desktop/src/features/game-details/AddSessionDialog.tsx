@@ -19,6 +19,7 @@ import {
   MANUAL_SESSION_DEFAULT_AGO_MS,
   MANUAL_SESSION_MAX_HOURS,
   MINUTE_MS,
+  MINUTES_PER_HOUR,
   SESSION_NOTE_MAX_CHARS,
   STEAM_LAUNCHER,
 } from "@/lib/constants";
@@ -117,7 +118,7 @@ export function AddSessionDialog({
                 id="manual-minutes"
                 type="number"
                 min={0}
-                max={59}
+                max={MINUTES_PER_HOUR - 1}
                 value={minutes}
                 onChange={(event) => setMinutes(event.target.value)}
               />

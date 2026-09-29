@@ -21,14 +21,15 @@ import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSecti
 import { ExportSection } from "@/features/settings/ExportSection";
 import {
   AUTO_BACKUP_KEEP,
-  DEFAULT_IDLE_THRESHOLD_SECONDS,
-  MIN_IDLE_THRESHOLD_SECONDS,
+  DEFAULT_IDLE_THRESHOLD_SECS,
+  MIN_IDLE_THRESHOLD_SECS,
   SECONDS_PER_MINUTE,
   SETTING_KEYS,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
+import { describeError } from "@/lib/utils";
 import { capitalize, numberWords, plural } from "@/lib/words";
 
 const SITE_URL = "https://vaultime.codfishcloud.de";
@@ -72,7 +73,7 @@ export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [idleMinutes, setIdleMinutes] = useState(String(DEFAULT_IDLE_THRESHOLD_SECONDS / SECONDS_PER_MINUTE));
+  const [idleMinutes, setIdleMinutes] = useState(String(DEFAULT_IDLE_THRESHOLD_SECS / SECONDS_PER_MINUTE));
   const [backgroundActive, setBackgroundActive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -109,7 +110,7 @@ export function SettingsPage() {
         setAutoBackup(values[SETTING_KEYS.autoBackup] !== "false");
         setAutoBackupFolder(backupFolder);
         setAutostart(Boolean(startsAtLogin));
-        const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECONDS);
+        const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
         setIdleMinutes(String(seconds / SECONDS_PER_MINUTE));
         setBackgroundActive(values[SETTING_KEYS.backgroundActive] === "true");
         setDiagnostics(nextDiagnostics);
@@ -117,7 +118,7 @@ export function SettingsPage() {
         setAppVersion(version);
       })
       .catch((loadError) => {
-        if (!cancelled) setError(String(loadError));
+        if (!cancelled) setError(describeError(loadError));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -129,8 +130,8 @@ export function SettingsPage() {
 
   async function saveTracking() {
     const seconds = Math.round(Number(idleMinutes) * SECONDS_PER_MINUTE);
-    if (!Number.isFinite(seconds) || seconds < MIN_IDLE_THRESHOLD_SECONDS) {
-      setError(`The idle time needs to be at least ${MIN_IDLE_THRESHOLD_SECONDS} seconds.`);
+    if (!Number.isFinite(seconds) || seconds < MIN_IDLE_THRESHOLD_SECS) {
+      setError(`The idle time needs to be at least ${MIN_IDLE_THRESHOLD_SECS} seconds.`);
       return;
     }
     try {
@@ -142,7 +143,7 @@ export function SettingsPage() {
       // The live bar shows the idle time too.
       await refresh();
     } catch (saveError) {
-      setError(String(saveError));
+      setError(describeError(saveError));
     } finally {
       setSaving(false);
     }
@@ -154,7 +155,7 @@ export function SettingsPage() {
       await api.setSetting(SETTING_KEYS.closeToTray, String(next));
     } catch (saveError) {
       setCloseToTray(!next);
-      setError(String(saveError));
+      setError(describeError(saveError));
     }
   }
 
@@ -164,7 +165,7 @@ export function SettingsPage() {
       await api.setSetting(SETTING_KEYS.autoBackup, String(next));
     } catch (saveError) {
       setAutoBackup(!next);
-      setError(String(saveError));
+      setError(describeError(saveError));
     }
   }
 
@@ -174,7 +175,7 @@ export function SettingsPage() {
       await (next ? enableAutostart() : disableAutostart());
     } catch (autostartError) {
       setAutostart(!next);
-      setError(String(autostartError));
+      setError(describeError(autostartError));
     }
   }
 
@@ -185,7 +186,7 @@ export function SettingsPage() {
       setBackupMessage(null);
       await task();
     } catch (backupError) {
-      setError(String(backupError));
+      setError(describeError(backupError));
     } finally {
       setBackupBusy(false);
     }
@@ -241,7 +242,7 @@ export function SettingsPage() {
       await api.updateGame(gameId, { is_hidden: false });
       await refresh();
     } catch (showError) {
-      setError(String(showError));
+      setError(describeError(showError));
     }
   }
 
@@ -268,7 +269,7 @@ export function SettingsPage() {
         {restartRequired && (
           <Notice className="mt-6">
             Restart Vaultime to continue tracking with the restored history.
-            <Button size="sm" onClick={() => relaunch().catch((restartError) => setError(String(restartError)))}>
+            <Button size="sm" onClick={() => relaunch().catch((restartError) => setError(describeError(restartError)))}>
               <RotateCcw className="size-3.5" />
               Restart now
             </Button>
@@ -285,7 +286,7 @@ export function SettingsPage() {
               <Input
                 id="idle-minutes"
                 type="number"
-                min={MIN_IDLE_THRESHOLD_SECONDS / SECONDS_PER_MINUTE}
+                min={MIN_IDLE_THRESHOLD_SECS / SECONDS_PER_MINUTE}
                 step="any"
                 value={idleMinutes}
                 onChange={(event) => {

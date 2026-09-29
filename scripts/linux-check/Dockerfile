@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Ubuntu image with the Tauri build dependencies and the pinned Rust toolchain.
 FROM ubuntu:24.04
 

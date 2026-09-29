@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";

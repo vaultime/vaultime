@@ -20,9 +20,9 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::config::Config;
 use crate::constants::{
-    ACCESS_TOKEN_TTL_MINUTES, INVITE_CODE_GROUP_LENGTH, INVITE_HASH_BYTES,
-    INVITE_LOOKUP_KEY_LENGTH, INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_P, INVITE_SCRYPT_R,
-    MIN_PASSWORD_LENGTH, REFRESH_TOKEN_BYTES, REFRESH_TOKEN_TTL_DAYS,
+    ACCESS_TOKEN_TTL_MINUTES, INVITE_CODE_GROUP_CHARS, INVITE_HASH_BYTES, INVITE_LOOKUP_KEY_CHARS,
+    INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_P, INVITE_SCRYPT_R, MIN_PASSWORD_CHARS, REFRESH_TOKEN_BYTES,
+    REFRESH_TOKEN_TTL_DAYS,
 };
 use crate::error::{AppError, AppResult};
 
@@ -60,13 +60,13 @@ impl ParsedInviteCode {
             .map(|ch| ch.to_ascii_uppercase())
             .collect::<String>();
 
-        if body.len() < INVITE_LOOKUP_KEY_LENGTH {
+        if body.len() < INVITE_LOOKUP_KEY_CHARS {
             return Err(AppError::bad_request("invite code is too short"));
         }
 
         Ok(Self {
             normalized_code: format!("{prefix}-{}", chunk_code(&body)),
-            lookup_key: body[..INVITE_LOOKUP_KEY_LENGTH].to_string(),
+            lookup_key: body[..INVITE_LOOKUP_KEY_CHARS].to_string(),
         })
     }
 }
@@ -74,7 +74,7 @@ impl ParsedInviteCode {
 /// Splits an ASCII code body into dash separated groups.
 pub fn chunk_code(body: &str) -> String {
     body.as_bytes()
-        .chunks(INVITE_CODE_GROUP_LENGTH)
+        .chunks(INVITE_CODE_GROUP_CHARS)
         .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
         .collect::<Vec<_>>()
         .join("-")
@@ -90,9 +90,9 @@ pub fn normalize_email(raw: &str) -> AppResult<String> {
 }
 
 pub fn check_password_length(password: &str) -> AppResult<()> {
-    if password.len() < MIN_PASSWORD_LENGTH {
+    if password.len() < MIN_PASSWORD_CHARS {
         return Err(AppError::bad_request(format!(
-            "password must be at least {MIN_PASSWORD_LENGTH} characters long"
+            "password must be at least {MIN_PASSWORD_CHARS} characters long"
         )));
     }
     Ok(())
@@ -282,8 +282,9 @@ impl FromRequestParts<AppState> for AuthenticatedAccount {
 mod tests {
     use super::*;
 
-    // Computed with argon2 0.5, scrypt 0.11, sha2 0.10 and jsonwebtoken 9 before the upgrade. The
-    // invite and refresh vectors also match Python hashlib and Node crypto.
+    // Known answers computed with argon2 0.5, scrypt 0.11, sha2 0.10 and jsonwebtoken 9, so a
+    // dependency update that changes how stored hashes and tokens verify fails here. The invite
+    // and refresh vectors also match Python hashlib.
     const INVITE_CODE: &str = "VTLINV-A3Q1-S5F8-S1DT-R1DJ-2RIC-NXAO";
     const INVITE_SALT: &str = "00112233445566778899aabbccddeeff";
     const INVITE_HASH: &str = "68f6d364d82e0da5f6a1015d7b2a1c350d5cbe76a4d44b19822bf1e2888a22d4e3d65e7dac381a8c4e56bd4cda419578f8ec7ad87802c369bbdd8ff7b765dae5";
@@ -309,8 +310,8 @@ mod tests {
             max_account_bytes: 4096,
             max_pending_backups_per_account: 1,
             max_complete_backups_per_account: 30,
-            min_backup_interval_seconds: 900,
-            stale_pending_backup_seconds: 3600,
+            min_backup_interval_secs: 900,
+            stale_pending_backup_secs: 3600,
         }
     }
 

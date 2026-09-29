@@ -6,7 +6,7 @@ import { formatHoursMinutes } from "@/lib/time";
 import type { SessionEvent } from "@/lib/types";
 import { capitalize } from "@/lib/words";
 
-export interface IntegrityMeta {
+interface IntegrityMeta {
   label: string;
   description: string;
 }
@@ -29,14 +29,13 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
     case "suspicious":
       return {
         label: "Suspicious",
-        description:
-          "Tracking found a clock jump, timing drift, or another local inconsistency.",
+        description: "The system clock jumped or the record was changed outside Vaultime.",
       };
     case "recovered":
       return {
         label: "Recovered",
         description:
-          "Session history was reconstructed after an interrupted shutdown or restart.",
+          "Vaultime was closed while the game ran, for example after a crash, and the session was closed on the next start.",
       };
     case "edited":
       return {
@@ -52,8 +51,7 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
     default:
       return {
         label: "Local",
-        description:
-          "Locally tracked session history with no currently detected integrity issue.",
+        description: "Recorded normally and unchanged since.",
       };
   }
 }
@@ -61,13 +59,13 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
 function formatIntegrityReason(reason: string | null | undefined): string {
   switch (reason) {
     case "wall_clock_moved_backwards":
-      return "System clock moved backwards";
+      return "The system clock went back";
     case "wall_clock_step_mismatch":
-      return "Wall clock jumped away from monotonic time";
+      return "The system clock jumped between two checks";
     case "wall_clock_drift_exceeded":
-      return "Wall clock drifted too far from monotonic time";
+      return "The system clock ran too fast or too slow over the session";
     case "startup_orphan_cleanup":
-      return "Recovered after restart";
+      return "Closed when Vaultime started again";
     default:
       return capitalize((reason ?? "local_integrity_issue").replaceAll("_", " "));
   }
@@ -118,11 +116,11 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
 
   switch (event.event_type) {
     case "integrity_flagged":
-      return reason ?? "Tracking mismatch recorded";
+      return reason ?? "Marked as suspicious";
     case "recovered":
-      return reason ?? "Session was reconstructed after an interruption";
+      return reason ?? "Closed after Vaultime was interrupted";
     case "started":
-      return "Local event chain opened for this session";
+      return "First entry in the session's record";
     case "corrected": {
       const previous = payload?.previous as Record<string, unknown> | undefined;
       const before = typeof previous?.runtime_ms === "number" ? formatHoursMinutes(previous.runtime_ms) : null;
@@ -147,15 +145,15 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
       const driftMs =
         typeof payload?.drift_ms === "number" ? payload.drift_ms : null;
       if (driftMs === null) {
-        return "Timing counters persisted";
+        return "Times saved";
       }
 
       const driftSeconds = Math.round(Math.abs(driftMs) / SECOND_MS);
       return driftSeconds > 0
-        ? `Timing counters persisted, ${driftSeconds}s drift`
-        : "Timing counters persisted";
+        ? `Times saved, the system clock was ${driftSeconds}s off`
+        : "Times saved";
     }
     default:
-      return "Audit event recorded";
+      return "Recorded";
   }
 }

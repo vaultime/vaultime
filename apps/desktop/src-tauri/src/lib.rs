@@ -29,8 +29,8 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use assets::AssetManager;
 use constants::{
-    AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL, AUTO_BACKUP_ON_QUIT_MIN_AGE, DEVICE_ID_FILE,
-    LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
+    ASSET_CACHE_DIR, AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL, AUTO_BACKUP_ON_QUIT_MIN_AGE,
+    DATABASE_FILE, DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
 };
 use db::connection::Database;
 use db::repo::devices;
@@ -43,7 +43,6 @@ pub struct AppContext {
     pub app_version: String,
 }
 
-/// Runs the Tauri application.
 pub fn run() {
     tauri::Builder::default()
         // Must be registered first. A second instance would track every game twice.
@@ -150,10 +149,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .expect("failed to resolve app data directory");
 
     fs::create_dir_all(&app_dir).expect("failed to create app data directory");
-    let asset_cache_dir = app_dir.join("asset-cache");
+    let asset_cache_dir = app_dir.join(ASSET_CACHE_DIR);
     fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
 
-    let db_path = app_dir.join("vaultime.db");
+    let db_path = app_dir.join(DATABASE_FILE);
     let first_start = !db_path.exists();
     let device_id = device_id(&app_dir, !first_start);
     let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
@@ -214,7 +213,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Checks every hour whether the daily automatic backup is due.
+/// Checks every `AUTO_BACKUP_CHECK_INTERVAL` whether the daily automatic
+/// backup is due.
 fn start_automatic_backups(database: Arc<Database>, assets: AssetManager, context: AppContext) {
     let spawned = std::thread::Builder::new()
         .name("vaultime-auto-backup".into())
@@ -233,7 +233,8 @@ fn start_automatic_backups(database: Arc<Database>, assets: AssetManager, contex
     }
 }
 
-/// Quitting saves the day's play, unless a backup was made within the hour.
+/// Quitting saves the day's play, unless the last backup is younger than
+/// `AUTO_BACKUP_ON_QUIT_MIN_AGE`.
 fn back_up_on_quit(app: &tauri::AppHandle) {
     let (Some(database), Some(assets), Some(context)) = (
         app.try_state::<Arc<Database>>(),

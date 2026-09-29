@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-/// Infer a human-readable game title from an executable path.
+/// Infers a human-readable game title from an executable path.
 ///
 /// Prefers the parent folder name, for example "Counter-Strike 2", and falls
 /// back to the file name. Strips build suffixes and separators.

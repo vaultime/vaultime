@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 /** Clock hands at five past eleven form a V inside a rounded vault frame. The
  * view box ends at the outer edge of the frame, so the mark has no margin. */
-export function LogoMark({
+function LogoMark({
   className,
   pivotClassName = "fill-violet",
 }: {

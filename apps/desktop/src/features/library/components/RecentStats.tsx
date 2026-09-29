@@ -8,7 +8,7 @@ import type { RecentPlay } from "@/lib/session-stats";
 import { formatDayPart, formatHoursMinutes } from "@/lib/time";
 import { numberWords } from "@/lib/words";
 
-/** Four numbers for the last seven days, separated by hairlines. */
+/** Four numbers for the last `RECENT_DAYS` days, separated by hairlines. */
 export function RecentStats({ recent, summaries }: { recent: RecentPlay; summaries: GameSummary[] }) {
   const gamesCount = recent.runtimeByGame.size;
   const longestTitle = recent.longest

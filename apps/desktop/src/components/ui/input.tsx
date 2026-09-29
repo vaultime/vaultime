@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2023 shadcn
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: MIT
+
 import * as React from "react"
 import { Input as InputPrimitive } from "@base-ui/react/input"
 

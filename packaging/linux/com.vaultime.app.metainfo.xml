@@ -13,13 +13,13 @@
     </p>
     <ul>
       <li>Detects running games automatically and records sessions</li>
-      <li>Finds Steam games and scans common launcher folders</li>
+      <li>Finds games from Steam, Xbox, Epic, GOG, EA and other launchers, and scans common game folders</li>
       <li>Shows your library with artwork from your game folders</li>
       <li>Local backups, plus optional encrypted backup to an invite-only server</li>
     </ul>
   </description>
   <launchable type="desktop-id">Vaultime.desktop</launchable>
-  <developer id="io.github.schwimmbeck">
+  <developer id="io.github.vaultime">
     <name>schwimmbeck</name>
   </developer>
   <categories>

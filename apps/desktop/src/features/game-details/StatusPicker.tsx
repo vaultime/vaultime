@@ -24,7 +24,7 @@ export function StatusPicker({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+        className="inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
         style={{ borderColor: tint.edge, color: tint.ink }}
       >
         {status ? <GameStatusIcon status={status} className="size-3.5" /> : <Plus className="size-3.5" />}

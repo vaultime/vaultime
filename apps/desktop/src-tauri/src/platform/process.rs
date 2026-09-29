@@ -12,7 +12,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 pub struct RunningProcess {
     /// OS process ID.
     pub pid: u32,
-    /// Process name (e.g. "game.exe").
+    /// Process name, for example "game.exe".
     pub name: String,
     /// Full executable path, if available.
     pub exe_path: Option<String>,

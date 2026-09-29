@@ -7,16 +7,17 @@
 //! label that says it was changed. A suspicious session stays suspicious,
 //! and a session added by hand stays Manual, since it was never tracked.
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use std::time::Duration;
+
+use chrono::{DateTime, Utc};
 use rusqlite::params;
 use serde_json::{Value, json};
 
-use crate::constants::{MANUAL_SESSION_MAX, SESSION_NOTE_MAX_CHARS};
+use crate::constants::{MANUAL_SESSION_MAX, SESSION_NOTE_MAX_CHARS, STEAM_SOURCE};
 use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::{attach_validated_status, row_to_session};
-use crate::earlier::STEAM_SOURCE;
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, STATUS_EDITED, STATUS_MANUAL, STATUS_SUSPICIOUS};
 
@@ -31,10 +32,6 @@ fn parse_time(value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|time| time.with_timezone(&Utc))
         .map_err(|_| VaultimeError::Invalid(format!("{value} is not a valid time")))
-}
-
-fn format_time(time: DateTime<Utc>) -> String {
-    time.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 fn check_text(text: &str, required: bool) -> Result<&str> {
@@ -132,7 +129,7 @@ pub fn trim_session(
         let idle_cut = removed.min(session.idle_ms);
         let active_cut = (removed - idle_cut).min(session.active_ms);
         let timing = Timing {
-            ended_at_wall: format_time(new_end),
+            ended_at_wall: integrity::format_timestamp(new_end),
             runtime_ms: session.runtime_ms - removed,
             active_ms: session.active_ms - active_cut,
             idle_ms: session.idle_ms - idle_cut,
@@ -239,7 +236,7 @@ pub fn add_manual_session(
     if runtime_ms <= 0 || runtime_ms > max_ms {
         return Err(VaultimeError::Invalid(format!(
             "a session added by hand lasts up to {} hours",
-            MANUAL_SESSION_MAX.as_secs() / 3600
+            MANUAL_SESSION_MAX.as_secs() / Duration::from_hours(1).as_secs()
         )));
     }
     let end = start + chrono::Duration::milliseconds(runtime_ms);
@@ -248,7 +245,10 @@ pub fn add_manual_session(
             "a session cannot end in the future".into(),
         ));
     }
-    let (started_at_wall, ended_at_wall) = (format_time(start), format_time(end));
+    let (started_at_wall, ended_at_wall) = (
+        integrity::format_timestamp(start),
+        integrity::format_timestamp(end),
+    );
     let id = uuid::Uuid::new_v4().to_string();
 
     db.with_transaction(|conn| {
@@ -265,7 +265,7 @@ pub fn add_manual_session(
                     game_id,
                     started_at_wall,
                     ended_at_wall,
-                    format_time(Utc::now())
+                    integrity::now_timestamp()
                 ],
                 |row| row.get(0),
             )
@@ -345,7 +345,7 @@ mod tests {
     /// with a start event at that time like the tracker writes.
     fn played(db: &Database, game_id: &str, runtime: i64, active: i64) -> Session {
         let id = uuid::Uuid::new_v4().to_string();
-        let start = format_time(Utc::now() - chrono::Duration::minutes(runtime));
+        let start = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(runtime));
         db.with_conn(|conn| {
             conn.execute(
                 "INSERT INTO sessions
@@ -386,7 +386,7 @@ mod tests {
         let (db, game) = setup();
         let session = played(&db, &game, 300, 120);
         let end = parse_time(session.ended_at_wall.as_deref().unwrap()).unwrap();
-        let new_end = format_time(end - chrono::Duration::minutes(200));
+        let new_end = integrity::format_timestamp(end - chrono::Duration::minutes(200));
 
         let trimmed = trim_session(&db, &session.id, &new_end, "Left the game running").unwrap();
         assert_eq!(trimmed.runtime_ms, 100 * MINUTE);
@@ -440,7 +440,7 @@ mod tests {
             discard_session(&db, &session.id, "  ").is_err(),
             "no reason"
         );
-        let after_end = format_time(
+        let after_end = integrity::format_timestamp(
             parse_time(session.ended_at_wall.as_deref().unwrap()).unwrap()
                 + chrono::Duration::minutes(1),
         );
@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn manual_sessions_count_as_active_and_say_so() {
         let (db, game) = setup();
-        let start = format_time(Utc::now() - chrono::Duration::hours(5));
+        let start = integrity::format_timestamp(Utc::now() - chrono::Duration::hours(5));
         let session = add_manual_session(
             &db,
             &game,
@@ -491,7 +491,7 @@ mod tests {
         assert!(session.closed_cleanly);
         assert_eq!(validated(&db, &session.id).integrity_status, STATUS_MANUAL);
 
-        let future = format_time(Utc::now() - chrono::Duration::minutes(10));
+        let future = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(10));
         assert!(
             add_manual_session(&db, &game, DEVICE, &future, 60 * MINUTE, "", None).is_err(),
             "ends in the future"
@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn a_corrected_manual_session_stays_manual() {
         let (db, game) = setup();
-        let start = format_time(Utc::now() - chrono::Duration::hours(5));
+        let start = integrity::format_timestamp(Utc::now() - chrono::Duration::hours(5));
         let session =
             add_manual_session(&db, &game, DEVICE, &start, 90 * MINUTE, "", None).unwrap();
         let fixed = discard_session(&db, &session.id, "Wrong game").unwrap();
@@ -520,7 +520,7 @@ mod tests {
     #[test]
     fn only_steam_can_count_a_manual_session() {
         let (db, game) = setup();
-        let start = format_time(Utc::now() - chrono::Duration::hours(5));
+        let start = integrity::format_timestamp(Utc::now() - chrono::Duration::hours(5));
         assert!(add_manual_session(&db, &game, DEVICE, &start, MINUTE, "", Some("epic")).is_err());
         let session =
             add_manual_session(&db, &game, DEVICE, &start, MINUTE, "", Some(STEAM_SOURCE)).unwrap();
@@ -531,7 +531,8 @@ mod tests {
     fn a_trim_leaves_sleep_out_of_what_it_takes() {
         let (db, game) = setup();
         let now = Utc::now();
-        let minutes_ago = |minutes| format_time(now - chrono::Duration::minutes(minutes));
+        let minutes_ago =
+            |minutes| integrity::format_timestamp(now - chrono::Duration::minutes(minutes));
         let id = uuid::Uuid::new_v4().to_string();
         // Two hours on the clock, an hour of it asleep until ten minutes ago.
         db.with_conn(|conn| {
@@ -599,7 +600,7 @@ mod tests {
     fn a_manual_session_cannot_overlap_play_of_the_same_game() {
         let (db, game) = setup();
         let tracked = played(&db, &game, 90, 90);
-        let inside = format_time(Utc::now() - chrono::Duration::minutes(60));
+        let inside = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(60));
         assert!(add_manual_session(&db, &game, DEVICE, &inside, 10 * MINUTE, "", None).is_err());
 
         discard_session(&db, &tracked.id, "The launcher only").unwrap();

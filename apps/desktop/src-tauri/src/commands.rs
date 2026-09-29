@@ -17,7 +17,7 @@ use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
-use crate::constants::{BACKUP_HISTORY_LIMIT, PAGE_SETTINGS, POLL_INTERVAL};
+use crate::constants::{BACKUP_HISTORY_LIMIT, PAGE_SETTINGS, POLL_INTERVAL, STEAM_SOURCE};
 use crate::db::connection::Database;
 use crate::db::models::{
     BackupSnapshot, CreateGame, EarlierPlaytime, Game, GameStatusChange, Session, SessionEvent,
@@ -535,7 +535,7 @@ pub fn import_steam_playtime(
 /// Removes all playtime imported from Steam. Returns how many games had some.
 #[tauri::command]
 pub fn remove_steam_playtime(db: State<'_, Arc<Database>>) -> Result<usize, VaultimeError> {
-    earlier_playtime::clear_earlier_playtime(&db, earlier::STEAM_SOURCE)
+    earlier_playtime::clear_earlier_playtime(&db, STEAM_SOURCE)
 }
 
 #[tauri::command(async)]

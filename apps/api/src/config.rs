@@ -27,8 +27,8 @@ pub struct Config {
     pub max_pending_backups_per_account: i64,
     /// Older complete backups beyond this count are rotated out after each new upload.
     pub max_complete_backups_per_account: i64,
-    pub min_backup_interval_seconds: i64,
-    pub stale_pending_backup_seconds: i64,
+    pub min_backup_interval_secs: i64,
+    pub stale_pending_backup_secs: i64,
 }
 
 impl Config {
@@ -54,12 +54,12 @@ impl Config {
                 DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT,
                 1,
             )?,
-            min_backup_interval_seconds: env_i64(
+            min_backup_interval_secs: env_i64(
                 "VAULTIME_MIN_BACKUP_INTERVAL_SECONDS",
                 DEFAULT_MIN_BACKUP_INTERVAL_SECS,
                 0,
             )?,
-            stale_pending_backup_seconds: env_i64(
+            stale_pending_backup_secs: env_i64(
                 "VAULTIME_STALE_PENDING_BACKUP_SECONDS",
                 DEFAULT_STALE_PENDING_BACKUP_SECS,
                 0,

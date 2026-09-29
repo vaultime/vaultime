@@ -10,15 +10,13 @@ use chrono::DateTime;
 use log::info;
 use serde::Serialize;
 
+use crate::constants::STEAM_SOURCE;
 use crate::db::connection::Database;
 use crate::db::models::EarlierPlaytime;
 use crate::db::repo::{earlier_playtime, games, sessions};
 use crate::discovery::steam::{self, SteamPlaytime};
 use crate::error::Result;
 use crate::integrity;
-
-/// Source name of playtime read from Steam.
-pub const STEAM_SOURCE: &str = "steam";
 
 /// A library game and the playtime Steam counted for it.
 #[derive(Debug, Clone, Serialize)]

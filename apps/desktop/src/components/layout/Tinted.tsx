@@ -94,7 +94,7 @@ export function TintedButton({
   onClick?: () => void;
   children: ReactNode;
 }) {
-  const className = cn(BUTTON, solid ? "font-semibold hover:opacity-90" : "border font-medium hover:bg-white/5");
+  const className = cn(BUTTON, solid ? "font-semibold hover:opacity-90" : "border font-medium hover:bg-glint/5");
   const style = solid
     ? { background: tint.ink, color: tint.wash }
     : { borderColor: tint.edge, color: tint.ink };

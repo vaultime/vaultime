@@ -16,6 +16,10 @@ export const MINUTES_PER_HOUR = 60;
 export const SECONDS_PER_HOUR = 3_600;
 export const HOURS_PER_DAY = 24;
 export const DAYS_PER_WEEK = 7;
+export const MONTHS_PER_YEAR = 12;
+/** Monday to Friday. The week starts on Monday. */
+export const WORKING_DAYS_PER_WEEK = 5;
+export const WEEKEND_DAYS_PER_WEEK = DAYS_PER_WEEK - WORKING_DAYS_PER_WEEK;
 
 // Settings
 
@@ -52,10 +56,10 @@ export const ACTIVE_POLL_MS = 5 * SECOND_MS;
 export const LIVE_TICK_MS = SECOND_MS;
 
 /** Idle threshold shown until the settings load. Same as DEFAULT_IDLE_THRESHOLD_SECS in constants.rs. */
-export const DEFAULT_IDLE_THRESHOLD_SECONDS = 300;
+export const DEFAULT_IDLE_THRESHOLD_SECS = 300;
 
 /** Lowest idle threshold the settings accept. Same as MIN_IDLE_THRESHOLD_SECS in constants.rs. */
-export const MIN_IDLE_THRESHOLD_SECONDS = 5;
+export const MIN_IDLE_THRESHOLD_SECS = 5;
 
 // Cloud
 
@@ -75,6 +79,15 @@ export const BYTES_PER_KIB = 1_024;
 /** Sizes below this many units get one decimal, "4.2 MB" but "42 MB". */
 export const SIZE_ONE_DECIMAL_BELOW = 10;
 
+/** Browser storage key of the cloud session saved by older builds, read once and removed. */
+export const CLOUD_SESSION_STORAGE_KEY = "vaultime.cloud.session";
+/** Browser storage key of the id this PC registers with the cloud server. */
+export const CLOUD_DEVICE_ID_STORAGE_KEY = "vaultime.cloud.device-id";
+/** Browser storage key prefix of the last backup list per account, shown while the server is not reachable. */
+export const CLOUD_BACKUPS_CACHE_KEY_PREFIX = "vaultime.cloud.backups.";
+/** Random characters in a device id when the webview cannot make a UUID. */
+export const FALLBACK_DEVICE_ID_CHARS = 10;
+
 // Library and charts
 
 /** Calendar days that count as recent on the library home, today included. */
@@ -89,12 +102,14 @@ export const ACTIVITY_CHART_DAYS = 14;
 /** Shortest visible bar in a chart, in percent of its height, so small days still show. */
 export const CHART_MIN_BAR_PERCENT = 3;
 
-/** Game results in the command palette, before and while typing. */
+/** Game results in the command palette before typing. */
 export const PALETTE_GAMES_IDLE = 5;
+/** Game results in the command palette while typing. */
 export const PALETTE_GAMES_SEARCHING = 8;
 
-/** Titles up to this many characters get the largest hero size, then one step down. */
+/** Titles up to this many characters get the largest hero size. */
 export const HERO_TITLE_LARGE_MAX_CHARS = 14;
+/** Titles up to this many characters get the medium hero size, longer ones the smallest. */
 export const HERO_TITLE_MEDIUM_MAX_CHARS = 26;
 
 // Game page
@@ -115,14 +130,18 @@ export const JOURNAL_MIN_SPAN_PERCENT = 0.8;
 
 // Time phrases
 
-/** Session lengths that change the words for a session: quick, short, plain, long, marathon. */
+/** Longest session that reads as a quick look. */
 export const SESSION_QUICK_MAX_MS = 20 * MINUTE_MS;
+/** Longest session that reads as short. */
 export const SESSION_SHORT_MAX_MS = HOUR_MS;
+/** Longest session that reads as a plain session, longer ones are long. */
 export const SESSION_PLAIN_MAX_MS = 2 * HOUR_MS;
+/** Longest session that reads as long, longer ones are marathons. */
 export const SESSION_LONG_MAX_MS = 4 * HOUR_MS;
 
-/** A part of the day counts as a habit after this many sessions and share of runtime. */
+/** Sessions in a part of the day before it can count as a habit. */
 export const HABIT_MIN_SESSIONS = 3;
+/** Share of runtime a part of the day needs to count as a habit. */
 export const HABIT_MIN_SHARE = 0.5;
 
 /** Under this many minutes a time reads "Just now". */
@@ -137,7 +156,7 @@ export const DAY_PART_HOURS = { morning: 5, afternoon: 12, evening: 17, night: 2
 /** Longest note on a session, in characters. Same as SESSION_NOTE_MAX_CHARS in constants.rs. */
 export const SESSION_NOTE_MAX_CHARS = 280;
 
-/** Launcher name of Steam. Same as STEAM_SOURCE in earlier.rs. */
+/** Launcher name of Steam. Same as STEAM_SOURCE in constants.rs. */
 export const STEAM_LAUNCHER = "steam";
 
 /** Longest session a player can add by hand, in hours. Same as MANUAL_SESSION_MAX in constants.rs. */
@@ -184,13 +203,15 @@ export const TINT_SAMPLE_PX = 32;
 /** Pixels more transparent than this alpha byte are skipped. */
 export const TINT_MIN_ALPHA = 128;
 
-/** Pixels outside this OKLab lightness range are skipped as black or white. */
+/** Pixels darker than this OKLab lightness are skipped as black. */
 export const TINT_MIN_LIGHTNESS = 0.12;
+/** Pixels lighter than this OKLab lightness are skipped as white. */
 export const TINT_MAX_LIGHTNESS = 0.96;
 
 /** Mean OKLab chroma of a typical colorful cover, it maps to full tint strength. */
 export const TINT_TYPICAL_CHROMA = 0.09;
 
-/** How far a tint may fade towards grey or go past the default colorfulness. */
+/** How far a tint may fade towards grey. */
 export const TINT_MIN_STRENGTH = 0.2;
+/** How far a tint may go past the default colorfulness. */
 export const TINT_MAX_STRENGTH = 1.2;

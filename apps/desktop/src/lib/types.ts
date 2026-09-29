@@ -133,7 +133,7 @@ export interface GameAssetView {
   is_preferred: boolean;
 }
 
-export interface CloudAuthUser {
+interface CloudAuthUser {
   id: string;
   email: string;
   role: string;
@@ -157,7 +157,7 @@ export interface CloudDevice {
   last_seen_at: string;
 }
 
-export interface CloudBackupPayloadSummary {
+interface CloudBackupPayloadSummary {
   local_backup_id: string;
   backup_version: number;
   created_at: string;
@@ -283,7 +283,7 @@ export interface CloudBackupUploadResult {
   artwork_uploaded: number;
 }
 
-export interface CloudBackupRestoreSummary {
+interface CloudBackupRestoreSummary {
   created_at: string;
   source_device_id: string;
   overall_checksum: string;

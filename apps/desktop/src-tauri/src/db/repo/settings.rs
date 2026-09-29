@@ -18,7 +18,6 @@ fn row_to_setting(row: &Row) -> rusqlite::Result<Setting> {
     })
 }
 
-/// Returns all settings.
 pub fn list_settings(db: &Database) -> Result<Vec<Setting>> {
     db.with_conn(|conn| {
         let mut stmt = conn
@@ -30,7 +29,7 @@ pub fn list_settings(db: &Database) -> Result<Vec<Setting>> {
     })
 }
 
-/// Gets a single setting value by key.
+/// `None` when the setting was never stored.
 pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>> {
     db.with_conn(|conn| {
         conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
@@ -41,7 +40,6 @@ pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>> {
     })
 }
 
-/// Sets a setting, inserting or updating as needed.
 pub fn set_setting(db: &Database, key: &str, value: &str) -> Result<()> {
     db.with_conn(|conn| {
         conn.execute(

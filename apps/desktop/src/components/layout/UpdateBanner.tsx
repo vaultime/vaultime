@@ -71,7 +71,7 @@ export function UpdateBanner() {
           type="button"
           onClick={() => setDismissed(true)}
           aria-label="Dismiss"
-          className="rounded-full p-1.5 text-faint hover:bg-white/10 hover:text-text"
+          className="rounded-full p-1.5 text-faint hover:bg-glint/10 hover:text-text"
         >
           <X className="h-4 w-4" />
         </button>

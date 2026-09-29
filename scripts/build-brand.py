@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the Vaultime logo files.
 
 The wordmark is converted to outlines from the bundled Fraunces font, so the

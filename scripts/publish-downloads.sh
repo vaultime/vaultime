@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Uploads the installers of a release to the download server and points the
 # latest links and the updater at them. The release workflow runs it once
 # every check passed.

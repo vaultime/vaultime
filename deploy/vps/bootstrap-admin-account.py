@@ -32,9 +32,9 @@ INVITE_SCRYPT_N = 2**14
 INVITE_SCRYPT_R = 8
 INVITE_SCRYPT_P = 1
 INVITE_HASH_BYTES = 64
-# Same as MIN_PASSWORD_LENGTH in apps/api/src/constants.rs.
+# Same as MIN_PASSWORD_CHARS in apps/api/src/constants.rs.
 MIN_PASSWORD_CHARS = 10
-# Where install-api.sh binds the API.
+# Same as api_addr in install-api.sh, where the API listens.
 DEFAULT_API_BASE_URL = "http://127.0.0.1:9005"
 
 
