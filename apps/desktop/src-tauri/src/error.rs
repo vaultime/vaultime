@@ -15,6 +15,8 @@ pub enum VaultimeError {
     Asset(String),
     /// Secure storage and the cloud backup API.
     Cloud(String),
+    /// Input the core refuses, with a message for the user.
+    Invalid(String),
 }
 
 impl fmt::Display for VaultimeError {
@@ -26,6 +28,7 @@ impl fmt::Display for VaultimeError {
             Self::Integrity(msg) => write!(f, "integrity error: {msg}"),
             Self::Asset(msg) => write!(f, "asset error: {msg}"),
             Self::Cloud(msg) => write!(f, "cloud error: {msg}"),
+            Self::Invalid(msg) => write!(f, "{msg}"),
         }
     }
 }

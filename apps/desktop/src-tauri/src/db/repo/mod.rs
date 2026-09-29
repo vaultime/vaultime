@@ -3,6 +3,7 @@
 
 //! Repository implementations for each domain entity.
 
+pub mod annotations;
 pub mod backup_snapshots;
 pub mod devices;
 pub mod earlier_playtime;

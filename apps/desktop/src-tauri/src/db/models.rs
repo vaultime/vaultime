@@ -18,6 +18,24 @@ pub struct Game {
     pub updated_at: String,
 }
 
+/// A game's status from a moment on: `backlog`, `playing`, `finished`,
+/// `dropped`, or `none` when it was cleared.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameStatusChange {
+    pub id: String,
+    pub game_id: String,
+    pub status: String,
+    pub changed_at: String,
+}
+
+/// A short note the player wrote on a session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionNote {
+    pub session_id: String,
+    pub note: String,
+    pub updated_at: String,
+}
+
 /// Playtime from before Vaultime, imported from a launcher.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EarlierPlaytime {

@@ -20,10 +20,11 @@ use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{BACKUP_HISTORY_LIMIT, POLL_INTERVAL};
 use crate::db::connection::Database;
 use crate::db::models::{
-    BackupSnapshot, CreateGame, EarlierPlaytime, Game, Session, SessionEvent, Setting, UpdateGame,
+    BackupSnapshot, CreateGame, EarlierPlaytime, Game, GameStatusChange, Session, SessionEvent,
+    SessionNote, Setting, UpdateGame,
 };
 use crate::db::repo::{
-    backup_snapshots, earlier_playtime, games, session_events, sessions, settings,
+    annotations, backup_snapshots, earlier_playtime, games, session_events, sessions, settings,
 };
 use crate::discovery::{self, DiscoveredGame};
 use crate::earlier;
@@ -402,6 +403,39 @@ pub fn discover_games(
     paths: Vec<String>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
     discovery::scanner::scan_folders(&db, &paths)
+}
+
+/// Every status change of every game, oldest first.
+#[tauri::command]
+pub fn list_status_changes(
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<GameStatusChange>, VaultimeError> {
+    annotations::list_status_changes(&db)
+}
+
+/// Records a new status for a game, `none` clears it.
+#[tauri::command]
+pub fn set_game_status(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+    status: String,
+) -> Result<Option<GameStatusChange>, VaultimeError> {
+    annotations::set_game_status(&db, &game_id, &status)
+}
+
+#[tauri::command]
+pub fn list_session_notes(db: State<'_, Arc<Database>>) -> Result<Vec<SessionNote>, VaultimeError> {
+    annotations::list_session_notes(&db)
+}
+
+/// Sets the note of a session, an empty note removes it.
+#[tauri::command]
+pub fn set_session_note(
+    db: State<'_, Arc<Database>>,
+    session_id: String,
+    note: String,
+) -> Result<Option<SessionNote>, VaultimeError> {
+    annotations::set_session_note(&db, &session_id, &note)
 }
 
 /// Playtime from before Vaultime, per game.

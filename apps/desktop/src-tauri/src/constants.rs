@@ -10,6 +10,9 @@ use std::time::Duration;
 /// How often the tracker polls running processes. The frontend polls at the
 /// same rate, see `ACTIVE_POLL_MS` in `lib/constants.ts`.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
+/// Longest note on a session, in characters. Same as `SESSION_NOTE_MAX_CHARS`
+/// in `lib/constants.ts`.
+pub const SESSION_NOTE_MAX_CHARS: usize = 280;
 /// Grace period so a quick alt-tab does not count as idle.
 pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// How long the tracker reuses install folders with their links resolved

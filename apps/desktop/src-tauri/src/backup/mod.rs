@@ -254,8 +254,10 @@ const RESTORE_TABLES: &[&str] = &[
     "games",
     "earlier_playtime",
     "game_assets",
+    "game_status_changes",
     "sessions",
     "session_events",
+    "session_notes",
     "settings",
     "backup_snapshots",
 ];
