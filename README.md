@@ -81,6 +81,8 @@ Every session carries a label that tells how much its record can be trusted:
 - **Edited.** Tracked, then corrected by you. The old times and your reason stay in the session's log.
 - **Manual.** Added by you for play Vaultime did not see, like a session on another device. It counts as active time.
 
+The library marks a game when one of its sessions from the last 30 days is Suspicious or Recovered, and the game's page counts all of them.
+
 These labels detect changes, they cannot prevent them. They are hints, not proof.
 
 To correct a session, point at it in the journal or on the game's page and pick Correct the time. You can count it only until you stopped playing, for a game left running, or take out all its time, for a session that was no play at all. Add a session on a game's page adds play from elsewhere.

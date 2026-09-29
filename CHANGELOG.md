@@ -18,7 +18,7 @@ The first public release.
 - **Controller play counts.** Buttons and sticks count as input, so a game played on a controller does not turn idle. On Windows this covers Xbox controllers and controllers that act as one.
 - **Nothing extra to install on Linux.** Vaultime asks the X server directly which window is in front and when you last used the keyboard or mouse, and GNOME on Wayland. Games that keep the screensaver off still turn idle when you leave.
 - **Careful matching.** Games are matched by their full path, so two games with the same file name stay apart. Libraries behind junctions or symlinks and games that run through Wine still match.
-- **Honest trust labels.** Every session keeps a hash-linked event log. Sessions with a clock jump are marked Suspicious, sessions rebuilt after an unclean exit Recovered, and both say what happened.
+- **Honest trust labels.** Every session keeps a hash-linked event log. Sessions with a clock jump are marked Suspicious, sessions rebuilt after an unclean exit Recovered, and both say what happened. The library marks a game for such sessions from the last 30 days, and its page counts all of them.
 
 ### Library
 
