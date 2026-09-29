@@ -13,6 +13,10 @@ updates:
       # Types follow the Node LTS used in CI, not the newest Node.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # typescript-eslint supports TypeScript below 6.1. Drop this once it
+      # supports newer versions.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
     groups:
       npm:
         patterns: ["*"]
