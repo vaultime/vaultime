@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
+import { ExportSection } from "@/features/settings/ExportSection";
 import {
   AUTO_BACKUP_KEEP,
   DEFAULT_IDLE_THRESHOLD_SECONDS,
@@ -485,6 +486,8 @@ export function SettingsPage() {
             ))
           )}
         </PageSection>
+
+        <ExportSection onError={setError} />
 
         <PageSection title="About">
           <PageRow label="Version">

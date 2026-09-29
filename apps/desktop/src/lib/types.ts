@@ -46,6 +46,9 @@ export interface Session {
   closed_cleanly: boolean;
 }
 
+/** Mirrors the Rust `ExportFormat` enum. */
+export type ExportFormat = "csv" | "json";
+
 /** Mirrors the Rust `SessionEvent` struct. */
 export interface SessionEvent {
   id: string;

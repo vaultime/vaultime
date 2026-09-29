@@ -17,6 +17,7 @@ import type {
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
   EarlierPlaytime,
+  ExportFormat,
   GameStatus,
   GameStatusChange,
   SessionNote,
@@ -126,6 +127,11 @@ export async function getSessionEventsForGame(
   gameId: string,
 ): Promise<SessionEvent[]> {
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
+}
+
+/** Saves every finished session to `path` and returns how many. */
+export async function exportSessions(path: string, format: ExportFormat): Promise<number> {
+  return invoke<number>("export_sessions", { path, format });
 }
 
 /** Counts a closed session only up to `endedAt`, with a reason. */

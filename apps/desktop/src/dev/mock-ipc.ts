@@ -456,6 +456,8 @@ mockIPC((cmd, payload) => {
     case "list_sessions":
       // Copies, as the real IPC sends, so corrections show up as new data.
       return allSessions.map((session) => ({ ...session }));
+    case "export_sessions":
+      return allSessions.filter((session) => session.ended_at_wall).length;
     case "trim_session": {
       const session = allSessions.find((candidate) => candidate.id === args.sessionId);
       if (!session?.ended_at_wall) throw new Error("a running session cannot be corrected");
