@@ -161,6 +161,12 @@ pub const HASH_BUFFER_BYTES: usize = 64 * 1024;
 pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 /// Cloud backup key length, as `ChaCha20Poly1305` requires.
 pub const BACKUP_KEY_BYTES: usize = 32;
+/// How often the tray menu updates the running game and today's play.
+pub const TRAY_STATUS_INTERVAL: Duration = Duration::from_secs(20);
+/// Name of the JSON session export, so tools can tell it apart.
+pub const EXPORT_FORMAT_NAME: &str = "vaultime-sessions";
+/// Version of the JSON session export, raised when its fields change.
+pub const EXPORT_FORMAT_VERSION: u32 = 1;
 /// Most artwork ids asked about in one request. Same as
 /// `MAX_BLOB_IDS_PER_REQUEST` in the API's `constants.rs`.
 pub const MAX_ARTWORK_IDS_PER_REQUEST: usize = 10_000;

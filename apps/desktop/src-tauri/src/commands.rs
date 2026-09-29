@@ -406,6 +406,22 @@ pub fn discover_games(
     discovery::scanner::scan_folders(&db, &paths)
 }
 
+/// Saves every finished session as CSV or JSON and returns how many.
+#[tauri::command(async)]
+pub fn export_sessions(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    path: String,
+    format: crate::export::ExportFormat,
+) -> Result<usize, VaultimeError> {
+    crate::export::export_sessions(
+        &db,
+        std::path::Path::new(&path),
+        format,
+        &app_context.app_version,
+    )
+}
+
 /// Counts a closed session only up to `ended_at`, with a reason.
 #[tauri::command]
 pub fn trim_session(

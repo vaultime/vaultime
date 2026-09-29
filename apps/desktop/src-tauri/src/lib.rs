@@ -11,6 +11,7 @@ pub mod db;
 pub mod discovery;
 pub mod earlier;
 pub mod error;
+pub mod export;
 pub mod hex;
 pub mod integrity;
 pub mod platform;
@@ -117,6 +118,7 @@ pub fn run() {
             commands::get_default_scan_paths,
             commands::import_discovered_games,
             commands::list_earlier_playtime,
+            commands::export_sessions,
             commands::trim_session,
             commands::discard_session,
             commands::add_manual_session,

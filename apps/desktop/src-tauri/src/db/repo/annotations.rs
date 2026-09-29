@@ -14,7 +14,9 @@ use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
 /// Statuses a game can have. `none` clears it.
-pub const GAME_STATUSES: &[&str] = &["backlog", "playing", "finished", "dropped", "none"];
+pub const GAME_STATUSES: &[&str] = &["backlog", "playing", "finished", "dropped", STATUS_NONE];
+/// The status that clears a game's status.
+pub const STATUS_NONE: &str = "none";
 
 fn row_to_change(row: &Row) -> rusqlite::Result<GameStatusChange> {
     Ok(GameStatusChange {

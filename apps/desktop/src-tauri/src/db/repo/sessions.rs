@@ -348,6 +348,42 @@ pub fn get_active_sessions(db: &Database) -> Result<Vec<Session>> {
     })
 }
 
+/// When a session ran and for how long, with its game's title.
+#[derive(Debug, Clone)]
+pub struct SessionSpan {
+    pub game_title: String,
+    pub started_at_wall: String,
+    pub ended_at_wall: Option<String>,
+    pub runtime_ms: i64,
+}
+
+/// Sessions that started at `since` or later and every running session,
+/// oldest first. It skips the integrity check, so it stays cheap to call often.
+pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT games.title, sessions.started_at_wall, sessions.ended_at_wall,
+                        sessions.runtime_ms
+                 FROM sessions JOIN games ON games.id = sessions.game_id
+                 WHERE sessions.started_at_wall >= ?1 OR sessions.ended_at_wall IS NULL
+                 ORDER BY sessions.started_at_wall",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([since], |row| {
+                Ok(SessionSpan {
+                    game_title: row.get(0)?,
+                    started_at_wall: row.get(1)?,
+                    ended_at_wall: row.get(2)?,
+                    runtime_ms: row.get(3)?,
+                })
+            })
+            .map_err(map_db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+    })
+}
+
 /// Tracked runtime per game id, over all sessions.
 pub fn runtime_by_game(db: &Database) -> Result<std::collections::HashMap<String, i64>> {
     db.with_conn(|conn| {
