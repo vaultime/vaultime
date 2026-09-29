@@ -67,6 +67,8 @@ Signing in to cloud backup needs a keyring service such as GNOME Keyring or KWal
 | Active | Runtime while the game was in front and you were at your computer |
 | Idle | Runtime while the game sat in the background or you were away |
 
+Playtime from before Vaultime can be imported from Steam in Settings. It counts toward each game's total, minus the time Vaultime already tracked, and stays out of the journal and the stats, which only show tracked sessions.
+
 You count as away after 5 minutes without keyboard, mouse or controller input. On Windows, controller input means Xbox controllers and controllers that act as one. On Linux it means every controller. You can change the 5 minutes in Settings, and you can also choose to count background time as active.
 
 ## Trust labels

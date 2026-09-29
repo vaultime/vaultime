@@ -12,6 +12,7 @@ Everything below stays on your device unless you choose to use cloud backup:
 
 - **Game library.** Titles, executable paths and install folders.
 - **Session history.** Start and end times, runtime, active and idle time, and integrity records.
+- **Earlier playtime.** If you import it, the playtime Steam counted for the games in your library and when you last played them there.
 - **Artwork.** Images found in your game folders or imported by you, plus cached thumbnails.
 - **Settings.** Tracking preferences such as the idle threshold.
 - **Device identity.** A random ID created on the first start, used to tell your devices apart in your history.
@@ -42,7 +43,7 @@ This data is processed to provide the cloud backup you signed up for (Art. 6(1)(
 - No crash reports.
 - No advertising identifiers or behavioral profiling.
 - No cookies and no tracking on the website. It loads nothing from other services, its fonts come from the same server.
-- No data from other programs. To detect games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It notices that input happened, never which key or button, and keeps only the resulting active and idle time.
+- No data from other programs. To detect games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It notices that input happened, never which key or button, and keeps only the resulting active and idle time. To find games it reads the install lists of game launchers, and when you import earlier playtime it reads Steam's playtime file once. It keeps only what belongs to games in your library.
 
 ## 4. Third Parties
 
