@@ -20,6 +20,7 @@ import {
   MANUAL_SESSION_MAX_HOURS,
   MINUTE_MS,
   SESSION_NOTE_MAX_CHARS,
+  STEAM_LAUNCHER,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { formatHoursMinutes, fromLocalInput, toLocalInput } from "@/lib/time";
@@ -29,12 +30,15 @@ import { describeError } from "@/lib/utils";
 export function AddSessionDialog({
   gameId,
   gameTitle,
+  steamGame,
   open,
   onOpenChange,
   onAdded,
 }: {
   gameId: string;
   gameTitle: string;
+  /** Offers to mark the play as counted by Steam too. */
+  steamGame: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdded: () => void;
@@ -45,6 +49,7 @@ export function AddSessionDialog({
   const [hours, setHours] = useState("1");
   const [minutes, setMinutes] = useState("0");
   const [reason, setReason] = useState("");
+  const [throughSteam, setThroughSteam] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +64,13 @@ export function AddSessionDialog({
     setSaving(true);
     setError(null);
     try {
-      await api.addManualSession(gameId, start.toISOString(), runtimeMs, reason);
+      await api.addManualSession(
+        gameId,
+        start.toISOString(),
+        runtimeMs,
+        reason,
+        steamGame && throughSteam ? STEAM_LAUNCHER : null,
+      );
       onAdded();
       onOpenChange(false);
     } catch (saveError) {
@@ -122,6 +133,24 @@ export function AddSessionDialog({
               onChange={(event) => setReason(event.target.value)}
             />
           </Field>
+
+          {steamGame && (
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={throughSteam}
+                onChange={(event) => setThroughSteam(event.target.checked)}
+                className="mt-1 accent-violet"
+              />
+              <span>
+                <span className="block text-sm text-text">Played through Steam</span>
+                <span className="block text-[13px] text-faint">
+                  On a Steam Deck or another PC with your Steam account. Steam counted this time too, so its playtime
+                  import leaves it out.
+                </span>
+              </span>
+            </label>
+          )}
 
           <p className="text-sm text-soft">
             {endsInFuture

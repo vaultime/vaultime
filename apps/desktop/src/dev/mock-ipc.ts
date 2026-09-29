@@ -201,7 +201,7 @@ function correct(session: Session, timing: Pick<Session, "ended_at_wall" | "runt
   return session;
 }
 
-function addManual(gameId: string, startedAt: string, runtimeMs: number, reason: string): Session {
+function addManual(gameId: string, startedAt: string, runtimeMs: number, reason: string, launcher: string | null = null): Session {
   const start = new Date(startedAt).getTime();
   const session: Session = {
     id: `session-manual-${start}`,
@@ -225,7 +225,12 @@ function addManual(gameId: string, startedAt: string, runtimeMs: number, reason:
     event_type: "added_manually",
     event_time_wall: session.ended_at_wall ?? session.started_at_wall,
     event_time_monotonic: null,
-    payload_json: JSON.stringify({ reason, started_at_wall: session.started_at_wall, ended_at_wall: session.ended_at_wall }),
+    payload_json: JSON.stringify({
+      reason,
+      started_at_wall: session.started_at_wall,
+      ended_at_wall: session.ended_at_wall,
+      launcher,
+    }),
     hash_prev: null,
     hash_self: "preview",
     signature: null,
@@ -489,7 +494,13 @@ mockIPC((cmd, payload) => {
       );
     }
     case "add_manual_session":
-      return addManual(String(args.gameId), String(args.startedAt), Number(args.runtimeMs), String(args.reason ?? ""));
+      return addManual(
+        String(args.gameId),
+        String(args.startedAt),
+        Number(args.runtimeMs),
+        String(args.reason ?? ""),
+        typeof args.launcher === "string" ? args.launcher : null,
+      );
     case "get_session_events_for_game": {
       const ids = new Set(allSessions.filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id));

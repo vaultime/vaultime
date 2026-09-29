@@ -22,7 +22,7 @@ import { useLibrary } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
+import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
 import { buildDailyActivity } from "@/lib/session-stats";
@@ -310,6 +310,7 @@ function GamePage({ gameId }: { gameId: string }) {
         <AddSessionDialog
           gameId={game.id}
           gameTitle={game.title}
+          steamGame={game.launcher_source === STEAM_LAUNCHER || summary.earlier?.source === STEAM_LAUNCHER}
           open={addingSession}
           onOpenChange={setAddingSession}
           onAdded={() => void refresh()}

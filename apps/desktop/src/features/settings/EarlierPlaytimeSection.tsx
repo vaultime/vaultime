@@ -14,14 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLibrary } from "@/features/library/library-context";
-import { MINUTE_MS } from "@/lib/constants";
+import { MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes } from "@/lib/time";
 import type { SteamPlaytimePreview } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
-
-const STEAM = "steam";
 
 /** Imports the playtime Steam counted before Vaultime, with a look at it first. */
 export function EarlierPlaytimeSection({ onError }: { onError: (message: string) => void }) {
@@ -31,7 +29,7 @@ export function EarlierPlaytimeSection({ onError }: { onError: (message: string)
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const imported = summaries.filter((summary) => summary.earlier?.source === STEAM && summary.earlier.earlier_ms > 0);
+  const imported = summaries.filter((summary) => summary.earlier?.source === STEAM_LAUNCHER && summary.earlier.earlier_ms > 0);
   const importedMs = imported.reduce((sum, summary) => sum + (summary.earlier?.earlier_ms ?? 0), 0);
   const importedAt = imported[0]?.earlier?.imported_at;
   const adds = preview?.games.filter((game) => game.earlier_ms > 0) ?? [];

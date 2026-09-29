@@ -150,8 +150,9 @@ export async function addManualSession(
   startedAt: string,
   runtimeMs: number,
   reason: string,
+  launcher: string | null,
 ): Promise<Session> {
-  return invoke<Session>("add_manual_session", { gameId, startedAt, runtimeMs, reason });
+  return invoke<Session>("add_manual_session", { gameId, startedAt, runtimeMs, reason, launcher });
 }
 
 /** Every status change of every game, oldest first. */
