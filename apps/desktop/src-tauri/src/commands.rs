@@ -443,7 +443,8 @@ pub fn discard_session(
     corrections::discard_session(&db, &session_id, &reason)
 }
 
-/// Adds play Vaultime did not see, labeled Manual.
+/// Adds play Vaultime did not see, labeled Manual. `launcher` is `steam`
+/// when Steam counted the play too.
 #[tauri::command]
 pub fn add_manual_session(
     db: State<'_, Arc<Database>>,
@@ -452,6 +453,7 @@ pub fn add_manual_session(
     started_at: String,
     runtime_ms: i64,
     reason: String,
+    launcher: Option<String>,
 ) -> Result<Session, VaultimeError> {
     corrections::add_manual_session(
         &db,
@@ -460,6 +462,7 @@ pub fn add_manual_session(
         &started_at,
         runtime_ms,
         &reason,
+        launcher.as_deref(),
     )
 }
 

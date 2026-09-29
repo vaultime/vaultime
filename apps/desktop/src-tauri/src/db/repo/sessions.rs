@@ -384,14 +384,37 @@ pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
     })
 }
 
-/// Tracked runtime per game id, over all sessions.
-pub fn runtime_by_game(db: &Database) -> Result<std::collections::HashMap<String, i64>> {
+/// Runtime per game id that `launcher` counted as well. A tracked session
+/// counts at the length the tracker recorded, before any correction, since
+/// the launcher saw the game run that long. A session added by hand counts
+/// only when it was played through that launcher.
+pub fn launcher_runtime_by_game(
+    db: &Database,
+    launcher: &str,
+) -> Result<std::collections::HashMap<String, i64>> {
     db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare("SELECT game_id, SUM(runtime_ms) FROM sessions GROUP BY game_id")
+            .prepare(
+                "SELECT sessions.game_id, SUM(CASE
+                     WHEN manual.id IS NOT NULL THEN sessions.runtime_ms
+                     ELSE COALESCE(
+                         (SELECT json_extract(first.payload_json, '$.previous.runtime_ms')
+                          FROM session_events AS first
+                          WHERE first.session_id = sessions.id
+                            AND first.event_type = 'corrected'
+                          ORDER BY first.sequence LIMIT 1),
+                         sessions.runtime_ms)
+                 END)
+                 FROM sessions
+                 LEFT JOIN session_events AS manual
+                     ON manual.session_id = sessions.id AND manual.event_type = 'added_manually'
+                 WHERE manual.id IS NULL
+                    OR json_extract(manual.payload_json, '$.launcher') = ?1
+                 GROUP BY sessions.game_id",
+            )
             .map_err(map_db)?;
         let rows = stmt
-            .query_map([], |row| {
+            .query_map([launcher], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })
             .map_err(map_db)?;

@@ -254,7 +254,7 @@ mod tests {
     fn add(db: &Database, game_id: &str, hours_ago: i64, reason: &str) -> String {
         let start = (Utc::now() - chrono::Duration::hours(hours_ago))
             .to_rfc3339_opts(SecondsFormat::Millis, true);
-        corrections::add_manual_session(db, game_id, DEVICE, &start, HOUR_MS, reason)
+        corrections::add_manual_session(db, game_id, DEVICE, &start, HOUR_MS, reason, None)
             .unwrap()
             .id
     }

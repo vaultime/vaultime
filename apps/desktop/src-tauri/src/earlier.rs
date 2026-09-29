@@ -81,7 +81,7 @@ fn candidates(
     steam: &SteamPlaytime,
     app_id_of: impl Fn(&str) -> Option<String>,
 ) -> Result<SteamPlaytimePreview> {
-    let tracked = sessions::runtime_by_game(db)?;
+    let tracked = sessions::launcher_runtime_by_game(db, STEAM_SOURCE)?;
     let mut games = Vec::new();
     for game in games::list_all_games(db)? {
         let Some(app) = game
@@ -117,8 +117,11 @@ fn candidates(
 mod tests {
     use std::collections::HashMap;
 
+    use chrono::{SecondsFormat, Utc};
+
     use super::*;
     use crate::db::models::CreateGame;
+    use crate::db::repo::{corrections, devices};
     use crate::discovery::steam::AppPlaytime;
 
     #[test]
@@ -161,5 +164,56 @@ mod tests {
             preview.games[0].last_played_at.as_deref(),
             Some("2024-09-29T08:53:20+00:00")
         );
+    }
+
+    #[test]
+    fn subtracts_only_the_time_steam_saw() {
+        const DEVICE: &str = "test-device";
+        const HOUR_MS: i64 = 3_600_000;
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, DEVICE, "windows", "0.1.0").unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Counter-Strike 2".into(),
+                executable_path: Some("C:/Steam/steamapps/common/cs2/cs2.exe".into()),
+                install_folder: Some("C:/Steam/steamapps/common/cs2".into()),
+                launcher_source: Some(STEAM_SOURCE.into()),
+            },
+        )
+        .unwrap();
+
+        // Tracked for three hours and then taken out: Steam still counted it.
+        let tracked = sessions::create_session(&db, &game.id, DEVICE).unwrap();
+        sessions::end_session(&db, &tracked.id, 3 * HOUR_MS, 3 * HOUR_MS, 0, "local").unwrap();
+        corrections::discard_session(&db, &tracked.id, "Left it running").unwrap();
+        // An hour on a console that Steam never saw, two on a Steam Deck.
+        let start =
+            (Utc::now() - chrono::Duration::hours(10)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        corrections::add_manual_session(&db, &game.id, DEVICE, &start, HOUR_MS, "", None).unwrap();
+        corrections::add_manual_session(
+            &db,
+            &game.id,
+            DEVICE,
+            &start,
+            2 * HOUR_MS,
+            "",
+            Some(STEAM_SOURCE),
+        )
+        .unwrap();
+
+        let steam = SteamPlaytime {
+            account: None,
+            apps: HashMap::from([(
+                "730".to_string(),
+                AppPlaytime {
+                    minutes: 600,
+                    last_played: None,
+                },
+            )]),
+        };
+        let preview = candidates(&db, &steam, |_| Some("730".to_string())).unwrap();
+        assert_eq!(preview.games[0].tracked_before_ms, 5 * HOUR_MS);
+        assert_eq!(preview.games[0].earlier_ms, 5 * HOUR_MS);
     }
 }

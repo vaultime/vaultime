@@ -4,7 +4,8 @@
 //! Honest changes to the play history: correcting the time of a tracked
 //! session and adding one by hand. Every change is an event in the session's
 //! hash chain with the old values and the reason, and the session carries a
-//! label that says it was changed. A suspicious session stays suspicious.
+//! label that says it was changed. A suspicious session stays suspicious,
+//! and a session added by hand stays Manual, since it was never tracked.
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::params;
@@ -15,6 +16,7 @@ use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::{attach_validated_status, row_to_session};
+use crate::earlier::STEAM_SOURCE;
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, STATUS_EDITED, STATUS_MANUAL, STATUS_SUSPICIOUS};
 
@@ -122,10 +124,10 @@ fn apply_correction(
     timing: &Timing,
     reason: &str,
 ) -> Result<Session> {
-    let status = if session.integrity_status == STATUS_SUSPICIOUS {
-        STATUS_SUSPICIOUS
-    } else {
-        STATUS_EDITED
+    let status = match session.integrity_status.as_str() {
+        STATUS_SUSPICIOUS => STATUS_SUSPICIOUS,
+        STATUS_MANUAL => STATUS_MANUAL,
+        _ => STATUS_EDITED,
     };
     conn.execute(
         "UPDATE sessions
@@ -170,7 +172,9 @@ fn apply_correction(
 }
 
 /// Adds play Vaultime did not see, like a session on another PC. It counts
-/// as active time and carries the Manual label.
+/// as active time and carries the Manual label. `launcher` names the
+/// launcher that counted the play too, so an import of that launcher's
+/// playtime leaves it out.
 pub fn add_manual_session(
     db: &Database,
     game_id: &str,
@@ -178,8 +182,14 @@ pub fn add_manual_session(
     started_at: &str,
     runtime_ms: i64,
     reason: &str,
+    launcher: Option<&str>,
 ) -> Result<Session> {
     let reason = check_text(reason, false)?;
+    if launcher.is_some_and(|name| name != STEAM_SOURCE) {
+        return Err(VaultimeError::Invalid(
+            "only Steam can count a session added by hand".into(),
+        ));
+    }
     let start = parse_time(started_at)?;
     let max_ms = i64::try_from(MANUAL_SESSION_MAX.as_millis()).unwrap_or(i64::MAX);
     if runtime_ms <= 0 || runtime_ms > max_ms {
@@ -230,6 +240,7 @@ pub fn add_manual_session(
                 "idle_ms": 0,
                 "integrity_status": STATUS_MANUAL,
                 "closed_cleanly": true,
+                "launcher": launcher,
             })
             .to_string(),
         )?;
@@ -395,9 +406,16 @@ mod tests {
     fn manual_sessions_count_as_active_and_say_so() {
         let (db, game) = setup();
         let start = format_time(Utc::now() - chrono::Duration::hours(5));
-        let session =
-            add_manual_session(&db, &game, DEVICE, &start, 90 * MINUTE, "On the Steam Deck")
-                .unwrap();
+        let session = add_manual_session(
+            &db,
+            &game,
+            DEVICE,
+            &start,
+            90 * MINUTE,
+            "On the Steam Deck",
+            None,
+        )
+        .unwrap();
         assert_eq!(session.integrity_status, STATUS_MANUAL);
         assert_eq!(
             (session.runtime_ms, session.active_ms, session.idle_ms),
@@ -408,26 +426,37 @@ mod tests {
 
         let future = format_time(Utc::now() - chrono::Duration::minutes(10));
         assert!(
-            add_manual_session(&db, &game, DEVICE, &future, 60 * MINUTE, "").is_err(),
+            add_manual_session(&db, &game, DEVICE, &future, 60 * MINUTE, "", None).is_err(),
             "ends in the future"
         );
         assert!(
-            add_manual_session(&db, &game, DEVICE, &start, 0, "").is_err(),
+            add_manual_session(&db, &game, DEVICE, &start, 0, "", None).is_err(),
             "no time"
         );
         assert!(
-            add_manual_session(&db, &game, DEVICE, "yesterday", 60, "").is_err(),
+            add_manual_session(&db, &game, DEVICE, "yesterday", 60, "", None).is_err(),
             "no time format"
         );
     }
 
     #[test]
-    fn a_corrected_manual_session_becomes_edited() {
+    fn a_corrected_manual_session_stays_manual() {
         let (db, game) = setup();
         let start = format_time(Utc::now() - chrono::Duration::hours(5));
-        let session = add_manual_session(&db, &game, DEVICE, &start, 90 * MINUTE, "").unwrap();
+        let session =
+            add_manual_session(&db, &game, DEVICE, &start, 90 * MINUTE, "", None).unwrap();
         let fixed = discard_session(&db, &session.id, "Wrong game").unwrap();
-        assert_eq!(fixed.integrity_status, STATUS_EDITED);
-        assert_eq!(validated(&db, &session.id).integrity_status, STATUS_EDITED);
+        assert_eq!(fixed.integrity_status, STATUS_MANUAL);
+        assert_eq!(validated(&db, &session.id).integrity_status, STATUS_MANUAL);
+    }
+
+    #[test]
+    fn only_steam_can_count_a_manual_session() {
+        let (db, game) = setup();
+        let start = format_time(Utc::now() - chrono::Duration::hours(5));
+        assert!(add_manual_session(&db, &game, DEVICE, &start, MINUTE, "", Some("epic")).is_err());
+        let session =
+            add_manual_session(&db, &game, DEVICE, &start, MINUTE, "", Some(STEAM_SOURCE)).unwrap();
+        assert_eq!(session.integrity_status, STATUS_MANUAL);
     }
 }
