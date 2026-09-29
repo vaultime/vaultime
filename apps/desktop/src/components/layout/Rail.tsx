@@ -3,11 +3,23 @@
 
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router";
-import { BookOpen, ChartNoAxesColumn, Cloud, LibraryBig, Search, SlidersHorizontal } from "lucide-react";
+import {
+  ArrowDownUp,
+  BookOpen,
+  ChartNoAxesColumn,
+  Check,
+  Cloud,
+  LibraryBig,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
+import { SETTING_KEYS } from "@/lib/constants";
+import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -25,11 +37,25 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
   const { session } = useCloudSession();
   const location = useLocation();
   const [appVersion, setAppVersion] = useState("");
+  const [sort, setSort] = useState<GameSort>("recent");
   const playing = new Set(active.map((session) => session.game_id));
+  const games = sortGames(summaries, sort);
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(() => {});
+    api
+      .listSettings()
+      .then((settings) => {
+        const saved = settings.find((setting) => setting.key === SETTING_KEYS.railSort)?.value;
+        if (isGameSort(saved)) setSort(saved);
+      })
+      .catch(() => {});
   }, []);
+
+  function changeSort(next: GameSort) {
+    setSort(next);
+    api.setSetting(SETTING_KEYS.railSort, next).catch(() => {});
+  }
 
   return (
     <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 xl:px-5">
@@ -70,15 +96,37 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-        <div className="flex items-center justify-between px-3 pb-1.5">
-          <span className="label-caps">Your games</span>
-          <span className="font-mono text-[11px] text-faint">{summaries.length}</span>
+        <div className="flex items-center justify-between pr-1.5 pb-1 pl-3">
+          <span className="flex items-baseline gap-2">
+            <span className="label-caps">Your games</span>
+            <span className="font-mono text-[11px] text-faint">{summaries.length}</span>
+          </span>
+          {summaries.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={`Sort games, now ${GAME_SORTS[sort]}`}
+                title="Sort games"
+                className="flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[11px] text-faint transition-colors hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none data-popup-open:text-soft"
+              >
+                <ArrowDownUp className="size-3" strokeWidth={1.8} />
+                {GAME_SORTS[sort]}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-auto min-w-40">
+                {(Object.keys(GAME_SORTS) as GameSort[]).map((option) => (
+                  <DropdownMenuItem key={option} onClick={() => changeSort(option)}>
+                    {GAME_SORTS[option]}
+                    {option === sort && <Check className="ml-auto size-4 text-violet" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         {summaries.length === 0 && (
           <p className="px-3 text-[13px] text-faint">Games you add show up here.</p>
         )}
         <ul className="no-scrollbar -mr-2 flex min-h-0 flex-col gap-0.5 overflow-y-auto pr-2">
-          {summaries.map(({ game, cover, totalMs, lastPlayedAt }) => {
+          {games.map(({ game, cover, totalMs, lastPlayedAt }) => {
             const selected = location.pathname === `/library/${game.id}`;
             return (
               <li key={game.id}>

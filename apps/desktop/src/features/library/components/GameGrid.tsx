@@ -16,18 +16,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { GameSummary } from "@/features/library/library-context";
 import { TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
+import { GAME_SORTS, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { plural } from "@/lib/words";
-
-const SORTS = {
-  recent: "Recent",
-  title: "A to Z",
-  played: "Most played",
-} as const;
-type Sort = keyof typeof SORTS;
 
 /** Every game as a cover, with sorting and the ways to add more. */
 export function GameGrid({
@@ -45,7 +39,7 @@ export function GameGrid({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const [sort, setSort] = useState<Sort>("recent");
+  const [sort, setSort] = useState<GameSort>("recent");
   const [filter, setFilter] = useState<GameStatus | "all">("all");
   const statuses = GAME_STATUSES.filter((status) => summaries.some((summary) => summary.status === status));
   const shownFilter = filter !== "all" && statuses.includes(filter) ? filter : "all";
@@ -53,11 +47,7 @@ export function GameGrid({
   const sorted = useMemo(() => {
     const filtered =
       shownFilter === "all" ? summaries : summaries.filter((summary) => summary.status === shownFilter);
-    if (sort === "recent") return filtered;
-    const copy = [...filtered];
-    if (sort === "title") copy.sort((a, b) => a.game.title.localeCompare(b.game.title));
-    if (sort === "played") copy.sort((a, b) => b.totalMs - a.totalMs);
-    return copy;
+    return sortGames(filtered, sort);
   }, [summaries, sort, shownFilter]);
 
   return (
@@ -89,7 +79,7 @@ export function GameGrid({
             </div>
           )}
           <div role="group" aria-label="Sort games" className="mr-2 flex rounded-full border border-hairline p-0.5">
-            {(Object.keys(SORTS) as Sort[]).map((key) => (
+            {(Object.keys(GAME_SORTS) as GameSort[]).map((key) => (
               <button
                 key={key}
                 type="button"
@@ -100,7 +90,7 @@ export function GameGrid({
                   sort === key ? "bg-raised text-text" : "text-faint hover:text-soft",
                 )}
               >
-                {SORTS[key]}
+                {GAME_SORTS[key]}
               </button>
             ))}
           </div>

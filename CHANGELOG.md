@@ -30,6 +30,7 @@ The first public release.
 - **Honest corrections.** Cut a session short when a game was left running, take out a session that was no play at all, or add play from another device. Changed sessions are labeled Edited or Manual and keep the old times and your reason in their log.
 - **Playtime from before Vaultime.** Settings reads the playtime Steam counted for the games in your library, shows what it adds and counts it toward each game's total. Time Vaultime already tracked counts once.
 - **Stats.** Your year in play: a calendar of every day with your streaks, when in the week you play, your games with active and idle time apart, the months, how long your sessions run and the games you leave running.
+- **Your games, sorted your way.** The list on the left sorts by recent play, title or playtime and keeps the choice.
 - **Live bar and search.** The running game and its timer stay at the bottom of every page, and Ctrl+K jumps to any game, page or action.
 - **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest.
 - **Steam covers.** Steam games get the cover art Steam already keeps on your PC.

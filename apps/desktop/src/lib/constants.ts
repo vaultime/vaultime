@@ -29,6 +29,8 @@ export const SETTING_KEYS = {
   /** Same as AUTO_BACKUP_FOLDER_SETTING in constants.rs. */
   autoBackupFolder: "auto_backup_folder",
   cloudAutoBackup: "cloud_auto_backup_enabled",
+  /** How the rail sorts the games. */
+  railSort: "rail_sort",
 } as const;
 
 /** Automatic local backups kept. Same as AUTO_BACKUP_KEEP in constants.rs. */
