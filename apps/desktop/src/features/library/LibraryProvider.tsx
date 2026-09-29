@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, LIBRARY_CHANGED_EVENT, SETTING_KEYS } from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
+import { countsAsPlay } from "@/lib/session-stats";
 import type { EarlierPlaytime, Game, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
@@ -147,7 +148,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     }
     for (const session of sessions) {
       const summary = byGame.get(session.game_id);
-      if (!summary) continue;
+      if (!summary || !countsAsPlay(session)) continue;
       summary.runtimeMs += session.runtime_ms;
       summary.activeMs += session.active_ms;
       summary.sessionsCount += 1;

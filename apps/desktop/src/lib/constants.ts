@@ -128,6 +128,11 @@ export const DAY_PART_HOURS = { morning: 5, afternoon: 12, evening: 17, night: 2
 /** Longest note on a session, in characters. Same as SESSION_NOTE_MAX_CHARS in constants.rs. */
 export const SESSION_NOTE_MAX_CHARS = 280;
 
+/** Longest session a player can add by hand, in hours. Same as MANUAL_SESSION_MAX in constants.rs. */
+export const MANUAL_SESSION_MAX_HOURS = 24;
+/** A session added by hand starts this long ago unless the player picks a time. */
+export const MANUAL_SESSION_DEFAULT_AGO_MS = 2 * HOUR_MS;
+
 // Stats page
 
 /** Smallest dot of the week clock for an hour with any play, in percent of its cell. */

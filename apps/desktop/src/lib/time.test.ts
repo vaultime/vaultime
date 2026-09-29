@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { at } from "@/test/sessions";
 import {
+  UI_LOCALE,
   clockPercent,
   formatClock,
   formatDayPart,
@@ -12,10 +13,11 @@ import {
   formatHoursShort,
   formatRelativeDay,
   formatSessionStart,
+  fromLocalInput,
   isoWeekNumber,
   parseVaultimeDate,
   startOfWeek,
-  UI_LOCALE,
+  toLocalInput,
 } from "./time";
 
 // Tuesday evening, local time.
@@ -135,5 +137,18 @@ describe("daylight saving", () => {
     expect(clockPercent(new Date(2026, 9, 25, 23, 0), day)).toBeCloseTo((23 / 24) * 100);
     expect(clockPercent(new Date(2026, 9, 24, 23, 0), day)).toBe(0);
     expect(clockPercent(new Date(2026, 9, 26, 0, 30), day)).toBe(100);
+  });
+});
+
+describe("datetime-local values", () => {
+  it("round trip in local time", () => {
+    const moment = new Date(2026, 2, 29, 2, 30);
+    expect(toLocalInput(new Date(2026, 8, 30, 20, 5))).toBe("2026-09-30T20:05");
+    expect(fromLocalInput(toLocalInput(moment))?.getTime()).toBe(new Date(2026, 2, 29, 2, 30).getTime());
+  });
+
+  it("refuse broken values", () => {
+    expect(fromLocalInput("")).toBeNull();
+    expect(fromLocalInput("30.09.2026 20:05")).toBeNull();
   });
 });

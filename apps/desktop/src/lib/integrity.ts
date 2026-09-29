@@ -11,7 +11,7 @@ export interface IntegrityMeta {
   description: string;
 }
 
-const KNOWN_STATUSES = new Set(["local", "recovered", "suspicious"]);
+const KNOWN_STATUSES = new Set(["local", "recovered", "suspicious", "edited", "manual"]);
 
 export function normalizeIntegrityStatus(
   status: string | null | undefined,
@@ -37,6 +37,16 @@ export function getIntegrityMeta(status: string): IntegrityMeta {
         label: "Recovered",
         description:
           "Session history was reconstructed after an interrupted shutdown or restart.",
+      };
+    case "edited":
+      return {
+        label: "Edited",
+        description: "Tracked, then corrected by you. The old times and your reason stay in its history.",
+      };
+    case "manual":
+      return {
+        label: "Manual",
+        description: "Added by you, not tracked. It counts as active time.",
       };
     case "local":
     default:
@@ -77,6 +87,10 @@ export function formatIntegrityEventType(eventType: string): string {
       return "Tracking ended";
     case "tracking_gap":
       return "Sleep or pause left out";
+    case "corrected":
+      return "Corrected";
+    case "added_manually":
+      return "Added by hand";
     default:
       return capitalize(eventType.replaceAll("_", " "));
   }
@@ -109,6 +123,17 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
       return reason ?? "Session was reconstructed after an interruption";
     case "started":
       return "Local event chain opened for this session";
+    case "corrected": {
+      const previous = payload?.previous as Record<string, unknown> | undefined;
+      const before = typeof previous?.runtime_ms === "number" ? formatHoursMinutes(previous.runtime_ms) : null;
+      const after = typeof payload?.runtime_ms === "number" ? formatHoursMinutes(payload.runtime_ms) : null;
+      const why = typeof payload?.reason === "string" ? `: ${payload.reason}` : "";
+      return before && after ? `Changed from ${before} to ${after}${why}` : `Corrected${why}`;
+    }
+    case "added_manually":
+      return typeof payload?.reason === "string" && payload.reason
+        ? `Added by hand: ${payload.reason}`
+        : "Added by hand";
     case "ended":
       return "Session closed cleanly";
     case "tracking_gap": {

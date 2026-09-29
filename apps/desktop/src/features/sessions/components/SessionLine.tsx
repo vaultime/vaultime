@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useState, type FormEvent } from "react";
-import { NotebookPen } from "lucide-react";
+import { NotebookPen, Scissors } from "lucide-react";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CorrectSessionDialog } from "@/features/sessions/components/CorrectSessionDialog";
 import { SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";
 import { formatSessionStart } from "@/lib/time";
@@ -21,6 +22,7 @@ export function SessionLine({
   bordered = true,
   note,
   onSaveNote,
+  onCorrected,
 }: {
   session: Session;
   /** Events of this session or more, used to explain flags and skipped time. */
@@ -33,6 +35,8 @@ export function SessionLine({
   note?: string;
   /** Lets the player write a note. An empty note removes it. */
   onSaveNote?: (note: string) => Promise<void>;
+  /** Lets the player correct a finished session, then reloads. */
+  onCorrected?: () => void;
 }) {
   const trustNote = sessionTrustNote(session, events);
   const live = !session.ended_at_wall;
@@ -40,6 +44,7 @@ export function SessionLine({
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState(false);
 
   function startEditing() {
     setDraft(note ?? "");
@@ -101,19 +106,44 @@ export function SessionLine({
           note && <p className="font-display mt-1.5 text-[17px] leading-snug text-soft italic">“{note}”</p>
         )}
       </div>
-      {onSaveNote && !editing && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={note ? "Edit the note" : "Add a note"}
-          title={note ? "Edit the note" : "Add a note"}
-          onClick={startEditing}
-          className="self-center text-faint opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <NotebookPen className="size-3.5" />
-        </Button>
+      {!editing && (onSaveNote || (onCorrected && !live)) && (
+        <span className="flex self-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {onSaveNote && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={note ? "Edit the note" : "Add a note"}
+              title={note ? "Edit the note" : "Add a note"}
+              onClick={startEditing}
+              className="text-faint"
+            >
+              <NotebookPen className="size-3.5" />
+            </Button>
+          )}
+          {onCorrected && !live && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Correct the time"
+              title="Correct the time"
+              onClick={() => setCorrecting(true)}
+              className="text-faint"
+            >
+              <Scissors className="size-3.5" />
+            </Button>
+          )}
+        </span>
       )}
       <IntegrityBadge status={session.integrity_status} />
+      {onCorrected && correcting && (
+        <CorrectSessionDialog
+          session={session}
+          gameTitle={gameTitle}
+          open={correcting}
+          onOpenChange={setCorrecting}
+          onCorrected={onCorrected}
+        />
+      )}
     </article>
   );
 }

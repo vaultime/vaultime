@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useCloudSession } from "@/features/cloud/cloud-context";
-import { Field } from "@/features/cloud/Field";
+import { Field } from "@/components/ui/field";
 import { describeError } from "@/lib/utils";
 
 export function ChangePasswordDialog({

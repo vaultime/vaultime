@@ -30,7 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
-import { Field } from "@/features/cloud/Field";
+import { Field } from "@/components/ui/field";
 import { BACKUP_PASSPHRASE_TOO_SHORT, INVITE_CODE_PREFIX } from "@/lib/cloud-api";
 import { BYTES_PER_KIB, MIN_BACKUP_PASSPHRASE_CHARS, SIZE_ONE_DECIMAL_BELOW } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";

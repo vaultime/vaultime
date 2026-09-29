@@ -16,7 +16,7 @@ import {
 } from "@/lib/constants";
 import { tintForTitle, type GameTint } from "@/lib/game-tint";
 import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
-import { playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
+import { countsAsPlay, playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import {
   clockPercent,
@@ -92,7 +92,7 @@ function hatch(colors: string[]): string {
 
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
-  const { sessions, summaries, statusChanges, notes, saveNote, loaded } = useLibrary();
+  const { sessions, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
   // 0 is this week, -1 the week before and so on.
   const [offset, setOffset] = useState(0);
   const [events, setEvents] = useState<SessionEvent[]>([]);
@@ -136,10 +136,10 @@ export function JournalPage() {
   const longestDay = [...days].sort((a, b) => b.playedMs - a.playedMs)[0];
   const title = offset === 0 ? "This week" : offset === -1 ? "Last week" : `Week of ${weekStart.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })}`;
   const sentence = weekSentence({
-    sessionsCount: days.reduce((sum, day) => sum + day.sessions.length, 0),
+    sessionsCount: days.reduce((sum, day) => sum + day.sessions.filter(countsAsPlay).length, 0),
     runtimeMs: days.reduce((sum, day) => sum + day.playedMs, 0),
     longestDay: longestDay ? longestDay.start.toLocaleDateString(UI_LOCALE, { weekday: "long" }) : null,
-    daysPlayed: days.length,
+    daysPlayed: days.filter((day) => day.sessions.some(countsAsPlay)).length,
     current: offset === 0,
   });
   const weekYear = weekEnd.getFullYear() === now.getFullYear() ? "" : `, ${weekStart.getFullYear()}`;
@@ -173,6 +173,7 @@ export function JournalPage() {
             now={now}
             notes={notes}
             onSaveNote={saveNote}
+            onCorrected={() => void refresh()}
             playedBefore={playedBefore}
           />
         ))}
@@ -219,6 +220,7 @@ function DaySection({
   now,
   notes,
   onSaveNote,
+  onCorrected,
   playedBefore,
 }: {
   day: JournalDay;
@@ -227,6 +229,7 @@ function DaySection({
   now: Date;
   notes: Record<string, string>;
   onSaveNote: (sessionId: string, note: string) => Promise<void>;
+  onCorrected: () => void;
   playedBefore: (gameId: string, moment: string) => number;
 }) {
   const tintOf = (gameId: string): GameTint => {
@@ -252,7 +255,7 @@ function DaySection({
       <div className="flex min-w-0 flex-1 flex-col gap-3.5">
         <div>
           <div aria-hidden="true" className="relative h-2.5 rounded-full bg-raised">
-            {day.sessions.map((session) => {
+            {day.sessions.filter(countsAsPlay).map((session) => {
               const start = parseVaultimeDate(session.started_at_wall);
               const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
               const left = clockPercent(start, day.start);
@@ -333,6 +336,7 @@ function DaySection({
                 bordered={false}
                 note={notes[session.id]}
                 onSaveNote={(note) => onSaveNote(session.id, note)}
+                onCorrected={onCorrected}
               />
             );
           })}

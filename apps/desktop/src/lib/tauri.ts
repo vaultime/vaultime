@@ -128,6 +128,26 @@ export async function getSessionEventsForGame(
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
 }
 
+/** Counts a closed session only up to `endedAt`, with a reason. */
+export async function trimSession(sessionId: string, endedAt: string, reason: string): Promise<Session> {
+  return invoke<Session>("trim_session", { sessionId, endedAt, reason });
+}
+
+/** Takes all time out of a closed session, with a reason. */
+export async function discardSession(sessionId: string, reason: string): Promise<Session> {
+  return invoke<Session>("discard_session", { sessionId, reason });
+}
+
+/** Adds play Vaultime did not see, labeled Manual. */
+export async function addManualSession(
+  gameId: string,
+  startedAt: string,
+  runtimeMs: number,
+  reason: string,
+): Promise<Session> {
+  return invoke<Session>("add_manual_session", { gameId, startedAt, runtimeMs, reason });
+}
+
 /** Every status change of every game, oldest first. */
 export async function listStatusChanges(): Promise<GameStatusChange[]> {
   return invoke<GameStatusChange[]>("list_status_changes");

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Eye, EyeOff, ImagePlus, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { DayBars, DayBarsLegend } from "@/components/charts/DayBars";
 import { Notice } from "@/components/layout/Page";
 import {
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary } from "@/features/library/library-context";
+import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
@@ -61,6 +62,7 @@ function GamePage({ gameId }: { gameId: string }) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
   const [showAll, setShowAll] = useState(false);
+  const [addingSession, setAddingSession] = useState(false);
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
   const [hideError, setHideError] = useState<string | null>(null);
@@ -209,9 +211,15 @@ function GamePage({ gameId }: { gameId: string }) {
           </section>
 
           <section aria-labelledby="sessions-title">
-            <h2 id="sessions-title" className="font-display mb-1.5 text-[30px]">
-              {showAll ? "Every session" : "Recent sessions"}
-            </h2>
+            <div className="mb-1.5 flex items-baseline justify-between gap-4">
+              <h2 id="sessions-title" className="font-display text-[30px]">
+                {showAll ? "Every session" : "Recent sessions"}
+              </h2>
+              <Button variant="ghost" size="sm" className="-mr-3.5 text-faint" onClick={() => setAddingSession(true)}>
+                <Plus className="size-3.5" />
+                Add a session
+              </Button>
+            </div>
             {sessions.length === 0 ? (
               <p className="py-3.5 text-faint">No sessions yet. They appear here as soon as you play.</p>
             ) : (
@@ -222,6 +230,7 @@ function GamePage({ gameId }: { gameId: string }) {
                   events={events}
                   note={notes[session.id]}
                   onSaveNote={(note) => saveNote(session.id, note)}
+                  onCorrected={() => void refresh()}
                 />
               ))
             )}
@@ -295,6 +304,15 @@ function GamePage({ gameId }: { gameId: string }) {
       </div>
 
       <EditGameDialog game={editing} onClose={() => setEditing(null)} onSaved={refresh} />
+      {addingSession && (
+        <AddSessionDialog
+          gameId={game.id}
+          gameTitle={game.title}
+          open={addingSession}
+          onOpenChange={setAddingSession}
+          onAdded={() => void refresh()}
+        />
+      )}
       <DeleteGameDialog
         game={deleting}
         onClose={() => setDeleting(null)}

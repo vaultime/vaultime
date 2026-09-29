@@ -171,6 +171,84 @@ const events: SessionEvent[] = allSessions.flatMap((session, index) => {
   if (index === 3) return [event("tracking_gap", { wall_gap_ms: 2 * HOUR_MS + 14 * MINUTE_MS })];
   return [];
 });
+
+/** A correction as the core writes it: the event keeps the old times and the reason. */
+function correct(session: Session, timing: Pick<Session, "ended_at_wall" | "runtime_ms" | "active_ms" | "idle_ms">, reason: string) {
+  events.push({
+    id: `${session.id}-corrected-${events.length}`,
+    session_id: session.id,
+    sequence: 3,
+    event_type: "corrected",
+    event_time_wall: new Date().toISOString(),
+    event_time_monotonic: null,
+    payload_json: JSON.stringify({
+      reason,
+      runtime_ms: timing.runtime_ms,
+      previous: { ended_at_wall: session.ended_at_wall, runtime_ms: session.runtime_ms },
+    }),
+    hash_prev: "preview",
+    hash_self: "preview",
+    signature: null,
+  });
+  Object.assign(session, timing, {
+    elapsed_monotonic_ms: timing.runtime_ms,
+    integrity_status: session.integrity_status === "suspicious" ? "suspicious" : "edited",
+  });
+  return session;
+}
+
+function addManual(gameId: string, startedAt: string, runtimeMs: number, reason: string): Session {
+  const start = new Date(startedAt).getTime();
+  const session: Session = {
+    id: `session-manual-${start}`,
+    game_id: gameId,
+    device_id: "preview",
+    started_at_wall: iso(start),
+    ended_at_wall: iso(start + runtimeMs),
+    elapsed_monotonic_ms: runtimeMs,
+    active_ms: runtimeMs,
+    idle_ms: 0,
+    runtime_ms: runtimeMs,
+    integrity_status: "manual",
+    closed_cleanly: true,
+  };
+  allSessions.push(session);
+  allSessions.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
+  events.push({
+    id: `${session.id}-added`,
+    session_id: session.id,
+    sequence: 1,
+    event_type: "added_manually",
+    event_time_wall: session.ended_at_wall ?? session.started_at_wall,
+    event_time_monotonic: null,
+    payload_json: JSON.stringify({ reason, started_at_wall: session.started_at_wall, ended_at_wall: session.ended_at_wall }),
+    hash_prev: null,
+    hash_self: "preview",
+    signature: null,
+  });
+  return session;
+}
+
+// One session cut short and one added by hand, so both labels show.
+const leftRunning = allSessions.find(
+  (session) => session.ended_at_wall && session.integrity_status === "local" && session.runtime_ms > 3 * HOUR_MS,
+);
+if (leftRunning?.ended_at_wall) {
+  const end = new Date(leftRunning.ended_at_wall).getTime() - HOUR_MS;
+  correct(
+    leftRunning,
+    {
+      ended_at_wall: iso(end),
+      runtime_ms: leftRunning.runtime_ms - HOUR_MS,
+      active_ms: leftRunning.active_ms - Math.max(0, HOUR_MS - leftRunning.idle_ms),
+      idle_ms: Math.max(0, leftRunning.idle_ms - HOUR_MS),
+    },
+    "Left it running while I cooked",
+  );
+}
+if (scenario !== "empty" && scenario !== "unplayed") {
+  addManual(games[1].id, iso(now - 2 * DAY_MS - 5 * HOUR_MS), 95 * MINUTE_MS, "On the Steam Deck");
+}
 const running = scenario === "empty" || scenario === "unplayed" ? [] : [live];
 
 /** One cover per game for ?mock=covers, served from dist-mock/covers. */
@@ -376,7 +454,36 @@ mockIPC((cmd, payload) => {
       return game ?? null;
     }
     case "list_sessions":
-      return allSessions;
+      // Copies, as the real IPC sends, so corrections show up as new data.
+      return allSessions.map((session) => ({ ...session }));
+    case "trim_session": {
+      const session = allSessions.find((candidate) => candidate.id === args.sessionId);
+      if (!session?.ended_at_wall) throw new Error("a running session cannot be corrected");
+      const newEnd = new Date(String(args.endedAt)).getTime();
+      const removed = Math.min(Math.max(0, new Date(session.ended_at_wall).getTime() - newEnd), session.runtime_ms);
+      const idleCut = Math.min(removed, session.idle_ms);
+      return correct(
+        session,
+        {
+          ended_at_wall: iso(newEnd),
+          runtime_ms: session.runtime_ms - removed,
+          active_ms: session.active_ms - Math.min(removed - idleCut, session.active_ms),
+          idle_ms: session.idle_ms - idleCut,
+        },
+        String(args.reason),
+      );
+    }
+    case "discard_session": {
+      const session = allSessions.find((candidate) => candidate.id === args.sessionId);
+      if (!session?.ended_at_wall) throw new Error("a running session cannot be corrected");
+      return correct(
+        session,
+        { ended_at_wall: session.ended_at_wall, runtime_ms: 0, active_ms: 0, idle_ms: 0 },
+        String(args.reason),
+      );
+    }
+    case "add_manual_session":
+      return addManual(String(args.gameId), String(args.startedAt), Number(args.runtimeMs), String(args.reason ?? ""));
     case "get_session_events_for_game": {
       const ids = new Set(allSessions.filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id));

@@ -38,6 +38,12 @@ describe("describeSession", () => {
     expect(describeSession(live)).toBe("Playing now");
     expect(describeSession(live, "Elden Ring")).toBe("Playing Elden Ring now");
   });
+
+  it("says when all the time was taken out", () => {
+    const discarded = session(at(2026, 9, 29, 20, 12), 165, { runtime_ms: 0, active_ms: 0, idle_ms: 0 });
+    expect(describeSession(discarded)).toBe("No play counted");
+    expect(describeSession(discarded, "Elden Ring")).toBe("No play counted for Elden Ring");
+  });
 });
 
 describe("sessionAmounts", () => {
@@ -80,6 +86,12 @@ describe("gamePlaytime", () => {
     expect(gamePlaytime([])).toEqual({
       before: "Not played yet. Start it however you usually do and the clock starts on its own.",
     });
+  });
+
+  it("leaves out a session with all its time taken out", () => {
+    const played = session(at(2026, 9, 20, 9, 0), 60);
+    const discarded = session(at(2026, 9, 21, 20, 0), 60, { runtime_ms: 0, active_ms: 0, idle_ms: 0 });
+    expect(gamePlaytime([played, discarded])).toEqual({ before: "One hour in one session." });
   });
 });
 
@@ -132,6 +144,23 @@ describe("sessionTrustNote", () => {
     ];
     expect(sessionTrustNote(played, events)).toBe("2 h 14 of sleep or pause left out.");
     expect(sessionTrustNote(played, [])).toBeNull();
+  });
+
+  it("gives the reason of a correction and of a session added by hand", () => {
+    const edited = session(at(2026, 9, 29, 21, 0), 30, { integrity_status: "edited" });
+    const corrected = [
+      event(edited.id, "corrected", { reason: "left it running", runtime_ms: 30 * MINUTE_MS, previous: { runtime_ms: 5 * HOUR_MS } }),
+    ];
+    expect(sessionTrustNote(edited, corrected)).toBe("Cut short by you, it had 5 h 00: left it running.");
+    const discarded = [
+      event(edited.id, "corrected", { reason: "Only the launcher!", runtime_ms: 0, previous: { runtime_ms: HOUR_MS } }),
+    ];
+    expect(sessionTrustNote(edited, discarded)).toBe("All time taken out by you, it had 1 h 00: Only the launcher!");
+    const manual = session(at(2026, 9, 29, 21, 0), 30, { integrity_status: "manual" });
+    expect(sessionTrustNote(manual, [event(manual.id, "added_manually", { reason: "On the Steam Deck" })])).toBe(
+      "Added by you: On the Steam Deck.",
+    );
+    expect(sessionTrustNote(manual, [event(manual.id, "added_manually", { reason: "" })])).toBe("Added by you.");
   });
 });
 

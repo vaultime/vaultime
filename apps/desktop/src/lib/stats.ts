@@ -12,7 +12,7 @@ import {
   SESSION_QUICK_MAX_MS,
   SESSION_SHORT_MAX_MS,
 } from "@/lib/constants";
-import { playedMs, toDayKey } from "@/lib/session-stats";
+import { countsAsPlay, playedMs, toDayKey } from "@/lib/session-stats";
 import { parseVaultimeDate } from "@/lib/time";
 import type { Session } from "@/lib/types";
 
@@ -123,7 +123,8 @@ function longestRun(days: Date[]): Streak | null {
 }
 
 /** Everything the stats page shows for `year`. The current streak looks at all sessions. */
-export function yearStats(sessions: Session[], year: number, now = new Date()): YearStats {
+export function yearStats(allSessions: Session[], year: number, now = new Date()): YearStats {
+  const sessions = allSessions.filter(countsAsPlay);
   const inYear = sessions.filter((session) => parseVaultimeDate(session.started_at_wall).getFullYear() === year);
   const activeByDay = new Map<string, number>();
   const playedDays = new Map<string, Date>();

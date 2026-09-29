@@ -14,6 +14,7 @@ import {
   SESSION_SHORT_MAX_MS,
 } from "@/lib/constants";
 import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity";
+import { countsAsPlay } from "@/lib/session-stats";
 import type { SessionShape, Streak } from "@/lib/stats";
 import {
   dayPartOf,
@@ -76,7 +77,8 @@ export function libraryPlaytime(runtimeMs: number, weekRuntimeMs: number): Phras
 }
 
 /** "Thirty-eight hours across twenty-one sessions. You mostly play it *late at night*." */
-export function gamePlaytime(sessions: Session[]): Phrase {
+export function gamePlaytime(allSessions: Session[]): Phrase {
+  const sessions = allSessions.filter(countsAsPlay);
   if (sessions.length === 0) {
     return { before: "Not played yet. Start it however you usually do and the clock starts on its own." };
   }
@@ -110,6 +112,7 @@ function habitOf(sessions: Session[]): DayPart | null {
  */
 export function describeSession(session: Session, gameTitle?: string): string {
   if (!session.ended_at_wall) return gameTitle ? `Playing ${gameTitle} now` : "Playing now";
+  if (!countsAsPlay(session)) return gameTitle ? `No play counted for ${gameTitle}` : "No play counted";
   const line = sessionShape(session);
   return gameTitle ? `${line} in ${gameTitle}` : line;
 }
@@ -131,6 +134,11 @@ function sessionShape(session: Session): string {
 export function sideBySideSentence(titles: string[], ms: number): string {
   const names = titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : (titles[0] ?? "");
   return `${names} ran side by side for ${formatHoursMinutes(ms)}.`;
+}
+
+/** Ends the player's own words with a period unless they already end a sentence. */
+function endSentence(text: string): string {
+  return /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
 /** "1 h 12 in all, 1 h 05 active, 7 min idle". */
@@ -156,6 +164,17 @@ export function sessionTrustNote(session: Session, events: SessionEvent[]): stri
     }
     if (event.event_type === "tracking_gap" && typeof payload?.wall_gap_ms === "number") {
       gapMs += payload.wall_gap_ms;
+    }
+    const why = typeof payload?.reason === "string" ? payload.reason.trim() : "";
+    const withReason = (lead: string) => (why ? `${lead}: ${endSentence(why)}` : `${lead}.`);
+    if (event.event_type === "corrected") {
+      const previous = payload?.previous as Record<string, unknown> | undefined;
+      const before = typeof previous?.runtime_ms === "number" ? formatHoursMinutes(previous.runtime_ms) : null;
+      const cut = payload?.runtime_ms === 0 ? "All time taken out" : "Cut short";
+      notes.push(withReason(before ? `${cut} by you, it had ${before}` : `${cut} by you`));
+    }
+    if (event.event_type === "added_manually") {
+      notes.push(withReason("Added by you"));
     }
   }
 

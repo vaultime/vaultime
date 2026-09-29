@@ -53,6 +53,11 @@ export function buildDailyActivity(
   return [...points.values()];
 }
 
+/** False for a finished session whose time was all taken out. It stays in the history as no play. */
+export function countsAsPlay(session: Session): boolean {
+  return !session.ended_at_wall || session.runtime_ms > 0;
+}
+
 /** The local calendar day, "2026-09-29". */
 export function toDayKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -76,7 +81,7 @@ interface Stretch {
 }
 
 function toSpans(sessions: Session[], now: Date): Span[] {
-  return sessions.map((session) => {
+  return sessions.filter(countsAsPlay).map((session) => {
     const start = parseVaultimeDate(session.started_at_wall).getTime();
     const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
     return { session, start, end, density: end > start ? session.runtime_ms / (end - start) : 0 };
@@ -164,7 +169,9 @@ export function summarizeRecentPlay(sessions: Session[], days = RECENT_DAYS, now
     longest: null,
   };
   const playedDays = new Set<string>();
-  const recent = sessions.filter((session) => parseVaultimeDate(session.started_at_wall) >= cutoff);
+  const recent = sessions.filter(
+    (session) => countsAsPlay(session) && parseVaultimeDate(session.started_at_wall) >= cutoff,
+  );
 
   for (const session of recent) {
     const started = parseVaultimeDate(session.started_at_wall);

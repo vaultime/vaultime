@@ -125,6 +125,13 @@ describe("playedMs", () => {
     const other = session(at(2026, 9, 29, 22, 30), 30, { game_id: "b" });
     expect(playedMs([live, other], now)).toBe(60 * MINUTE_MS);
   });
+
+  it("does not let a session with its time taken out run side by side", () => {
+    const played = session(at(2026, 9, 29, 10, 0), 60);
+    const discarded = session(at(2026, 9, 29, 10, 0), 60, { game_id: "b", runtime_ms: 0, active_ms: 0 });
+    expect(playedMs([played, discarded], now)).toBe(60 * MINUTE_MS);
+    expect(sideBySide([played, discarded], now)).toEqual([]);
+  });
 });
 
 describe("sideBySide", () => {

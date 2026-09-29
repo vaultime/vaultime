@@ -160,6 +160,20 @@ export function isoWeekNumber(date: Date): number {
 }
 
 /** "14:10", in the regional clock. */
+/** A local time as the value of a datetime-local input, "2026-09-30T20:15". */
+export function toLocalInput(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** The value of a datetime-local input as a local time, null when empty or broken. */
+export function fromLocalInput(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  return new Date(year, month - 1, day, hour, minute);
+}
+
 /** "14 March", in the order of the user's region. */
 export function formatDayAndMonth(date: Date): string {
   return date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" });

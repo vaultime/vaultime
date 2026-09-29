@@ -4,13 +4,15 @@
 import { Badge } from "@/components/ui/badge";
 import { getIntegrityMeta, normalizeIntegrityStatus } from "@/lib/integrity";
 
-const VARIANTS: Record<string, "secondary" | "amber" | "sky"> = {
+const VARIANTS: Record<string, "secondary" | "amber" | "sky" | "outline"> = {
   local: "secondary",
   suspicious: "amber",
   recovered: "sky",
+  edited: "outline",
+  manual: "outline",
 };
 
-/** The trust label of a session: Local, Suspicious or Recovered. */
+/** The trust label of a session: Local, Suspicious, Recovered, Edited or Manual. */
 export function IntegrityBadge({ status, className }: { status: string; className?: string }) {
   const normalized = normalizeIntegrityStatus(status);
   const meta = getIntegrityMeta(normalized);
