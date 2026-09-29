@@ -5,6 +5,9 @@ Dockerfile text eol=lf
 *.service text eol=lf
 *.timer text eol=lf
 
-# sqlx checksums include line endings, and the live database was migrated
-# with CRLF files. Every checkout keeps them CRLF so any build matches it.
-apps/api/migrations/*.sql text eol=crlf
+# sqlx checksums include line endings. The live database recorded 0001 and
+# 0002 with CRLF and every later migration with LF, so each checkout keeps
+# exactly those bytes. A test in apps/api pins the checksums.
+apps/api/migrations/*.sql text eol=lf
+apps/api/migrations/0001_initial_schema.sql text eol=crlf
+apps/api/migrations/0002_drop_ip_columns.sql text eol=crlf

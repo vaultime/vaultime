@@ -69,6 +69,50 @@ async fn main() -> Result<(), error::AppError> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    /// Checksums the live database recorded for each migration. sqlx refuses
+    /// to start once a shipped migration changes, line endings included.
+    const APPLIED: &[(i64, &str)] = &[
+        (
+            1,
+            "e92b3daac42b4fe2baa7a858e9ce1b332068fcc7850eea3c171deead15c8f0be073c4a3a538176dd732707d13216eb83",
+        ),
+        (
+            2,
+            "674f0f38eec20b32c67f5f1cb7b8a2aa4af007d5ccae79c64568ef6a9c7b8633435e95201305fa7891a19adaa8c6532d",
+        ),
+        (
+            3,
+            "2135971a75776eaeeaf9c191428d840d11d552c609e48ad8b3813f6076af35d683c197d5790d59a67093c33d6492ca55",
+        ),
+        (
+            4,
+            "e390d4a743d6ffe0257bfb2aa11992788ab85f4580462c63f93249b2ab4b3d8ee60f7d39e9e7b3955cfbc9e5f5992c68",
+        ),
+        (
+            5,
+            "08520b6eba886012668100ec200a50dae20008915215da28bc9c1cb7747a6239c0b10a1447d0f33db883978782dfc366",
+        ),
+    ];
+
+    #[test]
+    fn shipped_migrations_keep_their_bytes() {
+        let migrator = sqlx::migrate!();
+        for (version, checksum) in APPLIED {
+            let migration = migrator
+                .iter()
+                .find(|migration| migration.version == *version)
+                .expect("the migration exists");
+            assert_eq!(
+                hex::encode(&migration.checksum),
+                *checksum,
+                "migration {version} changed, the live database would refuse it"
+            );
+        }
+    }
+}
+
 async fn shutdown_signal() {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;
