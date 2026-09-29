@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";

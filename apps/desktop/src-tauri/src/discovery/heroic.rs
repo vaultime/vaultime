@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Games installed through the Heroic Games Launcher, for Epic through its
 //! Legendary backend, for Amazon through Nile and for GOG.

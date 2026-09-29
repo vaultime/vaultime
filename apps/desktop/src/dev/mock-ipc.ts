@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // Sample data for previewing the UI in a plain browser, without the Rust core.
 // Only loaded when VITE_MOCK_IPC=1, never in real builds. Add ?mock=empty to

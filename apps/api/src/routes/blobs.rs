@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Artwork blobs: encrypted images stored once per account and shared by every
 //! backup that refers to them. Blob ids are keyed hashes of the image, made on

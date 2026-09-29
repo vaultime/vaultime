@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 //! GOG games. Every GOG install carries a `goggame-<id>.info` file with the
 //! title and the main program, whether it came from GOG Galaxy, Heroic or an

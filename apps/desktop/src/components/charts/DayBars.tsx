@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { CHART_MIN_BAR_PERCENT } from "@/lib/constants";
 import type { ActivityPoint } from "@/lib/session-stats";

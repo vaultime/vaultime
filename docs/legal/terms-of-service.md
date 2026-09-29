@@ -10,7 +10,7 @@ By installing or using Vaultime, you agree to these terms. If you do not agree, 
 
 ## 2. The Software
 
-Vaultime is licensed under the MIT License. You may use, modify and distribute it in accordance with that license.
+Vaultime is free software. The app is licensed under the GNU General Public License, version 3 or later, and the cloud server software under the GNU Affero General Public License, version 3 or later. You may use, modify and distribute it in accordance with those licenses. The name Vaultime and its logo are not covered by them.
 
 ## 3. Local Use
 
@@ -41,7 +41,7 @@ Vaultime labels sessions as Local, Suspicious or Recovered. These labels are heu
 
 ## 8. Disclaimer of Warranties
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. See the MIT License for the full disclaimer.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. See the GNU General Public License for the full disclaimer.
 
 The cloud service is provided on a best-effort basis. We do not guarantee uninterrupted availability or that remote backups can never be lost. Keep a local backup of anything important.
 

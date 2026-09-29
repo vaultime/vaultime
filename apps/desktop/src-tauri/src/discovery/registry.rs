@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Games that launchers register with Windows instead of keeping library
 //! files: Battle.net, Rockstar, Riot, `HoYoPlay`, Ubisoft Connect, Legacy Games

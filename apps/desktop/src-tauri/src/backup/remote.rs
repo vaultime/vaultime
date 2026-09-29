@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Cloud backups. A cloud backup is an encrypted archive with the database
 //! and the manifest. Artwork is uploaded apart from it, encrypted once per

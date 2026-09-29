@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -487,7 +487,7 @@ export function SettingsPage() {
           <PageRow label="Version">
             <span className="font-mono">{appVersion ?? "unknown"}</span>
           </PageRow>
-          <PageRow label="License">MIT</PageRow>
+          <PageRow label="License">GPL 3.0 or later</PageRow>
           <div className="mt-5 flex flex-wrap gap-2">
             {LINKS.map((link) => (
               <Button key={link.url} variant="outline" size="sm" onClick={() => openUrl(link.url)}>

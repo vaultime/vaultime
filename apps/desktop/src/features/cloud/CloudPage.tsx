@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useEffectEvent, useState, type FormEvent } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";

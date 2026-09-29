@@ -155,6 +155,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   frontend and the core says so in both files. Exempt are 0, 1 and plain
   arithmetic, values fixed by an outside format or API, tests and sample data,
   and styling, which lives in Tailwind classes and the theme in `index.css`.
+- Every source file starts with the two SPDX lines of its neighbors. Files in
+  `apps/api` and `deploy` are `AGPL-3.0-or-later`, everything else
+  `GPL-3.0-or-later`. Outside code needs a license that fits both.
 - Match the style of the surrounding code.
 - Keep dependencies on current stable versions and drop unused ones.
 

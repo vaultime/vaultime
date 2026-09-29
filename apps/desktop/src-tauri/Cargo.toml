@@ -3,6 +3,7 @@ name = "vaultime"
 version = "0.1.0"
 description = "Universal game library and trustworthy playtime tracker"
 authors = ["schwimmbeck"]
+license = "GPL-3.0-or-later"
 edition = "2024"
 rust-version = "1.98"
 

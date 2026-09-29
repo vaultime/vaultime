@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 //! EA app games. There is no plain list of installed games, so Vaultime reads
 //! the `__Installer\installerdata.xml` every EA game keeps, in the default EA

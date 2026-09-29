@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2026 Vaultime Contributors
-// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";

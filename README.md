@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/schwimmbeck/vaultime/actions/workflows/ci.yml"><img src="https://github.com/schwimmbeck/vaultime/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/schwimmbeck/vaultime/actions/workflows/release.yml"><img src="https://github.com/schwimmbeck/vaultime/actions/workflows/release.yml/badge.svg" alt="Release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7a5ea6" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-7a5ea6" alt="GPL-3.0 license"></a>
   <img src="https://img.shields.io/badge/Tauri-2-24c8db" alt="Tauri 2">
   <img src="https://img.shields.io/badge/Rust-1.98-b7410e" alt="Rust 1.98">
   <img src="https://img.shields.io/badge/React-19-61dafb" alt="React 19">
@@ -104,4 +104,8 @@ Vaultime has no analytics and no telemetry. Details are in the [privacy policy](
 
 ## License
 
-[MIT](LICENSE)
+Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server in `apps/api` and its install tools in `deploy` are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
+
+The name Vaultime and the logo are not covered by these licenses. A modified version needs its own name and logo.
+
+Contributions come with a short agreement, see [CONTRIBUTING.md](CONTRIBUTING.md).
