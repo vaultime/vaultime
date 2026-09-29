@@ -38,6 +38,10 @@ pub const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
 /// That time is not counted. On Windows the monotonic clock keeps running
 /// during sleep and on Linux it stops, so both clocks are checked.
 pub const MAX_TICK_GAP_MS: i64 = 60_000;
+/// How far the clock that counts through sleep may run ahead of the
+/// monotonic clock in one tick before the tick counts as asleep, in
+/// milliseconds. Covers timer resolution, not real sleep.
+pub const SUSPEND_DETECT_MS: i64 = 2_000;
 /// How often connected controllers are read on Windows. `XInput` only reports
 /// the current state, so this has to be short enough to catch a quick press.
 pub const CONTROLLER_SAMPLE_INTERVAL: Duration = Duration::from_millis(250);

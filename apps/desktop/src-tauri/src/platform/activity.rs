@@ -19,12 +19,23 @@ pub struct ActivitySnapshot {
 /// Returns the best-effort activity snapshot for the current platform.
 pub fn capture_activity_snapshot() -> ActivitySnapshot {
     let controller_idle = controller::idle_duration();
+    let foreground_pid = imp::foreground_pid();
     ActivitySnapshot {
-        foreground_pid: imp::foreground_pid(),
-        foreground_supported: foreground_detection_strategy() != HEURISTIC,
+        foreground_pid,
+        foreground_supported: foreground_detection_strategy() != HEURISTIC
+            && foreground_known(foreground_pid),
         idle_for: with_controller_input(imp::idle_duration(), controller_idle),
         idle_supported: idle_detection_strategy() != HEURISTIC,
     }
+}
+
+/// On Wayland the X server only knows the windows of X11 apps. When none of
+/// them has the focus, a Wayland window has it, and whether that window is
+/// the game cannot be told. Such a tick goes by process activity instead.
+fn foreground_known(foreground_pid: Option<u32>) -> bool {
+    foreground_pid.is_some()
+        || !cfg!(target_os = "linux")
+        || std::env::var_os("WAYLAND_DISPLAY").is_none()
 }
 
 /// The desktop idle time, cut short by later controller input. Controller

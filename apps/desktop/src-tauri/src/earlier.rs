@@ -191,11 +191,13 @@ mod tests {
         let start =
             (Utc::now() - chrono::Duration::hours(10)).to_rfc3339_opts(SecondsFormat::Millis, true);
         corrections::add_manual_session(&db, &game.id, DEVICE, &start, HOUR_MS, "", None).unwrap();
+        let later =
+            (Utc::now() - chrono::Duration::hours(5)).to_rfc3339_opts(SecondsFormat::Millis, true);
         corrections::add_manual_session(
             &db,
             &game.id,
             DEVICE,
-            &start,
+            &later,
             2 * HOUR_MS,
             "",
             Some(STEAM_SOURCE),

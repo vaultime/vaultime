@@ -16,13 +16,14 @@ use sysinfo::System;
 use crate::constants::{
     CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS,
     DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS,
-    MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD,
+    MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD, SUSPEND_DETECT_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
 use crate::db::repo::{games, sessions, settings};
 use crate::discovery::metadata::is_likely_game_executable;
 use crate::integrity;
+use crate::platform;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{
     InstallFolder, RunningProcess, cpu_usage, matches_executable, refresh_running_processes,
@@ -42,6 +43,8 @@ struct ActiveSession {
     last_foreground_at: Option<Instant>,
     /// Wall time skipped by tracking gaps, left out of the drift check.
     skipped_wall_ms: i64,
+    /// The clock that counts through sleep, at the last tick.
+    last_boot_ms: Option<i64>,
     integrity_status: String,
 }
 
@@ -65,6 +68,7 @@ impl ActiveSession {
             last_signal_at: now,
             last_foreground_at: None,
             skipped_wall_ms: 0,
+            last_boot_ms: platform::clock::since_boot_ms(),
             integrity_status,
         }
     }
@@ -250,7 +254,6 @@ fn poll_tick(
     folders: &mut FolderCache,
     active: &mut HashMap<String, ActiveSession>,
 ) -> crate::error::Result<()> {
-    let now = Instant::now();
     let tracking_settings = TrackingSettings::load(db);
     let tracked_games = games::list_all_games(db)?;
     let processes = refresh_running_processes(system);
@@ -270,15 +273,16 @@ fn poll_tick(
             match sessions::create_session(db, game_id, device_id) {
                 Ok(session) => {
                     info!("session started for game {game_id}: {}", session.id);
+                    let started = Instant::now();
                     let mut active_session = ActiveSession::new(
                         session.id,
                         game_id.clone(),
-                        now,
+                        started,
                         parse_wall_timestamp(&session.started_at_wall),
                         session.integrity_status.clone(),
                     );
                     if observation.has_foreground_window {
-                        active_session.last_foreground_at = Some(now);
+                        active_session.last_foreground_at = Some(started);
                     }
                     active.insert(game_id.clone(), active_session);
                 }
@@ -289,6 +293,14 @@ fn poll_tick(
         }
     }
 
+    // All clocks are read together after the work above, which can wait on
+    // the database while a backup runs. Reading them apart would look like a
+    // clock change.
+    let clocks = Clocks {
+        now: Instant::now(),
+        wall: Utc::now(),
+        boot_ms: platform::clock::since_boot_ms(),
+    };
     for session in active.values_mut() {
         if let Some(observation) = observed_games.get(&session.game_id) {
             if !observation.is_running {
@@ -301,7 +313,7 @@ fn poll_tick(
                 *observation,
                 &tracking_settings,
                 &activity_snapshot,
-                now,
+                &clocks,
             )?;
         }
     }
@@ -481,9 +493,10 @@ fn observe_game_processes(
     let has_foreground_window = activity_snapshot
         .foreground_pid
         .is_some_and(|foreground_pid| {
-            matched_processes
-                .iter()
-                .any(|process| process.pid == foreground_pid)
+            matched_processes.iter().any(|process| {
+                process.pid == foreground_pid
+                    || platform::process::inner_pid(process.pid) == Some(foreground_pid)
+            })
         });
 
     let has_process_activity = matched_processes.iter().any(|process| {
@@ -498,15 +511,23 @@ fn observe_game_processes(
     }
 }
 
+/// The three clocks of one tick, read at the same moment.
+struct Clocks {
+    now: Instant,
+    wall: DateTime<Utc>,
+    /// Counts through sleep, unlike `now`.
+    boot_ms: Option<i64>,
+}
+
 fn apply_observation(
     db: &Database,
     session: &mut ActiveSession,
     observation: GameObservation,
     tracking_settings: &TrackingSettings,
     activity_snapshot: &ActivitySnapshot,
-    now: Instant,
+    clocks: &Clocks,
 ) -> crate::error::Result<()> {
-    let current_wall = Utc::now();
+    let (now, current_wall) = (clocks.now, clocks.wall);
     if observation.has_foreground_window {
         session.last_foreground_at = Some(now);
     }
@@ -528,8 +549,17 @@ fn apply_observation(
         .signed_duration_since(session.last_wall_at)
         .num_milliseconds();
     session.last_wall_at = current_wall;
+    // The monotonic clock stops while the PC sleeps on some systems. Time the
+    // clock that counts through sleep has on top of it was spent asleep.
+    let slept_ms = clocks
+        .boot_ms
+        .zip(session.last_boot_ms)
+        .map_or(0, |(boot_now, boot_before)| {
+            boot_now - boot_before - delta_ms
+        });
+    session.last_boot_ms = clocks.boot_ms;
 
-    if delta_ms.max(wall_delta_ms) > MAX_TICK_GAP_MS {
+    if delta_ms.max(wall_delta_ms) > MAX_TICK_GAP_MS || slept_ms > SUSPEND_DETECT_MS {
         session.skipped_wall_ms += wall_delta_ms.max(0);
         return sessions::record_tracking_gap(
             db,
@@ -817,6 +847,10 @@ mod tests {
     }
 
     fn tick(f: &Fixture, session: &mut ActiveSession) {
+        tick_at(f, session, None);
+    }
+
+    fn tick_at(f: &Fixture, session: &mut ActiveSession, boot_ms: Option<i64>) {
         let observation = GameObservation {
             is_running: true,
             has_foreground_window: true,
@@ -838,7 +872,11 @@ mod tests {
             observation,
             &settings,
             &snapshot,
-            Instant::now(),
+            &Clocks {
+                now: Instant::now(),
+                wall: Utc::now(),
+                boot_ms,
+            },
         )
         .unwrap();
     }
@@ -879,6 +917,19 @@ mod tests {
         // Both clocks kept running through sleep.
         let mut session = session_after(&f, Duration::from_secs(3_600), chrono::Duration::hours(1));
         tick(&f, &mut session);
+
+        assert_eq!(session.runtime_ms, 0);
+        assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn a_short_suspend_is_skipped_not_flagged() {
+        let f = fixture();
+        // Half a minute asleep: too short for the gap limit, but the clock
+        // that counts through sleep ran ahead of the monotonic one.
+        let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(35));
+        session.last_boot_ms = Some(1_000);
+        tick_at(&f, &mut session, Some(1_000 + 35_000));
 
         assert_eq!(session.runtime_ms, 0);
         assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);

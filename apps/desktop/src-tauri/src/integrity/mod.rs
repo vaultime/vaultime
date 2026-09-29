@@ -3,6 +3,9 @@
 
 //! Session event hashing, chain validation and trust scoring.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock, PoisonError};
+
 use chrono::{SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
@@ -103,6 +106,10 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     }
 
     let first_event = events.first().expect("events checked non-empty");
+    if let Some(reason) = check_status_history(&events, first_event.event_type == "added_manually")
+    {
+        return Ok(Some(reason));
+    }
     let start = match first_event.event_type.as_str() {
         "started" => Some(first_event.event_time_wall.clone()),
         "added_manually" => wall_in_payload(first_event, "started_at_wall"),
@@ -121,6 +128,9 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
 
         let end = match last_event.event_type.as_str() {
             "corrected" | "added_manually" => wall_in_payload(last_event, "ended_at_wall"),
+            // Recoveries from before the end moved into the payload ended at their own time.
+            "recovered" => wall_in_payload(last_event, "ended_at_wall")
+                .or_else(|| Some(last_event.event_time_wall.clone())),
             _ => Some(last_event.event_time_wall.clone()),
         };
         if end.as_deref() != Some(ended_at_wall) {
@@ -149,6 +159,102 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     }
 
     Ok(None)
+}
+
+/// A Suspicious flag stays once it is set, and only a session added by hand
+/// may carry the Manual label, always unless it was flagged.
+fn check_status_history(events: &[SessionEvent], added_by_hand: bool) -> Option<String> {
+    let mut flagged = false;
+    for event in events
+        .iter()
+        .filter(|event| STATUS_EVENTS.contains(&event.event_type.as_str()))
+    {
+        let status = match event.event_type.as_str() {
+            "started" => STATUS_LOCAL.to_owned(),
+            "integrity_flagged" => STATUS_SUSPICIOUS.to_owned(),
+            _ => wall_in_payload(event, "integrity_status")?,
+        };
+        if flagged && status != STATUS_SUSPICIOUS {
+            return Some("suspicious_flag_dropped".into());
+        }
+        if status == STATUS_MANUAL && !added_by_hand {
+            return Some("manual_label_on_tracked_session".into());
+        }
+        if added_by_hand && status != STATUS_MANUAL && status != STATUS_SUSPICIOUS {
+            return Some("tracked_label_on_manual_session".into());
+        }
+        flagged |= status == STATUS_SUSPICIOUS;
+    }
+    None
+}
+
+/// What a closed session was last checked against: the tail of its chain and
+/// the row values the check compares.
+#[derive(PartialEq)]
+struct CheckedState {
+    events: i64,
+    last_hash: Option<String>,
+    row: String,
+}
+
+type CheckCache = Mutex<HashMap<String, (CheckedState, Option<String>)>>;
+
+fn check_cache() -> &'static CheckCache {
+    static CACHE: OnceLock<CheckCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Validates a session like `validate_session_history`, but reuses the result
+/// for a closed session whose chain tail and row did not change since it was
+/// last checked. Listing every session then stays fast with long histories.
+/// The cache lives in memory, so every start of the app checks each chain in
+/// full again. Returns the reason and whether it was checked just now.
+pub fn validate_session_history_cached(
+    conn: &Connection,
+    session: &Session,
+) -> Result<(Option<String>, bool)> {
+    if session.ended_at_wall.is_none() {
+        return Ok((validate_session_history(conn, session)?, true));
+    }
+    let (events, last_hash) = conn
+        .query_row(
+            "SELECT COUNT(*),
+                    (SELECT hash_self FROM session_events
+                     WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1)
+             FROM session_events WHERE session_id = ?1",
+            [&session.id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .map_err(|e| VaultimeError::Integrity(format!("failed to read the event chain: {e}")))?;
+    let state = CheckedState {
+        events,
+        last_hash,
+        row: format!(
+            "{}|{:?}|{}|{}|{}|{}|{}",
+            session.started_at_wall,
+            session.ended_at_wall,
+            session.runtime_ms,
+            session.active_ms,
+            session.idle_ms,
+            session.integrity_status,
+            session.closed_cleanly
+        ),
+    };
+    let cache = check_cache();
+    if let Some((checked, reason)) = cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&session.id)
+        && *checked == state
+    {
+        return Ok((reason.clone(), false));
+    }
+    let reason = validate_session_history(conn, session)?;
+    cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(session.id.clone(), (state, reason.clone()));
+    Ok((reason, true))
 }
 
 fn next_sequence_and_previous_hash(

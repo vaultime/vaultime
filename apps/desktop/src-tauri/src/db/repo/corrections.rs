@@ -9,7 +9,7 @@
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::params;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::constants::{MANUAL_SESSION_MAX, SESSION_NOTE_MAX_CHARS};
 use crate::db::connection::Database;
@@ -50,13 +50,55 @@ fn check_text(text: &str, required: bool) -> Result<&str> {
     Ok(text)
 }
 
+/// The session with the label its history supports, so a correction never
+/// starts from a status someone changed by hand in the database.
 fn load(conn: &rusqlite::Connection, session_id: &str) -> Result<Session> {
-    conn.query_row(
-        "SELECT * FROM sessions WHERE id = ?1",
-        [session_id],
-        row_to_session,
-    )
-    .map_err(map_db)
+    let session = conn
+        .query_row(
+            "SELECT * FROM sessions WHERE id = ?1",
+            [session_id],
+            row_to_session,
+        )
+        .map_err(map_db)?;
+    attach_validated_status(conn, session)
+}
+
+/// Wall time between `from` and `to` that tracking gaps, such as sleep, left
+/// out of the runtime. A gap event is written when tracking resumes and
+/// covers the time before it.
+fn gap_ms_between(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> Result<i64> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT event_time_wall, payload_json FROM session_events
+             WHERE session_id = ?1 AND event_type = 'tracking_gap'",
+        )
+        .map_err(map_db)?;
+    let gaps = stmt
+        .query_map([session_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .and_then(Iterator::collect::<rusqlite::Result<Vec<_>>>)
+        .map_err(map_db)?;
+    let mut total = 0;
+    for (resumed_at, payload) in gaps {
+        let (Ok(resumed_at), Some(gap_ms)) = (
+            parse_time(&resumed_at),
+            serde_json::from_str::<Value>(&payload)
+                .ok()
+                .and_then(|payload| payload["wall_gap_ms"].as_i64()),
+        ) else {
+            continue;
+        };
+        let gap_start = resumed_at - chrono::Duration::milliseconds(gap_ms);
+        let overlap = resumed_at.min(to) - gap_start.max(from);
+        total += overlap.num_milliseconds().max(0);
+    }
+    Ok(total)
 }
 
 /// Counts a session only up to `ended_at`, for a game left running after
@@ -69,7 +111,7 @@ pub fn trim_session(
 ) -> Result<Session> {
     let reason = check_text(reason, true)?;
     let new_end = parse_time(ended_at)?;
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
         let session = load(conn, session_id)?;
         let Some(old_end) = session.ended_at_wall.as_deref() else {
             return Err(VaultimeError::Invalid(
@@ -82,9 +124,11 @@ pub fn trim_session(
                 "the new end has to lie within the session".into(),
             ));
         }
-        let removed = (old_end - new_end)
-            .num_milliseconds()
-            .min(session.runtime_ms);
+        // Sleep between the new and the old end was never counted, so it is
+        // not taken out again.
+        let removed = ((old_end - new_end).num_milliseconds()
+            - gap_ms_between(conn, &session.id, new_end, old_end)?)
+        .clamp(0, session.runtime_ms);
         let idle_cut = removed.min(session.idle_ms);
         let active_cut = (removed - idle_cut).min(session.active_ms);
         let timing = Timing {
@@ -101,7 +145,7 @@ pub fn trim_session(
 /// stays in the history with its reason.
 pub fn discard_session(db: &Database, session_id: &str, reason: &str) -> Result<Session> {
     let reason = check_text(reason, true)?;
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
         let session = load(conn, session_id)?;
         let Some(ended_at_wall) = session.ended_at_wall.clone() else {
             return Err(VaultimeError::Invalid(
@@ -168,7 +212,7 @@ fn apply_correction(
         })
         .to_string(),
     )?;
-    attach_validated_status(conn, load(conn, &session.id)?)
+    load(conn, &session.id)
 }
 
 /// Adds play Vaultime did not see, like a session on another PC. It counts
@@ -207,7 +251,31 @@ pub fn add_manual_session(
     let (started_at_wall, ended_at_wall) = (format_time(start), format_time(end));
     let id = uuid::Uuid::new_v4().to_string();
 
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
+        // Play of one game cannot happen twice at once. Sessions whose time
+        // was all taken out do not count, their slot is free again.
+        let overlaps: bool = conn
+            .query_row(
+                "SELECT EXISTS(
+                     SELECT 1 FROM sessions
+                     WHERE game_id = ?1 AND runtime_ms > 0
+                       AND started_at_wall < ?3
+                       AND COALESCE(ended_at_wall, ?4) > ?2)",
+                params![
+                    game_id,
+                    started_at_wall,
+                    ended_at_wall,
+                    format_time(Utc::now())
+                ],
+                |row| row.get(0),
+            )
+            .map_err(map_db)?;
+        if overlaps {
+            return Err(VaultimeError::Invalid(
+                "another session of this game already covers part of that time".into(),
+            ));
+        }
+
         conn.execute(
             "INSERT INTO sessions
                 (id, game_id, device_id, started_at_wall, ended_at_wall,
@@ -244,7 +312,7 @@ pub fn add_manual_session(
             })
             .to_string(),
         )?;
-        attach_validated_status(conn, load(conn, &id)?)
+        load(conn, &id)
     })
 }
 
@@ -310,8 +378,7 @@ mod tests {
     }
 
     fn validated(db: &Database, id: &str) -> Session {
-        db.with_conn(|conn| attach_validated_status(conn, load(conn, id)?))
-            .unwrap()
+        db.with_conn(|conn| load(conn, id)).unwrap()
     }
 
     #[test]
@@ -458,5 +525,84 @@ mod tests {
         let session =
             add_manual_session(&db, &game, DEVICE, &start, MINUTE, "", Some(STEAM_SOURCE)).unwrap();
         assert_eq!(session.integrity_status, STATUS_MANUAL);
+    }
+
+    #[test]
+    fn a_trim_leaves_sleep_out_of_what_it_takes() {
+        let (db, game) = setup();
+        let now = Utc::now();
+        let minutes_ago = |minutes| format_time(now - chrono::Duration::minutes(minutes));
+        let id = uuid::Uuid::new_v4().to_string();
+        // Two hours on the clock, an hour of it asleep until ten minutes ago.
+        db.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO sessions
+                    (id, game_id, device_id, started_at_wall, elapsed_monotonic_ms,
+                     active_ms, idle_ms, runtime_ms, integrity_status, closed_cleanly)
+                 VALUES (?1, ?2, ?3, ?4, 0, 0, 0, 0, 'local', 0)",
+                params![id, game, DEVICE, minutes_ago(120)],
+            )
+            .map_err(map_db)?;
+            integrity::append_session_event(
+                conn,
+                &id,
+                "started",
+                &minutes_ago(120),
+                Some(0),
+                &json!({ "game_id": game, "device_id": DEVICE, "integrity_status": "local" })
+                    .to_string(),
+            )?;
+            integrity::append_session_event(
+                conn,
+                &id,
+                "tracking_gap",
+                &minutes_ago(10),
+                Some(50 * MINUTE),
+                &json!({ "wall_gap_ms": 60 * MINUTE, "monotonic_gap_ms": 0 }).to_string(),
+            )
+        })
+        .unwrap();
+        sessions::end_session(&db, &id, 60 * MINUTE, 60 * MINUTE, 0, "local").unwrap();
+
+        // Half an hour off the end holds only ten minutes of play.
+        let trimmed = trim_session(&db, &id, &minutes_ago(30), "Stopped earlier").unwrap();
+        // The real end lies a few milliseconds after the times of this test.
+        assert!((trimmed.runtime_ms - 50 * MINUTE).abs() < 1_000);
+        assert_eq!(validated(&db, &id).integrity_status, STATUS_EDITED);
+    }
+
+    #[test]
+    fn a_flag_survives_recovery_and_correction() {
+        let (db, game) = setup();
+        let session = sessions::create_session(&db, &game, DEVICE).unwrap();
+        sessions::flag_session_suspicious(
+            &db,
+            &session.id,
+            0,
+            0,
+            30_000,
+            "wall_clock_step_mismatch",
+        )
+        .unwrap();
+        let recovered =
+            sessions::recover_session(&db, &session.id, "startup_orphan_cleanup").unwrap();
+        assert_eq!(recovered.integrity_status, STATUS_SUSPICIOUS);
+        let corrected = discard_session(&db, &session.id, "Not play").unwrap();
+        assert_eq!(corrected.integrity_status, STATUS_SUSPICIOUS);
+        assert_eq!(
+            validated(&db, &session.id).integrity_status,
+            STATUS_SUSPICIOUS
+        );
+    }
+
+    #[test]
+    fn a_manual_session_cannot_overlap_play_of_the_same_game() {
+        let (db, game) = setup();
+        let tracked = played(&db, &game, 90, 90);
+        let inside = format_time(Utc::now() - chrono::Duration::minutes(60));
+        assert!(add_manual_session(&db, &game, DEVICE, &inside, 10 * MINUTE, "", None).is_err());
+
+        discard_session(&db, &tracked.id, "The launcher only").unwrap();
+        assert!(add_manual_session(&db, &game, DEVICE, &inside, 10 * MINUTE, "", None).is_ok());
     }
 }

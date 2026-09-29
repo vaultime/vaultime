@@ -155,7 +155,7 @@ pub fn list_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, Vault
     sessions::list_all_sessions(&db)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_active_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
     sessions::get_active_sessions(&db)
 }

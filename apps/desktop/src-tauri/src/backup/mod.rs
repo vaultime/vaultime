@@ -783,8 +783,10 @@ fn resolve_backup_dir(backup_path: &Path) -> Result<PathBuf> {
 
 fn resolve_manifest_file_path(backup_dir: &Path, relative_path: &str) -> Result<PathBuf> {
     let relative = Path::new(relative_path);
-    // Plain names only: no root, no drive like `C:` and no way up.
+    // Plain names only: no root, no drive like `C:` and no way up. Backups
+    // write `/` between names on every system, so `\` and `:` never belong.
     if relative_path.is_empty()
+        || relative_path.contains(['\\', ':'])
         || relative
             .components()
             .any(|component| !matches!(component, std::path::Component::Normal(_)))

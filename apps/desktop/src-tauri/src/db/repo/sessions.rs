@@ -4,7 +4,7 @@
 //! Queries for the `sessions` table. Every write also appends a session event.
 
 use log::warn;
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::json;
 
 use crate::db::connection::Database;
@@ -43,7 +43,7 @@ pub fn create_session(db: &Database, game_id: &str, device_id: &str) -> Result<S
     let id = uuid::Uuid::new_v4().to_string();
     let started_at_wall = integrity::now_timestamp();
 
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
         conn.execute(
             "INSERT INTO sessions
                 (id, game_id, device_id, started_at_wall,
@@ -94,7 +94,7 @@ pub fn end_session(
 ) -> Result<Session> {
     let ended_at_wall = integrity::now_timestamp();
 
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
         let updated = conn
             .execute(
                 "UPDATE sessions
@@ -162,7 +162,7 @@ pub fn update_session_timing(
 ) -> Result<()> {
     let event_time_wall = integrity::now_timestamp();
 
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
         let updated = conn
             .execute(
                 "UPDATE sessions
@@ -214,7 +214,7 @@ pub fn flag_session_suspicious(
 ) -> Result<()> {
     let event_time_wall = integrity::now_timestamp();
 
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
         let updated = conn
             .execute(
                 "UPDATE sessions
@@ -246,7 +246,7 @@ pub fn flag_session_suspicious(
 }
 
 /// Logs a pause between ticks, such as system sleep, that was left out of the
-/// session time.
+/// session time. `event_time_wall` is when tracking resumed.
 pub fn record_tracking_gap(
     db: &Database,
     session_id: &str,
@@ -272,18 +272,37 @@ pub fn record_tracking_gap(
     })
 }
 
-/// Marks an orphaned session as recovered and appends an audit event.
+/// Closes a session nothing tracks any more, for example after a crash. It
+/// ends where its record ends, the last moment the tracker saw it, not now.
+/// A session that was flagged stays Suspicious.
 pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<Session> {
-    let ended_at_wall = integrity::now_timestamp();
+    let recovered_at = integrity::now_timestamp();
 
-    db.with_conn(|conn| {
-        let session = conn
-            .query_row(
+    db.with_transaction(|conn| {
+        let session = attach_validated_status(
+            conn,
+            conn.query_row(
                 "SELECT * FROM sessions WHERE id = ?1",
                 [session_id],
                 row_to_session,
             )
-            .map_err(map_db)?;
+            .map_err(map_db)?,
+        )?;
+        let status = if session.integrity_status == integrity::STATUS_SUSPICIOUS {
+            integrity::STATUS_SUSPICIOUS
+        } else {
+            integrity::STATUS_RECOVERED
+        };
+        let ended_at_wall: String = conn
+            .query_row(
+                "SELECT event_time_wall FROM session_events
+                 WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(map_db)?
+            .unwrap_or_else(|| session.started_at_wall.clone());
 
         let updated = conn
             .execute(
@@ -292,7 +311,7 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
                      integrity_status = ?2,
                      closed_cleanly = 0
                  WHERE id = ?3 AND ended_at_wall IS NULL",
-                params![ended_at_wall, integrity::STATUS_RECOVERED, session_id],
+                params![ended_at_wall, status, session_id],
             )
             .map_err(map_db)?;
 
@@ -306,14 +325,15 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
             conn,
             session_id,
             "recovered",
-            &ended_at_wall,
+            &recovered_at,
             Some(session.runtime_ms),
             &json!({
                 "reason": reason,
+                "ended_at_wall": ended_at_wall,
                 "runtime_ms": session.runtime_ms,
                 "active_ms": session.active_ms,
                 "idle_ms": session.idle_ms,
-                "integrity_status": integrity::STATUS_RECOVERED,
+                "integrity_status": status,
                 "closed_cleanly": false,
             })
             .to_string(),
@@ -454,7 +474,17 @@ pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
         let sessions = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)?;
         sessions
             .into_iter()
-            .map(|session| attach_validated_status(conn, session))
+            .map(|mut session| {
+                let (reason, checked_now) =
+                    integrity::validate_session_history_cached(conn, &session)?;
+                if let Some(reason) = reason {
+                    if checked_now {
+                        warn!("session {} failed validation: {reason}", session.id);
+                    }
+                    session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+                }
+                Ok(session)
+            })
             .collect()
     })
 }
@@ -736,5 +766,100 @@ mod tests {
 
         let all = list_all_sessions(&db).unwrap();
         assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn recovery_ends_where_the_record_ends() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = create_session(&db, &game_id, DEV_ID).unwrap();
+        update_session_timing(
+            &db,
+            &session.id,
+            5_000,
+            5_000,
+            0,
+            5_000,
+            0,
+            integrity::STATUS_LOCAL,
+        )
+        .unwrap();
+        let last_heartbeat: String = db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT event_time_wall FROM session_events
+                     WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+                    [&session.id],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+
+        let recovered = recover_session(&db, &session.id, "startup_orphan_cleanup").unwrap();
+        assert_eq!(
+            recovered.ended_at_wall.as_deref(),
+            Some(last_heartbeat.as_str())
+        );
+        let checked = get_session(&db, &session.id).unwrap();
+        assert_eq!(checked.integrity_status, integrity::STATUS_RECOVERED);
+    }
+
+    #[test]
+    fn a_dropped_flag_and_a_false_manual_label_are_caught() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+
+        let flagged = create_session(&db, &game_id, DEV_ID).unwrap();
+        flag_session_suspicious(&db, &flagged.id, 0, 0, 30_000, "wall_clock_moved_backwards")
+            .unwrap();
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE sessions SET integrity_status = 'local' WHERE id = ?1",
+                [&flagged.id],
+            )
+            .map_err(map_db)?;
+            Ok(())
+        })
+        .unwrap();
+        // A heartbeat that claims the flag away, written through the chain.
+        update_session_timing(&db, &flagged.id, 0, 0, 0, 0, 0, integrity::STATUS_LOCAL).unwrap();
+        assert_eq!(
+            get_session(&db, &flagged.id).unwrap().integrity_status,
+            integrity::STATUS_SUSPICIOUS
+        );
+
+        let tracked = create_session(&db, &game_id, DEV_ID).unwrap();
+        end_session(&db, &tracked.id, 0, 0, 0, integrity::STATUS_MANUAL).unwrap();
+        assert_eq!(
+            get_session(&db, &tracked.id).unwrap().integrity_status,
+            integrity::STATUS_SUSPICIOUS
+        );
+    }
+
+    #[test]
+    fn listing_notices_a_changed_row_between_calls() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = create_session(&db, &game_id, DEV_ID).unwrap();
+        end_session(&db, &session.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL).unwrap();
+        assert_eq!(
+            list_all_sessions(&db).unwrap()[0].integrity_status,
+            integrity::STATUS_LOCAL
+        );
+
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE sessions SET runtime_ms = 999999 WHERE id = ?1",
+                [&session.id],
+            )
+            .map_err(map_db)?;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(
+            list_all_sessions(&db).unwrap()[0].integrity_status,
+            integrity::STATUS_SUSPICIOUS
+        );
     }
 }

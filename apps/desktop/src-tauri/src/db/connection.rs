@@ -65,4 +65,20 @@ impl Database {
             .map_err(|e| VaultimeError::Database(format!("connection lock poisoned: {e}")))?;
         f(&conn)
     }
+
+    /// Like `with_conn`, in one transaction, so a session row and the event
+    /// that records its change are stored together or not at all.
+    pub fn with_transaction<F, T>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&Connection) -> Result<T>,
+    {
+        self.with_conn(|conn| {
+            let failed =
+                |e: rusqlite::Error| VaultimeError::Database(format!("transaction failed: {e}"));
+            let transaction = conn.unchecked_transaction().map_err(failed)?;
+            let value = f(&transaction)?;
+            transaction.commit().map_err(failed)?;
+            Ok(value)
+        })
+    }
 }
