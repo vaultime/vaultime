@@ -3,7 +3,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, LIBRARY_CHANGED_EVENT, SETTING_KEYS } from "@/lib/constants";
+import {
+  ACTIVE_POLL_MS,
+  DEFAULT_IDLE_THRESHOLD_SECONDS,
+  LIBRARY_CHANGED_EVENT,
+  SETTING_KEYS,
+  TRUST_BADGE_RECENT_DAYS,
+} from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/session-stats";
@@ -128,6 +134,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   }, [covers]);
 
   const summaries = useMemo(() => {
+    const recentSince = new Date();
+    recentSince.setDate(recentSince.getDate() - TRUST_BADGE_RECENT_DAYS);
+    const recentSinceWall = recentSince.toISOString();
     const byGame = new Map<string, GameSummary>();
     for (const game of games) {
       byGame.set(game.id, {
@@ -143,6 +152,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         sessionsCount: 0,
         suspiciousCount: 0,
         recoveredCount: 0,
+        recentSuspiciousCount: 0,
+        recentRecoveredCount: 0,
         lastPlayedAt: null,
       });
     }
@@ -153,8 +164,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       summary.activeMs += session.active_ms;
       summary.sessionsCount += 1;
       const trust = normalizeIntegrityStatus(session.integrity_status);
-      if (trust === "suspicious") summary.suspiciousCount += 1;
-      if (trust === "recovered") summary.recoveredCount += 1;
+      const recent = session.started_at_wall >= recentSinceWall;
+      if (trust === "suspicious") {
+        summary.suspiciousCount += 1;
+        if (recent) summary.recentSuspiciousCount += 1;
+      }
+      if (trust === "recovered") {
+        summary.recoveredCount += 1;
+        if (recent) summary.recentRecoveredCount += 1;
+      }
       if (!summary.lastPlayedAt || session.started_at_wall > summary.lastPlayedAt) {
         summary.lastPlayedAt = session.started_at_wall;
       }

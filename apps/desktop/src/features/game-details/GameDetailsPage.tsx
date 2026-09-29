@@ -258,6 +258,8 @@ function GamePage({ gameId }: { gameId: string }) {
             <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
             <TotalRow label="Idle" value={formatHoursMinutes(idleMs)} />
             <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
+            {summary.suspiciousCount > 0 && <TotalRow label="Suspicious" value={String(summary.suspiciousCount)} />}
+            {summary.recoveredCount > 0 && <TotalRow label="Recovered" value={String(summary.recoveredCount)} />}
             <TotalRow label="Longest" value={formatHoursMinutes(longest)} />
             <TotalRow label="First played" value={firstPlayed ? formatCalendarDay(firstPlayed) : "Not yet"} />
           </AsideSection>

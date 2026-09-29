@@ -15,10 +15,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { GameSummary } from "@/features/library/library-context";
+import { TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { plural } from "@/lib/words";
 
 const SORTS = {
   recent: "Recent",
@@ -139,7 +141,7 @@ function GameTile({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const { game, cover, totalMs, lastPlayedAt, suspiciousCount, recoveredCount, status } = summary;
+  const { game, cover, totalMs, lastPlayedAt, recentSuspiciousCount, recentRecoveredCount, status } = summary;
 
   return (
     <li className="group relative">
@@ -157,17 +159,17 @@ function GameTile({
               playing && "ring-2 ring-violet ring-offset-2 ring-offset-ink",
             )}
           />
-          {(suspiciousCount > 0 || recoveredCount > 0) && (
+          {(recentSuspiciousCount > 0 || recentRecoveredCount > 0) && (
             <Badge
-              variant={suspiciousCount > 0 ? "amber" : "sky"}
+              variant={recentSuspiciousCount > 0 ? "amber" : "sky"}
               className="absolute top-2 left-2 bg-ink/75 backdrop-blur-sm"
               title={
-                suspiciousCount > 0
-                  ? `${suspiciousCount} session${suspiciousCount === 1 ? "" : "s"} with a clock jump or timing drift`
-                  : `${recoveredCount} session${recoveredCount === 1 ? "" : "s"} rebuilt after an unclean exit`
+                recentSuspiciousCount > 0
+                  ? `${plural(recentSuspiciousCount, "session")} with a clock jump or timing drift in the last ${TRUST_BADGE_RECENT_DAYS} days`
+                  : `${plural(recentRecoveredCount, "session")} rebuilt after an unclean exit in the last ${TRUST_BADGE_RECENT_DAYS} days`
               }
             >
-              {suspiciousCount > 0 ? "Suspicious" : "Recovered"}
+              {recentSuspiciousCount > 0 ? "Suspicious" : "Recovered"}
             </Badge>
           )}
         </span>

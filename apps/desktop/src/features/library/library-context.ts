@@ -23,6 +23,10 @@ export interface GameSummary {
   sessionsCount: number;
   suspiciousCount: number;
   recoveredCount: number;
+  /** Suspicious sessions of the last `TRUST_BADGE_RECENT_DAYS` days. */
+  recentSuspiciousCount: number;
+  /** Recovered sessions of the last `TRUST_BADGE_RECENT_DAYS` days. */
+  recentRecoveredCount: number;
   lastPlayedAt: string | null;
 }
 

@@ -74,6 +74,9 @@ export const SIZE_ONE_DECIMAL_BELOW = 10;
 /** Calendar days that count as recent on the library home, today included. */
 export const RECENT_DAYS = 7;
 
+/** The library grid marks a game Suspicious or Recovered only for sessions this many days old or newer. The game page counts all of them. */
+export const TRUST_BADGE_RECENT_DAYS = 30;
+
 /** Calendar days in the activity charts. */
 export const ACTIVITY_CHART_DAYS = 14;
 

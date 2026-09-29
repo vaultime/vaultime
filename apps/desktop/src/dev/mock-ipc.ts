@@ -89,6 +89,10 @@ for (let day = HISTORY_DAYS; day >= 1; day -= 1) {
   }
 }
 
+// A recent clock jump, so one card in the grid shows its badge.
+const recentJump = sessions.findLast((session) => session.game_id === games[2].id);
+if (recentJump) recentJump.integrity_status = "suspicious";
+
 const liveRuntime = 84 * MINUTE_MS + 10 * SECOND_MS;
 const live: Session = {
   id: "session-live",
