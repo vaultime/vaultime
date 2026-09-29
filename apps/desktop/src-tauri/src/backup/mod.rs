@@ -19,11 +19,11 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use crate::AppContext;
-use crate::assets::AssetManager;
-use crate::constants::{BACKUP_VERSION, HASH_BUFFER_BYTES};
+use crate::assets::{AssetManager, is_plain_name};
+use crate::constants::{AUTO_BACKUP_FOLDER_SETTING, BACKUP_VERSION, HASH_BUFFER_BYTES};
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
-use crate::db::repo::devices;
+use crate::db::repo::{devices, sessions};
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 use crate::platform::process::file_name;
@@ -32,6 +32,11 @@ const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 const BACKUP_DB_FILE: &str = "vaultime.db";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 pub(crate) const BACKUP_ASSET_DIR: &str = "asset-cache";
+/// Settings that belong to this PC. A restore keeps the local values, so a
+/// backup cannot send the daily backups to a folder of its choosing.
+const DEVICE_SETTINGS: &[&str] = &[AUTO_BACKUP_FOLDER_SETTING];
+/// Why sessions that a backup caught while they ran are closed after a restore.
+const RESTORED_OPEN_SESSION_REASON: &str = "restored_while_running";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalBackupSummary {
@@ -159,7 +164,7 @@ pub(crate) fn export_backup_to(
 
 pub fn inspect_local_backup(backup_path: &Path) -> Result<LocalBackupSummary> {
     let backup_dir = resolve_backup_dir(backup_path)?;
-    let manifest = load_and_validate_manifest(&backup_dir)?;
+    let (manifest, _) = load_and_validate_manifest(&backup_dir)?;
     Ok(summary_from_manifest(&manifest, &backup_dir, false))
 }
 
@@ -170,22 +175,23 @@ pub fn import_local_backup(
     backup_path: &Path,
 ) -> Result<LocalBackupSummary> {
     let backup_dir = resolve_backup_dir(backup_path)?;
-    let manifest = load_and_validate_manifest(&backup_dir)?;
+    let (manifest, artwork) = load_and_validate_manifest(&backup_dir)?;
     ensure_schema_supported(&manifest.schema_migrations)?;
 
+    // A fresh name, never one from the backup, so the folder that is cleared
+    // afterwards is always our own.
     let staging_dir = app_context
         .app_dir
-        .join(format!(".restore-{}", manifest.backup_id));
-    if staging_dir.exists() {
-        fs::remove_dir_all(&staging_dir).map_err(|error| {
-            VaultimeError::Backup(format!(
-                "failed to clear staging directory {}: {error}",
-                staging_dir.display()
-            ))
-        })?;
-    }
+        .join(format!(".restore-{}", uuid::Uuid::new_v4()));
 
-    let result = restore_from_staging(db, asset_manager, app_context, &backup_dir, &staging_dir);
+    let result = restore_from_staging(
+        db,
+        asset_manager,
+        app_context,
+        &backup_dir,
+        &staging_dir,
+        &artwork,
+    );
     cleanup_staging_dir(&staging_dir);
     result?;
 
@@ -203,15 +209,27 @@ fn cleanup_staging_dir(staging_dir: &Path) {
     }
 }
 
+/// Stages the backup, checks it, then swaps the artwork cache and the
+/// database. A failed database swap puts the old cache back.
 fn restore_from_staging(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
     backup_dir: &Path,
     staging_dir: &Path,
+    artwork: &[String],
 ) -> Result<()> {
     let staged_assets = staging_dir.join(BACKUP_ASSET_DIR);
-    copy_directory_contents(&backup_dir.join(BACKUP_ASSET_DIR), &staged_assets, None)?;
+    create_dir(&staged_assets)?;
+    for relative_path in artwork {
+        let target = staging_dir.join(relative_path);
+        if let Some(parent) = target.parent() {
+            create_dir(parent)?;
+        }
+        fs::copy(backup_dir.join(relative_path), &target).map_err(|error| {
+            VaultimeError::Backup(format!("failed to stage {relative_path}: {error}"))
+        })?;
+    }
 
     // Older backups are migrated on a copy first so their columns match ours.
     let staged_db = staging_dir.join(BACKUP_DB_FILE);
@@ -219,10 +237,39 @@ fn restore_from_staging(
         VaultimeError::Backup(format!("failed to stage backup database: {error}"))
     })?;
     drop(Database::open(&staged_db)?);
+    check_restored_ids(&staged_db)?;
 
-    restore_database_snapshot(db, &staged_db)?;
-    replace_directory(&staged_assets, asset_manager.cache_dir())?;
-    rewrite_asset_cache_paths(db, asset_manager.cache_dir())?;
+    let cache_dir = asset_manager.cache_dir();
+    let previous_cache = staging_dir.join("previous-asset-cache");
+    let had_cache = cache_dir.exists();
+    if had_cache {
+        fs::rename(cache_dir, &previous_cache).map_err(|error| {
+            VaultimeError::Backup(format!("failed to set the current artwork aside: {error}"))
+        })?;
+    }
+    let put_back = || {
+        let _ = fs::remove_dir_all(cache_dir);
+        if had_cache {
+            let _ = fs::rename(&previous_cache, cache_dir);
+        }
+    };
+    if let Err(error) = fs::rename(&staged_assets, cache_dir) {
+        put_back();
+        return Err(VaultimeError::Backup(format!(
+            "failed to move the restored artwork in place: {error}"
+        )));
+    }
+    if let Err(error) = restore_database_snapshot(db, &staged_db) {
+        put_back();
+        return Err(error);
+    }
+    rewrite_asset_cache_paths(db, cache_dir)?;
+
+    // A backup made during play holds sessions that were still running.
+    // Nothing tracks them here, so they are closed like after a crash.
+    for session in sessions::get_active_sessions(db)? {
+        sessions::recover_session(db, &session.id, RESTORED_OPEN_SESSION_REASON)?;
+    }
 
     // The restored device list may not contain this machine yet.
     devices::ensure_device(
@@ -231,6 +278,37 @@ fn restore_from_staging(
         std::env::consts::OS,
         &app_context.app_version,
     )?;
+    Ok(())
+}
+
+fn create_dir(path: &Path) -> Result<()> {
+    fs::create_dir_all(path).map_err(|error| {
+        VaultimeError::Backup(format!(
+            "failed to create directory {}: {error}",
+            path.display()
+        ))
+    })
+}
+
+/// Game ids become folder names in the artwork cache, so a backup with an id
+/// that is not a plain name is refused before anything changes.
+fn check_restored_ids(database_path: &Path) -> Result<()> {
+    let refused = |error: rusqlite::Error| {
+        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
+    };
+    let conn = Connection::open(database_path).map_err(refused)?;
+    let mut stmt = conn
+        .prepare("SELECT id FROM games UNION SELECT game_id FROM game_assets")
+        .map_err(refused)?;
+    let ids = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .and_then(Iterator::collect::<rusqlite::Result<Vec<_>>>)
+        .map_err(refused)?;
+    if ids.iter().any(|id| !is_plain_name(id)) {
+        return Err(VaultimeError::Backup(
+            "this backup holds a game id Vaultime cannot use, so it was not restored".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -304,7 +382,9 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
             })
         });
         if restore_result.is_err() {
-            let _ = conn.execute_batch("ROLLBACK; PRAGMA foreign_keys=ON;");
+            // Apart, so a failed rollback cannot leave foreign keys off.
+            let _ = conn.execute_batch("ROLLBACK;");
+            let _ = conn.execute_batch("PRAGMA foreign_keys=ON;");
         }
         let detach_result = conn.execute_batch("DETACH DATABASE backup_restore;");
 
@@ -320,8 +400,18 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
 /// older versions restore too.
 fn restore_statements(conn: &Connection) -> Result<String> {
     let mut statements = String::from("PRAGMA foreign_keys=OFF;\nBEGIN IMMEDIATE;\n");
+    let kept_settings = DEVICE_SETTINGS
+        .iter()
+        .map(|key| format!("'{}'", sqlite_string_literal(key)))
+        .collect::<Vec<_>>()
+        .join(", ");
     for table in RESTORE_TABLES.iter().rev() {
-        let _ = writeln!(statements, "DELETE FROM {table};");
+        let keep = if *table == "settings" {
+            format!(" WHERE key NOT IN ({kept_settings})")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(statements, "DELETE FROM {table}{keep};");
     }
     for table in RESTORE_TABLES {
         let in_backup = table_columns(conn, "backup_restore", table)?;
@@ -333,9 +423,14 @@ fn restore_statements(conn: &Connection) -> Result<String> {
             continue;
         }
         let columns = columns.join(", ");
+        let skip = if *table == "settings" {
+            format!(" WHERE key NOT IN ({kept_settings})")
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             statements,
-            "INSERT INTO {table} ({columns}) SELECT {columns} FROM backup_restore.{table};"
+            "INSERT INTO {table} ({columns}) SELECT {columns} FROM backup_restore.{table}{skip};"
         );
     }
     statements.push_str("COMMIT;\nPRAGMA foreign_keys=ON;");
@@ -375,19 +470,21 @@ fn rewrite_asset_cache_paths(db: &Database, cache_dir: &Path) -> Result<()> {
             })?;
 
         for (asset_id, game_id, old_path) in assets {
-            // The backup may come from another OS.
-            let Some(file_name) = file_name(&old_path) else {
-                continue;
-            };
-            let next_path = cache_dir
-                .join(&game_id)
-                .join(file_name)
-                .to_string_lossy()
-                .to_string();
+            // The backup may come from another OS. A path that does not end in
+            // a plain file name is dropped, so no cached path leaves the cache.
+            let next_path = file_name(&old_path)
+                .filter(|name| is_plain_name(name) && is_plain_name(&game_id))
+                .map(|name| {
+                    cache_dir
+                        .join(&game_id)
+                        .join(name)
+                        .to_string_lossy()
+                        .to_string()
+                });
 
             conn.execute(
                 "UPDATE game_assets SET cache_path = ?1 WHERE id = ?2",
-                [&next_path, &asset_id],
+                rusqlite::params![next_path, asset_id],
             )
             .map_err(|error| {
                 VaultimeError::Backup(format!(
@@ -398,35 +495,6 @@ fn rewrite_asset_cache_paths(db: &Database, cache_dir: &Path) -> Result<()> {
 
         Ok(())
     })
-}
-
-fn replace_directory(staged_dir: &Path, destination_dir: &Path) -> Result<()> {
-    if destination_dir.exists() {
-        fs::remove_dir_all(destination_dir).map_err(|error| {
-            VaultimeError::Backup(format!(
-                "failed to clear destination directory {}: {error}",
-                destination_dir.display()
-            ))
-        })?;
-    }
-
-    if let Some(parent) = destination_dir.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            VaultimeError::Backup(format!(
-                "failed to create parent directory {}: {error}",
-                parent.display()
-            ))
-        })?;
-    }
-
-    fs::rename(staged_dir, destination_dir).map_err(|error| {
-        VaultimeError::Backup(format!(
-            "failed to move staged assets into {}: {error}",
-            destination_dir.display()
-        ))
-    })?;
-
-    Ok(())
 }
 
 fn list_applied_migrations(db: &Database) -> Result<Vec<String>> {
@@ -484,7 +552,9 @@ fn write_manifest(backup_dir: &Path, manifest: &LocalBackupManifest) -> Result<(
     })
 }
 
-fn load_and_validate_manifest(backup_dir: &Path) -> Result<LocalBackupManifest> {
+/// Reads and checks the manifest. Returns it with the artwork files that
+/// passed their check.
+fn load_and_validate_manifest(backup_dir: &Path) -> Result<(LocalBackupManifest, Vec<String>)> {
     let manifest_path = backup_dir.join(BACKUP_MANIFEST_FILE);
     let manifest_json = fs::read_to_string(&manifest_path).map_err(|error| {
         VaultimeError::Backup(format!(
@@ -506,8 +576,13 @@ fn load_and_validate_manifest(backup_dir: &Path) -> Result<LocalBackupManifest> 
             manifest.backup_version
         )));
     }
+    if uuid::Uuid::parse_str(&manifest.backup_id).is_err() {
+        return Err(VaultimeError::Backup(
+            "backup manifest has an invalid backup id".into(),
+        ));
+    }
 
-    validate_manifest_files(backup_dir, &manifest)?;
+    let artwork = validate_manifest_files(backup_dir, &manifest)?;
     let expected_checksum = compute_overall_checksum(
         &manifest.backup_id,
         &manifest.created_at,
@@ -523,30 +598,55 @@ fn load_and_validate_manifest(backup_dir: &Path) -> Result<LocalBackupManifest> 
         ));
     }
 
-    Ok(manifest)
+    Ok((manifest, artwork))
 }
 
-fn validate_manifest_files(backup_dir: &Path, manifest: &LocalBackupManifest) -> Result<()> {
+/// Checks the listed files. The database must be listed and intact. Artwork
+/// that fails its check is left out with a warning, so one damaged cover
+/// does not block a restore. Only regular files count, never links, and
+/// anything the manifest does not list is ignored.
+fn validate_manifest_files(
+    backup_dir: &Path,
+    manifest: &LocalBackupManifest,
+) -> Result<Vec<String>> {
+    if !manifest
+        .files
+        .iter()
+        .any(|file| file.path == BACKUP_DB_FILE)
+    {
+        return Err(VaultimeError::Backup(
+            "backup manifest does not list the database".into(),
+        ));
+    }
+    let mut artwork = Vec::new();
     for file in &manifest.files {
         let resolved_path = resolve_manifest_file_path(backup_dir, &file.path)?;
-        let (bytes, sha256) = hash_file(&resolved_path)?;
-
-        if bytes != file.bytes {
-            return Err(VaultimeError::Backup(format!(
-                "backup file size mismatch for {}",
-                resolved_path.display()
-            )));
-        }
-
-        if sha256 != file.sha256 {
-            return Err(VaultimeError::Backup(format!(
-                "backup checksum mismatch for {}",
-                resolved_path.display()
-            )));
+        let intact = fs::symlink_metadata(&resolved_path).is_ok_and(|meta| meta.is_file())
+            && hash_file(&resolved_path)
+                .is_ok_and(|(bytes, sha256)| bytes == file.bytes && sha256 == file.sha256);
+        if file.path == BACKUP_DB_FILE {
+            if !intact {
+                return Err(VaultimeError::Backup(
+                    "the backup database does not match its checksum".into(),
+                ));
+            }
+        } else if !intact {
+            warn!("left out backup file {} that failed its check", file.path);
+        } else if is_artwork_path(&file.path) {
+            artwork.push(file.path.clone());
         }
     }
+    Ok(artwork)
+}
 
-    Ok(())
+/// `asset-cache/<game id>/<file>`, the only shape cached artwork has.
+fn is_artwork_path(relative_path: &str) -> bool {
+    let mut parts = relative_path.split('/');
+    matches!(
+        (parts.next(), parts.next(), parts.next(), parts.next()),
+        (Some(BACKUP_ASSET_DIR), Some(game_id), Some(name), None)
+            if is_plain_name(game_id) && is_plain_name(name)
+    )
 }
 
 fn collect_backup_files(backup_dir: &Path) -> Result<Vec<BackupFileEntry>> {
@@ -683,10 +783,11 @@ fn resolve_backup_dir(backup_path: &Path) -> Result<PathBuf> {
 
 fn resolve_manifest_file_path(backup_dir: &Path, relative_path: &str) -> Result<PathBuf> {
     let relative = Path::new(relative_path);
-    if relative.is_absolute()
+    // Plain names only: no root, no drive like `C:` and no way up.
+    if relative_path.is_empty()
         || relative
             .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
     {
         return Err(VaultimeError::Backup(format!(
             "backup manifest contains an unsafe path: {relative_path}"
@@ -964,13 +1065,257 @@ mod tests {
         let restored_path = restored_assets[0].cache_path.as_deref().unwrap();
         assert!(restored_path.starts_with(&*asset_cache_dir.to_string_lossy()));
         assert!(Path::new(restored_path).is_file());
-        let staging_dir = context
-            .app_dir
-            .join(format!(".restore-{}", backup.backup_id));
-        assert!(!staging_dir.exists());
+        assert!(fs::read_dir(&context.app_dir).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".restore-")
+        }));
 
         // Windows cannot delete the folder while the database is open.
         drop(db);
         fs::remove_dir_all(&context.app_dir).unwrap();
+    }
+
+    /// A library with one game, one cached cover and a backup of it.
+    struct Fixture {
+        context: AppContext,
+        db: Database,
+        assets: AssetManager,
+        game_id: String,
+        backup_dir: PathBuf,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let context = test_paths();
+            let db = Database::open(&context.app_dir.join("vaultime.db")).unwrap();
+            devices::ensure_device(&db, &context.device_id, "linux", &context.app_version).unwrap();
+            let game = games::create_game(
+                &db,
+                &CreateGame {
+                    title: "Fixture Game".into(),
+                    executable_path: Some("/games/fixture.exe".into()),
+                    install_folder: None,
+                    launcher_source: None,
+                },
+            )
+            .unwrap();
+            let cache_dir = context.app_dir.join("asset-cache");
+            let cover = cache_dir.join(&game.id).join("cover.png");
+            fs::create_dir_all(cover.parent().unwrap()).unwrap();
+            fs::write(&cover, b"cover").unwrap();
+            game_assets::create_asset(
+                &db,
+                &game.id,
+                "cover",
+                "user_picked",
+                "/games/cover.png",
+                Some(&cover.to_string_lossy()),
+                Some("cover-hash"),
+            )
+            .unwrap();
+            Self {
+                context,
+                db,
+                assets: AssetManager::new(cache_dir),
+                game_id: game.id,
+                backup_dir: PathBuf::new(),
+            }
+        }
+
+        fn back_up(mut self) -> Self {
+            let exports = self.context.app_dir.join("exports");
+            fs::create_dir_all(&exports).unwrap();
+            let backup =
+                export_local_backup(&self.db, &self.assets, &self.context, &exports).unwrap();
+            self.backup_dir = PathBuf::from(backup.backup_path);
+            self
+        }
+
+        /// Changes the backup the way someone crafting one could, checksums included.
+        fn tamper(&self, change: impl FnOnce(&mut LocalBackupManifest, &Connection)) {
+            let manifest_path = self.backup_dir.join(BACKUP_MANIFEST_FILE);
+            let mut manifest: LocalBackupManifest =
+                serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
+            let conn = Connection::open(self.backup_dir.join(BACKUP_DB_FILE)).unwrap();
+            change(&mut manifest, &conn);
+            drop(conn);
+            manifest.files = collect_backup_files(&self.backup_dir)
+                .unwrap()
+                .into_iter()
+                .filter(|file| file.path != BACKUP_MANIFEST_FILE)
+                .collect();
+            manifest.overall_checksum = compute_overall_checksum(
+                &manifest.backup_id,
+                &manifest.created_at,
+                &manifest.app_version,
+                &manifest.source_device_id,
+                &manifest.schema_migrations,
+                &manifest.files,
+            );
+            write_manifest(&self.backup_dir, &manifest).unwrap();
+        }
+
+        fn restore(&self) -> Result<LocalBackupSummary> {
+            import_local_backup(&self.db, &self.assets, &self.context, &self.backup_dir)
+        }
+
+        fn finish(self) {
+            drop(self.db);
+            fs::remove_dir_all(&self.context.app_dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_crafted_backup_id_cannot_reach_outside_the_app_folder() {
+        let fixture = Fixture::new().back_up();
+        // Where `.restore-<id>` pointed before, one level above the app folder.
+        let victim = fixture.context.app_dir.join("victim");
+        fs::create_dir_all(&victim).unwrap();
+        fs::write(victim.join("keep.txt"), b"keep").unwrap();
+        fixture.tamper(|manifest, _| manifest.backup_id = "x/../victim".into());
+
+        assert!(fixture.restore().is_err());
+        assert!(victim.join("keep.txt").is_file());
+        fixture.finish();
+    }
+
+    #[test]
+    fn refuses_a_game_id_that_is_a_path_and_changes_nothing() {
+        let fixture = Fixture::new().back_up();
+        fixture.tamper(|_, conn| {
+            conn.execute_batch(
+                "PRAGMA foreign_keys=OFF; UPDATE game_assets SET game_id = '../../elsewhere';",
+            )
+            .unwrap();
+        });
+        games::update_game(
+            &fixture.db,
+            &fixture.game_id,
+            &crate::db::models::UpdateGame {
+                title: Some("Renamed here".into()),
+                executable_path: None,
+                install_folder: None,
+                launcher_source: None,
+                is_hidden: None,
+            },
+        )
+        .unwrap();
+
+        assert!(fixture.restore().is_err());
+        let game = games::get_game(&fixture.db, &fixture.game_id).unwrap();
+        assert_eq!(game.title, "Renamed here");
+        assert!(
+            fixture
+                .assets
+                .cache_dir()
+                .join(&fixture.game_id)
+                .join("cover.png")
+                .is_file()
+        );
+        fixture.finish();
+    }
+
+    #[test]
+    fn keeps_the_backup_folder_of_this_pc() {
+        let fixture = Fixture::new();
+        crate::db::repo::settings::set_setting(
+            &fixture.db,
+            AUTO_BACKUP_FOLDER_SETTING,
+            "\\\\elsewhere\\share",
+        )
+        .unwrap();
+        crate::db::repo::settings::set_setting(&fixture.db, "idle_threshold_seconds", "600")
+            .unwrap();
+        let fixture = fixture.back_up();
+        crate::db::repo::settings::set_setting(&fixture.db, AUTO_BACKUP_FOLDER_SETTING, "D:/Mine")
+            .unwrap();
+
+        fixture.restore().unwrap();
+        let setting = |key| crate::db::repo::settings::get_setting(&fixture.db, key).unwrap();
+        assert_eq!(
+            setting(AUTO_BACKUP_FOLDER_SETTING).as_deref(),
+            Some("D:/Mine")
+        );
+        assert_eq!(setting("idle_threshold_seconds").as_deref(), Some("600"));
+        fixture.finish();
+    }
+
+    #[test]
+    fn leaves_out_damaged_artwork_but_restores_the_rest() {
+        let fixture = Fixture::new().back_up();
+        let cover = fixture
+            .backup_dir
+            .join(BACKUP_ASSET_DIR)
+            .join(&fixture.game_id)
+            .join("cover.png");
+        fs::write(&cover, b"damaged").unwrap();
+        games::delete_game(&fixture.db, &fixture.game_id).unwrap();
+
+        fixture.restore().unwrap();
+        assert_eq!(games::list_all_games(&fixture.db).unwrap().len(), 1);
+        assert!(
+            !fixture
+                .assets
+                .cache_dir()
+                .join(&fixture.game_id)
+                .join("cover.png")
+                .exists()
+        );
+        fixture.finish();
+    }
+
+    #[test]
+    fn closes_sessions_the_backup_caught_while_running() {
+        let fixture = Fixture::new();
+        let running =
+            sessions::create_session(&fixture.db, &fixture.game_id, &fixture.context.device_id)
+                .unwrap();
+        let fixture = fixture.back_up();
+        sessions::end_session(
+            &fixture.db,
+            &running.id,
+            1_000,
+            1_000,
+            0,
+            integrity::STATUS_LOCAL,
+        )
+        .unwrap();
+
+        fixture.restore().unwrap();
+        assert!(
+            sessions::get_active_sessions(&fixture.db)
+                .unwrap()
+                .is_empty()
+        );
+        let restored = sessions::list_all_sessions(&fixture.db).unwrap();
+        assert_eq!(restored[0].integrity_status, integrity::STATUS_RECOVERED);
+        fixture.finish();
+    }
+
+    #[test]
+    fn manifest_paths_must_be_plain_names() {
+        let root = Path::new("backup");
+        assert!(resolve_manifest_file_path(root, "asset-cache/game/cover.png").is_ok());
+        for unsafe_path in [
+            "",
+            "../x",
+            "/etc/passwd",
+            "a/../../b",
+            "C:evil",
+            "C:/evil",
+            "\\\\host\\share",
+        ] {
+            assert!(
+                resolve_manifest_file_path(root, unsafe_path).is_err(),
+                "{unsafe_path}"
+            );
+        }
+        assert!(is_artwork_path("asset-cache/game/cover.png"));
+        assert!(!is_artwork_path("asset-cache/cover.png"));
+        assert!(!is_artwork_path("asset-cache/a/b/cover.png"));
+        assert!(!is_artwork_path("elsewhere/game/cover.png"));
     }
 }

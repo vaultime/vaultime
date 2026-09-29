@@ -22,8 +22,8 @@ use crate::constants::{
     ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO, ARTWORK_SCORE_POSTER,
     ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER, ARTWORK_SCORE_USER_PICKED,
     ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX, BANNER_WIDTH_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX,
-    COVER_WIDTH_PX, ICON_MAX_SIZE_PX, MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS,
-    SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
+    COVER_WIDTH_PX, ICON_MAX_SIZE_PX, MAX_ARTWORK_SOURCE_BYTES, MAX_LIBRARY_PREVIEWS,
+    MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
 };
 use crate::db::connection::Database;
 use crate::db::models::{Game, GameAsset, GameMetadata};
@@ -102,14 +102,18 @@ pub fn delete_game(db: &Database, asset_manager: &AssetManager, game_id: &str) -
 }
 
 /// A failure only leaves unused files behind, so it is logged and not returned.
-fn remove_game_cache(asset_manager: &AssetManager, game_id: &str) {
-    // Only a plain folder name, so an odd id from a restored backup cannot
-    // point outside the cache.
-    let mut components = Path::new(game_id).components();
-    if !matches!(
+/// A single folder or file name, never a path, so an id or name from a
+/// restored backup cannot point outside the folder it is joined to.
+pub(crate) fn is_plain_name(value: &str) -> bool {
+    let mut components = Path::new(value).components();
+    matches!(
         (components.next(), components.next()),
         (Some(Component::Normal(_)), None)
-    ) {
+    ) && !value.contains(['/', '\\', ':'])
+}
+
+fn remove_game_cache(asset_manager: &AssetManager, game_id: &str) {
+    if !is_plain_name(game_id) {
         return;
     }
 
@@ -132,7 +136,7 @@ pub fn scan_game_assets(
     let previous_preferred_asset_id = preferred_asset_id(&game);
 
     let removed_assets = game_assets::delete_non_user_assets_for_game(db, game_id)?;
-    cleanup_assets(&removed_assets);
+    cleanup_assets(asset_manager, &removed_assets);
 
     let candidates = find_candidates(&game)?;
     let mut inserted_assets = Vec::new();
@@ -316,18 +320,16 @@ fn asset_view(
     }
 }
 
+/// Only the cached copy is shown. The original path can come from another PC
+/// through a restored backup, so it is never read here.
 fn build_preview_data_url(asset: &GameAsset) -> Result<String> {
-    let data_path = asset
-        .cache_path
-        .as_deref()
-        .map_or_else(|| PathBuf::from(&asset.file_path), PathBuf::from);
-
-    let bytes = fs::read(&data_path).map_err(|e| {
-        VaultimeError::Asset(format!(
-            "failed to read cached asset {}: {e}",
-            data_path.display()
-        ))
-    })?;
+    let data_path = PathBuf::from(
+        asset
+            .cache_path
+            .as_deref()
+            .ok_or_else(|| VaultimeError::Asset("artwork has no cached copy".into()))?,
+    );
+    let bytes = read_artwork(&data_path)?;
 
     let mime = mime_for_path(&data_path);
 
@@ -482,12 +484,7 @@ fn cache_candidate(
     candidate: &AssetCandidate,
     prefer_cover: bool,
 ) -> Result<CachedAsset> {
-    let source_bytes = fs::read(&candidate.path).map_err(|e| {
-        VaultimeError::Asset(format!(
-            "failed to read asset source {}: {e}",
-            candidate.path.display()
-        ))
-    })?;
+    let source_bytes = read_artwork(&candidate.path)?;
 
     let source_hash = crate::hex::encode(&Sha256::digest(&source_bytes));
     let reader = ImageReader::new(Cursor::new(&source_bytes))
@@ -569,9 +566,33 @@ fn process_image(image: image::DynamicImage, asset_type: &str) -> image::Dynamic
     }
 }
 
-fn cleanup_assets(assets: &[GameAsset]) {
+/// Reads an image file unless it is too large to be artwork.
+fn read_artwork(path: &Path) -> Result<Vec<u8>> {
+    let failed = |error: std::io::Error| {
+        VaultimeError::Asset(format!(
+            "failed to read artwork {}: {error}",
+            path.display()
+        ))
+    };
+    let size = fs::metadata(path).map_err(failed)?.len();
+    if size > MAX_ARTWORK_SOURCE_BYTES {
+        return Err(VaultimeError::Asset(format!(
+            "{} is too large to be artwork",
+            path.display()
+        )));
+    }
+    fs::read(path).map_err(failed)
+}
+
+/// Deletes cached copies, never a file outside the cache.
+fn cleanup_assets(asset_manager: &AssetManager, assets: &[GameAsset]) {
     for asset in assets {
-        if let Some(cache_path) = &asset.cache_path {
+        if let Some(cache_path) = asset.cache_path.as_deref().map(Path::new)
+            && cache_path.starts_with(asset_manager.cache_dir())
+            && !cache_path
+                .components()
+                .any(|component| matches!(component, Component::ParentDir))
+        {
             let _ = fs::remove_file(cache_path);
         }
     }

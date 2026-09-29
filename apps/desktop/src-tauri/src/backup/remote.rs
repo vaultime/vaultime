@@ -27,7 +27,9 @@ use crate::backup::{
     BACKUP_ASSET_DIR, LocalBackupSummary, cleanup_staging_dir, export_local_backup, hash_file,
     import_local_backup,
 };
-use crate::constants::{ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, MAX_ARTWORK_IDS_PER_REQUEST};
+use crate::constants::{
+    ARCHIVE_FILE_MODE, BACKUP_KEY_BYTES, CLOUD_TRANSFER_TIMEOUT, MAX_ARTWORK_IDS_PER_REQUEST,
+};
 use crate::db::connection::Database;
 use crate::error::{Result, VaultimeError};
 use crate::secure_storage;
@@ -274,6 +276,10 @@ fn restore_with_key(
     backup_key: &[u8; BACKUP_KEY_BYTES],
     backup_id: &str,
 ) -> Result<RemoteBackupRestoreResult> {
+    // The id comes from the server and ends up in request paths.
+    let backup_id = uuid::Uuid::parse_str(backup_id)
+        .map_err(|_| VaultimeError::Cloud("the server listed an invalid backup id".into()))?
+        .to_string();
     let staging_dir = create_staging_dir(&app_context.app_dir, "restore")?;
 
     let result = (|| {
@@ -290,7 +296,7 @@ fn restore_with_key(
             ));
         }
 
-        let archive_path = staging_dir.join(format!("{backup_id}.enc"));
+        let archive_path = staging_dir.join("backup.enc");
         api.download(
             &format!("/v1/backups/{backup_id}/download?attachment=false"),
             &archive_path,
@@ -303,7 +309,7 @@ fn restore_with_key(
             ));
         }
 
-        let decrypted_archive_path = staging_dir.join(format!("{backup_id}.zip"));
+        let decrypted_archive_path = staging_dir.join("backup.zip");
         crypto::decrypt_file(&archive_path, &decrypted_archive_path, backup_key)?;
 
         let extracted_dir = staging_dir.join("extracted");
@@ -323,6 +329,22 @@ fn restore_with_key(
     result
 }
 
+/// The token only goes over https, plain http only to a server on this PC,
+/// as in the round trip test.
+fn checked_base_url(raw: &str) -> Result<String> {
+    let base_url = raw.trim().trim_end_matches('/');
+    let url = reqwest::Url::parse(base_url)
+        .map_err(|_| VaultimeError::Cloud("the cloud server address is not valid".into()))?;
+    let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    if url.scheme() == "https" || (url.scheme() == "http" && local) {
+        Ok(base_url.to_string())
+    } else {
+        Err(VaultimeError::Cloud(
+            "the cloud server address must use https".into(),
+        ))
+    }
+}
+
 impl<'a> Api<'a> {
     fn new(base_url: &str, access_token: &'a str) -> Result<Self> {
         let client = Client::builder().build().map_err(|error| {
@@ -330,7 +352,7 @@ impl<'a> Api<'a> {
         })?;
         Ok(Self {
             client,
-            base_url: base_url.trim().trim_end_matches('/').to_string(),
+            base_url: checked_base_url(base_url)?,
             access_token,
         })
     }
@@ -345,6 +367,7 @@ impl<'a> Api<'a> {
             self.client
                 .get(self.url(path))
                 .bearer_auth(self.access_token)
+                .timeout(CLOUD_TRANSFER_TIMEOUT)
                 .send()
                 .map_err(map_cloud_http)?,
         )?;
@@ -442,6 +465,7 @@ fn upload_missing_artwork(
             api.client
                 .put(api.url(&format!("/v1/blobs/{id}")))
                 .bearer_auth(api.access_token)
+                .timeout(CLOUD_TRANSFER_TIMEOUT)
                 .header(CONTENT_TYPE, "application/octet-stream")
                 .body(Body::from(body))
                 .send()
@@ -564,6 +588,7 @@ fn create_and_upload_backup(
         api.client
             .put(api.url(&format!("/v1/backups/{}/content", created.id)))
             .bearer_auth(api.access_token)
+            .timeout(CLOUD_TRANSFER_TIMEOUT)
             .header(CONTENT_TYPE, "application/octet-stream")
             .body(Body::from(archive_file)),
     )
@@ -753,6 +778,20 @@ fn map_cloud_http(error: reqwest::Error) -> VaultimeError {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn sends_the_token_only_over_https_or_to_this_pc() {
+        use super::checked_base_url;
+        assert_eq!(
+            checked_base_url(" https://vaultime.example/ ").unwrap(),
+            "https://vaultime.example"
+        );
+        assert!(checked_base_url("http://127.0.0.1:19005").is_ok());
+        assert!(checked_base_url("http://localhost:9005").is_ok());
+        assert!(checked_base_url("http://vaultime.example").is_err());
+        assert!(checked_base_url("http://127.0.0.1.example.com").is_err());
+        assert!(checked_base_url("file:///etc/passwd").is_err());
+    }
+
     use super::*;
 
     #[test]

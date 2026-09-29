@@ -86,6 +86,9 @@ pub const ASSET_SCAN_DEPTH: usize = 3;
 pub const MAX_SCANNED_ASSETS: usize = 10;
 /// Most assets per game returned with a preview.
 pub const MAX_LIBRARY_PREVIEWS: usize = 20;
+/// Largest image file read as artwork, in bytes. Covers are far smaller, so
+/// a huge file in a game folder cannot fill the memory.
+pub const MAX_ARTWORK_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 /// Score of artwork the user picked, above anything a scan can reach.
 pub const ARTWORK_SCORE_USER_PICKED: i32 = 10_000;
 /// Score of the cover from Steam's own library cache, above anything a
@@ -159,6 +162,9 @@ pub const ARCHIVE_FILE_MODE: u32 = 0o644;
 pub const HASH_BUFFER_BYTES: usize = 64 * 1024;
 /// Plaintext size of one encrypted cloud backup chunk.
 pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
+/// Longest time one backup or artwork upload or download may take. Small
+/// requests keep the HTTP client's default limit.
+pub const CLOUD_TRANSFER_TIMEOUT: Duration = Duration::from_mins(30);
 /// Cloud backup key length, as `ChaCha20Poly1305` requires.
 pub const BACKUP_KEY_BYTES: usize = 32;
 /// How often the tray menu updates the running game and today's play.
