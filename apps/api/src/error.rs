@@ -29,6 +29,8 @@ pub enum AppError {
     #[error("{0}")]
     StorageFull(String),
     #[error("{0}")]
+    TooManyRequests(String),
+    #[error("{0}")]
     Configuration(String),
     /// The message is only logged. Clients get a generic one.
     #[error("{0}")]
@@ -64,6 +66,10 @@ impl AppError {
         Self::StorageFull(message.into())
     }
 
+    pub fn too_many_requests() -> Self {
+        Self::TooManyRequests("too many attempts, try again in a few minutes".into())
+    }
+
     pub fn configuration(message: impl Into<String>) -> Self {
         Self::Configuration(message.into())
     }
@@ -83,6 +89,9 @@ impl IntoResponse for AppError {
             Self::Conflict(message) => (StatusCode::CONFLICT, "conflict", message),
             Self::MissingArtwork(message) => (StatusCode::CONFLICT, "missing_artwork", message),
             Self::StorageFull(message) => (StatusCode::PAYLOAD_TOO_LARGE, "storage_full", message),
+            Self::TooManyRequests(message) => {
+                (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", message)
+            }
             Self::Configuration(detail) | Self::Internal(detail) => {
                 tracing::error!(error = %detail, "request failed");
                 (

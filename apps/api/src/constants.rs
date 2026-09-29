@@ -26,6 +26,33 @@ pub const REFRESH_TOKEN_BYTES: usize = 32;
 /// Shortest accepted password length.
 pub const MIN_PASSWORD_LENGTH: usize = 10;
 
+// Abuse limits
+//
+// Kept in memory only. See `limits.rs`.
+
+/// Window the rate limits count requests in, in seconds.
+pub const RATE_WINDOW_SECS: u64 = 10 * 60;
+/// Sign-up, sign-in, refresh and password requests one client address may
+/// make per window. The app refreshes about four times an hour.
+pub const AUTH_REQUESTS_PER_WINDOW_PER_CLIENT: u32 = 60;
+/// Sign-in attempts per email address and window.
+pub const LOGIN_ATTEMPTS_PER_WINDOW_PER_EMAIL: u32 = 10;
+/// Beta applications one client address may send per window.
+pub const BETA_APPLICATIONS_PER_WINDOW_PER_CLIENT: u32 = 3;
+/// Keys a rate limiter tracks at most, so a flood of addresses cannot fill the memory.
+pub const RATE_LIMIT_MAX_KEYS: usize = 100_000;
+/// Password and invite hashes computed at the same time.
+pub const MAX_CONCURRENT_PASSWORD_HASHES: usize = 4;
+/// Devices one account may register.
+pub const MAX_DEVICES_PER_ACCOUNT: i64 = 50;
+/// Longest device id, name, platform or app version, in characters.
+pub const MAX_DEVICE_FIELD_CHARS: usize = 200;
+/// Longest device public key, in characters.
+pub const MAX_DEVICE_PUBLIC_KEY_CHARS: usize = 4096;
+/// How often the server removes stale uploads, unused artwork, expired
+/// sessions and old beta applications, in seconds.
+pub const MAINTENANCE_INTERVAL_SECS: u64 = 60 * 60;
+
 // Invites
 
 /// Redemptions of an admin invite when the request sets none.

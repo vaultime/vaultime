@@ -7,6 +7,9 @@ mod backups;
 mod beta;
 mod blobs;
 mod devices;
+mod maintenance;
+
+pub use maintenance::spawn_maintenance;
 
 use axum::http::{Method, header};
 use axum::routing::{delete, get, post, put};

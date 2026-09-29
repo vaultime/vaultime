@@ -85,7 +85,7 @@ run = subprocess.run
 
 def psql_in_container(command, *args, **kwargs):
     if command[0] == "psql":
-        command = ["docker", "exec", sys.argv[2], "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
+        command = ["docker", "exec", "-i", sys.argv[2], "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
     return run(command, *args, **kwargs)
 
 
@@ -95,9 +95,22 @@ invite.insert_invite("", created)
 print(created["code"])
 EOF
 )
-token=$(curl -fsS -X POST "$url/v1/auth/signup" -H "content-type: application/json" \
-  -d "{\"email\":\"e2e@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
-  | "$python" -c "import json, sys; print(json.load(sys.stdin)['access_token'])")
+session=$(curl -fsS -X POST "$url/v1/auth/signup" -H "content-type: application/json" \
+  -d "{\"email\":\"e2e@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}")
+field() { "$python" -c "import json, sys; print(json.load(sys.stdin)['$1'])"; }
+token=$(field access_token <<<"$session")
+
+echo "== refresh token reuse"
+refresh() { curl -s -o /dev/null -w '%{http_code}' -X POST "$url/v1/auth/refresh" \
+  -H "content-type: application/json" -d "{\"refresh_token\":\"$1\"}"; }
+first=$(field refresh_token <<<"$session")
+second=$(curl -fsS -X POST "$url/v1/auth/refresh" -H "content-type: application/json" \
+  -d "{\"refresh_token\":\"$first\"}" | field refresh_token)
+[ "$(refresh "$first")" = 401 ] || { echo "a used refresh token was taken again"; exit 1; }
+[ "$(refresh "$second")" = 401 ] || { echo "reusing a token did not end its session"; exit 1; }
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$url/v1/auth/login" -H "content-type: application/json" \
+  -d '{"email":"nobody@example.com","password":"wrong-password-1"}')" = 401 ] \
+  || { echo "an unknown account did not get 401"; exit 1; }
 
 echo "== running the desktop round trip"
 cd "$repo/apps/desktop/src-tauri"
@@ -118,7 +131,8 @@ stored=$(docker exec "$db" psql -U vaultime -d vaultime -tAc "SELECT COUNT(*) FR
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $token" "$url/v1/admin/beta-applications")" = 403 ] \
   || { echo "a normal account could list applications"; exit 1; }
 
-# Some failures, like a failed artwork cleanup, are only logged.
+# Some failures, like a failed artwork cleanup, are only logged. The reused
+# refresh token above is expected to log a warning, not an error.
 if docker logs "$api" 2>&1 | grep "ERROR"; then
   echo "The API logged errors"
   exit 1

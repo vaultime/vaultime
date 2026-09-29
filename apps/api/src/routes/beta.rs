@@ -6,7 +6,7 @@
 
 use axum::Json;
 use axum::extract::{Form, Path, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::Redirect;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -14,11 +14,9 @@ use uuid::Uuid;
 use super::admin::require_admin;
 use crate::AppState;
 use crate::auth::{AuthenticatedAccount, normalize_email};
-use crate::constants::{
-    BETA_APPLICATION_RETENTION_DAYS, BETA_APPLICATIONS_PER_HOUR, BETA_EMAIL_MAX_CHARS,
-    BETA_NOTE_MAX_CHARS,
-};
+use crate::constants::{BETA_APPLICATIONS_PER_HOUR, BETA_EMAIL_MAX_CHARS, BETA_NOTE_MAX_CHARS};
 use crate::error::AppResult;
+use crate::limits::client_key;
 use crate::models::BetaApplicationResponse;
 
 /// Website page after an application went in.
@@ -26,6 +24,8 @@ const APPLIED_PAGE: &str = "/applied.html";
 /// Website page when an application could not be taken.
 const FAILED_PAGE: &str = "/apply-failed.html";
 const PLATFORMS: &[&str] = &["windows", "linux", "both"];
+/// Advisory lock that makes counting and storing applications one step.
+const APPLICATIONS_LOCK: i64 = 0x5641_554c_5449_4d45;
 
 #[derive(Debug, Deserialize)]
 pub struct BetaApplicationForm {
@@ -44,8 +44,13 @@ pub struct BetaApplicationForm {
 
 pub async fn apply(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Form(form): Form<BetaApplicationForm>,
 ) -> Redirect {
+    if !state.limits.beta_by_client.allow(&client_key(&headers)) {
+        tracing::warn!("beta application not taken: too many from one address");
+        return Redirect::to(FAILED_PAGE);
+    }
     match store_application(&state, form).await {
         Ok(()) => Redirect::to(APPLIED_PAGE),
         Err(error) => {
@@ -62,25 +67,23 @@ async fn store_application(state: &AppState, form: BetaApplicationForm) -> Resul
         return Ok(());
     }
     let application = validate(&form)?;
+    let failed = |error: sqlx::Error| error.to_string();
 
-    sqlx::query(
-        "DELETE FROM beta_applications WHERE created_at < NOW() - make_interval(days => $1)",
-    )
-    .bind(BETA_APPLICATION_RETENTION_DAYS)
-    .execute(&state.db)
-    .await
-    .map_err(|error| error.to_string())?;
-
+    let mut tx = state.db.begin().await.map_err(failed)?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(APPLICATIONS_LOCK)
+        .execute(&mut *tx)
+        .await
+        .map_err(failed)?;
     let last_hour: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM beta_applications WHERE created_at > NOW() - INTERVAL '1 hour'",
     )
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(failed)?;
     if last_hour >= BETA_APPLICATIONS_PER_HOUR {
         return Err("too many applications in the last hour".into());
     }
-
     sqlx::query(
         "INSERT INTO beta_applications (email, platform, note) VALUES ($1, $2, $3)
          ON CONFLICT (email) DO NOTHING",
@@ -88,9 +91,10 @@ async fn store_application(state: &AppState, form: BetaApplicationForm) -> Resul
     .bind(&application.email)
     .bind(&application.platform)
     .bind(&application.note)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(failed)?;
+    tx.commit().await.map_err(failed)?;
     Ok(())
 }
 

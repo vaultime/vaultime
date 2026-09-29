@@ -10,11 +10,12 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::{
-    AuthenticatedAccount, ParsedInviteCode, create_access_token, generate_refresh_token,
-    hash_password, hash_refresh_token, normalize_email, refresh_token_expiry, verify_invite_hash,
-    verify_password,
+    AuthenticatedAccount, ParsedInviteCode, check_password_length, create_access_token,
+    generate_refresh_token, hash_password, hash_refresh_token, normalize_email,
+    refresh_token_expiry, run_hash, verify_against_dummy, verify_invite_hash, verify_password,
 };
 use crate::error::{AppError, AppResult};
+use crate::limits::client_key;
 use crate::models::{
     AccountPasswordRow, AuthResponse, AuthUserResponse, ChangePasswordRequest, InviteRow,
     LoginRequest, LogoutRequest, LogoutResponse, RefreshRequest, RefreshTokenAccountRow,
@@ -26,24 +27,17 @@ pub async fn sign_up(
     headers: HeaderMap,
     Json(payload): Json<SignUpRequest>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
+    if !state.limits.auth_by_client.allow(&client_key(&headers)) {
+        return Err(AppError::too_many_requests());
+    }
     let email = normalize_email(&payload.email)?;
+    check_password_length(&payload.password)?;
     let parsed_invite = ParsedInviteCode::parse(&payload.invite_code)?;
-    let password_hash = hash_password(&payload.password)?;
 
     let mut tx = state.db.begin().await?;
 
-    let email_taken = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE email = $1)",
-    )
-    .bind(&email)
-    .fetch_one(&mut *tx)
-    .await?;
-    if email_taken {
-        return Err(AppError::conflict(
-            "an account with that email already exists",
-        ));
-    }
-
+    // The invite is checked before anything else, so a stranger learns nothing
+    // about which addresses have accounts and cannot make the server hash.
     let invite = sqlx::query_as::<_, InviteRow>(
         r#"
         SELECT id, salt, code_hash, max_redemptions, redeemed_count, expires_at, revoked_at
@@ -57,6 +51,14 @@ pub async fn sign_up(
     .await?
     .ok_or_else(|| AppError::bad_request("invite code is invalid"))?;
 
+    let (code, salt, code_hash) = (
+        parsed_invite.normalized_code.clone(),
+        invite.salt.clone(),
+        invite.code_hash.clone(),
+    );
+    if !run_hash(&state, move || verify_invite_hash(&code, &salt, &code_hash)).await? {
+        return Err(AppError::bad_request("invite code is invalid"));
+    }
     if invite.revoked_at.is_some() {
         return Err(AppError::forbidden("invite has been revoked"));
     }
@@ -69,13 +71,21 @@ pub async fn sign_up(
     if invite.redeemed_count >= invite.max_redemptions {
         return Err(AppError::forbidden("invite has no redemptions remaining"));
     }
-    if !verify_invite_hash(
-        &parsed_invite.normalized_code,
-        &invite.salt,
-        &invite.code_hash,
-    )? {
-        return Err(AppError::bad_request("invite code is invalid"));
+
+    let email_taken = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE email = $1)",
+    )
+    .bind(&email)
+    .fetch_one(&mut *tx)
+    .await?;
+    if email_taken {
+        return Err(AppError::conflict(
+            "an account with that email already exists",
+        ));
     }
+
+    let password = payload.password;
+    let password_hash = run_hash(&state, move || hash_password(&password)).await?;
 
     let (account_id, account_email, account_role) = sqlx::query_as::<_, (Uuid, String, String)>(
         r#"
@@ -127,6 +137,11 @@ pub async fn login(
 ) -> AppResult<Json<AuthResponse>> {
     let email = normalize_email(&payload.email)?;
     let invalid_credentials = || AppError::unauthorized("invalid email or password");
+    if !state.limits.auth_by_client.allow(&client_key(&headers))
+        || !state.limits.login_by_email.allow(&email)
+    {
+        return Err(AppError::too_many_requests());
+    }
 
     let row = sqlx::query_as::<_, AccountPasswordRow>(
         r#"
@@ -138,11 +153,16 @@ pub async fn login(
     )
     .bind(&email)
     .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(invalid_credentials)?;
+    .await?;
+    let password = payload.password;
+    let Some(row) = row else {
+        run_hash(&state, move || verify_against_dummy(&password)).await?;
+        return Err(invalid_credentials());
+    };
 
     // The password is checked first so the access state is only revealed to the owner.
-    if !verify_password(&payload.password, &row.password_hash)? {
+    let stored_hash = row.password_hash.clone();
+    if !run_hash(&state, move || verify_password(&password, &stored_hash)).await? {
         return Err(invalid_credentials());
     }
     if row.access_state != "active" {
@@ -165,6 +185,9 @@ pub async fn refresh(
     headers: HeaderMap,
     Json(payload): Json<RefreshRequest>,
 ) -> AppResult<Json<AuthResponse>> {
+    if !state.limits.auth_by_client.allow(&client_key(&headers)) {
+        return Err(AppError::too_many_requests());
+    }
     let pepper = &state.config.refresh_token_pepper;
     let presented_hash = hash_refresh_token(&payload.refresh_token, pepper);
     let refresh_token = generate_refresh_token()?;
@@ -174,19 +197,35 @@ pub async fn refresh(
 
     let row = sqlx::query_as::<_, RefreshTokenAccountRow>(
         r#"
-        SELECT t.id, t.account_id, a.email, a.role, a.access_state
+        SELECT t.id, t.family_id, t.revoked_at, t.account_id, a.email, a.role, a.access_state
         FROM cloud_refresh_tokens t
         JOIN cloud_accounts a ON a.id = t.account_id
         WHERE t.token_hash = $1
-          AND t.revoked_at IS NULL
           AND t.expires_at > NOW()
-        FOR UPDATE
+        FOR UPDATE OF t
         "#,
     )
     .bind(&presented_hash)
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| AppError::unauthorized("refresh token is invalid or expired"))?;
+
+    // A token that was replaced already came back, so someone else holds a
+    // copy of this session. Ending the whole family locks both out.
+    if row.revoked_at.is_some() {
+        sqlx::query(
+            "UPDATE cloud_refresh_tokens SET revoked_at = COALESCE(revoked_at, NOW())
+             WHERE family_id = $1",
+        )
+        .bind(row.family_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        tracing::warn!(account_id = %row.account_id, "a replaced refresh token came back, its session was ended");
+        return Err(AppError::unauthorized(
+            "refresh token is invalid or expired",
+        ));
+    }
 
     if row.access_state != "active" {
         return Err(AppError::forbidden("account does not have cloud access"));
@@ -202,6 +241,7 @@ pub async fn refresh(
     insert_refresh_token(
         &mut *tx,
         row.account_id,
+        row.family_id,
         &hash_refresh_token(&refresh_token, pepper),
         user_agent(&headers),
         refresh_expires_at,
@@ -248,6 +288,10 @@ pub async fn change_password(
     headers: HeaderMap,
     Json(payload): Json<ChangePasswordRequest>,
 ) -> AppResult<Json<AuthResponse>> {
+    if !state.limits.auth_by_client.allow(&client_key(&headers)) {
+        return Err(AppError::too_many_requests());
+    }
+    check_password_length(&payload.new_password)?;
     let row = sqlx::query_as::<_, AccountPasswordRow>(
         r#"
         SELECT a.id, a.email, a.role, a.access_state, p.password_hash
@@ -262,10 +306,12 @@ pub async fn change_password(
     .ok_or_else(|| AppError::unauthorized("access token is invalid or expired"))?;
 
     // Not 401, the client would take that for an expired access token.
-    if !verify_password(&payload.current_password, &row.password_hash)? {
+    let (current, stored_hash) = (payload.current_password, row.password_hash.clone());
+    if !run_hash(&state, move || verify_password(&current, &stored_hash)).await? {
         return Err(AppError::forbidden("the current password is wrong"));
     }
-    let password_hash = hash_password(&payload.new_password)?;
+    let new_password = payload.new_password;
+    let password_hash = run_hash(&state, move || hash_password(&new_password)).await?;
 
     let refresh_token = generate_refresh_token()?;
     let refresh_expires_at = refresh_token_expiry();
@@ -289,6 +335,7 @@ pub async fn change_password(
     insert_refresh_token(
         &mut *tx,
         row.id,
+        Uuid::new_v4(),
         &hash_refresh_token(&refresh_token, &state.config.refresh_token_pepper),
         user_agent(&headers),
         refresh_expires_at,
@@ -320,6 +367,7 @@ async fn issue_session(
     insert_refresh_token(
         &state.db,
         account_id,
+        Uuid::new_v4(),
         &hash_refresh_token(&refresh_token, &state.config.refresh_token_pepper),
         user_agent,
         refresh_expires_at,
@@ -363,17 +411,19 @@ fn auth_response(
 async fn insert_refresh_token<'e>(
     executor: impl PgExecutor<'e>,
     account_id: Uuid,
+    family_id: Uuid,
     token_hash: &str,
     user_agent: Option<&str>,
     expires_at: DateTime<Utc>,
 ) -> AppResult<()> {
     sqlx::query(
         r#"
-        INSERT INTO cloud_refresh_tokens (account_id, token_hash, user_agent, expires_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO cloud_refresh_tokens (account_id, family_id, token_hash, user_agent, expires_at)
+        VALUES ($1, $2, $3, $4, $5)
         "#,
     )
     .bind(account_id)
+    .bind(family_id)
     .bind(token_hash)
     .bind(user_agent)
     .bind(expires_at)

@@ -69,6 +69,7 @@ pub async fn create_backup(
 
     let blob_ids = validate_blob_ids(&payload.blob_ids)?;
 
+    let _upload = state.limits.uploads.lock(auth.account_id).await;
     prune_stale_pending_backups(&state, auth.account_id).await?;
     enforce_backup_limits(&state, auth.account_id).await?;
 
@@ -146,6 +147,7 @@ pub async fn upload_backup_content(
     AxumPath(backup_id): AxumPath<Uuid>,
     request: Request,
 ) -> AppResult<Json<BackupRecordResponse>> {
+    let _upload = state.limits.uploads.lock(auth.account_id).await;
     let backup = find_backup(&state, auth.account_id, backup_id).await?;
     if backup.status == "complete" {
         return Err(AppError::conflict(
@@ -368,7 +370,10 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
     Ok(())
 }
 
-async fn prune_stale_pending_backups(state: &AppState, account_id: Uuid) -> AppResult<()> {
+pub(super) async fn prune_stale_pending_backups(
+    state: &AppState,
+    account_id: Uuid,
+) -> AppResult<()> {
     let stale = sqlx::query_as::<_, (Uuid, String)>(
         r#"
         DELETE FROM cloud_backups

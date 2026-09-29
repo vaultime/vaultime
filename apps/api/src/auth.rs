@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::sync::OnceLock;
+
 use argon2::Argon2;
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{Error as PasswordHashError, PasswordHasher, PasswordVerifier};
@@ -87,16 +89,53 @@ pub fn normalize_email(raw: &str) -> AppResult<String> {
     Ok(email)
 }
 
-pub fn hash_password(password: &str) -> AppResult<String> {
+pub fn check_password_length(password: &str) -> AppResult<()> {
     if password.len() < MIN_PASSWORD_LENGTH {
         return Err(AppError::bad_request(format!(
             "password must be at least {MIN_PASSWORD_LENGTH} characters long"
         )));
     }
+    Ok(())
+}
 
+pub fn hash_password(password: &str) -> AppResult<String> {
+    check_password_length(password)?;
     Ok(Argon2::default()
         .hash_password(password.as_bytes())?
         .to_string())
+}
+
+/// Runs a password or invite hash on the blocking pool, a few at a time, so
+/// a burst of sign-ins cannot stall the other requests or the memory.
+pub async fn run_hash<T: Send + 'static>(
+    state: &AppState,
+    work: impl FnOnce() -> AppResult<T> + Send + 'static,
+) -> AppResult<T> {
+    let _permit = state
+        .limits
+        .hashing
+        .acquire()
+        .await
+        .map_err(|error| AppError::internal(format!("hashing is closed: {error}")))?;
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|error| AppError::internal(format!("hashing failed: {error}")))?
+}
+
+/// Verifies a password against a throwaway hash, so an unknown email takes
+/// as long to reject as a wrong password.
+pub fn verify_against_dummy(password: &str) -> AppResult<()> {
+    static DUMMY_HASH: OnceLock<String> = OnceLock::new();
+    let hash = DUMMY_HASH.get_or_init(|| {
+        Argon2::default()
+            .hash_password(b"vaultime-unknown-account")
+            .map(|hash| hash.to_string())
+            .unwrap_or_default()
+    });
+    if !hash.is_empty() {
+        verify_password(password, hash)?;
+    }
+    Ok(())
 }
 
 /// The Argon2 parameters come from the stored PHC string, so hashes created with older defaults

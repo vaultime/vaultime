@@ -27,8 +27,12 @@ systemctl enable --now postgresql >/dev/null
 
 id vaultime >/dev/null 2>&1 \
   || useradd --system --home-dir /srv/vaultime --shell /usr/sbin/nologin vaultime
-install -d -o vaultime -g vaultime -m 0750 /srv/vaultime /srv/vaultime/backups /srv/vaultime/tmp
+# Root owns the folder with the binary and the admin tools, the service user
+# only its backups.
+install -d -o root -g vaultime -m 0750 /srv/vaultime
+install -d -o vaultime -g vaultime -m 0750 /srv/vaultime/backups
 install -d -o root -g root -m 0755 /srv/vaultime/api /srv/vaultime/api/current
+rmdir /srv/vaultime/tmp 2>/dev/null || true
 install -d -o root -g vaultime -m 0750 /etc/vaultime
 
 pg() { runuser -u postgres -- psql -qtA -v ON_ERROR_STOP=1 "$@"; }
@@ -37,30 +41,29 @@ pg() { runuser -u postgres -- psql -qtA -v ON_ERROR_STOP=1 "$@"; }
 env_file=/etc/vaultime/api.env
 if [ ! -f "$env_file" ]; then
   db_password=$(openssl rand -hex 24)
+  # The password goes to psql on stdin, so it never shows in the process list.
   if [ "$(pg -c "SELECT 1 FROM pg_roles WHERE rolname = 'vaultime'")" = "1" ]; then
-    pg -c "ALTER ROLE vaultime LOGIN PASSWORD '$db_password'"
+    printf "ALTER ROLE vaultime LOGIN PASSWORD '%s';\n" "$db_password" | pg
   else
-    pg -c "CREATE ROLE vaultime LOGIN PASSWORD '$db_password'"
+    printf "CREATE ROLE vaultime LOGIN PASSWORD '%s';\n" "$db_password" | pg
   fi
   if [ "$(pg -c "SELECT 1 FROM pg_database WHERE datname = 'vaultime'")" != "1" ]; then
     runuser -u postgres -- createdb -O vaultime vaultime
   fi
   pg -d vaultime -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS citext;"
 
-  umask 027
-  cat >"$env_file" <<EOF
+  # The limits keep the defaults in the API's constants.rs unless set here.
+  (
+    umask 027
+    cat >"$env_file" <<EOF
 VAULTIME_API_BIND=127.0.0.1:9005
 VAULTIME_PUBLIC_BASE_URL=https://$domain
 VAULTIME_DATABASE_URL=postgres://vaultime:$db_password@127.0.0.1:5432/vaultime
 VAULTIME_BACKUP_ROOT=/srv/vaultime/backups
 VAULTIME_ACCESS_TOKEN_SECRET=$(openssl rand -hex 32)
 VAULTIME_REFRESH_TOKEN_PEPPER=$(openssl rand -hex 32)
-VAULTIME_MAX_BACKUP_BYTES=536870912
-VAULTIME_MAX_PENDING_BACKUPS_PER_ACCOUNT=1
-VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=30
-VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=900
-VAULTIME_STALE_PENDING_BACKUP_SECONDS=3600
 EOF
+  )
   chown root:vaultime "$env_file"
   chmod 0640 "$env_file"
 fi
@@ -153,6 +156,7 @@ cat >"$caddy_site" <<EOF
 $domain {
 	encode zstd gzip
 	header {
+		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
 		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"

@@ -49,10 +49,12 @@ if [ -f "$release_key" ]; then
   payload+=(release-upload.pub)
 fi
 
-"$ssh_cmd" "$host" 'rm -rf /tmp/vaultime-deploy && mkdir -p /tmp/vaultime-deploy'
+# A fresh folder only root can enter, so nobody else on the box can swap
+# what root runs next.
+remote_dir=$("$ssh_cmd" "$host" 'mktemp -d /tmp/vaultime-deploy.XXXXXXXX')
 # Windows OpenSSH wants Windows paths.
 local_path() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
 files=("$(local_path "$stage/vaultime-api")")
 for file in "${payload[@]}"; do files+=("$(local_path "$stage/$file")"); done
-"$scp_cmd" -q "${files[@]}" "$host:/tmp/vaultime-deploy/"
-"$ssh_cmd" "$host" "bash /tmp/vaultime-deploy/install-api.sh '$domain' && rm -rf /tmp/vaultime-deploy"
+"$scp_cmd" -q "${files[@]}" "$host:$remote_dir/"
+"$ssh_cmd" "$host" "bash '$remote_dir/install-api.sh' '$domain'; status=\$?; rm -rf '$remote_dir'; exit \$status"

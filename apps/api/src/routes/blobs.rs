@@ -54,6 +54,7 @@ pub async fn upload_blob(
     request: Request,
 ) -> AppResult<StatusCode> {
     let blob_id = validate_blob_id(&blob_id)?;
+    let _upload = state.limits.uploads.lock(auth.account_id).await;
     if blob_exists(&state, auth.account_id, &blob_id).await? {
         return Ok(StatusCode::OK);
     }

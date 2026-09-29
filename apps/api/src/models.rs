@@ -155,6 +155,8 @@ pub struct AccountPasswordRow {
 #[derive(Debug, FromRow)]
 pub struct RefreshTokenAccountRow {
     pub id: Uuid,
+    pub family_id: Uuid,
+    pub revoked_at: Option<DateTime<Utc>>,
     pub account_id: Uuid,
     pub email: String,
     pub role: String,

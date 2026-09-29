@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Generate and store invite-only cloud backup keys on the VPS."""
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Generates invite codes for cloud backup and stores them in the database."""
 
 from __future__ import annotations
 
@@ -8,14 +10,27 @@ import base64
 import datetime as dt
 import hashlib
 import json
+import os
 import secrets
 import subprocess
 import sys
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 
 DEFAULT_ENV_FILE = "/etc/vaultime/api.env"
-DEFAULT_PREFIX = "VTLINV"
+# Invite codes, same as INVITE_* in apps/api/src/constants.rs. Changing the
+# scrypt settings breaks every stored invite hash.
+INVITE_PREFIX = "VTLINV"
+INVITE_BODY_RANDOM_BYTES = 18
+INVITE_BODY_CHARS = 24
+INVITE_LOOKUP_KEY_CHARS = 12
+INVITE_CODE_GROUP_CHARS = 4
+INVITE_SALT_BYTES = 16
+INVITE_SCRYPT_N = 2**14
+INVITE_SCRYPT_R = 8
+INVITE_SCRYPT_P = 1
+INVITE_HASH_BYTES = 64
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,7 +38,7 @@ def parse_args() -> argparse.Namespace:
         description="Generate invite codes and insert them into Vaultime PostgreSQL.",
     )
     parser.add_argument("--count", type=positive_int, default=1)
-    parser.add_argument("--prefix", default=DEFAULT_PREFIX)
+    parser.add_argument("--prefix", default=INVITE_PREFIX)
     parser.add_argument("--max-redemptions", type=positive_int, default=1)
     parser.add_argument("--expires-at", help="Optional ISO-8601 expiry timestamp")
     parser.add_argument("--note", default="")
@@ -78,35 +93,40 @@ def normalize_expiry(raw: str | None) -> str | None:
 
 
 def chunk_token(token: str) -> str:
-    return "-".join(token[index : index + 4] for index in range(0, len(token), 4))
+    return "-".join(
+        token[index : index + INVITE_CODE_GROUP_CHARS]
+        for index in range(0, len(token), INVITE_CODE_GROUP_CHARS)
+    )
 
 
 def generate_body_token() -> str:
     while True:
-        raw = base64.urlsafe_b64encode(secrets.token_bytes(18)).decode("ascii").rstrip("=")
+        raw = base64.urlsafe_b64encode(secrets.token_bytes(INVITE_BODY_RANDOM_BYTES)).decode("ascii").rstrip("=")
         body = "".join(ch for ch in raw if ch.isalnum()).upper()
-        if len(body) >= 24:
-            return body[:24]
+        if len(body) >= INVITE_BODY_CHARS:
+            return body[:INVITE_BODY_CHARS]
+
+
+def hash_invite(code: str, salt: str) -> str:
+    return hashlib.scrypt(
+        code.encode("utf-8"),
+        salt=salt.encode("utf-8"),
+        n=INVITE_SCRYPT_N,
+        r=INVITE_SCRYPT_R,
+        p=INVITE_SCRYPT_P,
+        dklen=INVITE_HASH_BYTES,
+    ).hex()
 
 
 def generate_invite(prefix: str, max_redemptions: int, expires_at: str | None, note: str) -> dict[str, Any]:
     body = generate_body_token()
     code = f"{prefix}-{chunk_token(body)}"
-    lookup_key = body[:12]
-    salt = secrets.token_hex(16)
-    code_hash = hashlib.scrypt(
-        code.encode("utf-8"),
-        salt=salt.encode("utf-8"),
-        n=16384,
-        r=8,
-        p=1,
-        dklen=64,
-    ).hex()
+    salt = secrets.token_hex(INVITE_SALT_BYTES)
     return {
         "code": code,
-        "lookup_key": lookup_key,
+        "lookup_key": body[:INVITE_LOOKUP_KEY_CHARS],
         "salt": salt,
-        "code_hash": code_hash,
+        "code_hash": hash_invite(code, salt),
         "max_redemptions": max_redemptions,
         "expires_at": expires_at,
         "note": note.strip() or None,
@@ -119,6 +139,24 @@ def sql_literal(value: Any) -> str:
         return "NULL"
     text = str(value).replace("'", "''")
     return f"'{text}'"
+
+
+def run_psql(database_url: str, sql: str) -> str:
+    """Runs SQL through psql. The password goes in the environment and the SQL
+    on stdin, so neither shows up in the process list."""
+    parsed = urlparse(database_url)
+    port = f":{parsed.port}" if parsed.port else ""
+    target = f"{parsed.scheme}://{parsed.username or ''}@{parsed.hostname or 'localhost'}{port}{parsed.path}"
+    env = dict(os.environ, PGPASSWORD=unquote(parsed.password or ""))
+    result = subprocess.run(
+        ["psql", target, "-v", "ON_ERROR_STOP=1", "-At"],
+        input=sql,
+        env=env,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip()
 
 
 def insert_invite(database_url: str, invite: dict[str, Any]) -> None:
@@ -141,11 +179,7 @@ def insert_invite(database_url: str, invite: dict[str, Any]) -> None:
         {sql_literal(invite["created_at"])}
     );
     """
-    subprocess.run(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-c", sql],
-        check=True,
-        stdout=subprocess.DEVNULL,
-    )
+    run_psql(database_url, sql)
 
 
 def print_pretty(invites: list[dict[str, Any]], inserted: bool) -> None:

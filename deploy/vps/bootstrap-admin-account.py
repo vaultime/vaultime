@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Bootstrap the first Vaultime admin account against the live self-hosted API."""
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Creates the first Vaultime admin account through the running API."""
 
 from __future__ import annotations
 
@@ -14,12 +16,26 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 DEFAULT_ENV_FILE = "/etc/vaultime/api.env"
+# Invite codes, same as INVITE_* in apps/api/src/constants.rs. Changing the
+# scrypt settings breaks every stored invite hash.
+INVITE_PREFIX = "VTLINV"
+INVITE_BODY_RANDOM_BYTES = 18
+INVITE_BODY_CHARS = 24
+INVITE_LOOKUP_KEY_CHARS = 12
+INVITE_CODE_GROUP_CHARS = 4
+INVITE_SALT_BYTES = 16
+INVITE_SCRYPT_N = 2**14
+INVITE_SCRYPT_R = 8
+INVITE_SCRYPT_P = 1
+INVITE_HASH_BYTES = 64
+# Same as MIN_PASSWORD_LENGTH in apps/api/src/constants.rs.
+MIN_PASSWORD_CHARS = 10
+# Where install-api.sh binds the API.
 DEFAULT_API_BASE_URL = "http://127.0.0.1:9005"
-DEFAULT_PREFIX = "VTLINV"
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,100 +71,22 @@ def sql_literal(value: str | None) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def psql(database_url: str, sql: str, capture: bool = False) -> str:
-    command = ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql]
-    result = subprocess.run(
-        command,
-        check=True,
-        text=True,
-        capture_output=capture,
-    )
-    return result.stdout.strip() if capture else ""
-
-
-def parse_database_url(database_url: str) -> tuple[str, str]:
+def run_psql(database_url: str, sql: str) -> str:
+    """Runs SQL through psql. The password goes in the environment and the SQL
+    on stdin, so neither shows up in the process list."""
     parsed = urlparse(database_url)
-    database_name = parsed.path.lstrip("/")
-    if not database_name:
-        raise SystemExit("database URL is missing a database name")
-    database_user = parsed.username or "vaultime"
-    return database_name, database_user
-
-
-def psql_as_postgres(database_name: str, sql: str, capture: bool = False) -> str:
+    port = f":{parsed.port}" if parsed.port else ""
+    target = f"{parsed.scheme}://{parsed.username or ''}@{parsed.hostname or 'localhost'}{port}{parsed.path}"
+    env = dict(os.environ, PGPASSWORD=unquote(parsed.password or ""))
     result = subprocess.run(
-        ["runuser", "-u", "postgres", "--", "psql", "-d", database_name, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql],
+        ["psql", target, "-v", "ON_ERROR_STOP=1", "-At"],
+        input=sql,
+        env=env,
         check=True,
         text=True,
-        capture_output=capture,
+        capture_output=True,
     )
-    return result.stdout.strip() if capture else ""
-
-
-def ensure_table_ownership(database_name: str, database_user: str) -> None:
-    psql_as_postgres(
-        database_name,
-        f"""
-        ALTER TABLE IF EXISTS cloud_invites OWNER TO {database_user};
-        ALTER TABLE IF EXISTS cloud_accounts OWNER TO {database_user};
-        ALTER TABLE IF EXISTS cloud_account_passwords OWNER TO {database_user};
-        ALTER TABLE IF EXISTS cloud_refresh_tokens OWNER TO {database_user};
-        ALTER TABLE IF EXISTS cloud_invite_redemptions OWNER TO {database_user};
-        ALTER TABLE IF EXISTS cloud_devices OWNER TO {database_user};
-        ALTER TABLE IF EXISTS cloud_backups OWNER TO {database_user};
-        """,
-    )
-
-
-def ensure_role_schema(database_url: str) -> None:
-    database_name, database_user = parse_database_url(database_url)
-
-    if os.geteuid() == 0:
-        ensure_table_ownership(database_name, database_user)
-        psql_as_postgres(
-            database_name,
-            """
-            ALTER TABLE cloud_accounts
-                ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
-
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1
-                    FROM pg_constraint
-                    WHERE conname = 'cloud_accounts_role_check'
-                ) THEN
-                    ALTER TABLE cloud_accounts
-                        ADD CONSTRAINT cloud_accounts_role_check
-                        CHECK (role IN ('user', 'admin'));
-                END IF;
-            END
-            $$;
-            """,
-        )
-        return
-
-    psql(
-        database_url,
-        """
-        ALTER TABLE cloud_accounts
-            ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
-
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_constraint
-                WHERE conname = 'cloud_accounts_role_check'
-            ) THEN
-                ALTER TABLE cloud_accounts
-                    ADD CONSTRAINT cloud_accounts_role_check
-                    CHECK (role IN ('user', 'admin'));
-            END IF;
-        END
-        $$;
-        """,
-    )
+    return result.stdout.strip()
 
 
 def normalize_email(raw: str) -> str:
@@ -158,36 +96,41 @@ def normalize_email(raw: str) -> str:
     return email
 
 
+def chunk_token(token: str) -> str:
+    return "-".join(
+        token[index : index + INVITE_CODE_GROUP_CHARS]
+        for index in range(0, len(token), INVITE_CODE_GROUP_CHARS)
+    )
+
+
 def generate_body_token() -> str:
     while True:
-        raw = base64.urlsafe_b64encode(secrets.token_bytes(18)).decode("ascii").rstrip("=")
+        raw = base64.urlsafe_b64encode(secrets.token_bytes(INVITE_BODY_RANDOM_BYTES)).decode("ascii").rstrip("=")
         body = "".join(ch for ch in raw if ch.isalnum()).upper()
-        if len(body) >= 24:
-            return body[:24]
+        if len(body) >= INVITE_BODY_CHARS:
+            return body[:INVITE_BODY_CHARS]
 
 
-def chunk_token(token: str) -> str:
-    return "-".join(token[index : index + 4] for index in range(0, len(token), 4))
+def hash_invite(code: str, salt: str) -> str:
+    return hashlib.scrypt(
+        code.encode("utf-8"),
+        salt=salt.encode("utf-8"),
+        n=INVITE_SCRYPT_N,
+        r=INVITE_SCRYPT_R,
+        p=INVITE_SCRYPT_P,
+        dklen=INVITE_HASH_BYTES,
+    ).hex()
 
 
 def generate_bootstrap_invite() -> dict[str, str]:
     body = generate_body_token()
-    code = f"{DEFAULT_PREFIX}-{chunk_token(body)}"
-    lookup_key = body[:12]
-    salt = secrets.token_hex(16)
-    code_hash = hashlib.scrypt(
-        code.encode("utf-8"),
-        salt=salt.encode("utf-8"),
-        n=16384,
-        r=8,
-        p=1,
-        dklen=64,
-    ).hex()
+    code = f"{INVITE_PREFIX}-{chunk_token(body)}"
+    salt = secrets.token_hex(INVITE_SALT_BYTES)
     return {
         "code": code,
-        "lookup_key": lookup_key,
+        "lookup_key": body[:INVITE_LOOKUP_KEY_CHARS],
         "salt": salt,
-        "code_hash": code_hash,
+        "code_hash": hash_invite(code, salt),
     }
 
 
@@ -210,8 +153,8 @@ def main() -> int:
     args = parse_args()
     email = normalize_email(args.email)
     password = args.password or getpass.getpass("Admin password: ")
-    if len(password) < 10:
-        raise SystemExit("password must be at least 10 characters")
+    if len(password) < MIN_PASSWORD_CHARS:
+        raise SystemExit(f"password must be at least {MIN_PASSWORD_CHARS} characters")
 
     database_url = args.db_url
     if not database_url:
@@ -220,15 +163,12 @@ def main() -> int:
     if not database_url:
         raise SystemExit("could not determine database URL")
 
-    ensure_role_schema(database_url)
-
-    existing_id = psql(
+    existing_id = run_psql(
         database_url,
         f"SELECT id::text FROM cloud_accounts WHERE email = {sql_literal(email)} LIMIT 1;",
-        capture=True,
     )
     if existing_id:
-        psql(
+        run_psql(
             database_url,
             f"""
             UPDATE cloud_accounts
@@ -253,7 +193,7 @@ def main() -> int:
             return 1
 
     invite = generate_bootstrap_invite()
-    psql(
+    run_psql(
         database_url,
         f"""
         INSERT INTO cloud_invites (
@@ -281,7 +221,7 @@ def main() -> int:
         },
     )
 
-    psql(
+    run_psql(
         database_url,
         f"""
         UPDATE cloud_accounts

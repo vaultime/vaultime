@@ -6,6 +6,7 @@ mod config;
 mod constants;
 mod error;
 mod invites;
+mod limits;
 mod models;
 mod routes;
 
@@ -13,6 +14,7 @@ use std::sync::Arc;
 
 use config::Config;
 use constants::DB_MAX_CONNECTIONS;
+use limits::Limits;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tracing::info;
@@ -22,6 +24,7 @@ use tracing_subscriber::EnvFilter;
 pub struct AppState {
     pub config: Arc<Config>,
     pub db: PgPool,
+    pub limits: Arc<Limits>,
 }
 
 #[tokio::main]
@@ -46,7 +49,9 @@ async fn main() -> Result<(), error::AppError> {
     let state = AppState {
         config: Arc::clone(&config),
         db,
+        limits: Arc::new(Limits::new()),
     };
+    routes::spawn_maintenance(state.clone());
 
     let app = routes::router(state);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;

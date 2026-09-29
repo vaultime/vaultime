@@ -48,7 +48,7 @@ This data is processed to provide the cloud backup you signed up for (Art. 6(1)(
 
 ## 4. Third Parties
 
-Cloud backup runs on a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. The website, the downloads and app updates come from the same server over HTTPS. Like any web server it sees your IP address while it answers a request, and it keeps no access logs.
+Cloud backup runs on a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. No other third-party analytics, advertising or cloud storage providers receive your data. The website, the downloads and app updates come from the same server over HTTPS. Like any web server it sees your IP address while it answers a request, and it keeps no access logs. To slow down password guessing and form spam, the server counts sign-ins and beta applications per address in its memory for ten minutes. It never writes these counts or addresses to disk.
 
 ## 5. Retention
 
