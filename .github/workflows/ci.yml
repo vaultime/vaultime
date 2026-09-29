@@ -40,11 +40,15 @@ jobs:
       - run: npm run build
 
   desktop:
-    name: Desktop core (${{ matrix.os }})
+    name: Desktop core (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest]
+        include:
+          - platform: Linux
+            os: ubuntu-24.04
+          - platform: Windows
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     defaults:
       run:
