@@ -19,17 +19,21 @@ export const DAYS_PER_WEEK = 7;
 
 // Settings
 
-/** Keys of the settings table, the Rust core reads the same ones from constants.rs. */
+/** Keys of the settings table the page may change. Same as PAGE_SETTINGS in constants.rs. */
 export const SETTING_KEYS = {
+  /** Same as IDLE_THRESHOLD_SETTING in constants.rs. */
   idleThreshold: "idle_threshold_seconds",
+  /** Same as BACKGROUND_ACTIVE_SETTING in constants.rs. */
   backgroundActive: "treat_background_as_active",
+  /** Same as CLOSE_TO_TRAY_SETTING in constants.rs. */
   closeToTray: "close_to_tray",
   /** Same as AUTO_BACKUP_ENABLED_SETTING in constants.rs. */
   autoBackup: "auto_backup_enabled",
   /** Same as AUTO_BACKUP_FOLDER_SETTING in constants.rs. */
   autoBackupFolder: "auto_backup_folder",
+  /** Same as CLOUD_AUTO_BACKUP_SETTING in constants.rs. */
   cloudAutoBackup: "cloud_auto_backup_enabled",
-  /** How the rail sorts the games. */
+  /** How the rail sorts the games. Same as RAIL_SORT_SETTING in constants.rs. */
   railSort: "rail_sort",
 } as const;
 

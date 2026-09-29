@@ -12,7 +12,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime, Webview};
 
-use crate::constants::TRAY_STATUS_INTERVAL;
+use crate::constants::{CLOSE_TO_TRAY_SETTING, TRAY_STATUS_INTERVAL};
 use crate::db::connection::Database;
 use crate::db::repo::sessions::{self, SessionSpan};
 use crate::db::repo::settings;
@@ -20,9 +20,6 @@ use crate::error::Result;
 
 /// Passed by the login item, so Vaultime starts in the tray.
 pub const MINIMIZED_ARG: &str = "--minimized";
-
-/// Setting that decides whether closing the window keeps Vaultime in the tray.
-pub const CLOSE_TO_TRAY_SETTING: &str = "close_to_tray";
 
 /// Tray and window icon while signed in to cloud backup, violet like the logo
 /// in the app. `scripts/build-brand.py` describes how it is made.

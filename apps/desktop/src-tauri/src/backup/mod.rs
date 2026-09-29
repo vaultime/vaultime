@@ -4,7 +4,7 @@
 //! Local backup export, inspection and restore.
 
 pub mod auto;
-mod crypto;
+pub(crate) mod crypto;
 pub mod remote;
 
 use std::fmt::Write;
@@ -1229,8 +1229,12 @@ mod tests {
             "\\\\elsewhere\\share",
         )
         .unwrap();
-        crate::db::repo::settings::set_setting(&fixture.db, "idle_threshold_seconds", "600")
-            .unwrap();
+        crate::db::repo::settings::set_setting(
+            &fixture.db,
+            crate::constants::IDLE_THRESHOLD_SETTING,
+            "600",
+        )
+        .unwrap();
         let fixture = fixture.back_up();
         crate::db::repo::settings::set_setting(&fixture.db, AUTO_BACKUP_FOLDER_SETTING, "D:/Mine")
             .unwrap();
@@ -1241,7 +1245,10 @@ mod tests {
             setting(AUTO_BACKUP_FOLDER_SETTING).as_deref(),
             Some("D:/Mine")
         );
-        assert_eq!(setting("idle_threshold_seconds").as_deref(), Some("600"));
+        assert_eq!(
+            setting(crate::constants::IDLE_THRESHOLD_SETTING).as_deref(),
+            Some("600")
+        );
         fixture.finish();
     }
 

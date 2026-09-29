@@ -144,12 +144,38 @@ pub const BACKUP_HISTORY_LIMIT: usize = 8;
 /// Folder in Vaultime's data folder for automatic backups, unless the user
 /// picks another one.
 pub const AUTO_BACKUP_DIR: &str = "backups";
+/// Setting with the idle threshold in seconds. Same as
+/// `SETTING_KEYS.idleThreshold` in `lib/constants.ts`.
+pub const IDLE_THRESHOLD_SETTING: &str = "idle_threshold_seconds";
+/// Setting that counts time in the background as active with `true`. Same as
+/// `SETTING_KEYS.backgroundActive` in `lib/constants.ts`.
+pub const BACKGROUND_ACTIVE_SETTING: &str = "treat_background_as_active";
+/// Setting that decides whether closing the window keeps Vaultime in the
+/// tray. Same as `SETTING_KEYS.closeToTray` in `lib/constants.ts`.
+pub const CLOSE_TO_TRAY_SETTING: &str = "close_to_tray";
+/// Setting that turns daily cloud backups off with `false`. Same as
+/// `SETTING_KEYS.cloudAutoBackup` in `lib/constants.ts`.
+pub const CLOUD_AUTO_BACKUP_SETTING: &str = "cloud_auto_backup_enabled";
+/// Setting with how the rail sorts the games. Same as `SETTING_KEYS.railSort`
+/// in `lib/constants.ts`.
+pub const RAIL_SORT_SETTING: &str = "rail_sort";
 /// Setting with the folder the user picked for automatic backups. Same as
 /// `SETTING_KEYS.autoBackupFolder` in `lib/constants.ts`.
 pub const AUTO_BACKUP_FOLDER_SETTING: &str = "auto_backup_folder";
 /// Setting that turns automatic backups off with `false`. Same as
 /// `SETTING_KEYS.autoBackup` in `lib/constants.ts`.
 pub const AUTO_BACKUP_ENABLED_SETTING: &str = "auto_backup_enabled";
+/// The settings the page may change. The others, such as the artwork scan
+/// version, belong to the core.
+pub const PAGE_SETTINGS: &[&str] = &[
+    IDLE_THRESHOLD_SETTING,
+    BACKGROUND_ACTIVE_SETTING,
+    CLOSE_TO_TRAY_SETTING,
+    AUTO_BACKUP_ENABLED_SETTING,
+    AUTO_BACKUP_FOLDER_SETTING,
+    CLOUD_AUTO_BACKUP_SETTING,
+    RAIL_SORT_SETTING,
+];
 /// Folder name prefix of automatic backups, so pruning never touches others.
 pub const AUTO_BACKUP_PREFIX: &str = "vaultime-auto";
 /// Automatic backups kept, older ones are deleted.

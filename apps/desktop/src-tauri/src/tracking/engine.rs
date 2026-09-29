@@ -14,9 +14,10 @@ use log::{debug, error, info, warn};
 use sysinfo::System;
 
 use crate::constants::{
-    CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS,
-    DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS,
-    MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD, SUSPEND_DETECT_MS,
+    BACKGROUND_ACTIVE_SETTING, CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS,
+    CLOCK_TOTAL_DRIFT_TOLERANCE_MS, DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE,
+    IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS,
+    POLL_INTERVAL, PROCESS_ACTIVITY_CPU_THRESHOLD, SUSPEND_DETECT_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
@@ -82,14 +83,14 @@ struct TrackingSettings {
 
 impl TrackingSettings {
     fn load(db: &Database) -> Self {
-        let idle_threshold_seconds = settings::get_setting(db, "idle_threshold_seconds")
+        let idle_threshold_seconds = settings::get_setting(db, IDLE_THRESHOLD_SETTING)
             .ok()
             .flatten()
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(DEFAULT_IDLE_THRESHOLD_SECS)
             .max(MIN_IDLE_THRESHOLD_SECS);
 
-        let treat_background_as_active = settings::get_setting(db, "treat_background_as_active")
+        let treat_background_as_active = settings::get_setting(db, BACKGROUND_ACTIVE_SETTING)
             .ok()
             .flatten()
             .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"));

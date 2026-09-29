@@ -17,7 +17,7 @@ use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
-use crate::constants::{BACKUP_HISTORY_LIMIT, POLL_INTERVAL};
+use crate::constants::{BACKUP_HISTORY_LIMIT, PAGE_SETTINGS, POLL_INTERVAL};
 use crate::db::connection::Database;
 use crate::db::models::{
     BackupSnapshot, CreateGame, EarlierPlaytime, Game, GameStatusChange, Session, SessionEvent,
@@ -66,8 +66,13 @@ pub fn has_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeE
 pub fn store_cloud_backup_key_secure(
     account_id: String,
     passphrase: String,
+    expected_key_check: Option<String>,
 ) -> Result<bool, VaultimeError> {
-    secure_storage::store_cloud_backup_key(&account_id, &passphrase)?;
+    secure_storage::store_cloud_backup_key(
+        &account_id,
+        &passphrase,
+        expected_key_check.as_deref(),
+    )?;
     Ok(true)
 }
 
@@ -362,6 +367,11 @@ pub fn set_setting(
     key: String,
     value: String,
 ) -> Result<bool, VaultimeError> {
+    if !PAGE_SETTINGS.contains(&key.as_str()) {
+        return Err(VaultimeError::Invalid(format!(
+            "the setting {key} cannot be changed from the app"
+        )));
+    }
     settings::set_setting(&db, &key, &value)?;
     Ok(true)
 }

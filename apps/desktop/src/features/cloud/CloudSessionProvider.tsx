@@ -63,6 +63,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [backupKeyReady, setBackupKeyReady] = useState(false);
   const [autoBackup, setAutoBackupState] = useState(true);
   const sessionRef = useRef<CloudAuthSession | null>(null);
+  // Counts sign-outs, so a refresh that finishes after one cannot sign back in.
+  const signOutsRef = useRef(0);
   const bootstrappedRef = useRef(false);
   const appVersionRef = useRef<string | null>(null);
   const [refreshWithToken] = useState(() =>
@@ -160,16 +162,18 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
       if (isExpired(stored.refresh_expires_at, 0)) {
         applyClearedSession();
-        void clearPersistedSessionStorage(stored.user.id);
+        void forgetStoredSession();
         if (!cancelled) {
           setInitializing(false);
         }
         return;
       }
 
+      const signOuts = signOutsRef.current;
       try {
         const refreshed = await refreshWithToken(stored.refresh_token);
-        if (cancelled) {
+        if (cancelled || signOuts !== signOutsRef.current) {
+          revokeLateSession(refreshed);
           return;
         }
         applySession(refreshed);
@@ -180,7 +184,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           if (shouldClearPersistedSession(error)) {
             applyClearedSession();
-            void clearPersistedSessionStorage(stored.user.id);
+            void forgetStoredSession();
           } else {
             setDeviceError(`Cloud API unavailable: ${describeError(error)}`);
           }
@@ -281,6 +285,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
+    signOutsRef.current += 1;
     const current = sessionRef.current;
     applyClearedSession();
     await clearPersistedSessionStorage(current?.user.id);
@@ -306,12 +311,17 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     if (isExpired(current.refresh_expires_at, 0)) {
       applyClearedSession();
-      await clearPersistedSessionStorage(current.user.id);
+      await forgetStoredSession();
       return null;
     }
 
+    const signOuts = signOutsRef.current;
     try {
       const refreshed = await refreshWithToken(current.refresh_token);
+      if (signOuts !== signOutsRef.current) {
+        revokeLateSession(refreshed);
+        return null;
+      }
       applySession(refreshed);
       await persistCloudSession(refreshed);
       await syncBackupKeyState(refreshed);
@@ -319,7 +329,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (shouldClearPersistedSession(error)) {
         applyClearedSession();
-        await clearPersistedSessionStorage(current.user.id);
+        await forgetStoredSession();
         return null;
       }
 
@@ -420,20 +430,25 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     if (isExpired(current.refresh_expires_at, 0)) {
       applyClearedSession();
-      void clearPersistedSessionStorage(current.user.id);
+      void forgetStoredSession();
       throw new Error("Your cloud session expired. Sign in again.");
     }
 
     if (isExpired(current.expires_at, TOKEN_REFRESH_MARGIN_MS)) {
+      const signOuts = signOutsRef.current;
       try {
         const refreshed = await refreshWithToken(current.refresh_token);
+        if (signOuts !== signOutsRef.current) {
+          revokeLateSession(refreshed);
+          throw new Error("You signed out of cloud backup.");
+        }
         applySession(refreshed);
         await persistCloudSession(refreshed);
         return refreshed;
       } catch (error) {
         if (shouldClearPersistedSession(error)) {
           applyClearedSession();
-          void clearPersistedSessionStorage(current.user.id);
+          void forgetStoredSession();
           throw new Error("Your cloud session expired. Sign in again.", {
             cause: error,
           });
@@ -598,6 +613,20 @@ async function persistCloudSession(session: CloudAuthSession): Promise<void> {
   window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
 }
 
+/**
+ * Forgets the session when the server ended it. The backup key stays, so
+ * signing in again does not ask for the passphrase. Signing out removes both.
+ */
+async function forgetStoredSession(): Promise<void> {
+  await clearCloudSessionSecure();
+  window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
+}
+
+/** Ends a session a refresh returned after the player signed out. */
+function revokeLateSession(late: CloudAuthSession) {
+  void cloudPostJson("/v1/auth/logout", { refresh_token: late.refresh_token }).catch(() => {});
+}
+
 async function clearPersistedSessionStorage(accountId?: string): Promise<void> {
   await Promise.all([
     clearCloudSessionSecure(),
@@ -606,11 +635,22 @@ async function clearPersistedSessionStorage(accountId?: string): Promise<void> {
   window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
 }
 
+/**
+ * Stores the passphrase's key after checking it against the newest cloud
+ * backup, so a typo cannot start backups nobody can open. Without a
+ * connection the upload checks it instead.
+ */
 async function persistBackupPassphrase(
   session: CloudAuthSession,
   backupPassphrase: string,
 ): Promise<void> {
-  await storeCloudBackupKeySecure(session.user.id, backupPassphrase.trim());
+  const backups = await cloudGetJson<CloudBackupRecord[]>("/v1/backups", session.access_token).catch(
+    () => [] as CloudBackupRecord[],
+  );
+  const newest = backups
+    .filter((backup) => backup.status === "complete")
+    .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))[0];
+  await storeCloudBackupKeySecure(session.user.id, backupPassphrase.trim(), newest?.metadata_json?.key_check ?? null);
 }
 
 async function ensureBackupKeyForSession(

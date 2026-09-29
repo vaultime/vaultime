@@ -34,8 +34,21 @@ pub fn has_cloud_backup_key(account_id: &str) -> Result<bool> {
     Ok(load_cloud_backup_key_encoded(account_id)?.is_some())
 }
 
-pub fn store_cloud_backup_key(account_id: &str, passphrase: &str) -> Result<()> {
+/// Stores the key a passphrase gives. With `expected_key_check`, the key check
+/// of the newest cloud backup, a passphrase that does not open it is refused.
+pub fn store_cloud_backup_key(
+    account_id: &str,
+    passphrase: &str,
+    expected_key_check: Option<&str>,
+) -> Result<()> {
     let key = derive_cloud_backup_key(account_id, passphrase)?;
+    if let Some(expected) = expected_key_check
+        && expected != crate::backup::crypto::key_check(&key)?
+    {
+        return Err(VaultimeError::Invalid(
+            "This passphrase does not open the cloud backups of this account.".into(),
+        ));
+    }
     let encoded = STANDARD.encode(key);
     entry(&backup_key_account(account_id))?
         .set_password(&encoded)

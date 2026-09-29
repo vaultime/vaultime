@@ -48,13 +48,16 @@ export async function clearCloudSessionSecure(): Promise<boolean> {
   return invoke<boolean>("clear_cloud_session_secure");
 }
 
+/** Refuses a passphrase whose key does not match `expectedKeyCheck`, the key check of the newest cloud backup. */
 export async function storeCloudBackupKeySecure(
   accountId: string,
   passphrase: string,
+  expectedKeyCheck: string | null,
 ): Promise<boolean> {
   return invoke<boolean>("store_cloud_backup_key_secure", {
     accountId,
     passphrase,
+    expectedKeyCheck,
   });
 }
 

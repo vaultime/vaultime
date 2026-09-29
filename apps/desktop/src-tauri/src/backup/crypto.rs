@@ -38,6 +38,9 @@ const V2_NONCE_PREFIX_BYTES: usize = V2_NONCE_BYTES - CHUNK_INDEX_BYTES;
 const LAST_CHUNK: u8 = 1;
 /// Derives the key that names artwork from the backup key.
 const ARTWORK_ID_LABEL: &[u8] = b"vaultime artwork id v1";
+const KEY_CHECK_LABEL: &[u8] = b"vaultime key check v1";
+/// Bytes of the key check kept, enough to tell two keys apart.
+const KEY_CHECK_BYTES: usize = 16;
 
 /// Encrypts `input_path` into `output_path` with the current scheme.
 pub fn encrypt_file(
@@ -160,6 +163,16 @@ impl ArtworkNamer {
         }
         Ok(crate::hex::encode(&mac.finalize().into_bytes()))
     }
+}
+
+/// A short value that tells whether two backup keys are the same, stored with
+/// every cloud backup. Without the key it reveals nothing about it.
+pub fn key_check(key: &[u8; BACKUP_KEY_BYTES]) -> Result<String> {
+    let mut mac = new_mac(key)?;
+    mac.update(KEY_CHECK_LABEL);
+    Ok(crate::hex::encode(
+        &mac.finalize().into_bytes()[..KEY_CHECK_BYTES],
+    ))
 }
 
 fn new_mac(key: &[u8]) -> Result<Hmac<Sha256>> {
@@ -429,6 +442,15 @@ mod tests {
         decrypt_file(&dir.join("sealed"), &dir.join("opened"), &KEY).unwrap();
         assert_eq!(fs::read(dir.join("opened")).unwrap(), bytes);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn key_checks_tell_keys_apart() {
+        let key = [7_u8; BACKUP_KEY_BYTES];
+        let check = key_check(&key).unwrap();
+        assert_eq!(check, key_check(&key).unwrap());
+        assert_eq!(check.len(), KEY_CHECK_BYTES * 2);
+        assert_ne!(check, key_check(&[8_u8; BACKUP_KEY_BYTES]).unwrap());
     }
 
     #[test]

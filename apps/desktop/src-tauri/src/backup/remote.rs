@@ -189,6 +189,12 @@ fn upload_with_key(
 
     let result = (|| {
         let api = Api::new(api_base_url, access_token)?;
+        // A wrong passphrase on this PC would make backups nobody can open
+        // and rotate out the ones that the right passphrase opens.
+        let key_check = crypto::key_check(backup_key)?;
+        if newest_key_check(&api)?.is_some_and(|stored| stored != key_check) {
+            return Err(VaultimeError::Cloud(WRONG_PASSPHRASE.into()));
+        }
         let export_root = staging_dir.join("export");
         fs::create_dir_all(&export_root).map_err(map_backup_io)?;
 
@@ -218,6 +224,7 @@ fn upload_with_key(
         let request = UploadRequest {
             client_device_id,
             label,
+            key_check: &key_check,
             payload_summary: &payload_summary,
             blob_ids: &blob_ids,
             archive_path: &encrypted_path,
@@ -327,6 +334,26 @@ fn restore_with_key(
 
     cleanup_staging_dir(&staging_dir);
     result
+}
+
+/// Field of a backup's metadata that holds the key check.
+const KEY_CHECK_FIELD: &str = "key_check";
+const WRONG_PASSPHRASE: &str = "The backup passphrase on this PC does not open your cloud backups. Set the right one on the Cloud page.";
+
+/// The key check of the newest backup that has one. Backups from before key
+/// checks have none.
+fn newest_key_check(api: &Api) -> Result<Option<String>> {
+    let backups = send_json::<Vec<RemoteBackupRecord>>(
+        api.client
+            .get(api.url("/v1/backups"))
+            .bearer_auth(api.access_token),
+    )?;
+    Ok(backups
+        .into_iter()
+        .filter(|backup| backup.status == "complete")
+        .max_by(|a, b| a.uploaded_at.cmp(&b.uploaded_at))
+        .and_then(|backup| backup.metadata_json)
+        .and_then(|metadata| metadata.get(KEY_CHECK_FIELD)?.as_str().map(str::to_owned)))
 }
 
 /// The token only goes over https, plain http only to a server on this PC,
@@ -536,6 +563,7 @@ fn artwork_target(extracted_dir: &Path, path: &str) -> Result<PathBuf> {
 struct UploadRequest<'a> {
     client_device_id: Option<&'a str>,
     label: Option<&'a str>,
+    key_check: &'a str,
     payload_summary: &'a RemoteBackupPayloadSummary,
     blob_ids: &'a [String],
     archive_path: &'a Path,
@@ -547,9 +575,12 @@ fn create_and_upload_backup(
     api: &Api,
     upload: &UploadRequest,
 ) -> Result<Option<RemoteBackupRecord>> {
-    let metadata_json = serde_json::to_value(upload.payload_summary).map_err(|error| {
+    let mut metadata_json = serde_json::to_value(upload.payload_summary).map_err(|error| {
         VaultimeError::Cloud(format!("failed to serialize backup metadata: {error}"))
     })?;
+    if let Some(metadata) = metadata_json.as_object_mut() {
+        metadata.insert(KEY_CHECK_FIELD.into(), upload.key_check.into());
+    }
     let request = CreateBackupRequest {
         label: upload
             .label

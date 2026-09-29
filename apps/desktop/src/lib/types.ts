@@ -172,6 +172,8 @@ export interface CloudBackupPayloadSummary {
   encryption: string;
   archive_checksum: string;
   archive_size_bytes: number;
+  /** Tells whether a backup key opens this backup. Missing on older backups. */
+  key_check?: string;
   /** Artwork the backup restores, stored once for all backups. Missing on older backups. */
   artwork_bytes?: number;
 }
