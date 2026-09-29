@@ -13,7 +13,7 @@ use crate::db::repo::map_db;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
-fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
+pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
     Ok(Session {
         id: row.get("id")?,
         game_id: row.get("game_id")?,
@@ -29,7 +29,7 @@ fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
     })
 }
 
-fn attach_validated_status(conn: &Connection, mut session: Session) -> Result<Session> {
+pub(crate) fn attach_validated_status(conn: &Connection, mut session: Session) -> Result<Session> {
     if let Some(reason) = integrity::validate_session_history(conn, &session)? {
         warn!("session {} failed validation: {reason}", session.id);
         session.integrity_status = integrity::STATUS_SUSPICIOUS.into();

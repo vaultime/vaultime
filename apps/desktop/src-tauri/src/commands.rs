@@ -24,7 +24,8 @@ use crate::db::models::{
     SessionNote, Setting, UpdateGame,
 };
 use crate::db::repo::{
-    annotations, backup_snapshots, earlier_playtime, games, session_events, sessions, settings,
+    annotations, backup_snapshots, corrections, earlier_playtime, games, session_events, sessions,
+    settings,
 };
 use crate::discovery::{self, DiscoveredGame};
 use crate::earlier;
@@ -403,6 +404,47 @@ pub fn discover_games(
     paths: Vec<String>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
     discovery::scanner::scan_folders(&db, &paths)
+}
+
+/// Counts a closed session only up to `ended_at`, with a reason.
+#[tauri::command]
+pub fn trim_session(
+    db: State<'_, Arc<Database>>,
+    session_id: String,
+    ended_at: String,
+    reason: String,
+) -> Result<Session, VaultimeError> {
+    corrections::trim_session(&db, &session_id, &ended_at, &reason)
+}
+
+/// Takes all time out of a closed session, with a reason.
+#[tauri::command]
+pub fn discard_session(
+    db: State<'_, Arc<Database>>,
+    session_id: String,
+    reason: String,
+) -> Result<Session, VaultimeError> {
+    corrections::discard_session(&db, &session_id, &reason)
+}
+
+/// Adds play Vaultime did not see, labeled Manual.
+#[tauri::command]
+pub fn add_manual_session(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    game_id: String,
+    started_at: String,
+    runtime_ms: i64,
+    reason: String,
+) -> Result<Session, VaultimeError> {
+    corrections::add_manual_session(
+        &db,
+        &game_id,
+        &app_context.device_id,
+        &started_at,
+        runtime_ms,
+        &reason,
+    )
 }
 
 /// Every status change of every game, oldest first.

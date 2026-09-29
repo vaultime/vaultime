@@ -5,6 +5,7 @@
 
 pub mod annotations;
 pub mod backup_snapshots;
+pub mod corrections;
 pub mod devices;
 pub mod earlier_playtime;
 pub mod game_assets;

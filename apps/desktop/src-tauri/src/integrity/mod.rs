@@ -15,6 +15,31 @@ use crate::error::{Result, VaultimeError};
 pub const STATUS_LOCAL: &str = "local";
 pub const STATUS_SUSPICIOUS: &str = "suspicious";
 pub const STATUS_RECOVERED: &str = "recovered";
+/// Tracked, then corrected by the player with a reason.
+pub const STATUS_EDITED: &str = "edited";
+/// Added by the player, never tracked.
+pub const STATUS_MANUAL: &str = "manual";
+
+/// Events that close a session. A correction or a session added by hand
+/// carries its end in the payload, the others at their own time.
+const TERMINAL_EVENTS: [&str; 4] = ["ended", "recovered", "corrected", "added_manually"];
+const TIMING_EVENTS: [&str; 6] = [
+    "started",
+    "heartbeat",
+    "ended",
+    "recovered",
+    "corrected",
+    "added_manually",
+];
+const STATUS_EVENTS: [&str; 7] = [
+    "started",
+    "integrity_flagged",
+    "heartbeat",
+    "ended",
+    "recovered",
+    "corrected",
+    "added_manually",
+];
 
 /// Returns the canonical wall timestamp format used for session and event rows.
 pub fn now_timestamp() -> String {
@@ -78,37 +103,38 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     }
 
     let first_event = events.first().expect("events checked non-empty");
-    if first_event.event_type != "started" {
-        return Ok(Some("event_chain_missing_start".into()));
-    }
-
-    if first_event.event_time_wall != session.started_at_wall {
+    let start = match first_event.event_type.as_str() {
+        "started" => Some(first_event.event_time_wall.clone()),
+        "added_manually" => wall_in_payload(first_event, "started_at_wall"),
+        _ => return Ok(Some("event_chain_missing_start".into())),
+    };
+    if start.as_deref() != Some(session.started_at_wall.as_str()) {
         return Ok(Some("session_start_mismatch".into()));
     }
 
     let last_event = events.last().expect("events checked non-empty");
+    let last_is_terminal = TERMINAL_EVENTS.contains(&last_event.event_type.as_str());
     if let Some(ended_at_wall) = session.ended_at_wall.as_deref() {
-        if !matches!(last_event.event_type.as_str(), "ended" | "recovered") {
+        if !last_is_terminal {
             return Ok(Some("closed_session_missing_terminal_event".into()));
         }
 
-        if last_event.event_time_wall != ended_at_wall {
+        let end = match last_event.event_type.as_str() {
+            "corrected" | "added_manually" => wall_in_payload(last_event, "ended_at_wall"),
+            _ => Some(last_event.event_time_wall.clone()),
+        };
+        if end.as_deref() != Some(ended_at_wall) {
             return Ok(Some("session_end_mismatch".into()));
         }
-    } else if matches!(last_event.event_type.as_str(), "ended" | "recovered") {
+    } else if last_is_terminal {
         return Ok(Some("open_session_terminal_event_invalid".into()));
     }
 
     let latest_timing_event = events
         .iter()
         .rev()
-        .find(|event| {
-            matches!(
-                event.event_type.as_str(),
-                "started" | "heartbeat" | "ended" | "recovered"
-            )
-        })
-        .expect("started event guarantees a timing event");
+        .find(|event| TIMING_EVENTS.contains(&event.event_type.as_str()))
+        .expect("a start event guarantees a timing event");
     if !timing_event_matches_session(latest_timing_event, session) {
         return Ok(Some("session_timing_mismatch".into()));
     }
@@ -116,13 +142,8 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     let latest_status_event = events
         .iter()
         .rev()
-        .find(|event| {
-            matches!(
-                event.event_type.as_str(),
-                "started" | "integrity_flagged" | "heartbeat" | "ended" | "recovered"
-            )
-        })
-        .expect("started event guarantees a status event");
+        .find(|event| STATUS_EVENTS.contains(&event.event_type.as_str()))
+        .expect("a start event guarantees a status event");
     if !status_event_matches_session(latest_status_event, session) {
         return Ok(Some("session_status_mismatch".into()));
     }
@@ -225,7 +246,7 @@ fn timing_event_matches_session(event: &SessionEvent, session: &Session) -> bool
                 && session.idle_ms == 0
                 && event.event_time_monotonic == Some(0)
         }
-        "heartbeat" | "ended" | "recovered" => {
+        "heartbeat" | "ended" | "recovered" | "corrected" | "added_manually" => {
             let Some(payload) = parse_payload(&event.payload_json) else {
                 return false;
             };
@@ -243,7 +264,7 @@ fn status_event_matches_session(event: &SessionEvent, session: &Session) -> bool
     match event.event_type.as_str() {
         "started" => session.integrity_status == STATUS_LOCAL && !session.closed_cleanly,
         "integrity_flagged" => session.integrity_status == STATUS_SUSPICIOUS,
-        "heartbeat" | "ended" | "recovered" => {
+        "heartbeat" | "ended" | "recovered" | "corrected" | "added_manually" => {
             let Some(payload) = parse_payload(&event.payload_json) else {
                 return false;
             };
@@ -251,7 +272,7 @@ fn status_event_matches_session(event: &SessionEvent, session: &Session) -> bool
             let status_matches = payload_str(&payload, "integrity_status")
                 == Some(session.integrity_status.as_str());
 
-            if matches!(event.event_type.as_str(), "ended" | "recovered") {
+            if TERMINAL_EVENTS.contains(&event.event_type.as_str()) {
                 return status_matches
                     && payload_bool(&payload, "closed_cleanly") == Some(session.closed_cleanly);
             }
@@ -260,6 +281,11 @@ fn status_event_matches_session(event: &SessionEvent, session: &Session) -> bool
         }
         _ => true,
     }
+}
+
+fn wall_in_payload(event: &SessionEvent, key: &str) -> Option<String> {
+    parse_payload(&event.payload_json)
+        .and_then(|payload| payload_str(&payload, key).map(str::to_owned))
 }
 
 fn load_session_events(conn: &Connection, session_id: &str) -> Result<Vec<SessionEvent>> {
