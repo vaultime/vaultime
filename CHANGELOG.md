@@ -12,7 +12,7 @@ The first public release.
 ### Tracking
 
 - **Automatic tracking.** Start a game however you usually do and Vaultime records the session. Runtime, active playtime and idle time are counted apart.
-- **Keeps running in the tray.** Closing the window keeps tracking, and Vaultime starts with Windows or when you log in on Linux. Both can be turned off in Settings.
+- **Keeps running in the tray.** Closing the window keeps tracking, and Vaultime starts with Windows or when you log in on Linux. Both can be turned off in Settings. The tray menu shows the game running with its time and how long you played today.
 - **Light on your PC.** A check for running games takes a few milliseconds every five seconds, and the window stops drawing while it sits in the tray.
 - **Sleep aware.** Time while your computer sleeps is not counted.
 - **Controller play counts.** Buttons and sticks count as input, so a game played on a controller does not turn idle. On Windows this covers Xbox controllers and controllers that act as one.
@@ -43,6 +43,7 @@ The first public release.
 - **Invite-only cloud backup** on our own server. Free, with the same limits for every account. Backups are encrypted on your computer before upload, artwork is uploaded once and shared by every backup, and at the limit a new backup replaces the oldest.
 - **Signed in at a glance.** The logo, the tray icon and the taskbar icon turn violet while the PC is signed in to cloud backup.
 - **Password change** on the Cloud page. Your other PCs are signed out, and the backup passphrase stays the same.
+- **Export.** Save every finished session as CSV for a spreadsheet or as JSON for other tools, with notes, trust labels and, in JSON, each game's status and earlier playtime.
 
 ### Platforms
 

@@ -80,6 +80,8 @@ We may update this policy as the product evolves. Material changes are noted in 
 
 ## 10. Your Rights
 
+The data on your device is yours to read at any time. Settings, Export saves your sessions as CSV or JSON, and a local backup copies all of it.
+
 You can ask for a copy of the data the cloud server holds about you, have it corrected or deleted, restrict its processing, receive it in a portable format and object to its processing. Write to [vaultime@outlook.de](mailto:vaultime@outlook.de). You can also complain to a data protection supervisory authority.
 
 ## 11. Contact

@@ -29,7 +29,7 @@ Vaultime keeps track of how long you really play your PC games, no matter which 
 - **Automatic tracking.** Start a game and Vaultime records the session. No launcher integration needed.
 - **Real playtime.** Runtime, active playtime and idle time are counted separately.
 - **Sleep aware.** Time while your computer sleeps is never counted.
-- **Runs in the background.** Closing the window keeps Vaultime tracking in the tray, and it starts when you log in. Both can be turned off in Settings.
+- **Runs in the background.** Closing the window keeps Vaultime tracking in the tray, and it starts when you log in. Both can be turned off in Settings. The tray menu shows the game running and how long you played today.
 - **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest.
 - **Your artwork.** Steam games get Steam's own covers, others the art from their game folders, and you choose the cover per game.
 - **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
@@ -96,6 +96,8 @@ To correct a session, point at it in the journal or on the game's page and pick 
 |---|---|---|
 | Library and history | `%APPDATA%\com.vaultime.app` | `~/.local/share/com.vaultime.app` |
 | Log files | `%LOCALAPPDATA%\com.vaultime.app\logs` | `~/.local/share/com.vaultime.app/logs` |
+
+Settings, Export saves every finished session as CSV for a spreadsheet or as JSON for other tools. Times are in your time zone and durations in seconds.
 
 Vaultime has no analytics and no telemetry. Details are in the [privacy policy](docs/legal/privacy-policy.md) and the [terms](docs/legal/terms-of-service.md).
 
