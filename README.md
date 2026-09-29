@@ -67,7 +67,7 @@ Signing in to cloud backup needs a keyring service such as GNOME Keyring or KWal
 | Active | Runtime while the game was in front and you were at your computer |
 | Idle | Runtime while the game sat in the background or you were away |
 
-Playtime from before Vaultime can be imported from Steam in Settings. It counts toward each game's total, minus the time Vaultime already tracked, and stays out of the journal and the stats, which only show tracked sessions.
+Playtime from before Vaultime can be imported from Steam in Settings. It counts toward each game's total, minus the time Vaultime already tracked. It stays out of the journal and the stats, because Steam does not say when you played.
 
 You count as away after 5 minutes without keyboard, mouse or controller input. On Windows, controller input means Xbox controllers and controllers that act as one. On Linux it means every controller. You can change the 5 minutes in Settings, and you can also choose to count background time as active.
 
@@ -76,10 +76,14 @@ You count as away after 5 minutes without keyboard, mouse or controller input. O
 Every session carries a label that tells how much its record can be trusted:
 
 - **Local.** Recorded normally and unchanged since.
-- **Suspicious.** The system clock jumped or the record was edited afterwards.
+- **Suspicious.** The system clock jumped or the record was changed outside Vaultime. A suspicious session stays Suspicious when you correct it.
 - **Recovered.** Vaultime was closed while the game ran, for example after a crash, and the session was closed on the next start.
+- **Edited.** Tracked, then corrected by you. The old times and your reason stay in the session's log.
+- **Manual.** Added by you for play Vaultime did not see, like a session on another device. It counts as active time.
 
 These labels detect changes, they cannot prevent them. They are hints, not proof.
+
+To correct a session, point at it in the journal or on the game's page and pick Correct the time. You can count it only until you stopped playing, for a game left running, or take out all its time, for a session that was no play at all. Add a session on a game's page adds play from elsewhere.
 
 ## Backups
 

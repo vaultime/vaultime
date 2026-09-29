@@ -92,7 +92,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Track and show runtime, active playtime and idle time separately.
 - Anti-tamper is integrity scoring, not prevention. Never overstate local
   guarantees.
-- Use honest trust labels: `Local`, `Suspicious`, `Recovered`. Reserve
+- Use honest trust labels: `Local`, `Suspicious`, `Recovered`, and `Edited`
+  or `Manual` for changes the player made. A correction is an event with the
+  old values and a reason, never an overwrite without a trace. Reserve
   `Verified` for server-backed validation.
 - No paywalls, subscriptions, tiers or billing. Cloud access is invite-only
   and the same for every account. Server limits exist only to stop abuse.

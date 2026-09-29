@@ -12,6 +12,7 @@ Everything below stays on your device unless you choose to use cloud backup:
 
 - **Game library.** Titles, executable paths and install folders.
 - **Session history.** Start and end times, runtime, active and idle time, and integrity records.
+- **What you write down.** The status you give each game, notes on sessions, sessions you add by hand and the reasons you give for corrections.
 - **Earlier playtime.** If you import it, the playtime Steam counted for the games in your library and when you last played them there.
 - **Artwork.** Images found in your game folders or imported by you, plus cached thumbnails.
 - **Settings.** Tracking preferences such as the idle threshold.
