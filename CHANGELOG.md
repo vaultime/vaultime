@@ -36,6 +36,7 @@ The first public release.
 - **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything.
 - **Automatic backups** once a day and when Vaultime quits, the newest seven kept, in Vaultime's data folder or a folder you pick. Artwork that did not change is stored once for all of them. Signed in PCs also back up to the cloud once a day.
 - **Invite-only cloud backup** on our own server. Free, with the same limits for every account. Backups are encrypted on your computer before upload, artwork is uploaded once and shared by every backup, and at the limit a new backup replaces the oldest.
+- **Signed in at a glance.** The logo, the tray icon and the taskbar icon turn violet while the PC is signed in to cloud backup.
 - **Password change** on the Cloud page. Your other PCs are signed out, and the backup passphrase stays the same.
 
 ### Platforms

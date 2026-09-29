@@ -31,6 +31,7 @@ import {
   hasCloudBackupKeySecure,
   listSettings,
   loadCloudSessionSecure,
+  setCloudSignedIn,
   setSetting,
   restoreRemoteBackup as restoreRemoteBackupCommand,
   storeCloudBackupKeySecure,
@@ -112,6 +113,12 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       void warn(`automatic cloud backup failed: ${describeError(error)}`);
     }
   });
+
+  // The tray and taskbar icon turn violet while signed in, like the logo.
+  const signedIn = session !== null;
+  useEffect(() => {
+    setCloudSignedIn(signedIn).catch(() => {});
+  }, [signedIn]);
 
   const accountId = session?.user.id ?? null;
   useEffect(() => {

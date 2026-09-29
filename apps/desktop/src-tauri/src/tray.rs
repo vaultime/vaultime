@@ -4,6 +4,7 @@
 //! Tray icon, so tracking keeps running while the window is closed.
 
 use log::{info, warn};
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime, Webview};
@@ -16,6 +17,13 @@ pub const MINIMIZED_ARG: &str = "--minimized";
 
 /// Setting that decides whether closing the window keeps Vaultime in the tray.
 pub const CLOSE_TO_TRAY_SETTING: &str = "close_to_tray";
+
+/// Tray and window icon while signed in to cloud backup, violet like the logo
+/// in the app. `scripts/build-brand.py` describes how it is made.
+const SIGNED_IN_ICON: &[u8] = include_bytes!("../icons/signed-in.png");
+const TRAY_ID: &str = "main";
+const TOOLTIP: &str = "Vaultime";
+const SIGNED_IN_TOOLTIP: &str = "Vaultime, signed in to cloud backup";
 
 /// Whether this system can show a tray icon at all.
 pub struct TrayState {
@@ -45,8 +53,8 @@ fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit Vaultime", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
 
-    let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Vaultime")
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
+        .tooltip(TOOLTIP)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -79,6 +87,32 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+}
+
+/// Shows in the tray and the taskbar whether this PC is signed in to cloud
+/// backup, the way the logo in the app does.
+pub fn show_cloud_state<R: Runtime>(app: &AppHandle<R>, signed_in: bool) {
+    let icon = if signed_in {
+        Image::from_bytes(SIGNED_IN_ICON)
+            .inspect_err(|e| warn!("failed to load the signed in icon: {e}"))
+            .ok()
+    } else {
+        app.default_window_icon().cloned()
+    };
+    let Some(icon) = icon else {
+        return;
+    };
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_icon(Some(icon.clone()));
+        let _ = tray.set_tooltip(Some(if signed_in {
+            SIGNED_IN_TOOLTIP
+        } else {
+            TOOLTIP
+        }));
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_icon(icon);
     }
 }
 

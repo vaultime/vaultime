@@ -109,6 +109,7 @@ pub fn run() {
             commands::set_setting,
             commands::get_tracking_diagnostics,
             commands::tray_available,
+            commands::set_cloud_signed_in,
             commands::discover_games,
             commands::discover_steam_games,
             commands::discover_launcher_games,

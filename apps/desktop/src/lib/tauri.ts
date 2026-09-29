@@ -123,6 +123,11 @@ export async function getSessionEventsForGame(
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
 }
 
+/** Turns the tray and taskbar icon violet while signed in to cloud backup. */
+export async function setCloudSignedIn(signedIn: boolean): Promise<void> {
+  return invoke("set_cloud_signed_in", { signedIn });
+}
+
 export async function getAutoBackupFolder(): Promise<string> {
   return invoke<string>("get_auto_backup_folder");
 }

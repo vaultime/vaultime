@@ -13,7 +13,7 @@ name = "vaultime_lib"
 tauri-build = "2.7"
 
 [dependencies]
-tauri = { version = "2.12", features = ["tray-icon"] }
+tauri = { version = "2.12", features = ["image-png", "tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2.8"
 tauri-plugin-log = "2.10"

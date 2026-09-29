@@ -296,6 +296,8 @@ mockIPC((cmd, payload) => {
       return signedIn;
     case "tray_available":
       return true;
+    case "set_cloud_signed_in":
+      return null;
     case "get_auto_backup_folder":
       return "C:/Users/you/AppData/Roaming/com.vaultime.app/backups";
     case "discover_steam_games":
