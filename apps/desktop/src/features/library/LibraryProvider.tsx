@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ACTIVE_POLL_MS, DEFAULT_IDLE_THRESHOLD_SECONDS, LIBRARY_CHANGED_EVENT, SETTING_KEYS } from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
-import type { EarlierPlaytime, Game, Session } from "@/lib/types";
+import type { EarlierPlaytime, Game, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { LibraryContext, type GameSummary } from "./library-context";
@@ -16,6 +16,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [earlier, setEarlier] = useState<EarlierPlaytime[]>([]);
+  const [statusChanges, setStatusChanges] = useState<GameStatusChange[]>([]);
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
   const [activePolledAt, setActivePolledAt] = useState(() => Date.now());
@@ -29,16 +31,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextGames, nextSessions, assets, settings, nextEarlier] = await Promise.all([
+      const [nextGames, nextSessions, assets, settings, nextEarlier, nextChanges, nextNotes] = await Promise.all([
         api.listGames(),
         api.listSessions(),
         api.listPreferredGameAssets(),
         api.listSettings(),
         api.listEarlierPlaytime(),
+        api.listStatusChanges(),
+        api.listSessionNotes(),
       ]);
       setGames(nextGames);
       setSessions(nextSessions);
       setEarlier(nextEarlier);
+      setStatusChanges(nextChanges);
+      setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
       setCovers(
         Object.fromEntries(
           assets
@@ -131,6 +137,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         activeMs: 0,
         earlier: null,
         totalMs: 0,
+        status: null,
+        statusSince: null,
         sessionsCount: 0,
         suspiciousCount: 0,
         recoveredCount: 0,
@@ -157,13 +165,38 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     for (const summary of byGame.values()) {
       summary.totalMs = summary.runtimeMs + (summary.earlier?.earlier_ms ?? 0);
     }
+    // Changes come oldest first, so the last one per game is its status.
+    for (const change of statusChanges) {
+      const summary = byGame.get(change.game_id);
+      if (!summary) continue;
+      summary.status = change.status === "none" ? null : change.status;
+      summary.statusSince = change.status === "none" ? null : change.changed_at;
+    }
     return [...byGame.values()].sort((a, b) => {
       if (a.lastPlayedAt && b.lastPlayedAt) return b.lastPlayedAt.localeCompare(a.lastPlayedAt);
       if (a.lastPlayedAt) return -1;
       if (b.lastPlayedAt) return 1;
       return a.game.title.localeCompare(b.game.title);
     });
-  }, [games, sessions, covers, artTints, earlier]);
+  }, [games, sessions, covers, artTints, earlier, statusChanges]);
+
+  const setStatus = useCallback(
+    async (gameId: string, status: GameStatus | "none") => {
+      await api.setGameStatus(gameId, status);
+      setStatusChanges(await api.listStatusChanges());
+    },
+    [],
+  );
+
+  const saveNote = useCallback(async (sessionId: string, note: string) => {
+    const saved = await api.setSessionNote(sessionId, note);
+    setNotes((current) => {
+      const next = { ...current };
+      if (saved) next[sessionId] = saved.note;
+      else delete next[sessionId];
+      return next;
+    });
+  }, []);
 
   const visible = useMemo(() => summaries.filter((summary) => !summary.game.is_hidden), [summaries]);
 
@@ -177,11 +210,31 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       idleThresholdSeconds,
       summaries,
       visible,
+      statusChanges,
+      notes,
       loaded,
       error,
       refresh,
+      setStatus,
+      saveNote,
     }),
-    [games, sessions, covers, active, activePolledAt, idleThresholdSeconds, summaries, visible, loaded, error, refresh],
+    [
+      games,
+      sessions,
+      covers,
+      active,
+      activePolledAt,
+      idleThresholdSeconds,
+      summaries,
+      visible,
+      statusChanges,
+      notes,
+      loaded,
+      error,
+      refresh,
+      setStatus,
+      saveNote,
+    ],
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;

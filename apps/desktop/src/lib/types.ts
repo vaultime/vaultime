@@ -173,6 +173,24 @@ export interface CloudBackupPayloadSummary {
   artwork_bytes?: number;
 }
 
+/** Where a game stands for the player. */
+export type GameStatus = "backlog" | "playing" | "finished" | "dropped";
+
+/** A game's status from a moment on. "none" clears it. */
+export interface GameStatusChange {
+  id: string;
+  game_id: string;
+  status: GameStatus | "none";
+  changed_at: string;
+}
+
+/** A short note the player wrote on a session. */
+export interface SessionNote {
+  session_id: string;
+  note: string;
+  updated_at: string;
+}
+
 /** Playtime a game had before Vaultime, read once from a launcher. */
 export interface EarlierPlaytime {
   game_id: string;

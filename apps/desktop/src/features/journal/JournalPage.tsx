@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
+import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
@@ -14,7 +15,7 @@ import {
   JOURNAL_TICK_HOURS,
 } from "@/lib/constants";
 import { tintForTitle, type GameTint } from "@/lib/game-tint";
-import { sideBySideSentence, weekSentence } from "@/lib/sentences";
+import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
 import { playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import {
@@ -26,11 +27,13 @@ import {
   startOfWeek,
   UI_LOCALE,
 } from "@/lib/time";
-import type { Session, SessionEvent } from "@/lib/types";
+import type { GameStatusChange, Session, SessionEvent } from "@/lib/types";
 
 interface JournalDay {
   start: Date;
   sessions: Session[];
+  /** Status changes of games on this day. */
+  changes: GameStatusChange[];
   /** Time with a game running, games side by side counted once. */
   playedMs: number;
 }
@@ -49,17 +52,25 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
-/** The sessions that started in the week from `start`, by day, newest day first. */
-function groupWeek(sessions: Session[], start: Date, now: Date): JournalDay[] {
+/** The sessions and status changes of the week from `start`, by day, newest day first. */
+function groupWeek(sessions: Session[], changes: GameStatusChange[], start: Date, now: Date): JournalDay[] {
   const end = addDays(start, DAYS_PER_WEEK);
   const grouped = new Map<number, JournalDay>();
+  const dayOf = (moment: Date) => {
+    const dayStart = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+    const day = grouped.get(dayStart.getTime()) ?? { start: dayStart, sessions: [], changes: [], playedMs: 0 };
+    grouped.set(dayStart.getTime(), day);
+    return day;
+  };
   for (const session of sessions) {
     const started = parseVaultimeDate(session.started_at_wall);
     if (started < start || started >= end) continue;
-    const dayStart = new Date(started.getFullYear(), started.getMonth(), started.getDate());
-    const day = grouped.get(dayStart.getTime()) ?? { start: dayStart, sessions: [], playedMs: 0 };
-    day.sessions.push(session);
-    grouped.set(dayStart.getTime(), day);
+    dayOf(started).sessions.push(session);
+  }
+  for (const change of changes) {
+    const changed = parseVaultimeDate(change.changed_at);
+    if (change.status === "none" || changed < start || changed >= end) continue;
+    dayOf(changed).changes.push(change);
   }
   for (const day of grouped.values()) {
     day.sessions.sort((a, b) => a.started_at_wall.localeCompare(b.started_at_wall));
@@ -81,7 +92,7 @@ function hatch(colors: string[]): string {
 
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
-  const { sessions, summaries, loaded } = useLibrary();
+  const { sessions, summaries, statusChanges, notes, saveNote, loaded } = useLibrary();
   // 0 is this week, -1 the week before and so on.
   const [offset, setOffset] = useState(0);
   const [events, setEvents] = useState<SessionEvent[]>([]);
@@ -92,7 +103,13 @@ export function JournalPage() {
 
   const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
 
-  const days = groupWeek(sessions, weekStart, now);
+  const days = groupWeek(sessions, statusChanges, weekStart, now);
+
+  /** A game's playtime up to a moment, with the playtime from before Vaultime. */
+  const playedBefore = (gameId: string, moment: string) =>
+    sessions
+      .filter((session) => session.game_id === gameId && session.started_at_wall < moment)
+      .reduce((sum, session) => sum + session.runtime_ms, byGame.get(gameId)?.earlier?.earlier_ms ?? 0);
 
   // Events explain flagged sessions and skipped sleep. Only the games of this week are loaded.
   const gameIds = [...new Set(days.flatMap((day) => day.sessions.map((session) => session.game_id)))].sort().join(",");
@@ -148,7 +165,16 @@ export function JournalPage() {
 
       <div className="px-8 xl:px-14">
         {days.map((day) => (
-          <DaySection key={day.start.getTime()} day={day} byGame={byGame} events={events} now={now} />
+          <DaySection
+            key={day.start.getTime()}
+            day={day}
+            byGame={byGame}
+            events={events}
+            now={now}
+            notes={notes}
+            onSaveNote={saveNote}
+            playedBefore={playedBefore}
+          />
         ))}
       </div>
     </div>
@@ -191,11 +217,17 @@ function DaySection({
   byGame,
   events,
   now,
+  notes,
+  onSaveNote,
+  playedBefore,
 }: {
   day: JournalDay;
   byGame: Map<string, GameSummary>;
   events: SessionEvent[];
   now: Date;
+  notes: Record<string, string>;
+  onSaveNote: (sessionId: string, note: string) => Promise<void>;
+  playedBefore: (gameId: string, moment: string) => number;
 }) {
   const tintOf = (gameId: string): GameTint => {
     const summary = byGame.get(gameId);
@@ -263,20 +295,47 @@ function DaySection({
           )}
         </div>
 
-        {day.sessions.map((session) => {
-          const start = formatClockTime(parseVaultimeDate(session.started_at_wall));
-          const end = session.ended_at_wall ? formatClockTime(parseVaultimeDate(session.ended_at_wall)) : "now";
-          return (
-            <SessionLine
-              key={session.id}
-              session={session}
-              events={events}
-              gameTitle={byGame.get(session.game_id)?.game.title ?? "a removed game"}
-              when={`${start} to ${end}`}
-              bordered={false}
-            />
-          );
-        })}
+        {[
+          ...day.sessions.map((session) => ({ at: session.started_at_wall, session, change: null })),
+          ...day.changes.map((change) => ({ at: change.changed_at, session: null, change })),
+        ]
+          .sort((a, b) => a.at.localeCompare(b.at))
+          .map(({ session, change }) => {
+            if (change) {
+              if (change.status === "none") return null;
+              const title = byGame.get(change.game_id)?.game.title ?? "a removed game";
+              return (
+                <article key={change.id} className="flex items-baseline gap-5">
+                  <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
+                    {formatClockTime(parseVaultimeDate(change.changed_at))}
+                  </span>
+                  <p className="font-display flex min-w-0 flex-1 items-baseline gap-2.5 text-[20px] leading-snug">
+                    <GameStatusIcon status={change.status} className="size-4 shrink-0 translate-y-0.5 text-violet" />
+                    <span>
+                      <PhraseText
+                        phrase={statusSentence(change.status, title, playedBefore(change.game_id, change.changed_at))}
+                      />
+                    </span>
+                  </p>
+                </article>
+              );
+            }
+            if (!session) return null;
+            const start = formatClockTime(parseVaultimeDate(session.started_at_wall));
+            const end = session.ended_at_wall ? formatClockTime(parseVaultimeDate(session.ended_at_wall)) : "now";
+            return (
+              <SessionLine
+                key={session.id}
+                session={session}
+                events={events}
+                gameTitle={byGame.get(session.game_id)?.game.title ?? "a removed game"}
+                when={`${start} to ${end}`}
+                bordered={false}
+                note={notes[session.id]}
+                onSaveNote={(note) => onSaveNote(session.id, note)}
+              />
+            );
+          })}
       </div>
     </section>
   );

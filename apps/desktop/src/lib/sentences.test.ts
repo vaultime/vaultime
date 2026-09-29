@@ -14,6 +14,7 @@ import {
   sessionAmounts,
   sessionTrustNote,
   shapesSentence,
+  statusSentence,
   streakSentence,
   weekSentence,
   yearSentence,
@@ -185,5 +186,18 @@ describe("stats sentences", () => {
     );
     expect(shapesSentence({ quick: 0, short: 0, plain: 0, long: 0, marathon: 0 })).toBeNull();
     expect(busiestMonthSentence(months.map(() => ({ activeMs: 0, idleMs: 0 })), 2026)).toBeNull();
+  });
+});
+
+describe("statusSentence", () => {
+  it("writes status changes with the playtime so far", () => {
+    expect(statusSentence("finished", "Hades II", 42 * HOUR_MS)).toEqual({
+      before: "You finished ",
+      em: "Hades II",
+      after: " after forty-two hours.",
+    });
+    expect(statusSentence("dropped", "Celeste", 3 * HOUR_MS).after).toBe(" down after three hours.");
+    expect(statusSentence("finished", "Celeste", 0).after).toBe(".");
+    expect(statusSentence("backlog", "Outer Wilds", 0)).toEqual({ before: "", em: "Outer Wilds", after: " went on your list." });
   });
 });

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary } from "@/features/library/library-context";
+import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
@@ -56,7 +57,7 @@ export function GameDetailsPage() {
 
 function GamePage({ gameId }: { gameId: string }) {
   const navigate = useNavigate();
-  const { summaries, sessions: allSessions, active, loaded, refresh } = useLibrary();
+  const { summaries, sessions: allSessions, active, loaded, refresh, notes, saveNote, setStatus } = useLibrary();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
   const [showAll, setShowAll] = useState(false);
@@ -161,6 +162,14 @@ function GamePage({ gameId }: { gameId: string }) {
             <TintedSentence tint={tint}>
               <PhraseText phrase={gamePlaytime(sessions)} />
             </TintedSentence>
+            <div className="mt-6">
+              <StatusPicker
+                tint={tint}
+                status={summary.status}
+                since={summary.statusSince}
+                onChange={(status) => void setStatus(game.id, status).catch(() => {})}
+              />
+            </div>
           </div>
           <Cover
             title={game.title}
@@ -206,7 +215,15 @@ function GamePage({ gameId }: { gameId: string }) {
             {sessions.length === 0 ? (
               <p className="py-3.5 text-faint">No sessions yet. They appear here as soon as you play.</p>
             ) : (
-              shown.map((session) => <SessionLine key={session.id} session={session} events={events} />)
+              shown.map((session) => (
+                <SessionLine
+                  key={session.id}
+                  session={session}
+                  events={events}
+                  note={notes[session.id]}
+                  onSaveNote={(note) => saveNote(session.id, note)}
+                />
+              ))
             )}
             {sessions.length > GAME_RECENT_SESSIONS && (
               <button

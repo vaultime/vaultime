@@ -125,6 +125,9 @@ export const WEEKDAY_NAME_DAYS = 7;
 /** Hours where the parts of the day begin, 24 hour clock. Night wraps past midnight. */
 export const DAY_PART_HOURS = { morning: 5, afternoon: 12, evening: 17, night: 22 };
 
+/** Longest note on a session, in characters. Same as SESSION_NOTE_MAX_CHARS in constants.rs. */
+export const SESSION_NOTE_MAX_CHARS = 280;
+
 // Stats page
 
 /** Smallest dot of the week clock for an hour with any play, in percent of its cell. */

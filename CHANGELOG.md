@@ -25,6 +25,8 @@ The first public release.
 - **Library home.** Opens on the game you play right now or last, in colors taken from its cover, with the last seven days in numbers, a shelf of recent games and every game below.
 - **Game pages.** The last two weeks at a glance, every session as a sentence, totals and the cover you pick.
 - **Journal.** Your play week by week, with a 24 hour strip for each day. Games that ran side by side are hatched on the strip and count once in the day and week totals.
+- **Where each game stands.** Mark a game as Backlog, Playing, Finished or Dropped on its page and filter the library by it. The journal notes the day, for example "You finished Hades II after forty-two hours."
+- **Notes on sessions.** Write a line on any session in the journal or on the game page. Notes never change tracked time.
 - **Playtime from before Vaultime.** Settings reads the playtime Steam counted for the games in your library, shows what it adds and counts it toward each game's total. Time Vaultime already tracked counts once.
 - **Stats.** Your year in play: a calendar of every day with your streaks, when in the week you play, your games with active and idle time apart, the months, how long your sessions run and the games you leave running.
 - **Live bar and search.** The running game and its timer stay at the bottom of every page, and Ctrl+K jumps to any game, page or action.

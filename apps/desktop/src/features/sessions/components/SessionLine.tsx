@@ -1,19 +1,26 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { useState, type FormEvent } from "react";
+import { NotebookPen } from "lucide-react";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";
 import { formatSessionStart } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, describeError } from "@/lib/utils";
 
-/** One session as a sentence, with its numbers and trust label below. */
+/** One session as a sentence, with its numbers, a note of its own and the trust label. */
 export function SessionLine({
   session,
   events,
   gameTitle,
   when,
   bordered = true,
+  note,
+  onSaveNote,
 }: {
   session: Session;
   /** Events of this session or more, used to explain flags and skipped time. */
@@ -23,12 +30,39 @@ export function SessionLine({
   /** Replaces the start day and time in the left column. */
   when?: string;
   bordered?: boolean;
+  note?: string;
+  /** Lets the player write a note. An empty note removes it. */
+  onSaveNote?: (note: string) => Promise<void>;
 }) {
-  const note = sessionTrustNote(session, events);
+  const trustNote = sessionTrustNote(session, events);
   const live = !session.ended_at_wall;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEditing() {
+    setDraft(note ?? "");
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!onSaveNote) return;
+    setSaving(true);
+    try {
+      await onSaveNote(draft);
+      setEditing(false);
+    } catch (saveError) {
+      setError(describeError(saveError));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <article className={cn("flex items-baseline gap-5", bordered && "border-b border-rule py-3.5")}>
+    <article className={cn("group flex items-baseline gap-5", bordered && "border-b border-rule py-3.5")}>
       <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
         {when ?? formatSessionStart(session.started_at_wall)}
       </span>
@@ -39,9 +73,46 @@ export function SessionLine({
         <div className="mt-1 text-[13px] text-faint">
           {sessionAmounts(session)}
           {live ? " so far." : "."}
-          {note && <span className="text-soft"> {note}</span>}
+          {trustNote && <span className="text-soft"> {trustNote}</span>}
         </div>
+        {editing ? (
+          <form className="mt-2.5 flex flex-wrap items-center gap-2" onSubmit={(event) => void save(event)}>
+            <Input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setEditing(false);
+              }}
+              maxLength={SESSION_NOTE_MAX_CHARS}
+              placeholder="A line about this session"
+              aria-label="Note on this session"
+              autoFocus
+              className="h-9 max-w-[480px] min-w-0 flex-1"
+            />
+            <Button type="submit" size="sm" disabled={saving}>
+              Save
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            {error && <p className="w-full text-[13px] text-amber">{error}</p>}
+          </form>
+        ) : (
+          note && <p className="font-display mt-1.5 text-[17px] leading-snug text-soft italic">“{note}”</p>
+        )}
       </div>
+      {onSaveNote && !editing && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={note ? "Edit the note" : "Add a note"}
+          title={note ? "Edit the note" : "Add a note"}
+          onClick={startEditing}
+          className="self-center text-faint opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <NotebookPen className="size-3.5" />
+        </Button>
+      )}
       <IntegrityBadge status={session.integrity_status} />
     </article>
   );

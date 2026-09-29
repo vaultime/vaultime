@@ -24,7 +24,7 @@ import {
   UI_LOCALE,
   type DayPart,
 } from "@/lib/time";
-import type { Session, SessionEvent } from "@/lib/types";
+import type { GameStatus, Session, SessionEvent } from "@/lib/types";
 import { capitalize, numberWords } from "@/lib/words";
 
 /** A sentence with an optional part set in italics. */
@@ -291,4 +291,22 @@ const SHAPE_WORDS: Record<SessionShape, string> = {
 export function shapesSentence(shapes: Record<SessionShape, number>): string | null {
   const [shape, count] = (Object.entries(shapes) as [SessionShape, number][]).sort((a, b) => b[1] - a[1])[0];
   return count > 0 ? `Your most common session was ${SHAPE_WORDS[shape]}.` : null;
+}
+
+/**
+ * A status change in the journal: "You finished *Hades II* after forty-two
+ * hours." `playedMs` is the game's playtime up to the change.
+ */
+export function statusSentence(status: GameStatus, title: string, playedMs: number): Phrase {
+  const after = playedMs >= MINUTE_MS ? ` after ${amount(playedMs)}` : "";
+  switch (status) {
+    case "finished":
+      return { before: "You finished ", em: title, after: `${after}.` };
+    case "dropped":
+      return { before: "You put ", em: title, after: ` down${after}.` };
+    case "playing":
+      return { before: "You picked up ", em: title, after: "." };
+    case "backlog":
+      return { before: "", em: title, after: " went on your list." };
+  }
 }

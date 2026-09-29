@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
+import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { GameSummary } from "@/features/library/library-context";
-import type { Game } from "@/lib/types";
+import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
+import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -42,14 +44,19 @@ export function GameGrid({
   onDelete: (game: Game) => void;
 }) {
   const [sort, setSort] = useState<Sort>("recent");
+  const [filter, setFilter] = useState<GameStatus | "all">("all");
+  const statuses = GAME_STATUSES.filter((status) => summaries.some((summary) => summary.status === status));
+  const shownFilter = filter !== "all" && statuses.includes(filter) ? filter : "all";
 
   const sorted = useMemo(() => {
-    if (sort === "recent") return summaries;
-    const copy = [...summaries];
+    const filtered =
+      shownFilter === "all" ? summaries : summaries.filter((summary) => summary.status === shownFilter);
+    if (sort === "recent") return filtered;
+    const copy = [...filtered];
     if (sort === "title") copy.sort((a, b) => a.game.title.localeCompare(b.game.title));
     if (sort === "played") copy.sort((a, b) => b.totalMs - a.totalMs);
     return copy;
-  }, [summaries, sort]);
+  }, [summaries, sort, shownFilter]);
 
   return (
     <section id="all-games" aria-labelledby="all-games-title" className="scroll-mt-6 px-8 pt-12 xl:px-14">
@@ -58,9 +65,27 @@ export function GameGrid({
           <h2 id="all-games-title" className="font-display text-[34px] font-normal">
             All games
           </h2>
-          <span className="font-mono text-sm text-faint">{summaries.length}</span>
+          <span className="font-mono text-sm text-faint">{sorted.length}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {statuses.length > 0 && (
+            <div role="group" aria-label="Show games by status" className="mr-2 flex rounded-full border border-hairline p-0.5">
+              {(["all", ...statuses] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={shownFilter === key}
+                  onClick={() => setFilter(key)}
+                  className={cn(
+                    "h-8 rounded-full px-3.5 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
+                    shownFilter === key ? "bg-raised text-text" : "text-faint hover:text-soft",
+                  )}
+                >
+                  {key === "all" ? "All" : GAME_STATUS_LABELS[key]}
+                </button>
+              ))}
+            </div>
+          )}
           <div role="group" aria-label="Sort games" className="mr-2 flex rounded-full border border-hairline p-0.5">
             {(Object.keys(SORTS) as Sort[]).map((key) => (
               <button
@@ -114,7 +139,7 @@ function GameTile({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const { game, cover, totalMs, lastPlayedAt, suspiciousCount, recoveredCount } = summary;
+  const { game, cover, totalMs, lastPlayedAt, suspiciousCount, recoveredCount, status } = summary;
 
   return (
     <li className="group relative">
@@ -149,6 +174,12 @@ function GameTile({
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm text-text">{game.title}</span>
           <span className="flex items-center gap-1.5 truncate text-xs text-faint">
+            {status && (
+              <span title={GAME_STATUS_LABELS[status]} className="flex shrink-0 items-center">
+                <GameStatusIcon status={status} className="size-3" />
+                <span className="sr-only">{GAME_STATUS_LABELS[status]}</span>
+              </span>
+            )}
             {playing ? (
               <>
                 <span className="size-1.5 rounded-full bg-violet" />

@@ -20,6 +20,7 @@ import type {
   CloudDevice,
   EarlierPlaytime,
   Game,
+  GameStatusChange,
   Session,
   SessionEvent,
   SteamPlaytimePreview,
@@ -82,7 +83,7 @@ for (let day = HISTORY_DAYS; day >= 1; day -= 1) {
       active_ms: runtime - idle,
       idle_ms: idle,
       runtime_ms: runtime,
-      integrity_status: random() < 0.08 ? "suspicious" : random() < 0.06 ? "recovered" : "local",
+      integrity_status: random() < 0.012 ? "suspicious" : random() < 0.01 ? "recovered" : "local",
       closed_cleanly: true,
     });
   }
@@ -136,6 +137,19 @@ const toEarlier = (candidate: SteamPlaytimePreview["games"][number]): EarlierPla
   source: "steam",
   imported_at: iso(now - 2 * DAY_MS),
 });
+// Statuses and a note, so the journal and the library show them.
+let statusChanges: GameStatusChange[] =
+  scenario === "empty"
+    ? []
+    : [
+        { id: "status-1", game_id: "game-5", status: "backlog", changed_at: iso(now - 30 * DAY_MS) },
+        { id: "status-2", game_id: "game-6", status: "playing", changed_at: iso(now - 20 * DAY_MS) },
+        { id: "status-3", game_id: "game-2", status: "finished", changed_at: iso(now - DAY_MS - 3 * HOUR_MS) },
+        { id: "status-4", game_id: "game-7", status: "dropped", changed_at: iso(now - 9 * DAY_MS) },
+      ];
+const newestPlayed = allSessions.find((session) => session.ended_at_wall);
+const sessionNotes: Record<string, string> = newestPlayed ? { [newestPlayed.id]: "Beat the boss on the third try." } : {};
+
 let earlierPlaytime: EarlierPlaytime[] = params.get("earlier") === "1" ? steamPreview.games.map(toEarlier) : [];
 
 // Flagged and recovered sessions explain themselves, and one skipped a sleep.
@@ -324,6 +338,27 @@ mockIPC((cmd, payload) => {
       return allGames;
     case "list_earlier_playtime":
       return earlierPlaytime;
+    case "list_status_changes":
+      return statusChanges;
+    case "set_game_status": {
+      const change: GameStatusChange = {
+        id: `status-${statusChanges.length + 1}`,
+        game_id: String(args?.gameId),
+        status: args?.status as GameStatusChange["status"],
+        changed_at: new Date().toISOString(),
+      };
+      statusChanges = [...statusChanges, change];
+      return change;
+    }
+    case "list_session_notes":
+      return Object.entries(sessionNotes).map(([session_id, note]) => ({ session_id, note, updated_at: iso(now) }));
+    case "set_session_note": {
+      const id = String(args?.sessionId);
+      const note = String(args?.note ?? "").trim();
+      if (note) sessionNotes[id] = note;
+      else delete sessionNotes[id];
+      return note ? { session_id: id, note, updated_at: new Date().toISOString() } : null;
+    }
     case "preview_steam_playtime":
       return steamPreview;
     case "import_steam_playtime":

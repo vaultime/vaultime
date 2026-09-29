@@ -17,6 +17,9 @@ import type {
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
   EarlierPlaytime,
+  GameStatus,
+  GameStatusChange,
+  SessionNote,
   SteamPlaytimePreview,
 } from "@/lib/types";
 
@@ -123,6 +126,24 @@ export async function getSessionEventsForGame(
   gameId: string,
 ): Promise<SessionEvent[]> {
   return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
+}
+
+/** Every status change of every game, oldest first. */
+export async function listStatusChanges(): Promise<GameStatusChange[]> {
+  return invoke<GameStatusChange[]>("list_status_changes");
+}
+
+export async function setGameStatus(gameId: string, status: GameStatus | "none"): Promise<GameStatusChange | null> {
+  return invoke<GameStatusChange | null>("set_game_status", { gameId, status });
+}
+
+export async function listSessionNotes(): Promise<SessionNote[]> {
+  return invoke<SessionNote[]>("list_session_notes");
+}
+
+/** An empty note removes it. */
+export async function setSessionNote(sessionId: string, note: string): Promise<SessionNote | null> {
+  return invoke<SessionNote | null>("set_session_note", { sessionId, note });
 }
 
 export async function listEarlierPlaytime(): Promise<EarlierPlaytime[]> {
