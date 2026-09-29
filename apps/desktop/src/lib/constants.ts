@@ -125,6 +125,21 @@ export const WEEKDAY_NAME_DAYS = 7;
 /** Hours where the parts of the day begin, 24 hour clock. Night wraps past midnight. */
 export const DAY_PART_HOURS = { morning: 5, afternoon: 12, evening: 17, night: 22 };
 
+// Stats page
+
+/** Smallest dot of the week clock for an hour with any play, in percent of its cell. */
+export const WEEK_CLOCK_MIN_DOT_PERCENT = 22;
+/** Games listed on the stats page, the rest are left out. */
+export const STATS_TOP_GAMES = 8;
+/** Active time per day at which the year heatmap turns one step brighter. */
+export const HEATMAP_STEPS_MS = [30 * MINUTE_MS, HOUR_MS, 2 * HOUR_MS, 4 * HOUR_MS];
+/** A game shows among those left running from this much runtime in the year. */
+export const STATS_IDLE_MIN_RUNTIME_MS = 2 * HOUR_MS;
+/** A game shows among those left running from this share of idle runtime. */
+export const STATS_IDLE_MIN_SHARE = 0.25;
+/** Games shown among those left running. */
+export const STATS_IDLE_GAMES = 3;
+
 /** Numbers up to this are written as words in prose, larger ones as digits. */
 export const NUMBER_WORDS_MAX = 999;
 

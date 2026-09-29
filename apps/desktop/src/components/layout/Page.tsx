@@ -85,6 +85,31 @@ export function PageRow({
   );
 }
 
+/** A round arrow button that steps through weeks or years in a page header. */
+export function StepButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex size-11 items-center justify-center rounded-full border border-hairline text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:border-rule disabled:text-faint/50 disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
+  );
+}
+
 /** A one-line message under a header or inside a section. */
 export function Notice({
   tone = "info",

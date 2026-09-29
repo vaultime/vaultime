@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { PageHeader } from "@/components/layout/Page";
+import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
@@ -134,12 +134,12 @@ export function JournalPage() {
         title={title}
         aside={
           <>
-            <WeekButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
+            <StepButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
               <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
-            </WeekButton>
-            <WeekButton label="Next week" disabled={offset >= 0} onClick={() => setOffset((value) => value + 1)}>
+            </StepButton>
+            <StepButton label="Next week" disabled={offset >= 0} onClick={() => setOffset((value) => value + 1)}>
               <ChevronRight className="size-[18px]" strokeWidth={1.8} />
-            </WeekButton>
+            </StepButton>
           </>
         }
       >
@@ -183,30 +183,6 @@ function SharedStretch({
       className={`absolute inset-y-0 ${carriesOnBefore ? "" : "rounded-l-full"} ${carriesOnAfter ? "" : "rounded-r-full"}`}
       style={{ left: `${left}%`, width: `${width}%`, backgroundImage: hatch(colors) }}
     />
-  );
-}
-
-function WeekButton({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="flex size-11 items-center justify-center rounded-full border border-hairline text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:border-rule disabled:text-faint/50 disabled:hover:bg-transparent"
-    >
-      {children}
-    </button>
   );
 }
 

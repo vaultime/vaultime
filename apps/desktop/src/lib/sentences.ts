@@ -14,7 +14,16 @@ import {
   SESSION_SHORT_MAX_MS,
 } from "@/lib/constants";
 import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity";
-import { dayPartOf, formatHoursMinutes, formatRelativeDay, parseVaultimeDate, type DayPart } from "@/lib/time";
+import type { SessionShape, Streak } from "@/lib/stats";
+import {
+  dayPartOf,
+  formatDayRange,
+  formatHoursMinutes,
+  formatRelativeDay,
+  parseVaultimeDate,
+  UI_LOCALE,
+  type DayPart,
+} from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
 import { capitalize, numberWords } from "@/lib/words";
 
@@ -197,4 +206,89 @@ export function weekSentence({
   const lead = `${capitalize(numberWords(sessionsCount))} session${sessionsCount === 1 ? "" : "s"}, ${durationWords(runtimeMs)} in all.`;
   if (daysPlayed === 1) return { before: `${lead} All of it on `, em: longestDay, after: "." };
   return { before: `${lead} `, em: longestDay, after: " was the longest day." };
+}
+
+/** "Two hundred twelve hours on ninety days. *Elden Ring* led with sixty-one hours." */
+export function yearSentence({
+  playedMs,
+  daysPlayed,
+  topTitle,
+  topMs,
+  gamesCount,
+  year,
+  current,
+}: {
+  playedMs: number;
+  daysPlayed: number;
+  topTitle: string | null;
+  topMs: number;
+  gamesCount: number;
+  year: number;
+  current: boolean;
+}): Phrase {
+  if (playedMs < MINUTE_MS || !topTitle) {
+    return { before: current ? "Nothing played this year yet." : `Nothing played in ${year}.` };
+  }
+  const lead = `${capitalize(amount(playedMs))} on ${numberWords(daysPlayed)} day${daysPlayed === 1 ? "" : "s"}.`;
+  if (gamesCount === 1) return { before: `${lead} All of it in `, em: topTitle, after: "." };
+  return { before: `${lead} `, em: topTitle, after: ` led with ${amount(topMs)}.` };
+}
+
+/** "Your longest streak was twelve days, 3 to 14 March. Right now you are on four days in a row." */
+export function streakSentence(longest: Streak | null, current: number, showCurrent: boolean): string {
+  if (!longest) return "No days played yet.";
+  const now = showCurrent && current > 1 ? ` Right now you are on ${numberWords(current)} days in a row.` : "";
+  if (longest.days < 2) return `No two days in a row yet.${now}`;
+  return `Your longest streak was ${numberWords(longest.days)} days, ${formatDayRange(longest.start, longest.end)}.${now}`;
+}
+
+const PART_PLURALS: Record<DayPart, string> = {
+  morning: "mornings",
+  afternoon: "afternoons",
+  evening: "evenings",
+  night: "late nights",
+};
+const WEEKEND_DAYS = 2;
+const WORKING_DAYS = 5;
+
+/**
+ * "Your time to play is *weekend afternoons*." Weekdays and weekends are
+ * compared per day, so five working days do not outweigh two free ones.
+ * `weekClock` holds time by weekday, Monday first, then by hour.
+ */
+export function rhythmSentence(weekClock: number[][]): Phrase | null {
+  const totals = new Map<string, number>();
+  weekClock.forEach((hours, weekday) => {
+    const weekend = weekday >= WORKING_DAYS;
+    hours.forEach((ms, hour) => {
+      const key = `${weekend ? "weekend" : "weekday"} ${PART_PLURALS[dayPartOf(new Date(2000, 0, 1, hour))]}`;
+      totals.set(key, (totals.get(key) ?? 0) + ms / (weekend ? WEEKEND_DAYS : WORKING_DAYS));
+    });
+  });
+  const [best, ms] = [...totals.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
+  if (ms <= 0) return null;
+  return { before: "Your time to play is ", em: best, after: "." };
+}
+
+/** "October was your busiest month, thirty-one hours." */
+export function busiestMonthSentence(months: { activeMs: number; idleMs: number }[], year: number): string | null {
+  const totals = months.map((month) => month.activeMs + month.idleMs);
+  const busiest = totals.indexOf(Math.max(...totals));
+  if (busiest < 0 || totals[busiest] < MINUTE_MS) return null;
+  const name = new Date(year, busiest, 1).toLocaleDateString(UI_LOCALE, { month: "long" });
+  return `${name} was your busiest month, ${amount(totals[busiest])}.`;
+}
+
+const SHAPE_WORDS: Record<SessionShape, string> = {
+  quick: "a quick look under twenty minutes",
+  short: "a short one under an hour",
+  plain: "one to two hours",
+  long: "a long one of two to four hours",
+  marathon: "a marathon of four hours or more",
+};
+
+/** "Your most common session was one to two hours." */
+export function shapesSentence(shapes: Record<SessionShape, number>): string | null {
+  const [shape, count] = (Object.entries(shapes) as [SessionShape, number][]).sort((a, b) => b[1] - a[1])[0];
+  return count > 0 ? `Your most common session was ${SHAPE_WORDS[shape]}.` : null;
 }

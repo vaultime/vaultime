@@ -5,6 +5,7 @@ import { Routes, Route, Navigate } from "react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LibraryPage } from "@/features/library/LibraryPage";
 import { JournalPage } from "@/features/journal/JournalPage";
+import { StatsPage } from "@/features/stats/StatsPage";
 import { CloudPage } from "@/features/cloud/CloudPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { GameDetailsPage } from "@/features/game-details/GameDetailsPage";
@@ -18,6 +19,7 @@ export function App() {
         <Route path="library/:gameId" element={<GameDetailsPage />} />
         <Route path="journal" element={<JournalPage />} />
         <Route path="sessions" element={<Navigate to="/journal" replace />} />
+        <Route path="stats" element={<StatsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="cloud" element={<CloudPage />} />
       </Route>

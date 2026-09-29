@@ -160,6 +160,17 @@ export function isoWeekNumber(date: Date): number {
 }
 
 /** "14:10", in the regional clock. */
+/** "14 March", in the order of the user's region. */
+export function formatDayAndMonth(date: Date): string {
+  return date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" });
+}
+
+/** "3 to 14 March", or "27 February to 2 March" across months. */
+export function formatDayRange(start: Date, end: Date): string {
+  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+  return `${sameMonth ? String(start.getDate()) : formatDayAndMonth(start)} to ${formatDayAndMonth(end)}`;
+}
+
 export function formatClockTime(value: Date): string {
   return value.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
 }

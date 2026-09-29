@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router";
-import { BookOpen, Cloud, LibraryBig, Search, SlidersHorizontal } from "lucide-react";
+import { BookOpen, ChartNoAxesColumn, Cloud, LibraryBig, Search, SlidersHorizontal } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
 import { useCloudSession } from "@/features/cloud/cloud-context";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 const PAGES = [
   { to: "/library", label: "Library", icon: LibraryBig },
   { to: "/journal", label: "Journal", icon: BookOpen },
+  { to: "/stats", label: "Stats", icon: ChartNoAxesColumn },
   { to: "/cloud", label: "Cloud", icon: Cloud },
   { to: "/settings", label: "Settings", icon: SlidersHorizontal },
 ] as const;

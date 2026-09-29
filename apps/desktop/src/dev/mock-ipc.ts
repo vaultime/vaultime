@@ -40,20 +40,29 @@ const games: Game[] = titles.map((title, index) => ({
   updated_at: iso(now - 90 * DAY_MS),
 }));
 
-// A few weeks of evenings, weighted towards the first games.
+// Over a year of weekday evenings and weekend afternoons, weighted towards the
+// first games, with a quiet summer break and one game often left running.
 const sessions: Session[] = [];
 let seed = 7;
 const random = () => {
   seed = (seed * 16807) % 2147483647;
   return seed / 2147483647;
 };
-for (let day = 21; day >= 1; day -= 1) {
-  const plays = random() < 0.25 ? 0 : 1 + Math.floor(random() * 2);
+const HISTORY_DAYS = 420;
+const LEFT_RUNNING = "Stardew Valley";
+for (let day = HISTORY_DAYS; day >= 1; day -= 1) {
+  const weekday = new Date(now - day * DAY_MS).getDay();
+  const weekend = weekday === 0 || weekday === 6;
+  const summerBreak = day > 120 && day < 135;
+  const chance = summerBreak ? 0.05 : weekend ? 0.85 : 0.6;
+  const plays = random() < chance ? 1 + Math.floor(random() * (weekend ? 3 : 2)) : 0;
   for (let play = 0; play < plays; play += 1) {
     const game = games[Math.min(Math.floor(random() * random() * titles.length), titles.length - 1)];
-    const start = now - day * DAY_MS + (18 + play * 2.5 + random()) * HOUR_MS - (now % DAY_MS);
-    const runtime = Math.round((0.6 + random() * 3.2) * HOUR_MS);
-    const idle = Math.round(runtime * (0.05 + random() * 0.15));
+    const firstHour = weekend ? 12 : 18;
+    const start = now - day * DAY_MS + (firstHour + play * 2.5 + random()) * HOUR_MS - (now % DAY_MS);
+    const runtime = Math.round((0.3 + random() * (weekend ? 4.2 : 3)) * HOUR_MS);
+    const idleShare = game.title === LEFT_RUNNING ? 0.35 + random() * 0.2 : 0.05 + random() * 0.15;
+    const idle = Math.round(runtime * idleShare);
     sessions.push({
       id: `session-${day}-${play}`,
       game_id: game.id,
