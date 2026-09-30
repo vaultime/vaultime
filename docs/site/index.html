@@ -96,8 +96,8 @@
         <div>
           <div class="row"><div><h3>Runtime</h3><p>How long the game was open.</p></div></div>
           <div class="row"><div><h3>Active time</h3><p>The game was in front and you were at the keyboard, mouse or controller. This is your playtime.</p></div></div>
-          <div class="row"><div><h3>Idle time</h3><p>The game ran while you were away or it sat in the background. You choose after how many minutes that starts.</p></div></div>
-          <div class="row"><div><h3>Sleep</h3><p>Time while your computer sleeps is never counted.</p></div></div>
+          <div class="row"><div><h3>Idle time</h3><p>The game ran while you were away or it sat in the background. You choose after how many minutes without input you count as away, and whether background time counts as active.</p></div></div>
+          <div class="row"><div><h3>Sleep</h3><p>Time while your PC sleeps is never counted.</p></div></div>
           <div class="row"><div><h3>Trust labels</h3><p>Every session keeps a hash-linked log. A session is Suspicious when the clock jumped and Recovered when Vaultime rebuilt it after an unclean exit, and it says what happened. The labels show changes, they cannot prove that nothing changed.</p></div></div>
         </div>
       </section>
@@ -150,7 +150,7 @@
         <form class="apply" method="post" action="/v1/beta/apply">
           <label class="field">
             <span class="caps">Email</span>
-            <!-- Same as BETA_EMAIL_MAX_CHARS in apps/api/src/constants.rs. -->
+            <!-- Same as EMAIL_MAX_CHARS in apps/api/src/constants.rs. -->
             <input type="email" name="email" required maxlength="254" autocomplete="email" />
           </label>
           <fieldset class="field">
@@ -169,7 +169,7 @@
           <label class="bot" aria-hidden="true">Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
           <label class="consent">
             <input type="checkbox" name="consent" value="yes" required />
-            <span>Vaultime may keep my email and note to answer this application, as the <a href="/privacy.html">privacy policy</a> describes.</span>
+            <span>Vaultime may keep my email, platform and note to answer this application, as the <a href="/privacy.html">privacy policy</a> describes.</span>
           </label>
           <div><button class="button solid" type="submit">Apply</button></div>
         </form>

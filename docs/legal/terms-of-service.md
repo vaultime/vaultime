@@ -2,11 +2,11 @@
 
 **Effective date:** September 30, 2026
 
-These terms govern your use of the Vaultime desktop application and its optional invite-only cloud backup service.
+These terms govern your use of the Vaultime website and the optional invite-only cloud backup service for the Vaultime desktop application.
 
 ## 1. Acceptance
 
-By installing or using Vaultime, you agree to these terms. If you do not agree, do not use the software.
+By using the cloud backup service or the website, you agree to these terms. The app itself is covered by its license. If you do not agree, do not use the service or the website.
 
 ## 2. The Software
 
@@ -19,7 +19,7 @@ The app runs entirely on your device. No account is needed for tracking, session
 ## 4. Cloud Backup
 
 - Cloud backup is free and invite-only. There are no paid plans.
-- Every account has the same limits on backup size, number of stored backups and upload frequency. They exist to keep the service available for everyone.
+- Every account has the same limits on backup size, total storage, number of stored backups and upload frequency. They exist to keep the service available for everyone.
 - Backups are encrypted with your backup passphrase before they leave your device. If you lose the passphrase, nobody can decrypt those backups, including us.
 - Access can be revoked for accounts that break these terms.
 

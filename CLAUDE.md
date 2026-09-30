@@ -53,8 +53,9 @@ Frontend, from `apps/desktop`:
 - `npm ci`
 - `npm run tauri dev` starts the app
 - `npm run typecheck`, `npm run lint`, `npm test` and `npm run build`
-- Tests live next to the code as `*.test.ts` and run in Berlin time with a
-  German locale, so day boundaries and date formats differ from UTC.
+- Tests live next to the code as `*.test.ts` and run in six time zones (see
+  `vitest.config.ts`) with a German locale, so code that mixes up local and
+  UTC days fails somewhere.
 - `VITE_MOCK_IPC=1 npx vite build --outDir dist-mock`, then
   `npx vite preview --outDir dist-mock` shows the UI in a browser with sample
   data. `bash ../../scripts/ui-screenshots.sh <folder> [page ...]` captures
@@ -106,6 +107,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Session events are append-only and hash-chained. Totals are derived from
   them.
 - Every schema change is a new migration. Never edit a shipped migration.
+- The API migrations 0001 to 0004 carry no SPDX lines and never change,
+  because the live database recorded their checksums. New migrations carry
+  the lines.
 - Keep enough metadata to recalculate totals when tracking rules change.
 
 ## Tracking

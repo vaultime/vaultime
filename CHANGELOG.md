@@ -11,14 +11,14 @@ The first public release.
 
 ### Tracking
 
-- **Automatic tracking.** Start a game however you usually do and Vaultime records the session. Runtime, active playtime and idle time are counted apart.
+- **Automatic tracking.** Once a game is in your library, start it however you like and Vaultime records the session. Runtime, active playtime and idle time are counted apart.
 - **Keeps running in the tray.** Closing the window keeps tracking, and Vaultime starts with Windows or when you log in on Linux. Both can be turned off in Settings. The tray menu shows the game running with its time and how long you played today.
 - **Light on your PC.** A check for running games takes a few milliseconds every five seconds, and the window stops drawing while it sits in the tray.
-- **Sleep aware.** Time while your computer sleeps is not counted.
+- **Sleep aware.** Time while your PC sleeps is not counted.
 - **Controller play counts.** Buttons and sticks count as input, so a game played on a controller does not turn idle. On Windows this covers Xbox controllers and controllers that act as one.
 - **Nothing extra to install on Linux.** Vaultime asks the X server directly which window is in front and when you last used the keyboard or mouse. On Wayland, GNOME reports the idle time. Games that keep the screensaver off still turn idle when you leave.
 - **Careful matching.** Games are matched by their full path, so two games with the same file name stay apart. Libraries behind junctions or symlinks and games that run through Wine still match.
-- **Honest trust labels.** Every session keeps a hash-linked event log. Sessions with a clock jump are marked Suspicious, sessions rebuilt after an unclean exit Recovered, and both say what happened. The library marks a game for such sessions from the last 30 days, and its page counts all of them.
+- **Honest trust labels.** Every session keeps a hash-linked event log. Sessions with a clock jump or a record changed outside Vaultime are marked Suspicious, sessions rebuilt after an unclean exit Recovered, and both say what happened. The library marks a game for such sessions from the last 30 days, and its page counts all of them.
 
 ### Library
 
@@ -27,21 +27,21 @@ The first public release.
 - **Journal.** Your play week by week, with a 24 hour strip for each day. Games that ran side by side are hatched on the strip and count once in the day and week totals.
 - **Where each game stands.** Mark a game as Backlog, Playing, Finished or Dropped on its page and filter the library by it. The journal notes the day, for example "You finished Hades II after forty-two hours."
 - **Notes on sessions.** Write a line on any session in the journal or on the game page. Notes never change tracked time.
-- **Honest corrections.** Cut a session short when a game was left running, take out a session that was no play at all, or add play from another device. Changed sessions are labeled Edited or Manual and keep the old times and your reason in their log.
+- **Honest corrections.** Cut a session short when a game was left running, take out a session that was no play at all, or add play from another PC. Changed sessions are labeled Edited or Manual and keep the old times and your reason in their log.
 - **Playtime from before Vaultime.** Settings reads the playtime Steam counted for the games in your library, shows what it adds and counts it toward each game's total. Time Vaultime already tracked counts once, and reading Steam again keeps your corrections and the sessions you added by hand.
 - **Stats.** Your year in play: a calendar of every day with your streaks, when in the week you play, your games with active and idle time apart, the months, how long your sessions run and the games you leave running.
 - **Your games, sorted your way.** The list on the left sorts by recent play, title or playtime and keeps the choice.
 - **Live bar and search.** The running game and its timer stay at the bottom of every page, and Ctrl+K jumps to any game, page or action.
-- **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest.
+- **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest. Any other game can be added by hand.
 - **Steam covers.** Steam games get the cover art Steam already keeps on your PC.
 - **Artwork.** Picks up cover art from your game folders, or add your own.
 - **Hidden games.** Hide a game from the library without losing it. It stays tracked, its sessions still count in the journal and your totals, and Settings lists hidden games to bring them back.
 
 ### Backups
 
-- **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything. A restore only takes what a backup may hold and keeps the backup folder of this PC. Damaged artwork is left out instead of stopping it.
+- **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything. A restore only takes the files a backup may hold and keeps this PC's backup folder setting. Damaged artwork is skipped instead of stopping the restore.
 - **Automatic backups** once a day and when Vaultime quits, the newest seven kept, in Vaultime's data folder or a folder you pick. Artwork that did not change is stored once for all of them. Signed in PCs also back up to the cloud once a day.
-- **Invite-only cloud backup** on our own server. Free, with the same limits for every account. Backups are encrypted on your computer before upload, artwork is uploaded once and shared by every backup, and at the limit a new backup replaces the oldest. A wrong backup passphrase is refused before it can start backups nobody can open. The server slows down password guessing and ends a session whose sign-in was copied.
+- **Invite-only cloud backup** on our own server. Free, with the same limits for every account: 2 GiB for backups and artwork together and up to 30 backups. Backups are encrypted on your PC before upload, and artwork is uploaded once and shared by every backup. At 30 backups a new upload replaces the oldest. When the storage is full, an upload is refused until you delete older backups. A backup passphrase that does not open your earlier cloud backups is refused. The server slows down password guessing and ends a session whose sign-in was copied.
 - **Signed in at a glance.** The logo, the tray icon and the taskbar icon turn violet while the PC is signed in to cloud backup.
 - **Password change** on the Cloud page. Your other PCs are signed out, and the backup passphrase stays the same.
 - **Export.** Save every finished session as CSV for a spreadsheet or as JSON for other tools, with notes, trust labels and, in JSON, each game's status and earlier playtime.

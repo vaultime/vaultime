@@ -1,5 +1,5 @@
-# Not released yet
+# Download not available
 
-The first version of Vaultime is still being tested, so there is nothing to download yet. Once it is out, the downloads appear on the start page.
+This download is not available. The first release of Vaultime may still be on its way. Once it is out, the start page always links the current version.
 
-[Apply for the cloud beta](/#beta) to hear from us when it is out.
+[Go to the downloads](/#download)
