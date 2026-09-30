@@ -35,8 +35,18 @@ async fn run(state: &AppState) -> AppResult<()> {
     .fetch_all(&state.db)
     .await?;
     for account_id in accounts {
-        prune_stale_pending_backups(state, account_id).await?;
-        collect_unreferenced_blobs(state, account_id).await?;
+        // An account that is uploading right now is left for the next round,
+        // so a long upload never loses its pending backup halfway.
+        let Some(_upload) = state.limits.uploads.try_lock(account_id) else {
+            continue;
+        };
+        let cleaned = async {
+            prune_stale_pending_backups(state, account_id).await?;
+            collect_unreferenced_blobs(state, account_id).await
+        };
+        if let Err(error) = cleaned.await {
+            tracing::error!(%account_id, error = %error, "account cleanup failed");
+        }
     }
 
     // Revoked tokens stay until they expire, so a copy that comes back is recognized.

@@ -22,7 +22,9 @@ use uuid::Uuid;
 use super::backups::{is_sha256_hex, receive_body, remove_file_if_present};
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
-use crate::constants::{BYTES_PER_MIB, MAX_BLOB_IDS_PER_REQUEST};
+use crate::constants::{
+    BYTES_PER_GIB, BYTES_PER_MIB, MAX_BLOB_IDS_PER_REQUEST, UPLOAD_LOCK_WAIT_SECS,
+};
 use crate::error::{AppError, AppResult};
 use crate::models::{MissingBlobsRequest, MissingBlobsResponse, StorageResponse};
 
@@ -54,7 +56,19 @@ pub async fn upload_blob(
     request: Request,
 ) -> AppResult<StatusCode> {
     let blob_id = validate_blob_id(&blob_id)?;
-    let _upload = state.limits.uploads.lock(auth.account_id).await;
+    let Some(_upload) = state
+        .limits
+        .uploads
+        .lock_within(
+            auth.account_id,
+            std::time::Duration::from_secs(UPLOAD_LOCK_WAIT_SECS),
+        )
+        .await
+    else {
+        return Err(AppError::conflict(
+            "another upload of this account is still running",
+        ));
+    };
     if blob_exists(&state, auth.account_id, &blob_id).await? {
         return Ok(StatusCode::OK);
     }
@@ -305,9 +319,13 @@ fn too_large(max_bytes: i64) -> AppError {
 }
 
 pub(super) fn storage_full(max_account_bytes: i64) -> AppError {
+    let limit = if max_account_bytes % BYTES_PER_GIB == 0 {
+        format!("{} GiB", max_account_bytes / BYTES_PER_GIB)
+    } else {
+        format!("{} MiB", max_account_bytes / BYTES_PER_MIB)
+    };
     AppError::storage_full(format!(
-        "this account has used its {} MiB of cloud storage, delete older backups to make room",
-        max_account_bytes / BYTES_PER_MIB
+        "this account's {limit} of cloud storage is full. Delete older backups to make room."
     ))
 }
 

@@ -7,8 +7,12 @@
 
 /// Bytes in one mebibyte.
 pub const BYTES_PER_MIB: i64 = 1024 * 1024;
+/// Bytes in one gibibyte.
+pub const BYTES_PER_GIB: i64 = 1024 * BYTES_PER_MIB;
 /// Seconds in one minute.
 pub const SECS_PER_MINUTE: i64 = 60;
+/// Seconds in one hour.
+pub const SECS_PER_HOUR: u64 = 60 * 60;
 
 // Database
 
@@ -36,14 +40,22 @@ pub const RATE_WINDOW_SECS: u64 = 10 * 60;
 /// Sign-up, sign-in, refresh and password requests one client address may
 /// make per window. The app refreshes about four times an hour.
 pub const AUTH_REQUESTS_PER_WINDOW_PER_CLIENT: u32 = 60;
-/// Sign-in attempts per email address and window.
-pub const LOGIN_ATTEMPTS_PER_WINDOW_PER_EMAIL: u32 = 10;
-/// Beta applications one client address may send per window.
-pub const BETA_APPLICATIONS_PER_WINDOW_PER_CLIENT: u32 = 3;
+/// Failed sign-ins per email address and window, from anywhere.
+pub const LOGIN_FAILURES_PER_WINDOW_PER_EMAIL: u32 = 30;
+/// Failed sign-ins per email address and window from one client address.
+pub const LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT: u32 = 10;
+/// Beta applications one client address may send per hour.
+pub const BETA_APPLICATIONS_PER_HOUR_PER_CLIENT: u32 = 3;
 /// Keys a rate limiter tracks at most, so a flood of addresses cannot fill the memory.
 pub const RATE_LIMIT_MAX_KEYS: usize = 100_000;
 /// Password and invite hashes computed at the same time.
 pub const MAX_CONCURRENT_PASSWORD_HASHES: usize = 4;
+/// Longest wait for a free hashing slot before a sign-in is turned away, in seconds.
+pub const HASH_QUEUE_WAIT_SECS: u64 = 10;
+/// Longest wait for another upload of the same account to finish, in seconds.
+pub const UPLOAD_LOCK_WAIT_SECS: u64 = 60;
+/// Longest pause between two parts of an upload before it counts as stalled, in seconds.
+pub const UPLOAD_IDLE_SECS: u64 = 120;
 /// Devices one account may register.
 pub const MAX_DEVICES_PER_ACCOUNT: i64 = 50;
 /// Longest device id, name, platform or app version, in characters.
@@ -107,9 +119,10 @@ pub const DEFAULT_STALE_PENDING_BACKUP_SECS: i64 = 60 * SECS_PER_MINUTE;
 
 // Beta applications
 
-/// Longest email address a beta application takes, the limit of the address
-/// format. Same as the `maxlength` of the email field in `docs/site/index.html`.
-pub const BETA_EMAIL_MAX_CHARS: usize = 254;
+/// Longest email address an account or a beta application takes, the limit
+/// of the address format. Same as the `maxlength` of the email field in
+/// `docs/site/index.html`.
+pub const EMAIL_MAX_CHARS: usize = 254;
 /// Longest note on a beta application. Same as the `maxlength` of the note
 /// field in `docs/site/index.html`.
 pub const BETA_NOTE_MAX_CHARS: usize = 500;

@@ -20,9 +20,9 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::config::Config;
 use crate::constants::{
-    ACCESS_TOKEN_TTL_MINUTES, INVITE_CODE_GROUP_CHARS, INVITE_HASH_BYTES, INVITE_LOOKUP_KEY_CHARS,
-    INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_P, INVITE_SCRYPT_R, MIN_PASSWORD_CHARS, REFRESH_TOKEN_BYTES,
-    REFRESH_TOKEN_TTL_DAYS,
+    ACCESS_TOKEN_TTL_MINUTES, EMAIL_MAX_CHARS, HASH_QUEUE_WAIT_SECS, INVITE_CODE_GROUP_CHARS,
+    INVITE_HASH_BYTES, INVITE_LOOKUP_KEY_CHARS, INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_P,
+    INVITE_SCRYPT_R, MIN_PASSWORD_CHARS, REFRESH_TOKEN_BYTES, REFRESH_TOKEN_TTL_DAYS,
 };
 use crate::error::{AppError, AppResult};
 
@@ -82,7 +82,7 @@ pub fn chunk_code(body: &str) -> String {
 
 pub fn normalize_email(raw: &str) -> AppResult<String> {
     let email = raw.trim().to_ascii_lowercase();
-    if email.is_empty() || !email.contains('@') {
+    if email.is_empty() || !email.contains('@') || email.chars().count() > EMAIL_MAX_CHARS {
         return Err(AppError::bad_request("a valid email address is required"));
     }
 
@@ -90,7 +90,7 @@ pub fn normalize_email(raw: &str) -> AppResult<String> {
 }
 
 pub fn check_password_length(password: &str) -> AppResult<()> {
-    if password.len() < MIN_PASSWORD_CHARS {
+    if password.chars().count() < MIN_PASSWORD_CHARS {
         return Err(AppError::bad_request(format!(
             "password must be at least {MIN_PASSWORD_CHARS} characters long"
         )));
@@ -111,12 +111,13 @@ pub async fn run_hash<T: Send + 'static>(
     state: &AppState,
     work: impl FnOnce() -> AppResult<T> + Send + 'static,
 ) -> AppResult<T> {
-    let _permit = state
-        .limits
-        .hashing
-        .acquire()
-        .await
-        .map_err(|error| AppError::internal(format!("hashing is closed: {error}")))?;
+    let _permit = tokio::time::timeout(
+        std::time::Duration::from_secs(HASH_QUEUE_WAIT_SECS),
+        state.limits.hashing.acquire(),
+    )
+    .await
+    .map_err(|_| AppError::too_many_requests())?
+    .map_err(|error| AppError::internal(format!("hashing is closed: {error}")))?;
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|error| AppError::internal(format!("hashing failed: {error}")))?

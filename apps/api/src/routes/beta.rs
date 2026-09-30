@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::admin::require_admin;
 use crate::AppState;
 use crate::auth::{AuthenticatedAccount, normalize_email};
-use crate::constants::{BETA_APPLICATIONS_PER_HOUR, BETA_EMAIL_MAX_CHARS, BETA_NOTE_MAX_CHARS};
+use crate::constants::{BETA_APPLICATIONS_PER_HOUR, BETA_NOTE_MAX_CHARS, EMAIL_MAX_CHARS};
 use crate::error::AppResult;
 use crate::limits::client_key;
 use crate::models::BetaApplicationResponse;
@@ -111,7 +111,7 @@ fn validate(form: &BetaApplicationForm) -> Result<Application, String> {
     }
     let email = normalize_email(&form.email).map_err(|error| error.to_string())?;
     let (local, domain) = email.split_once('@').unwrap_or_default();
-    if email.chars().count() > BETA_EMAIL_MAX_CHARS
+    if email.chars().count() > EMAIL_MAX_CHARS
         || local.is_empty()
         || !domain.contains('.')
         || email.chars().any(char::is_whitespace)
@@ -122,7 +122,9 @@ fn validate(form: &BetaApplicationForm) -> Result<Application, String> {
     if !PLATFORMS.contains(&platform.as_str()) {
         return Err("the platform is not known".into());
     }
-    let note = form.note.trim();
+    // Browsers send a line break as two characters, the page counts it as one.
+    let note = form.note.replace("\r\n", "\n");
+    let note = note.trim();
     if note.chars().count() > BETA_NOTE_MAX_CHARS {
         return Err("the note is too long".into());
     }

@@ -69,7 +69,7 @@ pub async fn sign_up(
         return Err(AppError::forbidden("invite has expired"));
     }
     if invite.redeemed_count >= invite.max_redemptions {
-        return Err(AppError::forbidden("invite has no redemptions remaining"));
+        return Err(AppError::forbidden("this invite code has been used up"));
     }
 
     let email_taken = sqlx::query_scalar::<_, bool>(
@@ -136,12 +136,25 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> AppResult<Json<AuthResponse>> {
     let email = normalize_email(&payload.email)?;
-    let invalid_credentials = || AppError::unauthorized("invalid email or password");
-    if !state.limits.auth_by_client.allow(&client_key(&headers))
-        || !state.limits.login_by_email.allow(&email)
+    let client = client_key(&headers);
+    let email_and_client = format!("{email} {client}");
+    let limits = &state.limits;
+    if !limits.auth_by_client.allow(&client)
+        || limits.failures_by_email.blocked(&email)
+        || limits
+            .failures_by_email_and_client
+            .blocked(&email_and_client)
     {
         return Err(AppError::too_many_requests());
     }
+    // Only failures count, so signing in often never locks anyone out.
+    let invalid_credentials = || {
+        limits.failures_by_email.record(&email);
+        limits
+            .failures_by_email_and_client
+            .record(&email_and_client);
+        AppError::unauthorized("invalid email or password")
+    };
 
     let row = sqlx::query_as::<_, AccountPasswordRow>(
         r#"
@@ -197,12 +210,13 @@ pub async fn refresh(
 
     let row = sqlx::query_as::<_, RefreshTokenAccountRow>(
         r#"
-        SELECT t.id, t.family_id, t.revoked_at, t.account_id, a.email, a.role, a.access_state
+        SELECT t.id, t.family_id, t.revoked_at, t.replaced_at, t.account_id,
+               a.email, a.role, a.access_state
         FROM cloud_refresh_tokens t
         JOIN cloud_accounts a ON a.id = t.account_id
         WHERE t.token_hash = $1
           AND t.expires_at > NOW()
-        FOR UPDATE OF t
+        FOR UPDATE OF t FOR SHARE OF a
         "#,
     )
     .bind(&presented_hash)
@@ -210,9 +224,10 @@ pub async fn refresh(
     .await?
     .ok_or_else(|| AppError::unauthorized("refresh token is invalid or expired"))?;
 
-    // A token that was replaced already came back, so someone else holds a
-    // copy of this session. Ending the whole family locks both out.
-    if row.revoked_at.is_some() {
+    // A token that a refresh replaced came back, so someone else holds a copy
+    // of this session. Ending the whole family locks both out. A token that
+    // signing out or a password change revoked is only refused.
+    if row.replaced_at.is_some() {
         sqlx::query(
             "UPDATE cloud_refresh_tokens SET revoked_at = COALESCE(revoked_at, NOW())
              WHERE family_id = $1",
@@ -227,12 +242,19 @@ pub async fn refresh(
         ));
     }
 
+    if row.revoked_at.is_some() {
+        return Err(AppError::unauthorized(
+            "refresh token is invalid or expired",
+        ));
+    }
     if row.access_state != "active" {
         return Err(AppError::forbidden("account does not have cloud access"));
     }
 
     sqlx::query(
-        "UPDATE cloud_refresh_tokens SET revoked_at = NOW(), last_used_at = NOW() WHERE id = $1",
+        "UPDATE cloud_refresh_tokens
+         SET revoked_at = NOW(), replaced_at = NOW(), last_used_at = NOW()
+         WHERE id = $1",
     )
     .bind(row.id)
     .execute(&mut *tx)
@@ -316,6 +338,13 @@ pub async fn change_password(
     let refresh_token = generate_refresh_token()?;
     let refresh_expires_at = refresh_token_expiry();
     let mut tx = state.db.begin().await?;
+
+    // Waits for refreshes of this account to finish, so the revocation below
+    // also sees the tokens they just handed out.
+    sqlx::query("SELECT id FROM cloud_accounts WHERE id = $1 FOR UPDATE")
+        .bind(row.id)
+        .execute(&mut *tx)
+        .await?;
 
     sqlx::query(
         "UPDATE cloud_account_passwords SET password_hash = $2, password_updated_at = NOW() WHERE account_id = $1",

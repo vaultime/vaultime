@@ -24,7 +24,7 @@ use super::blobs::{
 };
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
-use crate::constants::{BYTES_PER_MIB, SECS_PER_MINUTE};
+use crate::constants::{BYTES_PER_MIB, SECS_PER_MINUTE, UPLOAD_IDLE_SECS, UPLOAD_LOCK_WAIT_SECS};
 use crate::error::{AppError, AppResult};
 use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
 
@@ -69,7 +69,19 @@ pub async fn create_backup(
 
     let blob_ids = validate_blob_ids(&payload.blob_ids)?;
 
-    let _upload = state.limits.uploads.lock(auth.account_id).await;
+    let Some(_upload) = state
+        .limits
+        .uploads
+        .lock_within(
+            auth.account_id,
+            std::time::Duration::from_secs(UPLOAD_LOCK_WAIT_SECS),
+        )
+        .await
+    else {
+        return Err(AppError::conflict(
+            "another upload of this account is still running",
+        ));
+    };
     prune_stale_pending_backups(&state, auth.account_id).await?;
     enforce_backup_limits(&state, auth.account_id).await?;
 
@@ -147,7 +159,19 @@ pub async fn upload_backup_content(
     AxumPath(backup_id): AxumPath<Uuid>,
     request: Request,
 ) -> AppResult<Json<BackupRecordResponse>> {
-    let _upload = state.limits.uploads.lock(auth.account_id).await;
+    let Some(_upload) = state
+        .limits
+        .uploads
+        .lock_within(
+            auth.account_id,
+            std::time::Duration::from_secs(UPLOAD_LOCK_WAIT_SECS),
+        )
+        .await
+    else {
+        return Err(AppError::conflict(
+            "another upload of this account is still running",
+        ));
+    };
     let backup = find_backup(&state, auth.account_id, backup_id).await?;
     if backup.status == "complete" {
         return Err(AppError::conflict(
@@ -321,10 +345,15 @@ pub(super) async fn receive_body(
     let mut hasher = Sha256::new();
     let mut size_bytes = 0_i64;
 
-    while let Some(chunk) = stream.try_next().await.map_err(|error| {
-        tracing::debug!(error = %error, "backup upload body failed");
-        AppError::bad_request("backup upload was interrupted")
-    })? {
+    let idle = std::time::Duration::from_secs(UPLOAD_IDLE_SECS);
+    while let Some(chunk) = tokio::time::timeout(idle, stream.try_next())
+        .await
+        .map_err(|_| AppError::bad_request("the upload stalled"))?
+        .map_err(|error| {
+            tracing::debug!(error = %error, "backup upload body failed");
+            AppError::bad_request("backup upload was interrupted")
+        })?
+    {
         size_bytes = size_bytes.saturating_add(i64::try_from(chunk.len()).unwrap_or(i64::MAX));
         if size_bytes > max_bytes {
             return Ok(None);
@@ -362,7 +391,7 @@ async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<
         && last_complete_at + Duration::seconds(min_interval_secs) > Utc::now()
     {
         return Err(AppError::conflict(format!(
-            "wait at least {} minutes between remote backups",
+            "wait at least {} minutes between cloud backups",
             min_interval_secs / SECS_PER_MINUTE
         )));
     }

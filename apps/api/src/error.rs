@@ -67,7 +67,7 @@ impl AppError {
     }
 
     pub fn too_many_requests() -> Self {
-        Self::TooManyRequests("too many attempts, try again in a few minutes".into())
+        Self::TooManyRequests("too many attempts. Try again in a few minutes.".into())
     }
 
     pub fn configuration(message: impl Into<String>) -> Self {

@@ -44,13 +44,18 @@ async fn main() -> Result<(), error::AppError> {
         .connect(&config.database_url)
         .await?;
 
-    sqlx::migrate!().run(&db).await?;
+    // A release rolled back after a newer one ran keeps working, since
+    // migrations only ever add.
+    let mut migrator = sqlx::migrate!();
+    migrator.set_ignore_missing(true);
+    migrator.run(&db).await?;
 
     let state = AppState {
         config: Arc::clone(&config),
         db,
         limits: Arc::new(Limits::new()),
     };
+    limits::spawn_pruning(Arc::clone(&state.limits));
     routes::spawn_maintenance(state.clone());
 
     let app = routes::router(state);
@@ -116,6 +121,10 @@ mod tests {
         (
             5,
             "08520b6eba886012668100ec200a50dae20008915215da28bc9c1cb7747a6239c0b10a1447d0f33db883978782dfc366",
+        ),
+        (
+            6,
+            "ef36b8b07c2fe5d257df7f8e5d26ec58b72ef092710f2705879457402069d05768100781b02ad1676fc9056e8b848092",
         ),
     ];
 
