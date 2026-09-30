@@ -51,19 +51,38 @@ for pattern in "${!aliases[@]}"; do
   cp "$file" "$stage/latest/${aliases[$pattern]}"
 done
 
+# The installer an updater platform gets. The links in latest.json can be
+# release asset ids instead of file names, so the platform decides.
+installer_for() {
+  case "$1" in
+    windows-*-msi) one "*.msi" ;;
+    windows-*) one "*-setup.exe" ;;
+    linux-*-deb) one "*.deb" ;;
+    linux-*-rpm) one "*.rpm" ;;
+    linux-*) one "*.AppImage" ;;
+    *) echo "no installer known for the platform $1" >&2; return 1 ;;
+  esac
+}
+
 # The updater downloads from this version's folder.
 manifest=$(one latest.json)
-jq --arg base "$base/$version" \
-  '.platforms |= map_values(.url = ($base + "/" + (.url | split("/") | last)))' \
-  "$manifest" >"$stage/latest.json"
-jq -e --arg version "$version" '.version | ltrimstr("v") == $version' "$stage/latest.json" >/dev/null \
+jq -e --arg version "$version" '.version | ltrimstr("v") == $version' "$manifest" >/dev/null \
   || { echo "latest.json is not for $version" >&2; exit 1; }
 for platform in windows-x86_64 linux-x86_64; do
-  jq -e --arg platform "$platform" '.platforms | has($platform)' "$stage/latest.json" >/dev/null \
+  jq -e --arg platform "$platform" '.platforms | has($platform)' "$manifest" >/dev/null \
     || { echo "latest.json has no $platform update" >&2; exit 1; }
 done
-for url in $(jq -r '.platforms[].url' "$stage/latest.json"); do
-  [ -f "$stage/$version/${url##*/}" ] || { echo "latest.json names ${url##*/}, which is missing" >&2; exit 1; }
+cp "$manifest" "$stage/latest.json"
+for platform in $(jq -r '.platforms | keys[]' "$manifest"); do
+  installer=$(installer_for "$platform")
+  name=${installer##*/}
+  # The signature proves the platform and the file belong together.
+  jq -e --arg platform "$platform" --rawfile signature "$installer.sig" \
+    '.platforms[$platform].signature == ($signature | rtrimstr("\n"))' "$manifest" >/dev/null \
+    || { echo "latest.json signs another file than $name for $platform" >&2; exit 1; }
+  jq --arg platform "$platform" --arg url "$base/$version/$name" \
+    '.platforms[$platform].url = $url' "$stage/latest.json" >"$stage/latest.next"
+  mv "$stage/latest.next" "$stage/latest.json"
 done
 
 # Files first, then the links, then the updater, so nothing points at a file
