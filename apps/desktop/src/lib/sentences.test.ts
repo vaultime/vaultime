@@ -131,7 +131,7 @@ describe("sessionTrustNote", () => {
   });
 
   it("falls back to a general reason", () => {
-    expect(sessionTrustNote(flagged, [])).toBe("Timing looked off during it.");
+    expect(sessionTrustNote(flagged, [])).toBe("The clock jumped or the record was changed outside Vaultime.");
     const recovered = { ...flagged, integrity_status: "recovered" };
     expect(sessionTrustNote(recovered, [])).toBe("Rebuilt after an unclean exit.");
   });

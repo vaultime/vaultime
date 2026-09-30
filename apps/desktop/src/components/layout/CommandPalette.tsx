@@ -26,7 +26,7 @@ const FIXED: Command[] = [
   { id: "page-stats", label: "Stats", hint: "Your year in numbers", kind: "Page", to: "/stats" },
   { id: "page-cloud", label: "Cloud", hint: "Encrypted backups on the server", kind: "Page", to: "/cloud" },
   { id: "page-settings", label: "Settings", hint: "Tracking, backups and more", kind: "Page", to: "/settings" },
-  { id: "action-add", label: "Add a game", hint: "Pick an executable by hand", kind: "Action", to: "/library?add=1" },
+  { id: "action-add", label: "Add a game", hint: "Pick its program by hand", kind: "Action", to: "/library?add=1" },
   { id: "action-discover", label: "Discover games", hint: "Scan Steam and the folders of other launchers", kind: "Action", to: "/library?discover=1" },
   { id: "setting-backup", label: "Local backups", hint: "Save or restore a backup", kind: "Page", to: "/settings" },
   { id: "setting-idle", label: "Idle time", hint: "When time stops counting as active", kind: "Page", to: "/settings" },

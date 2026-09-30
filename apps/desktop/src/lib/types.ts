@@ -80,7 +80,7 @@ export interface Setting {
   updated_at: string;
 }
 
-/** Runtime tracking capabilities reported by the backend. */
+/** Runtime tracking capabilities reported by the core. */
 export interface TrackingDiagnostics {
   platform: string;
   running: boolean;
@@ -119,7 +119,7 @@ export interface DiscoveredGame {
   already_added: boolean;
 }
 
-/** Artwork entry plus an inline preview payload returned by the backend. */
+/** Artwork entry plus an inline preview payload returned by the core. */
 export interface GameAssetView {
   id: string;
   game_id: string;

@@ -3,9 +3,9 @@
 
 // The colored header that opens the library and every game page.
 
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
-import { HERO_TITLE_LARGE_MAX_CHARS, HERO_TITLE_MEDIUM_MAX_CHARS } from "@/lib/constants";
+import { HERO_TITLE_MIN_FONT_PX } from "@/lib/constants";
 import type { GameTint } from "@/lib/game-tint";
 import { cn } from "@/lib/utils";
 
@@ -50,28 +50,74 @@ export function TintedOverline({ tint, children }: { tint: GameTint; children: R
   );
 }
 
+/**
+ * Every title gets the same size and one line, so the header keeps its height
+ * from game to game. A title too long for the line shrinks until it fits, and
+ * one that does not fit even then wraps at the smallest size.
+ */
 export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
-  // Long titles step down so they stay on two lines.
-  const size =
-    text.length <= HERO_TITLE_LARGE_MAX_CHARS
-      ? "text-[clamp(56px,7vw,104px)]"
-      : text.length <= HERO_TITLE_MEDIUM_MAX_CHARS
-        ? "text-[clamp(48px,5.4vw,80px)]"
-        : "text-[clamp(40px,4.2vw,60px)]";
+  const lineRef = useRef<HTMLHeadingElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const line = lineRef.current;
+    const title = textRef.current;
+    if (!line || !title) return;
+
+    function fit() {
+      if (!line || !title) return;
+      title.style.fontSize = "";
+      title.style.removeProperty("text-wrap");
+      const available = line.clientWidth;
+      let needed = title.offsetWidth;
+      let size = parseFloat(getComputedStyle(line).fontSize);
+      // Fraunces draws wider at smaller sizes, so one step can fall short.
+      while (needed > available && size > HERO_TITLE_MIN_FONT_PX) {
+        size = Math.max(Math.floor((size * available) / needed), HERO_TITLE_MIN_FONT_PX);
+        title.style.fontSize = `${size}px`;
+        needed = title.offsetWidth;
+      }
+      if (needed > available) {
+        title.style.setProperty("text-wrap", "balance");
+      }
+    }
+
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(line);
+    // Fraunces may still be loading, and it sets different widths.
+    void document.fonts.ready.then(fit);
+    return () => observer.disconnect();
+  }, [text]);
+
   return (
     <h1
-      // The size goes first, twMerge drops a line height that comes before a font size.
-      className={cn("font-display mt-3.5", size, "leading-[0.95] font-medium tracking-[-0.03em] text-balance")}
+      ref={lineRef}
+      className="font-display mt-3.5 text-[clamp(48px,5.4vw,80px)] leading-[0.95] font-medium tracking-[-0.03em] whitespace-nowrap"
       style={{ color: tint.ink }}
     >
-      {text}
+      {/* The line keeps the full size height, the shrunk title sits on its baseline. */}
+      <span ref={textRef} className="inline-block">
+        {text}
+      </span>
     </h1>
   );
 }
 
-export function TintedSentence({ tint, children }: { tint: GameTint; children: ReactNode }) {
+export function TintedSentence({
+  tint,
+  className,
+  children,
+}: {
+  tint: GameTint;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <p className="font-display mt-5 max-w-[620px] text-2xl leading-[1.3] text-pretty" style={{ color: tint.soft }}>
+    <p
+      className={cn("font-display mt-5 max-w-[620px] text-2xl leading-[1.3] text-pretty", className)}
+      style={{ color: tint.soft }}
+    >
       {children}
     </p>
   );

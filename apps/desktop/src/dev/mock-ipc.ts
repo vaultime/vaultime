@@ -421,6 +421,8 @@ mockIPC((cmd, payload) => {
   switch (cmd) {
     case "get_app_version":
       return "0.1.0";
+    case "get_device_id":
+      return "preview";
     case "list_games":
       return allGames;
     case "list_earlier_playtime":

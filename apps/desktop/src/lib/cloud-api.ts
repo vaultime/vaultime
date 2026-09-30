@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { MIN_BACKUP_PASSPHRASE_CHARS } from "@/lib/constants";
+import { MIN_BACKUP_PASSPHRASE_CHARS, VAULTIME_URL } from "@/lib/constants";
 import { sentence } from "@/lib/words";
 
 const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim();
@@ -9,11 +9,8 @@ const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim(
 export const CLOUD_API_BASE_URL = (
   configuredCloudApiBaseUrl && configuredCloudApiBaseUrl.length > 0
     ? configuredCloudApiBaseUrl
-    : "https://vaultime.codfishcloud.de"
+    : VAULTIME_URL
 ).replace(/\/+$/, "");
-
-/** Prefix of invite codes. Same as INVITE_PREFIX in apps/api/src/constants.rs. */
-export const INVITE_CODE_PREFIX = "VTLINV";
 
 /** Shown when a backup passphrase is shorter than the minimum. */
 export const BACKUP_PASSPHRASE_TOO_SHORT = `The backup passphrase needs at least ${MIN_BACKUP_PASSPHRASE_CHARS} characters.`;

@@ -7,18 +7,29 @@
 
 // Time units
 
+/** One second in milliseconds. */
 export const SECOND_MS = 1_000;
+/** One minute in milliseconds. */
 export const MINUTE_MS = 60 * SECOND_MS;
+/** One hour in milliseconds. */
 export const HOUR_MS = 60 * MINUTE_MS;
+/** One day in milliseconds, ignoring clock changes. */
 export const DAY_MS = 24 * HOUR_MS;
+/** Seconds in a minute. */
 export const SECONDS_PER_MINUTE = 60;
+/** Minutes in an hour. */
 export const MINUTES_PER_HOUR = 60;
+/** Seconds in an hour. */
 export const SECONDS_PER_HOUR = 3_600;
+/** Hours in a day. */
 export const HOURS_PER_DAY = 24;
+/** Days in a week. */
 export const DAYS_PER_WEEK = 7;
+/** Months in a year. */
 export const MONTHS_PER_YEAR = 12;
 /** Monday to Friday. The week starts on Monday. */
 export const WORKING_DAYS_PER_WEEK = 5;
+/** Saturday and Sunday, the last days of the week. */
 export const WEEKEND_DAYS_PER_WEEK = DAYS_PER_WEEK - WORKING_DAYS_PER_WEEK;
 
 // Settings
@@ -63,6 +74,11 @@ export const MIN_IDLE_THRESHOLD_SECS = 5;
 
 // Cloud
 
+/** Address of the website and the cloud server. Same as CLOUD_API_BASE_URL in constants.rs. */
+export const VAULTIME_URL = "https://vaultime.codfishcloud.de";
+/** Prefix of invite codes. Same as INVITE_PREFIX in apps/api/src/constants.rs. */
+export const INVITE_CODE_PREFIX = "VTLINV";
+
 /** Refresh the access token when it expires within this window. */
 export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;
 /** Age of the newest cloud backup at which the daily automatic one is due. */
@@ -73,10 +89,10 @@ export const CLOUD_AUTO_BACKUP_CHECK_MS = HOUR_MS;
 /** Shortest backup passphrase the app accepts. */
 export const MIN_BACKUP_PASSPHRASE_CHARS = 12;
 
-/** Step between byte units, B to KB to MB. */
+/** Step between byte units, B to KiB to MiB. */
 export const BYTES_PER_KIB = 1_024;
 
-/** Sizes below this many units get one decimal, "4.2 MB" but "42 MB". */
+/** Sizes below this many units get one decimal, "4.2 MiB" but "42 MiB". */
 export const SIZE_ONE_DECIMAL_BELOW = 10;
 
 /** Browser storage key of the cloud session saved by older builds, read once and removed. */
@@ -107,10 +123,8 @@ export const PALETTE_GAMES_IDLE = 5;
 /** Game results in the command palette while typing. */
 export const PALETTE_GAMES_SEARCHING = 8;
 
-/** Titles up to this many characters get the largest hero size. */
-export const HERO_TITLE_LARGE_MAX_CHARS = 14;
-/** Titles up to this many characters get the medium hero size, longer ones the smallest. */
-export const HERO_TITLE_MEDIUM_MAX_CHARS = 26;
+/** Smallest size a long title in a header shrinks to before it wraps, in CSS pixels. */
+export const HERO_TITLE_MIN_FONT_PX = 32;
 
 // Game page
 
@@ -184,8 +198,8 @@ export const NUMBER_WORDS_MAX = 999;
 
 // Game tints
 
-/** Hue of Vaultime violet in OKLCH. */
-export const BRAND_HUE = 293;
+/** Hue of Vaultime violet in OKLCH, in degrees. The hue of --violet in index.css. */
+export const BRAND_HUE_DEG = 293;
 
 /** Lightness and chroma of each tint role, the hue comes from the game. */
 export const TINT_LEVELS = {

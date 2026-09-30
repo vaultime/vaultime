@@ -5,6 +5,7 @@ import { JOURNAL_TICK_HOURS, WEEK_CLOCK_MIN_DOT_PERCENT } from "@/lib/constants"
 import { formatHoursMinutes } from "@/lib/time";
 
 const WEEKDAYS = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"];
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const hourLabel = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
@@ -25,7 +26,7 @@ export function WeekClock({ weekClock }: { weekClock: number[][] }) {
     >
       {weekClock.map((row, weekday) => [
         <span key={`label-${weekday}`} className="self-center pr-3 text-xs text-faint">
-          {WEEKDAYS[weekday].slice(0, 3)}
+          {WEEKDAY_LABELS[weekday]}
         </span>,
         ...row.map((ms, hour) => {
           const size =

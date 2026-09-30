@@ -23,6 +23,8 @@ export interface CloudSessionContextValue {
   backupKeyReady: boolean;
   /** Whether a signed in PC uploads a backup once a day. */
   autoBackup: boolean;
+  /** Why the last automatic backup failed, until one succeeds. */
+  autoBackupError: string | null;
   setAutoBackup: (enabled: boolean) => Promise<void>;
   isAdmin: boolean;
   login: (
@@ -37,6 +39,7 @@ export interface CloudSessionContextValue {
     backupPassphrase: string,
   ) => Promise<CloudAuthSession>;
   setBackupPassphrase: (passphrase: string) => Promise<void>;
+  forgetBackupPassphrase: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<CloudAuthSession | null>;

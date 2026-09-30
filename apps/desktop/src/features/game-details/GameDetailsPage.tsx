@@ -25,7 +25,7 @@ import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
-import { buildDailyActivity } from "@/lib/session-stats";
+import { buildDailyActivity, countsAsPlay } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { EarlierPlaytime, Game, GameAssetView, SessionEvent } from "@/lib/types";
@@ -121,7 +121,7 @@ function GamePage({ gameId }: { gameId: string }) {
 
   const { game, cover, tint } = summary;
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
-  const firstPlayed = sessions.at(-1)?.started_at_wall;
+  const firstPlayed = sessions.filter(countsAsPlay).at(-1)?.started_at_wall;
   const longest = sessions.reduce((best, session) => Math.max(best, session.runtime_ms), 0);
   const idleMs = sessions.reduce((sum, session) => sum + session.idle_ms, 0);
 
@@ -161,7 +161,8 @@ function GamePage({ gameId }: { gameId: string }) {
               )}
             </TintedOverline>
             <TintedTitle tint={tint} text={game.title} />
-            <TintedSentence tint={tint}>
+            {/* Room for two lines, so the header keeps its height from game to game. */}
+            <TintedSentence tint={tint} className="min-h-[2.6em]">
               <PhraseText phrase={gamePlaytime(sessions)} />
             </TintedSentence>
             <div className="mt-6">
@@ -258,8 +259,8 @@ function GamePage({ gameId }: { gameId: string }) {
             <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
             <TotalRow label="Idle" value={formatHoursMinutes(idleMs)} />
             <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
-            {summary.suspiciousCount > 0 && <TotalRow label="Suspicious" value={String(summary.suspiciousCount)} />}
-            {summary.recoveredCount > 0 && <TotalRow label="Recovered" value={String(summary.recoveredCount)} />}
+            <TotalRow label="Suspicious" value={String(summary.suspiciousCount)} />
+            <TotalRow label="Recovered" value={String(summary.recoveredCount)} />
             <TotalRow label="Longest" value={formatHoursMinutes(longest)} />
             <TotalRow label="First played" value={firstPlayed ? formatCalendarDay(firstPlayed) : "Not yet"} />
           </AsideSection>
@@ -278,7 +279,7 @@ function GamePage({ gameId }: { gameId: string }) {
               </>
             ) : (
               <p className="text-[13px] text-faint">
-                No executable set, so this game is not tracked yet. Edit it to pick one.
+                No program set, so this game is not tracked yet. Edit it to pick one.
               </p>
             )}
             <div className="mt-4 flex flex-wrap gap-2">

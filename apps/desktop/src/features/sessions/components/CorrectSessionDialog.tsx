@@ -15,12 +15,27 @@ import {
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
+import { parseIntegrityPayload } from "@/lib/integrity";
 import * as api from "@/lib/tauri";
 import { formatHoursMinutes, fromLocalInput, parseVaultimeDate, toLocalInput } from "@/lib/time";
-import type { Session } from "@/lib/types";
+import type { Session, SessionEvent } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 
 type Mode = "trim" | "discard";
+
+/** Sleep and pauses of a session between two times, which its runtime never held. */
+function gapMsBetween(events: SessionEvent[], sessionId: string, from: Date, to: Date): number {
+  let total = 0;
+  for (const event of events) {
+    if (event.session_id !== sessionId || event.event_type !== "tracking_gap") continue;
+    const gapMs = parseIntegrityPayload(event.payload_json)?.wall_gap_ms;
+    if (typeof gapMs !== "number") continue;
+    const resumedAt = parseVaultimeDate(event.event_time_wall).getTime();
+    const overlap = Math.min(resumedAt, to.getTime()) - Math.max(resumedAt - gapMs, from.getTime());
+    total += Math.max(overlap, 0);
+  }
+  return total;
+}
 
 /**
  * Corrects a finished session: counts it only up to a time, or takes all its
@@ -28,12 +43,15 @@ type Mode = "trim" | "discard";
  */
 export function CorrectSessionDialog({
   session,
+  events,
   gameTitle,
   open,
   onOpenChange,
   onCorrected,
 }: {
   session: Session;
+  /** Events of this session, so the preview leaves out sleep like the core. */
+  events: SessionEvent[];
   gameTitle?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -49,12 +67,16 @@ export function CorrectSessionDialog({
 
   // The field drops seconds, so an untouched field keeps the exact end.
   const newEnd = endInput === toLocalInput(end) ? end : fromLocalInput(endInput);
-  // The same rule as the core: the cut comes out of idle time first.
+  // The same rules as the core: sleep in the cut part was never counted, and
+  // the cut comes out of idle time first.
   const removed =
     mode === "discard"
       ? session.runtime_ms
       : newEnd
-        ? Math.min(Math.max(0, end.getTime() - newEnd.getTime()), session.runtime_ms)
+        ? Math.min(
+            Math.max(0, end.getTime() - newEnd.getTime() - gapMsBetween(events, session.id, newEnd, end)),
+            session.runtime_ms,
+          )
         : 0;
   const idleCut = Math.min(removed, session.idle_ms);
   const counts = session.runtime_ms - removed;
@@ -89,7 +111,11 @@ export function CorrectSessionDialog({
             <DialogDescription>
               {gameTitle ? `${gameTitle}, ` : ""}
               {formatHoursMinutes(session.runtime_ms)} in all. The old times and your reason stay in its history
-              {session.integrity_status === "suspicious" ? ", and it stays labeled Suspicious." : ", and it is labeled Edited."}
+              {session.integrity_status === "suspicious"
+                ? ", and it stays labeled Suspicious."
+                : session.integrity_status === "manual"
+                  ? ", and it stays labeled Manual."
+                  : ", and it is labeled Edited."}
             </DialogDescription>
           </DialogHeader>
 

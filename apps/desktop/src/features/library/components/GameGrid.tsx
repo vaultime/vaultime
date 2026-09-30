@@ -155,7 +155,7 @@ function GameTile({
               className="absolute top-2 left-2 bg-ink/75 backdrop-blur-sm"
               title={
                 recentSuspiciousCount > 0
-                  ? `${plural(recentSuspiciousCount, "session")} with a clock jump or timing drift in the last ${TRUST_BADGE_RECENT_DAYS} days`
+                  ? `${plural(recentSuspiciousCount, "session")} with a clock jump or a record changed outside Vaultime in the last ${TRUST_BADGE_RECENT_DAYS} days`
                   : `${plural(recentRecoveredCount, "session")} rebuilt after an unclean exit in the last ${TRUST_BADGE_RECENT_DAYS} days`
               }
             >

@@ -18,23 +18,25 @@ const FORMATS: { format: ExportFormat; label: string; filter: string; icon: type
 ];
 
 /** Every finished session as a file for a spreadsheet or other tools. */
-export function ExportSection({ onError }: { onError: (message: string) => void }) {
+export function ExportSection() {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function run(format: ExportFormat, filter: string) {
     setMessage(null);
-    const path = await saveFileDialog({
-      defaultPath: `vaultime-sessions-${toDayKey(new Date())}.${format}`,
-      filters: [{ name: filter, extensions: [format] }],
-    });
-    if (!path) return;
-    setBusy(format);
+    setError(null);
     try {
+      const path = await saveFileDialog({
+        defaultPath: `vaultime-sessions-${toDayKey(new Date())}.${format}`,
+        filters: [{ name: filter, extensions: [format] }],
+      });
+      if (!path) return;
+      setBusy(format);
       const count = await api.exportSessions(path, format);
       setMessage(`Saved ${plural(count, "session")} to ${path}.`);
-    } catch (error) {
-      onError(describeError(error));
+    } catch (exportError) {
+      setError(describeError(exportError));
     } finally {
       setBusy(null);
     }
@@ -54,6 +56,11 @@ export function ExportSection({ onError }: { onError: (message: string) => void 
         ))}
       </div>
       {message && <Notice className="mt-5">{message}</Notice>}
+      {error && (
+        <Notice tone="warning" className="mt-5">
+          {error}
+        </Notice>
+      )}
     </PageSection>
   );
 }

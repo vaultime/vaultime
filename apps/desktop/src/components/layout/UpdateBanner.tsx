@@ -6,11 +6,13 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Download, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { describeError } from "@/lib/utils";
 
 export function UpdateBanner() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +42,7 @@ export function UpdateBanner() {
   async function handleInstall() {
     try {
       setInstalling(true);
+      setInstallError(null);
       const update = await check();
       if (update) {
         await update.downloadAndInstall();
@@ -47,7 +50,8 @@ export function UpdateBanner() {
       } else {
         setInstalling(false);
       }
-    } catch {
+    } catch (error) {
+      setInstallError(describeError(error));
       setInstalling(false);
     }
   }
@@ -57,6 +61,7 @@ export function UpdateBanner() {
       <p className="text-sm text-text">
         Vaultime <span className="font-semibold">v{updateVersion}</span> is
         available.
+        {installError && <span className="ml-2 text-amber">The update failed: {installError}</span>}
       </p>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={handleInstall} disabled={installing}>

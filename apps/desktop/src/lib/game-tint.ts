@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
-  BRAND_HUE,
+  BRAND_HUE_DEG,
   TINT_LEVELS,
   TINT_MAX_LIGHTNESS,
   TINT_MAX_STRENGTH,
@@ -46,7 +46,7 @@ function tintFromHue(hue: number, chroma = 1): GameTint {
 }
 
 /** Vaultime violet, for pages that are not about one game. */
-export const BRAND_TINT = tintFromHue(BRAND_HUE);
+export const BRAND_TINT = tintFromHue(BRAND_HUE_DEG);
 
 /** A stable tint per title, for games without artwork. */
 export function tintForTitle(title: string): GameTint {
@@ -121,7 +121,7 @@ async function readImageTint(src: string): Promise<GameTint | null> {
       sumChroma += chroma;
       counted += 1;
     }
-    if (counted === 0) return tintFromHue(BRAND_HUE, TINT_MIN_STRENGTH);
+    if (counted === 0) return tintFromHue(BRAND_HUE_DEG, TINT_MIN_STRENGTH);
 
     const hue = (Math.atan2(sumB, sumA) * 180) / Math.PI;
     const meanChroma = sumChroma / counted;

@@ -76,7 +76,7 @@ export function formatIntegrityEventType(eventType: string): string {
     case "started":
       return "Tracking started";
     case "heartbeat":
-      return "Heartbeat";
+      return "Times saved";
     case "integrity_flagged":
       return "Flagged";
     case "recovered":
@@ -88,7 +88,7 @@ export function formatIntegrityEventType(eventType: string): string {
     case "corrected":
       return "Corrected";
     case "added_manually":
-      return "Added by hand";
+      return "Added by you";
     default:
       return capitalize(eventType.replaceAll("_", " "));
   }
@@ -130,16 +130,16 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
     }
     case "added_manually":
       return typeof payload?.reason === "string" && payload.reason
-        ? `Added by hand: ${payload.reason}`
-        : "Added by hand";
+        ? `Added by you: ${payload.reason}`
+        : "Added by you";
     case "ended":
       return "Session closed cleanly";
     case "tracking_gap": {
       const gapMs =
         typeof payload?.wall_gap_ms === "number" ? payload.wall_gap_ms : null;
       return gapMs === null
-        ? "Time while the machine slept or tracking paused was not counted"
-        : `${formatHoursMinutes(gapMs)} not counted while the machine slept or tracking paused`;
+        ? "Time while the PC slept or tracking paused was not counted"
+        : `${formatHoursMinutes(gapMs)} not counted while the PC slept or tracking paused`;
     }
     case "heartbeat": {
       const driftMs =

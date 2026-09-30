@@ -8,7 +8,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** The message of an error, or the value itself as text. */
+/** The message of an error, or the value itself as text, starting with a capital. */
 export function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  return message.charAt(0).toUpperCase() + message.slice(1);
 }

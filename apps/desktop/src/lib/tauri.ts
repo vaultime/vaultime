@@ -24,6 +24,11 @@ import type {
   SteamPlaytimePreview,
 } from "@/lib/types";
 
+/** The id of this PC, stored with its sessions and backups. */
+export async function getDeviceId(): Promise<string> {
+  return invoke<string>("get_device_id");
+}
+
 export async function getAppVersion(): Promise<string> {
   return invoke<string>("get_app_version");
 }

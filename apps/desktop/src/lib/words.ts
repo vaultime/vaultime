@@ -30,6 +30,12 @@ export function sentence(text: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
+/** "this PC" or "another PC", or null while the id of this PC is not known. */
+export function whichPc(deviceId: string | null | undefined, thisDeviceId: string | null): string | null {
+  if (!deviceId || !thisDeviceId) return null;
+  return deviceId === thisDeviceId ? "this PC" : "another PC";
+}
+
 /** "1 game", "3 games". */
 export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;

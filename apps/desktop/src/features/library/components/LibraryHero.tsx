@@ -29,8 +29,8 @@ export function LibraryHero(props: HeroProps) {
         <TintedOverline tint={BRAND_TINT}>Welcome to Vaultime</TintedOverline>
         <TintedTitle tint={BRAND_TINT} text="Start your library" />
         <TintedSentence tint={BRAND_TINT}>
-          Find your Steam games or add any game by hand. Vaultime keeps time for everything you
-          play, on this PC.
+          Find the games your launchers installed, or add any game by hand. Vaultime keeps time for
+          everything you play, on this PC.
         </TintedSentence>
         <div className="mt-7 flex flex-wrap gap-3">
           <TintedButton tint={BRAND_TINT} solid onClick={props.onDiscover}>

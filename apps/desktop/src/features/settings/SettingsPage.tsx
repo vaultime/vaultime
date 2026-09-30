@@ -25,20 +25,20 @@ import {
   MIN_IDLE_THRESHOLD_SECS,
   SECONDS_PER_MINUTE,
   SETTING_KEYS,
+  VAULTIME_URL,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
 import { describeError } from "@/lib/utils";
-import { capitalize, numberWords, plural } from "@/lib/words";
+import { capitalize, numberWords, plural, whichPc } from "@/lib/words";
 
-const SITE_URL = "https://vaultime.codfishcloud.de";
 
 const LINKS = [
-  { label: "Website", url: SITE_URL },
-  { label: "Changelog", url: `${SITE_URL}/changelog.html` },
-  { label: "Privacy policy", url: `${SITE_URL}/privacy.html` },
-  { label: "Terms of service", url: `${SITE_URL}/terms.html` },
+  { label: "Website", url: VAULTIME_URL },
+  { label: "Changelog", url: `${VAULTIME_URL}/changelog.html` },
+  { label: "Privacy policy", url: `${VAULTIME_URL}/privacy.html` },
+  { label: "Terms of service", url: `${VAULTIME_URL}/terms.html` },
 ];
 
 const PLATFORM_NAMES: Record<string, string> = { windows: "Windows", linux: "Linux", macos: "macOS" };
@@ -89,6 +89,7 @@ export function SettingsPage() {
   const [autoBackup, setAutoBackup] = useState(true);
   const [autoBackupFolder, setAutoBackupFolder] = useState("");
   const [autostart, setAutostart] = useState(false);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,14 +102,16 @@ export function SettingsPage() {
       api.trayAvailable().catch(() => false),
       autostartEnabled().catch(() => false),
       api.getAutoBackupFolder().catch(() => ""),
+      api.getDeviceId().catch(() => null),
     ])
-      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder]) => {
+      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder, thisDevice]) => {
         if (cancelled) return;
         const values = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
         setTrayAvailable(Boolean(tray));
         setCloseToTray(values[SETTING_KEYS.closeToTray] !== "false");
         setAutoBackup(values[SETTING_KEYS.autoBackup] !== "false");
         setAutoBackupFolder(backupFolder);
+        setDeviceId(thisDevice);
         setAutostart(Boolean(startsAtLogin));
         const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
         setIdleMinutes(String(seconds / SECONDS_PER_MINUTE));
@@ -140,7 +143,7 @@ export function SettingsPage() {
       await api.setSetting(SETTING_KEYS.idleThreshold, String(seconds));
       await api.setSetting(SETTING_KEYS.backgroundActive, String(backgroundActive));
       setSaved(true);
-      // The live bar shows the idle time too.
+      // The live bar shows the idle threshold, so the library reloads it.
       await refresh();
     } catch (saveError) {
       setError(describeError(saveError));
@@ -317,7 +320,7 @@ export function SettingsPage() {
               {saving && <Loader2 className="size-4 animate-spin" />}
               Save
             </Button>
-            {saved && <span className="text-sm text-faint">Saved. New sessions use these rules.</span>}
+            {saved && <span className="text-sm text-faint">Saved. Tracking uses these rules from now on.</span>}
           </div>
         </PageSection>
 
@@ -420,15 +423,19 @@ export function SettingsPage() {
             <Switch id="auto-backup" checked={autoBackup} onCheckedChange={(checked) => void changeAutoBackup(checked)} />
           </PageRow>
           <PageRow
-            label="Automatic backups go to"
+            label={
+              <>
+                Automatic backups go to
+                <span className="mt-1 block font-mono text-xs break-all text-soft">
+                  {autoBackupFolder || "Not set"}
+                </span>
+              </>
+            }
             hint="A folder on another drive or one that syncs keeps them safe if this drive fails."
           >
-            <span className="flex max-w-[420px] items-center gap-3">
-              <span className="min-w-0 font-mono text-xs break-all text-soft">{autoBackupFolder || "Not set"}</span>
-              <Button variant="outline" size="sm" onClick={changeAutoBackupFolder} disabled={backupBusy}>
-                Change
-              </Button>
-            </span>
+            <Button variant="outline" size="sm" onClick={changeAutoBackupFolder} disabled={backupBusy}>
+              Change
+            </Button>
           </PageRow>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -446,7 +453,10 @@ export function SettingsPage() {
           {restorePreview && (
             <div className="mt-6 border-l-2 border-amber py-1 pl-5">
               <p className="text-[15px]">
-                Backup from {formatLongDate(restorePreview.created_at)}, made on {restorePreview.source_device_id}.
+                Backup from {formatLongDate(restorePreview.created_at)}
+                {whichPc(restorePreview.source_device_id, deviceId) &&
+                  `, made on ${whichPc(restorePreview.source_device_id, deviceId)}`}
+                .
               </p>
               <p className="mt-2 font-mono text-sm text-soft">
                 {plural(restorePreview.games_count, "game")}, {plural(restorePreview.sessions_count, "session")},{" "}
@@ -480,7 +490,7 @@ export function SettingsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm">{capitalize(snapshot.restore_point_label ?? "Local backup")}</div>
                   <div className="mt-0.5 truncate text-xs text-faint">
-                    {[snapshot.source_device_id, snapshot.remote_path].filter(Boolean).join(", ")}
+                    {[whichPc(snapshot.source_device_id, deviceId), snapshot.remote_path].filter(Boolean).join(", ")}
                   </div>
                 </div>
               </div>
@@ -488,7 +498,7 @@ export function SettingsPage() {
           )}
         </PageSection>
 
-        <ExportSection onError={setError} />
+        <ExportSection />
 
         <PageSection title="About">
           <PageRow label="Version">

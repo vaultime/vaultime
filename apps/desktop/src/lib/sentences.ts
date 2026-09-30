@@ -181,7 +181,7 @@ export function sessionTrustNote(session: Session, events: SessionEvent[]): stri
   }
 
   const status = normalizeIntegrityStatus(session.integrity_status);
-  if (notes.length === 0 && status === "suspicious") notes.push("Timing looked off during it.");
+  if (notes.length === 0 && status === "suspicious") notes.push("The clock jumped or the record was changed outside Vaultime.");
   if (notes.length === 0 && status === "recovered") notes.push("Rebuilt after an unclean exit.");
   if (gapMs >= MINUTE_MS) notes.push(`${formatHoursMinutes(gapMs)} of sleep or pause left out.`);
   return notes.length > 0 ? notes.join(" ") : null;

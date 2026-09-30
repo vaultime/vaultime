@@ -31,17 +31,19 @@ import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { Field } from "@/components/ui/field";
-import { BACKUP_PASSPHRASE_TOO_SHORT, INVITE_CODE_PREFIX } from "@/lib/cloud-api";
+import { BACKUP_PASSPHRASE_TOO_SHORT } from "@/lib/cloud-api";
 import {
   BYTES_PER_KIB,
   CLOUD_BACKUPS_CACHE_KEY_PREFIX,
+  INVITE_CODE_PREFIX,
   MIN_BACKUP_PASSPHRASE_CHARS,
   SIZE_ONE_DECIMAL_BELOW,
 } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { CloudAdminInvite, CloudBackupRecord, CloudStorage } from "@/lib/types";
+import { getDeviceId } from "@/lib/tauri";
 import { describeError } from "@/lib/utils";
-import { capitalize, plural } from "@/lib/words";
+import { capitalize, plural, whichPc } from "@/lib/words";
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -64,7 +66,7 @@ function formatByteSize(bytes: number) {
     return "0 B";
   }
 
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   const exponent = Math.min(
     Math.floor(Math.log(bytes) / Math.log(BYTES_PER_KIB)),
     units.length - 1,
@@ -126,11 +128,13 @@ export function CloudPage() {
   const {
     apiBaseUrl,
     autoBackup,
+    autoBackupError,
     backupKeyReady,
     createAdminInvite,
     deleteBackup,
     device,
     deviceError,
+    forgetBackupPassphrase,
     initializing,
     isAdmin,
     listBackups,
@@ -180,6 +184,13 @@ export function CloudPage() {
   const [inviteMaxRedemptions, setInviteMaxRedemptions] = useState("1");
   const [inviteExpiry, setInviteExpiry] = useState("");
   const [inviteNote, setInviteNote] = useState("");
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDeviceId()
+      .then(setDeviceId)
+      .catch(() => {});
+  }, []);
 
   function requestBackups(accountId: string) {
     getStorage()
@@ -430,7 +441,7 @@ export function CloudPage() {
       setRemoteBackupBusy(false);
     }
 
-    // The server may have rotated out the oldest backup to make room.
+    // Past the backup limit the server removed the oldest one.
     if (session) {
       await fetchBackups(session.user.id);
     }
@@ -594,6 +605,7 @@ export function CloudPage() {
                 <Field id="cloud-signup-invite" label="Invite code">
                   <Input
                     id="cloud-signup-invite"
+                    // Six groups of four, INVITE_BODY_CHARS in the API's constants.rs.
                     placeholder={`${INVITE_CODE_PREFIX}-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`}
                     value={inviteCode}
                     onChange={(event) => setInviteCode(event.target.value)}
@@ -641,7 +653,7 @@ export function CloudPage() {
           <>
             <PageSection
               title="Backups"
-              description="Kept on the server for this account. When the limit is reached, a new backup replaces the oldest."
+              description="Kept on the server for this account. Past the backup limit, a new backup replaces the oldest. When the space is full, delete older backups to make room."
             >
               {!backupKeyReady && (
                 <form className="mb-8 grid max-w-[520px] gap-4" onSubmit={handleSetBackupPassphrase}>
@@ -682,7 +694,7 @@ export function CloudPage() {
               <PageRow
                 label="Back up every day"
                 htmlFor="cloud-auto-backup"
-                hint="While this PC is signed in and its backups are unlocked. At the limit, the oldest backup makes room."
+                hint="While this PC is signed in and its backups are unlocked."
               >
                 <Switch
                   id="cloud-auto-backup"
@@ -692,6 +704,11 @@ export function CloudPage() {
                   }
                 />
               </PageRow>
+              {autoBackup && autoBackupError && (
+                <Notice tone="warning" className="my-4">
+                  The last daily backup failed: {autoBackupError}
+                </Notice>
+              )}
 
               {storage && (
                 <PageRow
@@ -744,7 +761,8 @@ export function CloudPage() {
                             backup.metadata_json && plural(backup.metadata_json.games_count, "game"),
                             backup.metadata_json && plural(backup.metadata_json.sessions_count, "session"),
                             backupSize(backup),
-                            backup.metadata_json?.source_device_id ?? backup.client_device_id,
+                            whichPc(backup.metadata_json?.source_device_id ?? backup.client_device_id, deviceId) &&
+                              `made on ${whichPc(backup.metadata_json?.source_device_id ?? backup.client_device_id, deviceId)}`,
                           ]
                             .filter(Boolean)
                             .join(", ")}
@@ -790,9 +808,29 @@ export function CloudPage() {
               ) : (
                 <p className="text-sm text-faint">This PC is not registered yet.</p>
               )}
-              <PageRow label="Backup passphrase">
-                <span className={backupKeyReady ? "text-soft" : "text-amber"}>
-                  {backupKeyReady ? "Unlocked, kept in the system keychain" : "Locked"}
+              <PageRow
+                label="Backup passphrase"
+                hint={
+                  backupKeyReady
+                    ? "Change it only if these backups were made with another passphrase."
+                    : "Enter it above to unlock the backups."
+                }
+              >
+                <span className="flex items-center gap-3">
+                  <span className={backupKeyReady ? "text-soft" : "text-amber"}>
+                    {backupKeyReady ? "Unlocked, kept in the system keychain" : "Locked"}
+                  </span>
+                  {backupKeyReady && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        forgetBackupPassphrase().catch((error: unknown) => setErrorMessage(describeError(error)))
+                      }
+                    >
+                      Change
+                    </Button>
+                  )}
                 </span>
               </PageRow>
               {deviceError && (
@@ -845,7 +883,7 @@ export function CloudPage() {
           <PageRow label="Address">
             <span className="font-mono text-sm">{formatApiHostname(apiBaseUrl)}</span>
           </PageRow>
-          <PageRow label="Encryption" hint="With your backup passphrase, before anything leaves this PC.">
+          <PageRow label="Encryption" hint="With your backup passphrase, before the backup leaves this PC.">
             XChaCha20-Poly1305
           </PageRow>
           <PageRow label="Checksums" hint="The server checks every upload before it accepts it.">

@@ -61,6 +61,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
   const [autoBackup, setAutoBackupState] = useState(true);
+  const [autoBackupError, setAutoBackupError] = useState<string | null>(null);
   const sessionRef = useRef<CloudAuthSession | null>(null);
   // Counts sign-outs, so a refresh that finishes after one cannot sign back in.
   const signOutsRef = useRef(0);
@@ -109,8 +110,10 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         await uploadRemoteBackup("Automatic");
         void info("automatic cloud backup uploaded");
       }
+      setAutoBackupError(null);
     } catch (error) {
       // The next check tries again, the app works without the cloud.
+      setAutoBackupError(describeError(error));
       void warn(`automatic cloud backup failed: ${describeError(error)}`);
     }
   });
@@ -124,9 +127,12 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const accountId = session?.user.id ?? null;
   useEffect(() => {
     if (initializing || !accountId || !backupKeyReady || !autoBackup) return;
-    void backUpIfDue();
+    const first = window.setTimeout(() => void backUpIfDue(), 0);
     const timer = window.setInterval(() => void backUpIfDue(), CLOUD_AUTO_BACKUP_CHECK_MS);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
   }, [initializing, accountId, backupKeyReady, autoBackup]);
 
   async function setAutoBackup(enabled: boolean) {
@@ -143,16 +149,14 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     if (bootstrappedRef.current) {
       return;
     }
+    // The ref makes this run once, also through React's development double
+    // run, so the run that started finishes its work.
     bootstrappedRef.current = true;
-
-    let cancelled = false;
 
     async function restoreStoredSession() {
       const stored = await loadPersistedSession();
       if (!stored) {
-        if (!cancelled) {
-          setInitializing(false);
-        }
+        setInitializing(false);
         return;
       }
 
@@ -162,16 +166,14 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       if (isExpired(stored.refresh_expires_at, 0)) {
         applyClearedSession();
         void forgetStoredSession();
-        if (!cancelled) {
-          setInitializing(false);
-        }
+        setInitializing(false);
         return;
       }
 
       const signOuts = signOutsRef.current;
       try {
         const refreshed = await refreshWithToken(stored.refresh_token);
-        if (cancelled || signOuts !== signOutsRef.current) {
+        if (signOuts !== signOutsRef.current) {
           revokeLateSession(refreshed);
           return;
         }
@@ -180,26 +182,18 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         await syncBackupKeyState(refreshed);
         void restoreDeviceRegistration(refreshed);
       } catch (error) {
-        if (!cancelled) {
-          if (shouldClearPersistedSession(error)) {
-            applyClearedSession();
-            void forgetStoredSession();
-          } else {
-            setDeviceError(`The cloud server is not reachable: ${describeError(error)}`);
-          }
+        if (shouldClearPersistedSession(error)) {
+          applyClearedSession();
+          void forgetStoredSession();
+        } else {
+          setDeviceError(describeError(error));
         }
       } finally {
-        if (!cancelled) {
-          setInitializing(false);
-        }
+        setInitializing(false);
       }
     }
 
     void restoreStoredSession();
-
-    return () => {
-      cancelled = true;
-    };
   }, [refreshWithToken]);
 
   function applySession(next: CloudAuthSession) {
@@ -226,7 +220,10 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     });
     await persistCloudSession(next);
     if (backupPassphrase?.trim()) {
-      await persistBackupPassphrase(next, backupPassphrase);
+      const backups = await backupsForKeyCheck(() =>
+        cloudGetJson<CloudBackupRecord[]>("/v1/backups", next.access_token),
+      );
+      await persistBackupPassphrase(next, backupPassphrase, backups);
       setBackupKeyReady(true);
     } else {
       await syncBackupKeyState(next);
@@ -248,7 +245,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       invite_code: inviteCode,
     });
     await persistCloudSession(next);
-    await persistBackupPassphrase(next, backupPassphrase);
+    await persistBackupPassphrase(next, backupPassphrase, []);
     setBackupKeyReady(true);
     applySession(next);
     void tryRegisterDeviceForSession(next);
@@ -266,8 +263,27 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       throw new Error(BACKUP_PASSPHRASE_TOO_SHORT);
     }
 
-    await persistBackupPassphrase(current, normalized);
+    const signOuts = signOutsRef.current;
+    const backups = await backupsForKeyCheck(() =>
+      withAuthenticatedSession((active) => cloudGetJson<CloudBackupRecord[]>("/v1/backups", active.access_token)),
+    );
+    await persistBackupPassphrase(current, normalized, backups);
+    // Signed out while the check ran: the key must not stay behind.
+    if (signOuts !== signOutsRef.current) {
+      await clearCloudBackupKeySecure(current.user.id);
+      throw new Error("You signed out of cloud backup.");
+    }
     setBackupKeyReady(true);
+  }
+
+  /** Removes the backup key from this PC, so a different passphrase can be set. */
+  async function forgetBackupPassphrase() {
+    const current = sessionRef.current;
+    if (!current) {
+      return;
+    }
+    await clearCloudBackupKeySecure(current.user.id);
+    setBackupKeyReady(false);
   }
 
   // The server signs out every other device and returns a new session for this one.
@@ -331,9 +347,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         await forgetStoredSession();
         return null;
       }
-
-      setDeviceError(`The cloud server is not reachable: ${describeError(error)}`);
-      return current;
+      throw error;
     }
   }
 
@@ -434,32 +448,38 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     }
 
     if (isExpired(current.expires_at, TOKEN_REFRESH_MARGIN_MS)) {
-      const signOuts = signOutsRef.current;
-      try {
-        const refreshed = await refreshWithToken(current.refresh_token);
-        if (signOuts !== signOutsRef.current) {
-          revokeLateSession(refreshed);
-          throw new Error("You signed out of cloud backup.");
-        }
-        applySession(refreshed);
-        await persistCloudSession(refreshed);
-        return refreshed;
-      } catch (error) {
-        if (shouldClearPersistedSession(error)) {
-          applyClearedSession();
-          void forgetStoredSession();
-          throw new Error("Your cloud session expired. Sign in again.", {
-            cause: error,
-          });
-        }
-
-        throw new Error(`The cloud server is not reachable: ${describeError(error)}`, {
-          cause: error,
-        });
-      }
+      return refreshForAction(current);
     }
 
     return current;
+  }
+
+  /**
+   * Refreshes the session for an action. A refresh that finishes after
+   * signing out is revoked, and one the server refuses ends the session.
+   */
+  async function refreshForAction(current: CloudAuthSession): Promise<CloudAuthSession> {
+    const signOuts = signOutsRef.current;
+    let refreshed: CloudAuthSession;
+    try {
+      refreshed = await refreshWithToken(current.refresh_token);
+    } catch (error) {
+      if (shouldClearPersistedSession(error)) {
+        applyClearedSession();
+        void forgetStoredSession();
+        throw new Error("Your cloud session expired. Sign in again.", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+    if (signOuts !== signOutsRef.current) {
+      revokeLateSession(refreshed);
+      throw new Error("You signed out of cloud backup.");
+    }
+    applySession(refreshed);
+    await persistCloudSession(refreshed);
+    return refreshed;
   }
 
   async function withAuthenticatedSession<T>(
@@ -471,11 +491,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       return await action(current);
     } catch (error) {
       if (error instanceof CloudApiError && error.status === 401) {
-        const refreshed = await refreshWithToken(current.refresh_token);
-        applySession(refreshed);
-        await persistCloudSession(refreshed);
-        await syncBackupKeyState(refreshed);
-        current = refreshed;
+        current = await refreshForAction(current);
+        await syncBackupKeyState(current);
         return action(current);
       }
 
@@ -563,11 +580,13 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     deviceError,
     backupKeyReady,
     autoBackup,
+    autoBackupError,
     setAutoBackup,
     isAdmin: session?.user.role === "admin",
     login,
     signUp,
     setBackupPassphrase,
+    forgetBackupPassphrase,
     changePassword,
     logout,
     refreshSession,
@@ -636,17 +655,29 @@ async function clearPersistedSessionStorage(accountId?: string): Promise<void> {
 }
 
 /**
+ * The backups a new passphrase is checked against. Without a connection the
+ * list is empty and the upload checks the key before it sends anything.
+ */
+async function backupsForKeyCheck(list: () => Promise<CloudBackupRecord[]>): Promise<CloudBackupRecord[]> {
+  try {
+    return await list();
+  } catch (error) {
+    if (error instanceof CloudApiError && error.status === 0) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+/**
  * Stores the passphrase's key after checking it against the newest cloud
- * backup, so a typo cannot start backups nobody can open. Without a
- * connection the upload checks it instead.
+ * backup, so a typo cannot start backups nobody can open.
  */
 async function persistBackupPassphrase(
   session: CloudAuthSession,
   backupPassphrase: string,
+  backups: CloudBackupRecord[],
 ): Promise<void> {
-  const backups = await cloudGetJson<CloudBackupRecord[]>("/v1/backups", session.access_token).catch(
-    () => [] as CloudBackupRecord[],
-  );
   const newest = backups
     .filter((backup) => backup.status === "complete")
     .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))[0];

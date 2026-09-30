@@ -4,7 +4,16 @@
 import { describe, expect, it } from "vitest";
 import { tintForTitle } from "./game-tint";
 import { normalizeIntegrityStatus } from "./integrity";
-import { capitalize, numberWords, sentence } from "./words";
+import { capitalize, numberWords, sentence, whichPc } from "./words";
+
+describe("whichPc", () => {
+  it("names this PC and waits for its id", () => {
+    expect(whichPc("a", "a")).toBe("this PC");
+    expect(whichPc("b", "a")).toBe("another PC");
+    expect(whichPc("a", null)).toBeNull();
+    expect(whichPc(undefined, "a")).toBeNull();
+  });
+});
 
 describe("numberWords", () => {
   it("writes numbers up to 999 as words", () => {

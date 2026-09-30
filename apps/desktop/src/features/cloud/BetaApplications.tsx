@@ -19,7 +19,7 @@ function inviteMail(email: string, code: string): string {
   const body = [
     "Hi,",
     "",
-    "thanks for applying for the Vaultime cloud beta. Here is your invite code, it works once:",
+    "Thanks for applying for the Vaultime cloud beta. Here is your invite code, it works once:",
     "",
     code,
     "",

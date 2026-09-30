@@ -30,6 +30,7 @@ import {
   streakSentence,
   yearSentence,
 } from "@/lib/sentences";
+import { countsAsPlay } from "@/lib/session-stats";
 import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape } from "@/lib/stats";
 import { formatDayAndMonth, formatDayRange, formatHoursMinutes, formatHoursShort, parseVaultimeDate } from "@/lib/time";
 import { numberWords } from "@/lib/words";
@@ -57,7 +58,7 @@ export function StatsPage() {
   const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
   const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
 
-  const earliest = sessions.reduce(
+  const earliest = sessions.filter(countsAsPlay).reduce(
     (min, session) => Math.min(min, parseVaultimeDate(session.started_at_wall).getFullYear()),
     year,
   );
