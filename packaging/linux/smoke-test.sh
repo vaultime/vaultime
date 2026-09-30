@@ -53,6 +53,11 @@ fi
 # Containers cannot create the nested namespaces WebKit's sandbox needs.
 export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
 export LIBGL_ALWAYS_SOFTWARE=1
+# How long the app gets to start tracking, and then to show its window, in seconds.
+start_wait_secs=60
+settle_secs=10
+# Lines of output and log shown when the test fails.
+log_tail_lines=40
 
 log_dir="${XDG_DATA_HOME:-$HOME/.local/share}/com.vaultime.app/logs"
 out=$(mktemp)
@@ -60,7 +65,7 @@ xvfb-run -a "${app[@]}" >"$out" 2>&1 &
 runner=$!
 
 started=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "$start_wait_secs"); do
   if grep -qs "tracking engine started" "$log_dir"/*.log; then
     started=1
     break
@@ -77,7 +82,7 @@ app_pids() {
 }
 
 # Give the window and webview time to come up, then make sure nothing died.
-sleep 10
+sleep "$settle_secs"
 alive=0
 [ -n "$(app_pids)" ] && alive=1
 
@@ -85,8 +90,8 @@ kill "$runner" $(app_pids) 2>/dev/null || true
 
 if [ "$started" -ne 1 ] || [ "$alive" -ne 1 ] || grep -qiE "panicked|crashed|segmentation" "$out"; then
   echo "smoke test FAILED (started=$started alive=$alive)"
-  echo "--- app output"; tail -n 40 "$out"
-  echo "--- app log"; tail -n 40 "$log_dir"/*.log 2>/dev/null || true
+  echo "--- app output"; tail -n "$log_tail_lines" "$out"
+  echo "--- app log"; tail -n "$log_tail_lines" "$log_dir"/*.log 2>/dev/null || true
   exit 1
 fi
 

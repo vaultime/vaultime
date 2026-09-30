@@ -33,8 +33,8 @@ PAGES = [
     ("terms.html", "Terms of service", ROOT / "docs/legal/terms-of-service.md"),
     ("changelog.html", "Changelog", ROOT / "CHANGELOG.md"),
     ("applied.html", "Thanks for applying", SITE / "pages/applied.md"),
-    ("apply-failed.html", "Application not sent", SITE / "pages/apply-failed.md"),
-    ("download-soon.html", "Not released yet", SITE / "pages/download-soon.md"),
+    ("apply-failed.html", "That did not go through", SITE / "pages/apply-failed.md"),
+    ("download-soon.html", "Download not available", SITE / "pages/download-soon.md"),
     ("404.html", "Page not found", SITE / "pages/404.md"),
 ]
 

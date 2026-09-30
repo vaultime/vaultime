@@ -17,6 +17,14 @@ network=vaultime-e2e
 db=vaultime-e2e-db
 api=vaultime-e2e-api
 port=19005
+# The port the API listens on inside its container, as in install-api.sh.
+api_port=9005
+# Random bytes in each test secret, as install-api.sh makes them.
+secret_bytes=32
+# How long the API gets to answer its health check, in seconds.
+health_wait_secs=30
+# Log lines of the API shown when something fails.
+log_tail_lines=40
 url="http://127.0.0.1:$port"
 python=$(command -v python3 || command -v python)
 
@@ -52,13 +60,13 @@ docker run -d --name "$db" --network "$network" \
 # Over TCP, so the temporary server of the first start does not count.
 until docker exec "$db" pg_isready -h 127.0.0.1 -U vaultime -q; do sleep 1; done
 
-secret() { "$python" -c "import secrets; print(secrets.token_hex(32))"; }
+secret() { "$python" -c "import secrets; print(secrets.token_hex($secret_bytes))"; }
 # The test needs two kept backups, no pause between backups and cleanup of
 # unused artwork at once.
 MSYS_NO_PATHCONV=1 docker run -d --name "$api" --network "$network" \
-  -p "127.0.0.1:$port:9005" \
+  -p "127.0.0.1:$port:$api_port" \
   --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
-  -e VAULTIME_API_BIND=0.0.0.0:9005 \
+  -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
   -e VAULTIME_PUBLIC_BASE_URL="$url" \
   -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
   -e VAULTIME_BACKUP_ROOT=/tmp/backups \
@@ -68,11 +76,11 @@ MSYS_NO_PATHCONV=1 docker run -d --name "$api" --network "$network" \
   -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
   -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
   vaultime-linux-check /app/vaultime-api >/dev/null
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "$health_wait_secs"); do
   curl -fsS "$url/healthz" >/dev/null 2>&1 && break
   sleep 1
 done
-curl -fsS "$url/healthz" >/dev/null || { docker logs "$api" | tail -30; exit 1; }
+curl -fsS "$url/healthz" >/dev/null || { docker logs "$api" | tail -"$log_tail_lines"; exit 1; }
 
 echo "== creating a test account"
 code=$("$python" - "$repo/deploy/vps/generate-cloud-invite.py" "$db" <<'EOF'
@@ -93,8 +101,7 @@ def psql_in_container(command, *args, **kwargs):
 
 
 invite.subprocess.run = psql_in_container
-# Same as INVITE_PREFIX in apps/api/src/constants.rs.
-created = invite.generate_invite("VTLINV", 1, None, "e2e")
+created = invite.generate_invite(invite.INVITE_PREFIX, 1, None, "e2e")
 invite.insert_invite("", created)
 print(created["code"])
 EOF
@@ -121,7 +128,7 @@ cd "$repo/apps/desktop/src-tauri"
 if ! VAULTIME_E2E_API="$url" VAULTIME_E2E_TOKEN="$token" \
   cargo test --lib artwork_is_uploaded_once_and_restores -- --ignored --nocapture; then
   echo "== API log"
-  docker logs "$api" 2>&1 | tail -40
+  docker logs "$api" 2>&1 | tail -"$log_tail_lines"
   exit 1
 fi
 echo "== beta application form"

@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Ubuntu image with the Tauri build dependencies and the pinned Rust toolchain.
+# Ubuntu image with the Tauri build dependencies and rustup. check.sh installs
+# the Rust toolchain pinned in rust-toolchain.toml when it runs.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \

@@ -9,18 +9,20 @@
     <p>
       Vaultime tracks how long you play your PC games, across launchers and
       standalone games. It keeps runtime, active playtime and idle time apart
-      and stores every session in a tamper-evident log on your computer.
+      and stores every session on your PC in a hash-linked log that shows
+      changes made outside Vaultime.
     </p>
     <ul>
-      <li>Detects running games automatically and records sessions</li>
+      <li>Detects when games in your library run and records sessions</li>
       <li>Finds games from Steam, Xbox, Epic, GOG, EA and other launchers, and scans common game folders</li>
       <li>Shows your library with artwork from your game folders</li>
       <li>Local backups, plus optional encrypted backup to an invite-only server</li>
     </ul>
   </description>
   <launchable type="desktop-id">Vaultime.desktop</launchable>
+  <url type="homepage">https://vaultime.codfishcloud.de</url>
   <developer id="io.github.vaultime">
-    <name>schwimmbeck</name>
+    <name>Dominik Schwimmbeck</name>
   </developer>
   <categories>
     <category>Game</category>

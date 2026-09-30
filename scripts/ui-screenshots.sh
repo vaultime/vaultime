@@ -23,13 +23,15 @@ fi
 edge="/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
 width=${WIDTH:-1440}
 height=${HEIGHT:-900}
+# How long a page may render before the capture, in milliseconds.
+render_budget_ms=4000
 mkdir -p "$out"
 out_win=$(cygpath -w "$out" 2>/dev/null || echo "$out")
 
 for page in "${pages[@]}"; do
   name=$(echo "$page" | tr '/?=&' '----')
   "$edge" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
-    --window-size="$width,$height" --virtual-time-budget=4000 \
+    --window-size="$width,$height" --virtual-time-budget="$render_budget_ms" \
     --screenshot="$out_win\\$name.png" "http://localhost:4173/$page" >/dev/null 2>&1
   echo "$out/$name.png"
 done
