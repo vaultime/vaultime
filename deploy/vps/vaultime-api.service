@@ -23,6 +23,9 @@ PrivateTmp=true
 PrivateDevices=true
 ReadWritePaths=/srv/vaultime/backups
 UMask=0077
+# The box is shared, so the API may never take the memory other services
+# need. It uses far less, hashing four passwords at most at a time.
+MemoryMax=512M
 CapabilityBoundingSet=
 AmbientCapabilities=
 ProtectKernelTunables=true

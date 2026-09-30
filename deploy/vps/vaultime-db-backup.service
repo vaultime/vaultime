@@ -11,7 +11,8 @@ Type=oneshot
 User=postgres
 Group=postgres
 UMask=0077
-# One custom format dump per day, the last 14 days are kept.
+# One custom format dump per day. Each run then deletes the dumps that are at
+# least 15 days old, so a dump stays for 15 to 16 days.
 ExecStart=/bin/sh -c 'pg_dump --format=custom --file=/var/backups/vaultime/vaultime-$(date +%%Y-%%m-%%d).dump vaultime'
 ExecStartPost=/usr/bin/find /var/backups/vaultime -name 'vaultime-*.dump' -mtime +14 -delete
 

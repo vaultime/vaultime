@@ -20,6 +20,15 @@ here=$(cd "$(dirname "$0")" && pwd)
 # Where the API listens. DEFAULT_API_BASE_URL in bootstrap-admin-account.py
 # points here too.
 api_addr=127.0.0.1:9005
+# Random bytes in the database password and in each API secret.
+db_password_bytes=24
+secret_bytes=32
+# How long a new release gets to answer its health check, in seconds.
+health_wait_secs=20
+# Log lines shown when a release does not come up.
+failure_log_lines=30
+# How long browsers remember to use https only, one year in seconds.
+hsts_max_age_secs=31536000
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 [ -f "$here/vaultime-api" ] || { echo "vaultime-api binary missing next to this script" >&2; exit 1; }
@@ -38,7 +47,6 @@ id vaultime >/dev/null 2>&1 \
 install -d -o root -g vaultime -m 0750 /srv/vaultime
 install -d -o vaultime -g vaultime -m 0750 /srv/vaultime/backups
 install -d -o root -g root -m 0755 /srv/vaultime/api /srv/vaultime/api/current
-rmdir /srv/vaultime/tmp 2>/dev/null || true
 install -d -o root -g vaultime -m 0750 /etc/vaultime
 
 pg() { runuser -u postgres -- psql -qtA -v ON_ERROR_STOP=1 "$@"; }
@@ -46,7 +54,7 @@ pg() { runuser -u postgres -- psql -qtA -v ON_ERROR_STOP=1 "$@"; }
 # First install: database, role and secrets. Secrets never leave the server.
 env_file=/etc/vaultime/api.env
 if [ ! -f "$env_file" ]; then
-  db_password=$(openssl rand -hex 24)
+  db_password=$(openssl rand -hex "$db_password_bytes")
   # The password goes to psql on stdin, so it never shows in the process list.
   if [ "$(pg -c "SELECT 1 FROM pg_roles WHERE rolname = 'vaultime'")" = "1" ]; then
     printf "ALTER ROLE vaultime LOGIN PASSWORD '%s';\n" "$db_password" | pg
@@ -66,8 +74,8 @@ VAULTIME_API_BIND=$api_addr
 VAULTIME_PUBLIC_BASE_URL=https://$domain
 VAULTIME_DATABASE_URL=postgres://vaultime:$db_password@127.0.0.1:5432/vaultime
 VAULTIME_BACKUP_ROOT=/srv/vaultime/backups
-VAULTIME_ACCESS_TOKEN_SECRET=$(openssl rand -hex 32)
-VAULTIME_REFRESH_TOKEN_PEPPER=$(openssl rand -hex 32)
+VAULTIME_ACCESS_TOKEN_SECRET=$(openssl rand -hex "$secret_bytes")
+VAULTIME_REFRESH_TOKEN_PEPPER=$(openssl rand -hex "$secret_bytes")
 EOF
   )
   chown root:vaultime "$env_file"
@@ -133,14 +141,14 @@ if [ -f "$here/release-upload.pub" ]; then
 fi
 
 healthy() {
-  for _ in $(seq 1 20); do
+  for _ in $(seq 1 "$health_wait_secs"); do
     curl -fsS "http://$api_addr/healthz" >/dev/null 2>&1 && return 0
     sleep 1
   done
   return 1
 }
 if ! healthy; then
-  journalctl -u vaultime-api -n 30 --no-pager
+  journalctl -u vaultime-api -n "$failure_log_lines" --no-pager
   if [ -f "$binary.previous" ]; then
     mv -f "$binary.previous" "$binary"
     [ -f "$unit.previous" ] && mv -f "$unit.previous" "$unit"
@@ -151,6 +159,8 @@ if ! healthy; then
   exit 1
 fi
 echo "API is up on $api_addr"
+# Only now, so a rollback to a unit that still lists it keeps working.
+rmdir /srv/vaultime/tmp 2>/dev/null || true
 
 # The Caddy site lives in its own file that the Caddyfile imports. Other sites
 # on the box stay untouched, and a config that does not validate is rolled back.
@@ -162,10 +172,10 @@ cat >"$caddy_site" <<EOF
 $domain {
 	encode zstd gzip
 	header {
-		Strict-Transport-Security "max-age=31536000"
+		Strict-Transport-Security "max-age=$hsts_max_age_secs"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
-		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 	}
 
 	handle /v1/* {
@@ -188,8 +198,8 @@ $domain {
 		file_server
 	}
 
-	# Missing files get pages of the site, a download before the first
-	# release its own. Errors of the API pass through as they are.
+	# A missing file gets the site's 404 page, a missing download the page
+	# that says it is not available. API errors pass through unchanged.
 	handle_errors {
 		@missing_download expression \`{err.status_code} == 404 && {http.request.orig_uri.path}.startsWith("/downloads/")\`
 		@missing expression \`{err.status_code} == 404\`
