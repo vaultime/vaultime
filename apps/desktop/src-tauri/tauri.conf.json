@@ -40,7 +40,7 @@
       "icons/icon.icns"
     ],
     "category": "Game",
-    "shortDescription": "Universal game library and trustworthy playtime tracker",
+    "shortDescription": "Game library and playtime tracker",
     "longDescription": "Vaultime is a local-first game library and playtime tracker. It records runtime, active and idle time for every session in a hash-chained local log, and can back up to an optional invite-only server.",
     "linux": {
       "deb": {

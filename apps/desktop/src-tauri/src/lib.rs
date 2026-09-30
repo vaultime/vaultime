@@ -81,6 +81,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_version,
+            commands::get_device_id,
             commands::load_cloud_session_secure,
             commands::has_cloud_backup_key_secure,
             commands::store_cloud_session_secure,

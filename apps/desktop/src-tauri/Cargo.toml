@@ -1,7 +1,7 @@
 [package]
 name = "vaultime"
 version = "0.1.0"
-description = "Universal game library and trustworthy playtime tracker"
+description = "Game library and playtime tracker"
 authors = ["schwimmbeck"]
 license = "GPL-3.0-or-later"
 edition = "2024"
@@ -46,7 +46,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2-zli
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 libloading = "0.9"
-x11rb = { version = "0.14", features = ["screensaver", "xinput"] }
+x11rb = { version = "0.14", features = ["res", "screensaver", "xinput"] }
 zbus = "5"
 
 [target.'cfg(windows)'.dependencies]

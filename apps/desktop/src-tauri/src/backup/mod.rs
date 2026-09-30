@@ -35,6 +35,8 @@ pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 /// Settings that belong to this PC. A restore keeps the local values, so a
 /// backup cannot send the daily backups to a folder of its choosing.
 const DEVICE_SETTINGS: &[&str] = &[AUTO_BACKUP_FOLDER_SETTING];
+/// Where a restore keeps the current artwork until the new one is in place.
+const PREVIOUS_CACHE_DIR: &str = "previous-asset-cache";
 /// Why sessions that a backup caught while they ran are closed after a restore.
 const RESTORED_OPEN_SESSION_REASON: &str = "restored_while_running";
 
@@ -192,7 +194,16 @@ pub fn import_local_backup(
         &staging_dir,
         &artwork,
     );
-    cleanup_staging_dir(&staging_dir);
+    // When putting the old artwork back failed, it is still in the staging
+    // folder, which then stays so nothing is lost.
+    if result.is_err() && staging_dir.join(PREVIOUS_CACHE_DIR).exists() {
+        warn!(
+            "the earlier artwork stays in {} after a failed restore",
+            staging_dir.display()
+        );
+    } else {
+        cleanup_staging_dir(&staging_dir);
+    }
     result?;
 
     Ok(summary_from_manifest(&manifest, &backup_dir, true))
@@ -239,8 +250,27 @@ fn restore_from_staging(
     drop(Database::open(&staged_db)?);
     check_restored_ids(&staged_db)?;
 
+    // Everything that can still fail runs on the staged copy, so swapping the
+    // artwork and the database is the last step.
     let cache_dir = asset_manager.cache_dir();
-    let previous_cache = staging_dir.join("previous-asset-cache");
+    {
+        let staged = Database::open(&staged_db)?;
+        rewrite_asset_cache_paths(&staged, cache_dir)?;
+        // A backup made during play holds sessions that were still running.
+        // Nothing tracks them here, so they are closed like after a crash.
+        for session in sessions::get_active_sessions(&staged)? {
+            sessions::recover_session(&staged, &session.id, RESTORED_OPEN_SESSION_REASON)?;
+        }
+        // The restored device list may not contain this PC yet.
+        devices::ensure_device(
+            &staged,
+            &app_context.device_id,
+            std::env::consts::OS,
+            &app_context.app_version,
+        )?;
+    }
+
+    let previous_cache = staging_dir.join(PREVIOUS_CACHE_DIR);
     let had_cache = cache_dir.exists();
     if had_cache {
         fs::rename(cache_dir, &previous_cache).map_err(|error| {
@@ -263,21 +293,6 @@ fn restore_from_staging(
         put_back();
         return Err(error);
     }
-    rewrite_asset_cache_paths(db, cache_dir)?;
-
-    // A backup made during play holds sessions that were still running.
-    // Nothing tracks them here, so they are closed like after a crash.
-    for session in sessions::get_active_sessions(db)? {
-        sessions::recover_session(db, &session.id, RESTORED_OPEN_SESSION_REASON)?;
-    }
-
-    // The restored device list may not contain this machine yet.
-    devices::ensure_device(
-        db,
-        &app_context.device_id,
-        std::env::consts::OS,
-        &app_context.app_version,
-    )?;
     Ok(())
 }
 
@@ -557,10 +572,8 @@ fn write_manifest(backup_dir: &Path, manifest: &LocalBackupManifest) -> Result<(
 fn load_and_validate_manifest(backup_dir: &Path) -> Result<(LocalBackupManifest, Vec<String>)> {
     let manifest_path = backup_dir.join(BACKUP_MANIFEST_FILE);
     let manifest_json = fs::read_to_string(&manifest_path).map_err(|error| {
-        VaultimeError::Backup(format!(
-            "failed to read backup manifest {}: {error}",
-            manifest_path.display()
-        ))
+        warn!("no backup manifest at {}: {error}", manifest_path.display());
+        VaultimeError::Invalid("This folder is not a Vaultime backup.".into())
     })?;
 
     let manifest: LocalBackupManifest = serde_json::from_str(&manifest_json).map_err(|error| {
@@ -1169,7 +1182,7 @@ mod tests {
     #[test]
     fn a_crafted_backup_id_cannot_reach_outside_the_app_folder() {
         let fixture = Fixture::new().back_up();
-        // Where `.restore-<id>` pointed before, one level above the app folder.
+        // Where the crafted id pointed the staging folder: next to it, not inside it.
         let victim = fixture.context.app_dir.join("victim");
         fs::create_dir_all(&victim).unwrap();
         fs::write(victim.join("keep.txt"), b"keep").unwrap();

@@ -35,12 +35,30 @@ impl fmt::Display for VaultimeError {
 
 impl std::error::Error for VaultimeError {}
 
+impl VaultimeError {
+    /// The message for the page: without the category the logs carry, and
+    /// starting with a capital letter.
+    fn user_message(&self) -> String {
+        let (Self::Database(message)
+        | Self::Backup(message)
+        | Self::Tracking(message)
+        | Self::Integrity(message)
+        | Self::Asset(message)
+        | Self::Cloud(message)
+        | Self::Invalid(message)) = self;
+        let mut chars = message.chars();
+        chars.next().map_or_else(String::new, |first| {
+            first.to_uppercase().chain(chars).collect()
+        })
+    }
+}
+
 impl serde::Serialize for VaultimeError {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        serializer.serialize_str(&self.user_message())
     }
 }
 

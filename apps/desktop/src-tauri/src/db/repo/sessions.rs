@@ -38,10 +38,22 @@ pub(crate) fn attach_validated_status(conn: &Connection, mut session: Session) -
     Ok(session)
 }
 
-/// Creates a new open session for a game on a device.
+/// Creates a new open session for a game on a device, starting now.
 pub fn create_session(db: &Database, game_id: &str, device_id: &str) -> Result<Session> {
+    create_session_at(db, game_id, device_id, chrono::Utc::now())
+}
+
+/// Creates a new open session that started at `started_at`. The tracker
+/// reads that time together with its monotonic clock, before the database
+/// lock, which a backup can hold for a while.
+pub fn create_session_at(
+    db: &Database,
+    game_id: &str,
+    device_id: &str,
+    started_at: chrono::DateTime<chrono::Utc>,
+) -> Result<Session> {
     let id = uuid::Uuid::new_v4().to_string();
-    let started_at_wall = integrity::now_timestamp();
+    let started_at_wall = integrity::format_timestamp(started_at);
 
     db.with_transaction(|conn| {
         conn.execute(
@@ -766,6 +778,50 @@ mod tests {
 
         let all = list_all_sessions(&db).unwrap();
         assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn moving_a_session_to_another_game_is_caught() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let other = seed_game(&db);
+        let session = create_session(&db, &game_id, DEV_ID).unwrap();
+        end_session(&db, &session.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL).unwrap();
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE sessions SET game_id = ?1 WHERE id = ?2",
+                params![other, session.id],
+            )
+            .map_err(map_db)?;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(
+            get_session(&db, &session.id).unwrap().integrity_status,
+            integrity::STATUS_SUSPICIOUS
+        );
+    }
+
+    #[test]
+    fn a_status_event_without_a_status_is_caught() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = create_session(&db, &game_id, DEV_ID).unwrap();
+        db.with_conn(|conn| {
+            integrity::append_session_event(
+                conn,
+                &session.id,
+                "heartbeat",
+                &integrity::now_timestamp(),
+                Some(0),
+                &json!({ "runtime_ms": 0, "active_ms": 0, "idle_ms": 0 }).to_string(),
+            )
+        })
+        .unwrap();
+        assert_eq!(
+            get_session(&db, &session.id).unwrap().integrity_status,
+            integrity::STATUS_SUSPICIOUS
+        );
     }
 
     #[test]

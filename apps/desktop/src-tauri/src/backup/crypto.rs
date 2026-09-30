@@ -19,7 +19,9 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce, XChaCha20Poly1305, XNon
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-use crate::constants::{BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, HASH_BUFFER_BYTES};
+use crate::constants::{
+    BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, HASH_BUFFER_BYTES, KEY_CHECK_BYTES,
+};
 use crate::error::{Result, VaultimeError};
 
 /// Name of the current scheme in backup metadata.
@@ -39,8 +41,6 @@ const LAST_CHUNK: u8 = 1;
 /// Derives the key that names artwork from the backup key.
 const ARTWORK_ID_LABEL: &[u8] = b"vaultime artwork id v1";
 const KEY_CHECK_LABEL: &[u8] = b"vaultime key check v1";
-/// Bytes of the key check kept, enough to tell two keys apart.
-const KEY_CHECK_BYTES: usize = 16;
 
 /// Encrypts `input_path` into `output_path` with the current scheme.
 pub fn encrypt_file(

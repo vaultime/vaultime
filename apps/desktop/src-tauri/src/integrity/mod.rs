@@ -125,6 +125,15 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     if start.as_deref() != Some(session.started_at_wall.as_str()) {
         return Ok(Some("session_start_mismatch".into()));
     }
+    // The first event names the game and the PC the time belongs to.
+    for (key, value) in [
+        ("game_id", &session.game_id),
+        ("device_id", &session.device_id),
+    ] {
+        if wall_in_payload(first_event, key).is_some_and(|recorded| &recorded != value) {
+            return Ok(Some("session_owner_mismatch".into()));
+        }
+    }
 
     let last_event = events.last().expect("events checked non-empty");
     let last_is_terminal = TERMINAL_EVENTS.contains(&last_event.event_type.as_str());
@@ -179,7 +188,10 @@ fn check_status_history(events: &[SessionEvent], added_by_hand: bool) -> Option<
         let status = match event.event_type.as_str() {
             "started" => STATUS_LOCAL.to_owned(),
             "integrity_flagged" => STATUS_SUSPICIOUS.to_owned(),
-            _ => wall_in_payload(event, "integrity_status")?,
+            _ => match wall_in_payload(event, "integrity_status") {
+                Some(status) => status,
+                None => return Some("session_status_missing".into()),
+            },
         };
         if flagged && status != STATUS_SUSPICIOUS {
             return Some("suspicious_flag_dropped".into());
@@ -223,6 +235,7 @@ pub fn validate_session_history_cached(
     if session.ended_at_wall.is_none() {
         return Ok((validate_session_history(conn, session)?, true));
     }
+    forget_checks_after_outside_writes(conn)?;
     let (events, last_hash) = conn
         .query_row(
             "SELECT COUNT(*),
@@ -264,6 +277,26 @@ pub fn validate_session_history_cached(
         .unwrap_or_else(PoisonError::into_inner)
         .insert(session.id.clone(), (state, reason.clone()));
     Ok((reason, true))
+}
+
+/// Clears the cache when another program wrote to the database, such as a
+/// database tool, so its changes are checked again right away.
+fn forget_checks_after_outside_writes(conn: &Connection) -> Result<()> {
+    static SEEN_VERSION: Mutex<Option<i64>> = Mutex::new(None);
+    let version: i64 = conn
+        .query_row("PRAGMA data_version", [], |row| row.get(0))
+        .map_err(|error| {
+            VaultimeError::Integrity(format!("failed to read the data version: {error}"))
+        })?;
+    let mut seen = SEEN_VERSION.lock().unwrap_or_else(PoisonError::into_inner);
+    if seen.is_some_and(|seen| seen != version) {
+        check_cache()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
+    *seen = Some(version);
+    Ok(())
 }
 
 fn next_sequence_and_previous_hash(

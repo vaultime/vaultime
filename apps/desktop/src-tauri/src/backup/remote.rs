@@ -299,7 +299,7 @@ fn restore_with_key(
 
         if backup.status != "complete" {
             return Err(VaultimeError::Cloud(
-                "remote backup is not ready for restore".into(),
+                "this cloud backup is not complete yet".into(),
             ));
         }
 
@@ -312,7 +312,7 @@ fn restore_with_key(
         let (_, actual_checksum) = hash_file(&archive_path)?;
         if actual_checksum != backup.checksum {
             return Err(VaultimeError::Backup(
-                "downloaded remote backup failed checksum verification".into(),
+                "the downloaded cloud backup is damaged, try again".into(),
             ));
         }
 
@@ -338,10 +338,10 @@ fn restore_with_key(
 
 /// Field of a backup's metadata that holds the key check.
 const KEY_CHECK_FIELD: &str = "key_check";
-const WRONG_PASSPHRASE: &str = "The backup passphrase on this PC does not open your cloud backups. Set the right one on the Cloud page.";
+const WRONG_PASSPHRASE: &str = "The backup passphrase on this PC does not open your cloud backups. Change it on the Cloud page, under This PC.";
 
-/// The key check of the newest backup that has one. Backups from before key
-/// checks have none.
+/// The key check of the newest complete backup. `None` when it has none,
+/// like backups from before key checks.
 fn newest_key_check(api: &Api) -> Result<Option<String>> {
     let backups = send_json::<Vec<RemoteBackupRecord>>(
         api.client

@@ -309,6 +309,8 @@ pub fn add_manual_session(
                 "integrity_status": STATUS_MANUAL,
                 "closed_cleanly": true,
                 "launcher": launcher,
+                "game_id": game_id,
+                "device_id": device_id,
             })
             .to_string(),
         )?;

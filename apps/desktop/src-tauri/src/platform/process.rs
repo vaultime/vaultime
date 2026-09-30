@@ -50,25 +50,6 @@ pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
 
 /// CPU usage in percent of the given processes since their previous
 /// measurement. A process measured for the first time reads 0.
-/// The id a process has inside its own PID namespace, such as a Flatpak
-/// sandbox, where its windows report that id instead of the one this app sees.
-#[cfg(target_os = "linux")]
-pub fn inner_pid(pid: u32) -> Option<u32> {
-    std::fs::read_to_string(format!("/proc/{pid}/status"))
-        .ok()?
-        .lines()
-        .find_map(|line| line.strip_prefix("NSpid:"))?
-        .split_whitespace()
-        .last()?
-        .parse()
-        .ok()
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn inner_pid(_pid: u32) -> Option<u32> {
-    None
-}
-
 pub fn cpu_usage(sys: &mut System, pids: &[u32]) -> HashMap<u32, f32> {
     let pids: Vec<Pid> = pids.iter().copied().map(Pid::from_u32).collect();
     sys.refresh_processes_specifics(

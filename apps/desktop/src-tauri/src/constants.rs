@@ -178,7 +178,7 @@ pub const AUTO_BACKUP_FOLDER_SETTING: &str = "auto_backup_folder";
 /// `SETTING_KEYS.autoBackup` in `lib/constants.ts`.
 pub const AUTO_BACKUP_ENABLED_SETTING: &str = "auto_backup_enabled";
 /// The settings the page may change. The others, such as the artwork scan
-/// version, belong to the core.
+/// version, belong to the core. Same as `SETTING_KEYS` in `lib/constants.ts`.
 pub const PAGE_SETTINGS: &[&str] = &[
     IDLE_THRESHOLD_SETTING,
     BACKGROUND_ACTIVE_SETTING,
@@ -208,7 +208,7 @@ pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 /// Longest time one backup or artwork upload or download may take. Small
 /// requests keep the HTTP client's default limit.
 pub const CLOUD_TRANSFER_TIMEOUT: Duration = Duration::from_mins(30);
-/// Cloud backup key length, as `ChaCha20Poly1305` requires.
+/// Cloud backup key length, as `XChaCha20Poly1305` requires.
 pub const BACKUP_KEY_BYTES: usize = 32;
 /// How often the tray menu updates the running game and today's play.
 pub const TRAY_STATUS_INTERVAL: Duration = Duration::from_secs(20);
@@ -218,6 +218,12 @@ pub const TRAY_TODAY_MIN_PLAYED_MS: i64 = 60_000;
 pub const EXPORT_FORMAT_NAME: &str = "vaultime-sessions";
 /// Version of the JSON session export, raised when its fields change.
 pub const EXPORT_FORMAT_VERSION: u32 = 1;
+/// Bytes of the key check stored with each cloud backup, enough to tell two
+/// keys apart. Part of the backup format, changing it breaks the check.
+pub const KEY_CHECK_BYTES: usize = 16;
+/// Address of the cloud server. Release builds use only this one, whatever the
+/// page asks. Same as `VAULTIME_URL` in `lib/constants.ts`.
+pub const CLOUD_API_BASE_URL: &str = "https://vaultime.codfishcloud.de";
 /// Most artwork ids asked about in one request. Same as
 /// `MAX_BLOB_IDS_PER_REQUEST` in the API's `constants.rs`.
 pub const MAX_ARTWORK_IDS_PER_REQUEST: usize = 10_000;

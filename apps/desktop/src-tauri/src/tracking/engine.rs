@@ -44,8 +44,8 @@ struct ActiveSession {
     last_foreground_at: Option<Instant>,
     /// Wall time skipped by tracking gaps, left out of the drift check.
     skipped_wall_ms: i64,
-    /// The clock that counts through sleep, at the last tick.
-    last_boot_ms: Option<i64>,
+    /// How long the PC had slept since boot, at the last tick.
+    last_asleep_ms: Option<i64>,
     integrity_status: String,
 }
 
@@ -69,7 +69,7 @@ impl ActiveSession {
             last_signal_at: now,
             last_foreground_at: None,
             skipped_wall_ms: 0,
-            last_boot_ms: platform::clock::since_boot_ms(),
+            last_asleep_ms: platform::clock::asleep_ms(),
             integrity_status,
         }
     }
@@ -270,10 +270,10 @@ fn poll_tick(
 
     for (game_id, observation) in &observed_games {
         if observation.is_running && !active.contains_key(game_id) {
-            match sessions::create_session(db, game_id, device_id) {
+            let (started, started_wall) = (Instant::now(), Utc::now());
+            match sessions::create_session_at(db, game_id, device_id, started_wall) {
                 Ok(session) => {
                     info!("session started for game {game_id}: {}", session.id);
-                    let started = Instant::now();
                     let mut active_session = ActiveSession::new(
                         session.id,
                         game_id.clone(),
@@ -299,7 +299,7 @@ fn poll_tick(
     let clocks = Clocks {
         now: Instant::now(),
         wall: Utc::now(),
-        boot_ms: platform::clock::since_boot_ms(),
+        asleep_ms: platform::clock::asleep_ms(),
     };
     for session in active.values_mut() {
         if let Some(observation) = observed_games.get(&session.game_id) {
@@ -493,10 +493,9 @@ fn observe_game_processes(
     let has_foreground_window = activity_snapshot
         .foreground_pid
         .is_some_and(|foreground_pid| {
-            matched_processes.iter().any(|process| {
-                process.pid == foreground_pid
-                    || platform::process::inner_pid(process.pid) == Some(foreground_pid)
-            })
+            matched_processes
+                .iter()
+                .any(|process| process.pid == foreground_pid)
         });
 
     let has_process_activity = matched_processes.iter().any(|process| {
@@ -515,8 +514,8 @@ fn observe_game_processes(
 struct Clocks {
     now: Instant,
     wall: DateTime<Utc>,
-    /// Counts through sleep, unlike `now`.
-    boot_ms: Option<i64>,
+    /// How long the PC had slept since boot.
+    asleep_ms: Option<i64>,
 }
 
 fn apply_observation(
@@ -549,15 +548,11 @@ fn apply_observation(
         .signed_duration_since(session.last_wall_at)
         .num_milliseconds();
     session.last_wall_at = current_wall;
-    // The monotonic clock stops while the PC sleeps on some systems. Time the
-    // clock that counts through sleep has on top of it was spent asleep.
     let slept_ms = clocks
-        .boot_ms
-        .zip(session.last_boot_ms)
-        .map_or(0, |(boot_now, boot_before)| {
-            boot_now - boot_before - delta_ms
-        });
-    session.last_boot_ms = clocks.boot_ms;
+        .asleep_ms
+        .zip(session.last_asleep_ms)
+        .map_or(0, |(now_asleep, before_asleep)| now_asleep - before_asleep);
+    session.last_asleep_ms = clocks.asleep_ms;
 
     if delta_ms.max(wall_delta_ms) > MAX_TICK_GAP_MS || slept_ms > SUSPEND_DETECT_MS {
         session.skipped_wall_ms += wall_delta_ms.max(0);
@@ -642,6 +637,14 @@ fn should_count_as_active(
 
     if activity_snapshot.foreground_supported {
         if observation.has_foreground_window {
+            return true;
+        }
+
+        // On Wayland a game that never showed up as the X11 window in front
+        // runs as a Wayland window, and whether it has the focus cannot be
+        // told. While no X11 window has it, input alone decides for it. A game
+        // that had the X11 focus before has lost it to a Wayland app.
+        if !activity_snapshot.foreground_known && session.last_foreground_at.is_none() {
             return true;
         }
 
@@ -851,7 +854,7 @@ mod tests {
         tick_at(f, session, None);
     }
 
-    fn tick_at(f: &Fixture, session: &mut ActiveSession, boot_ms: Option<i64>) {
+    fn tick_at(f: &Fixture, session: &mut ActiveSession, asleep_ms: Option<i64>) {
         let observation = GameObservation {
             is_running: true,
             has_foreground_window: true,
@@ -860,6 +863,7 @@ mod tests {
         let snapshot = ActivitySnapshot {
             foreground_pid: None,
             foreground_supported: true,
+            foreground_known: true,
             idle_for: Some(Duration::ZERO),
             idle_supported: true,
         };
@@ -876,7 +880,7 @@ mod tests {
             &Clocks {
                 now: Instant::now(),
                 wall: Utc::now(),
-                boot_ms,
+                asleep_ms,
             },
         )
         .unwrap();
@@ -924,13 +928,54 @@ mod tests {
     }
 
     #[test]
+    fn wayland_focus_elsewhere_counts_only_for_games_that_never_had_it() {
+        let f = fixture();
+        let session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(5));
+        let behind = GameObservation {
+            is_running: true,
+            has_foreground_window: false,
+            has_process_activity: true,
+        };
+        let wayland_window_in_front = ActivitySnapshot {
+            foreground_pid: None,
+            foreground_supported: true,
+            foreground_known: false,
+            idle_for: Some(Duration::ZERO),
+            idle_supported: true,
+        };
+        let settings = TrackingSettings {
+            idle_threshold: Duration::from_secs(300),
+            treat_background_as_active: false,
+        };
+        let now = Instant::now();
+        // A native Wayland game never shows up in front, so input decides.
+        assert!(should_count_as_active(
+            &session,
+            behind,
+            &settings,
+            &wayland_window_in_front,
+            now
+        ));
+        // An XWayland game that had the focus lost it to a Wayland app.
+        let mut switched_away = session;
+        switched_away.last_foreground_at = now.checked_sub(Duration::from_secs(60));
+        assert!(!should_count_as_active(
+            &switched_away,
+            behind,
+            &settings,
+            &wayland_window_in_front,
+            now
+        ));
+    }
+
+    #[test]
     fn a_short_suspend_is_skipped_not_flagged() {
         let f = fixture();
-        // Half a minute asleep: too short for the gap limit, but the clock
-        // that counts through sleep ran ahead of the monotonic one.
+        // Half a minute asleep: too short for the gap limit, but the time
+        // the PC slept grew by it.
         let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(35));
-        session.last_boot_ms = Some(1_000);
-        tick_at(&f, &mut session, Some(1_000 + 35_000));
+        session.last_asleep_ms = Some(1_000);
+        tick_at(&f, &mut session, Some(1_000 + 30_000));
 
         assert_eq!(session.runtime_ms, 0);
         assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);

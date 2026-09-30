@@ -12,6 +12,9 @@ use super::controller;
 pub struct ActivitySnapshot {
     pub foreground_pid: Option<u32>,
     pub foreground_supported: bool,
+    /// False on Wayland while no X11 window has the focus: a Wayland window
+    /// has it then, and which one cannot be told.
+    pub foreground_known: bool,
     pub idle_for: Option<Duration>,
     pub idle_supported: bool,
 }
@@ -22,16 +25,15 @@ pub fn capture_activity_snapshot() -> ActivitySnapshot {
     let foreground_pid = imp::foreground_pid();
     ActivitySnapshot {
         foreground_pid,
-        foreground_supported: foreground_detection_strategy() != HEURISTIC
-            && foreground_known(foreground_pid),
+        foreground_supported: foreground_detection_strategy() != HEURISTIC,
+        foreground_known: foreground_known(foreground_pid),
         idle_for: with_controller_input(imp::idle_duration(), controller_idle),
         idle_supported: idle_detection_strategy() != HEURISTIC,
     }
 }
 
 /// On Wayland the X server only knows the windows of X11 apps. When none of
-/// them has the focus, a Wayland window has it, and whether that window is
-/// the game cannot be told. Such a tick goes by process activity instead.
+/// them has the focus, a Wayland window has it.
 fn foreground_known(foreground_pid: Option<u32>) -> bool {
     foreground_pid.is_some()
         || !cfg!(target_os = "linux")
@@ -127,6 +129,7 @@ mod imp {
     use x11rb::cookie::VoidCookie;
     use x11rb::errors::ReplyError;
     use x11rb::protocol::Event;
+    use x11rb::protocol::res::{ClientIdMask, ClientIdSpec, ConnectionExt as _};
     use x11rb::protocol::screensaver::ConnectionExt as _;
     use x11rb::protocol::xinput::{ConnectionExt as _, Device, EventMask, XIEventMask};
     use x11rb::protocol::xproto::{Atom, AtomEnum, ConnectionExt as _, Window};
@@ -191,6 +194,8 @@ mod imp {
         active_window: Atom,
         window_pid: Atom,
         screensaver: bool,
+        /// Whether the X server can name the process behind a window.
+        resource: bool,
     }
 
     impl X11 {
@@ -207,13 +212,21 @@ mod imp {
                 .ok()
                 .and_then(|cookie| cookie.reply().ok())
                 .is_some();
-            info!("connected to the X server, screensaver extension {screensaver}");
+            let resource = connection
+                .res_query_version(1, 2)
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+                .is_some();
+            info!(
+                "connected to the X server, screensaver extension {screensaver}, resource extension {resource}"
+            );
             Some(Self {
                 connection,
                 root,
                 active_window,
                 window_pid,
                 screensaver,
+                resource,
             })
         }
 
@@ -235,8 +248,27 @@ mod imp {
             let window = self.property(self.root, self.active_window, AtomEnum::WINDOW)?;
             match window {
                 None | Some(0) => Ok(None),
-                Some(window) => self.property(window, self.window_pid, AtomEnum::CARDINAL),
+                Some(window) => {
+                    if self.resource
+                        && let Some(pid) = self.client_pid(window)?
+                    {
+                        return Ok(Some(pid));
+                    }
+                    self.property(window, self.window_pid, AtomEnum::CARDINAL)
+                }
             }
+        }
+
+        /// The process behind `window` as the X server knows it. Unlike
+        /// `_NET_WM_PID` it is the id this app sees, also for games in a
+        /// Flatpak sandbox, which count their own ids from 1.
+        fn client_pid(&self, window: Window) -> Result<Option<u32>, ReplyError> {
+            let spec = ClientIdSpec {
+                client: window,
+                mask: ClientIdMask::LOCAL_CLIENT_PID,
+            };
+            let reply = self.connection.res_query_client_ids(&[spec])?.reply()?;
+            Ok(reply.ids.iter().find_map(|id| id.value.first().copied()))
         }
 
         fn idle(&self) -> Result<Option<Duration>, ReplyError> {

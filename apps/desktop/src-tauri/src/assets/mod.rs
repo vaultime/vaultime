@@ -101,17 +101,31 @@ pub fn delete_game(db: &Database, asset_manager: &AssetManager, game_id: &str) -
     Ok(deleted)
 }
 
-/// A failure only leaves unused files behind, so it is logged and not returned.
 /// A single folder or file name, never a path, so an id or name from a
-/// restored backup cannot point outside the folder it is joined to.
+/// restored backup cannot point outside the folder it is joined to. Names
+/// Windows changes or reserves are refused too: it drops trailing dots and
+/// spaces, so `...` would name the folder itself.
 pub(crate) fn is_plain_name(value: &str) -> bool {
+    const RESERVED: [&str; 4] = ["CON", "PRN", "AUX", "NUL"];
     let mut components = Path::new(value).components();
+    let stem = value
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    let numbered_device = (stem.starts_with("COM") || stem.starts_with("LPT"))
+        && stem.len() == 4
+        && stem.ends_with(|last: char| last.is_ascii_digit());
     matches!(
         (components.next(), components.next()),
         (Some(Component::Normal(_)), None)
     ) && !value.contains(['/', '\\', ':'])
+        && !value.ends_with(['.', ' '])
+        && !RESERVED.contains(&stem.as_str())
+        && !numbered_device
 }
 
+/// A failure only leaves unused files behind, so it is logged and not returned.
 fn remove_game_cache(asset_manager: &AssetManager, game_id: &str) {
     if !is_plain_name(game_id) {
         return;
@@ -643,6 +657,19 @@ struct CachedAsset {
 mod tests {
     use super::*;
     use crate::db::models::CreateGame;
+
+    #[test]
+    fn only_plain_names_pass() {
+        for name in ["2f0e9c3a-game-id", "cover.png", "Elden Ring"] {
+            assert!(is_plain_name(name), "{name}");
+        }
+        for name in [
+            "", ".", "..", "...", " ", "cover.", "cover ", "a/b", "a\\b", "C:x", "/etc", "CON",
+            "nul.png", "com1", "LPT9.txt",
+        ] {
+            assert!(!is_plain_name(name), "{name}");
+        }
+    }
 
     fn create_game(db: &Database) -> Game {
         games::create_game(

@@ -17,7 +17,9 @@ use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
-use crate::constants::{BACKUP_HISTORY_LIMIT, PAGE_SETTINGS, POLL_INTERVAL, STEAM_SOURCE};
+use crate::constants::{
+    BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, POLL_INTERVAL, STEAM_SOURCE,
+};
 use crate::db::connection::Database;
 use crate::db::models::{
     BackupSnapshot, CreateGame, EarlierPlaytime, Game, GameStatusChange, Session, SessionEvent,
@@ -38,6 +40,11 @@ use crate::tracking::engine::TrackingEngine;
 #[tauri::command]
 pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
     Ok(app_context.app_version.clone())
+}
+
+#[tauri::command]
+pub fn get_device_id(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
+    Ok(app_context.device_id.clone())
 }
 
 #[tauri::command]
@@ -216,7 +223,7 @@ pub fn export_local_backup(
         &app_context.device_id,
         &summary.overall_checksum,
         &summary.backup_path,
-        "Local export",
+        "Saved backup",
     );
 
     Ok(summary)
@@ -255,6 +262,16 @@ pub fn import_local_backup(
     Ok(summary)
 }
 
+/// Release builds talk only to the Vaultime server, whatever the page asks.
+/// Development builds follow the page, so a local server can be tried.
+fn cloud_api_base_url(requested: &str) -> &str {
+    if cfg!(debug_assertions) {
+        requested
+    } else {
+        CLOUD_API_BASE_URL
+    }
+}
+
 #[tauri::command(async)]
 #[expect(clippy::too_many_arguments)]
 pub fn upload_remote_backup(
@@ -271,7 +288,7 @@ pub fn upload_remote_backup(
         &db,
         &asset_manager,
         &app_context,
-        &api_base_url,
+        cloud_api_base_url(&api_base_url),
         &access_token,
         &account_id,
         client_device_id.as_deref(),
@@ -283,7 +300,7 @@ pub fn upload_remote_backup(
         &result.payload_summary.source_device_id,
         &result.payload_summary.overall_checksum,
         &result.backup.storage_key,
-        "Remote backup",
+        "Cloud backup",
     );
 
     Ok(result)
@@ -306,7 +323,7 @@ pub fn restore_remote_backup(
             &db,
             &asset_manager,
             &app_context,
-            &api_base_url,
+            cloud_api_base_url(&api_base_url),
             &access_token,
             &account_id,
             &backup_id,
@@ -318,7 +335,7 @@ pub fn restore_remote_backup(
         &result.restored_summary.source_device_id,
         &result.restored_summary.overall_checksum,
         &result.backup.storage_key,
-        "Remote restore",
+        "Cloud restore",
     );
 
     Ok(result)
