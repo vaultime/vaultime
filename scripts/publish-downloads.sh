@@ -58,6 +58,10 @@ jq --arg base "$base/$version" \
   "$manifest" >"$stage/latest.json"
 jq -e --arg version "$version" '.version | ltrimstr("v") == $version' "$stage/latest.json" >/dev/null \
   || { echo "latest.json is not for $version" >&2; exit 1; }
+for platform in windows-x86_64 linux-x86_64; do
+  jq -e --arg platform "$platform" '.platforms | has($platform)' "$stage/latest.json" >/dev/null \
+    || { echo "latest.json has no $platform update" >&2; exit 1; }
+done
 for url in $(jq -r '.platforms[].url' "$stage/latest.json"); do
   [ -f "$stage/$version/${url##*/}" ] || { echo "latest.json names ${url##*/}, which is missing" >&2; exit 1; }
 done
