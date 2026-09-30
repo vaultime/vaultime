@@ -104,8 +104,9 @@ pub const INVITE_CODE_GROUP_CHARS: usize = 4;
 
 /// Largest accepted backup upload in bytes. Also the largest artwork blob.
 pub const DEFAULT_MAX_BACKUP_BYTES: i64 = 512 * BYTES_PER_MIB;
-/// Storage one account may use for backups and artwork together, in bytes.
-pub const DEFAULT_MAX_ACCOUNT_BYTES: i64 = 2048 * BYTES_PER_MIB;
+/// Storage one account may use for backups and artwork together, in bytes,
+/// counted as stored: compressed and encrypted.
+pub const DEFAULT_MAX_ACCOUNT_BYTES: i64 = BYTES_PER_GIB;
 /// Unfinished uploads allowed per account at the same time.
 pub const DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT: i64 = 1;
 /// Complete backups kept per account before the oldest are rotated out.

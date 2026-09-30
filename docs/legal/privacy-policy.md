@@ -59,7 +59,7 @@ No other third parties, such as analytics, advertising or cloud storage provider
 ## 5. Retention
 
 - **Local data** stays until you delete it or the app's data folder.
-- **Cloud backups** stay until you delete them in the app. When your account holds 30 backups, a new upload replaces the oldest one. When its 2 GiB of storage for backups and artwork is full, an upload is refused until older backups are deleted. Unfinished uploads are removed after about an hour.
+- **Cloud backups** stay until you delete them in the app. When your account holds 30 backups, a new upload replaces the oldest one. When its 1 GiB of storage for backups and artwork is full, an upload is refused until older backups are deleted. Unfinished uploads are removed after about an hour.
 - **Accounts** stay until you ask for deletion.
 - **Beta applications** are deleted once answered, and after 90 days at the latest.
 - **Nightly copies.** The server copies its database every night and keeps each copy for up to 16 days. Deleted accounts, backup records and beta applications can stay in these copies for that long.
