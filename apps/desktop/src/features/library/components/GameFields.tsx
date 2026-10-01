@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import type { ReactNode } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { FileIcon, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 /** File types offered when choosing a game's program. The empty one is Linux binaries. */
 const EXECUTABLE_EXTENSIONS = ["exe", "app", "sh", "bat", "cmd", ""];
@@ -86,16 +85,6 @@ export function GameFields({
           </Button>
         </div>
       </Field>
-    </div>
-  );
-}
-
-function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {hint && <p className="text-xs text-faint">{hint}</p>}
     </div>
   );
 }

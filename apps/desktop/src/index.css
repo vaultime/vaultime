@@ -63,6 +63,11 @@
 }
 
 @layer base {
+  /* Edge hides its own reveal button for good once the field loses focus. PasswordInput brings one that stays. */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
   * {
     @apply border-border outline-ring/50;
   }

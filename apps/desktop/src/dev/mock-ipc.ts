@@ -9,7 +9,8 @@
 // ?palette=1 opens the command palette. ?hidden=1 hides Celeste from the
 // library. ?cloud=1 signs in to a fake cloud
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
-// password dialog on the cloud page.
+// password dialog on the cloud page. Signed out, ?signin=empty|wrong|ok and
+// ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -283,6 +284,7 @@ function discovered(title: string, path: string, source: string, alreadyAdded = 
 }
 
 const MOCK_CLOUD_PASSWORD = "correct horse battery";
+const MOCK_INVITE_CODE = "VTLINV-PREV-IEWA-BCDE-FGHJ-KLMN-PQRS";
 
 function cloudSession(): CloudAuthSession {
   return {
@@ -348,8 +350,17 @@ window.fetch = async (input, init) => {
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, string>) : {};
   switch (url.pathname) {
     case "/v1/auth/refresh":
-    case "/v1/auth/login":
       return cloudReply(200, cloudSession());
+    case "/v1/auth/login":
+      if (body.password !== MOCK_CLOUD_PASSWORD) {
+        return cloudReply(401, { error: { code: "unauthorized", message: "invalid email or password" } });
+      }
+      return cloudReply(200, cloudSession());
+    case "/v1/auth/signup":
+      if (body.invite_code !== MOCK_INVITE_CODE) {
+        return cloudReply(400, { error: { code: "bad_request", message: "invite code is invalid" } });
+      }
+      return cloudReply(201, cloudSession());
     case "/v1/auth/password":
       if (body.current_password !== MOCK_CLOUD_PASSWORD) {
         return cloudReply(403, { error: { code: "forbidden", message: "the current password is wrong" } });
@@ -401,6 +412,32 @@ if (passwordStep) {
       [...(dialog?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.trim() === "Change password")?.click();
     }, 1600);
   }
+}
+
+const signInStep = params.get("signin");
+if (signInStep) {
+  setTimeout(() => {
+    if (signInStep !== "empty") {
+      typeInto("cloud-login-email", "player@example.com");
+      typeInto("cloud-login-password", signInStep === "wrong" ? "not my password" : MOCK_CLOUD_PASSWORD);
+    }
+  }, 800);
+  setTimeout(() => clickButton("Sign in"), 1200);
+}
+
+const signUpStep = params.get("signup");
+if (signUpStep) {
+  setTimeout(() => {
+    document.getElementById("cloud-signup-email")?.scrollIntoView();
+    if (signUpStep !== "empty") {
+      typeInto("cloud-signup-email", "player@example.com");
+      typeInto("cloud-signup-password", signUpStep === "short" ? "short" : MOCK_CLOUD_PASSWORD);
+      typeInto("cloud-signup-invite", signUpStep === "invite" ? "VTLINV-WRONG" : MOCK_INVITE_CODE);
+      typeInto("cloud-signup-backup-passphrase", "a long backup passphrase");
+      typeInto("cloud-signup-backup-passphrase-confirm", signUpStep === "short" ? "a long backup" : "a long backup passphrase");
+    }
+  }, 800);
+  setTimeout(() => clickButton("Create account"), 1200);
 }
 
 // ?scan=1 presses "Start the scan" in the discover dialog, open it with ?discover=1.

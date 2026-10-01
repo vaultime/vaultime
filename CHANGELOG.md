@@ -5,6 +5,12 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Backups
+
+- **Clearer cloud forms.** The button that shows a password works every time, not only while you first type it. Each cloud form says under the field what is wrong, like a password that is too short or a passphrase that does not match, and a wrong password shows right above the button you pressed.
+
 ## [0.1.0] - 2026-09-30
 
 The first public release.

@@ -28,7 +28,8 @@ pub const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
 /// Random bytes in a refresh token, before base64url encoding.
 pub const REFRESH_TOKEN_BYTES: usize = 32;
 /// Shortest accepted password, in characters. Same as `MIN_PASSWORD_CHARS` in
-/// `deploy/vps/bootstrap-admin-account.py`.
+/// `deploy/vps/bootstrap-admin-account.py` and `MIN_CLOUD_PASSWORD_CHARS` in
+/// `apps/desktop/src/lib/constants.ts`.
 pub const MIN_PASSWORD_CHARS: usize = 10;
 
 // Abuse limits

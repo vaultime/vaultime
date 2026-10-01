@@ -88,6 +88,8 @@ export const CLOUD_AUTO_BACKUP_CHECK_MS = HOUR_MS;
 
 /** Shortest backup passphrase the app accepts. */
 export const MIN_BACKUP_PASSPHRASE_CHARS = 12;
+/** Shortest cloud account password. Same as `MIN_PASSWORD_CHARS` in `apps/api/src/constants.rs`. */
+export const MIN_CLOUD_PASSWORD_CHARS = 10;
 
 /** Step between byte units, B to KiB to MiB. */
 export const BYTES_PER_KIB = 1_024;

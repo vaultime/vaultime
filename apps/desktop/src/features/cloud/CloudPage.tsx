@@ -27,16 +27,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { SignInForm, SignUpForm, UnlockBackupsForm } from "@/features/cloud/AccountForms";
 import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { Field } from "@/components/ui/field";
-import { BACKUP_PASSPHRASE_TOO_SHORT } from "@/lib/cloud-api";
 import {
   BYTES_PER_KIB,
   CLOUD_BACKUPS_CACHE_KEY_PREFIX,
   INVITE_CODE_PREFIX,
-  MIN_BACKUP_PASSPHRASE_CHARS,
   SIZE_ONE_DECIMAL_BELOW,
 } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
@@ -139,15 +138,12 @@ export function CloudPage() {
     isAdmin,
     listBackups,
     getStorage,
-    login,
     logout,
     refreshSession,
     registerCurrentDevice,
     restoreRemoteBackup,
-    setBackupPassphrase,
     session,
     setAutoBackup,
-    signUp,
     uploadRemoteBackup,
   } = useCloudSession();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -161,7 +157,6 @@ export function CloudPage() {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
-  const [backupKeyBusy, setBackupKeyBusy] = useState(false);
   const [lastInvite, setLastInvite] = useState<CloudAdminInvite | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [remoteBackups, setRemoteBackups] = useState<CloudBackupRecord[]>([]);
@@ -169,17 +164,6 @@ export function CloudPage() {
   const [deleteTarget, setDeleteTarget] = useState<CloudBackupRecord | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [restartRequired, setRestartRequired] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [signUpEmail, setSignUpEmail] = useState("");
-  const [signUpPassword, setSignUpPassword] = useState("");
-  const [signUpBackupPassphrase, setSignUpBackupPassphrase] = useState("");
-  const [signUpBackupPassphraseConfirm, setSignUpBackupPassphraseConfirm] =
-    useState("");
-  const [deviceBackupPassphrase, setDeviceBackupPassphrase] = useState("");
-  const [deviceBackupPassphraseConfirm, setDeviceBackupPassphraseConfirm] =
-    useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [invitePrefix, setInvitePrefix] = useState(INVITE_CODE_PREFIX);
   const [inviteMaxRedemptions, setInviteMaxRedemptions] = useState("1");
   const [inviteExpiry, setInviteExpiry] = useState("");
@@ -240,50 +224,9 @@ export function CloudPage() {
     }
   }, [accountId]);
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setAuthBusy(true);
+  function showDone(message: string) {
     setErrorMessage(null);
-    setStatusMessage(null);
-
-    try {
-      const nextSession = await login(loginEmail, loginPassword);
-      setStatusMessage(`Signed in as ${nextSession.user.email}.`);
-    } catch (error) {
-      setErrorMessage(describeError(error));
-    } finally {
-      setAuthBusy(false);
-    }
-  }
-
-  async function handleSignUp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setAuthBusy(true);
-    setErrorMessage(null);
-    setStatusMessage(null);
-
-    try {
-      if (signUpBackupPassphrase.trim().length < MIN_BACKUP_PASSPHRASE_CHARS) {
-        throw new Error(BACKUP_PASSPHRASE_TOO_SHORT);
-      }
-      if (signUpBackupPassphrase !== signUpBackupPassphraseConfirm) {
-        throw new Error("Backup passphrase confirmation does not match.");
-      }
-      const nextSession = await signUp(
-        signUpEmail,
-        signUpPassword,
-        inviteCode,
-        signUpBackupPassphrase,
-      );
-      setStatusMessage(`Cloud account created for ${nextSession.user.email}.`);
-      setInviteCode("");
-      setSignUpBackupPassphrase("");
-      setSignUpBackupPassphraseConfirm("");
-    } catch (error) {
-      setErrorMessage(describeError(error));
-    } finally {
-      setAuthBusy(false);
-    }
+    setStatusMessage(message);
   }
 
   async function handleRefreshSession() {
@@ -334,31 +277,6 @@ export function CloudPage() {
       setErrorMessage(describeError(error));
     } finally {
       setAuthBusy(false);
-    }
-  }
-
-  async function handleSetBackupPassphrase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBackupKeyBusy(true);
-    setErrorMessage(null);
-    setStatusMessage(null);
-
-    try {
-      if (deviceBackupPassphrase.trim().length < MIN_BACKUP_PASSPHRASE_CHARS) {
-        throw new Error(BACKUP_PASSPHRASE_TOO_SHORT);
-      }
-      if (deviceBackupPassphrase !== deviceBackupPassphraseConfirm) {
-        throw new Error("Backup passphrase confirmation does not match.");
-      }
-
-      await setBackupPassphrase(deviceBackupPassphrase);
-      setDeviceBackupPassphrase("");
-      setDeviceBackupPassphraseConfirm("");
-      setStatusMessage("Backup passphrase unlocked for this PC.");
-    } catch (error) {
-      setErrorMessage(describeError(error));
-    } finally {
-      setBackupKeyBusy(false);
     }
   }
 
@@ -553,100 +471,14 @@ export function CloudPage() {
         {!session ? (
           <>
             <PageSection title="Sign in" description="With an account you already have.">
-              <form className="grid max-w-[520px] gap-4" onSubmit={handleLogin}>
-                <Field id="cloud-login-email" label="Email">
-                  <Input
-                    id="cloud-login-email"
-                    autoComplete="email"
-                    value={loginEmail}
-                    onChange={(event) => setLoginEmail(event.target.value)}
-                  />
-                </Field>
-                <Field id="cloud-login-password" label="Password">
-                  <Input
-                    id="cloud-login-password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={loginPassword}
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                  />
-                </Field>
-                <div>
-                  <Button type="submit" disabled={authBusy || !loginEmail.trim() || !loginPassword}>
-                    {authBusy && <Loader2 className="size-4 animate-spin" />}
-                    {authBusy ? "Signing in" : "Sign in"}
-                  </Button>
-                </div>
-              </form>
+              <SignInForm onDone={showDone} />
             </PageSection>
 
             <PageSection
               title="Create an account"
               description="You need an invite code. The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
             >
-              <form className="grid max-w-[520px] gap-4" onSubmit={handleSignUp}>
-                <Field id="cloud-signup-email" label="Email">
-                  <Input
-                    id="cloud-signup-email"
-                    autoComplete="email"
-                    value={signUpEmail}
-                    onChange={(event) => setSignUpEmail(event.target.value)}
-                  />
-                </Field>
-                <Field id="cloud-signup-password" label="Password">
-                  <Input
-                    id="cloud-signup-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={signUpPassword}
-                    onChange={(event) => setSignUpPassword(event.target.value)}
-                  />
-                </Field>
-                <Field id="cloud-signup-invite" label="Invite code">
-                  <Input
-                    id="cloud-signup-invite"
-                    // Six groups of four, INVITE_BODY_CHARS in the API's constants.rs.
-                    placeholder={`${INVITE_CODE_PREFIX}-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`}
-                    value={inviteCode}
-                    onChange={(event) => setInviteCode(event.target.value)}
-                    className="font-mono"
-                  />
-                </Field>
-                <Field id="cloud-signup-backup-passphrase" label="Backup passphrase">
-                  <Input
-                    id="cloud-signup-backup-passphrase"
-                    type="password"
-                    autoComplete="new-password"
-                    value={signUpBackupPassphrase}
-                    onChange={(event) => setSignUpBackupPassphrase(event.target.value)}
-                  />
-                </Field>
-                <Field id="cloud-signup-backup-passphrase-confirm" label="Backup passphrase again">
-                  <Input
-                    id="cloud-signup-backup-passphrase-confirm"
-                    type="password"
-                    autoComplete="new-password"
-                    value={signUpBackupPassphraseConfirm}
-                    onChange={(event) => setSignUpBackupPassphraseConfirm(event.target.value)}
-                  />
-                </Field>
-                <div>
-                  <Button
-                    type="submit"
-                    disabled={
-                      authBusy ||
-                      !signUpEmail.trim() ||
-                      !signUpPassword ||
-                      !inviteCode.trim() ||
-                      !signUpBackupPassphrase ||
-                      !signUpBackupPassphraseConfirm
-                    }
-                  >
-                    {authBusy && <Loader2 className="size-4 animate-spin" />}
-                    {authBusy ? "Creating the account" : "Create account"}
-                  </Button>
-                </div>
-              </form>
+              <SignUpForm onDone={showDone} />
             </PageSection>
           </>
         ) : (
@@ -655,41 +487,7 @@ export function CloudPage() {
               title="Backups"
               description="Kept on the server for this account. Past the backup limit, a new backup replaces the oldest. When the space is full, delete older backups to make room."
             >
-              {!backupKeyReady && (
-                <form className="mb-8 grid max-w-[520px] gap-4" onSubmit={handleSetBackupPassphrase}>
-                  <p className="text-sm leading-relaxed text-soft">
-                    New account: choose a backup passphrase now. Existing backups: enter the passphrase you used for
-                    them.
-                  </p>
-                  <Field id="device-backup-passphrase" label="Backup passphrase">
-                    <Input
-                      id="device-backup-passphrase"
-                      type="password"
-                      autoComplete="new-password"
-                      value={deviceBackupPassphrase}
-                      onChange={(event) => setDeviceBackupPassphrase(event.target.value)}
-                    />
-                  </Field>
-                  <Field id="device-backup-passphrase-confirm" label="Backup passphrase again">
-                    <Input
-                      id="device-backup-passphrase-confirm"
-                      type="password"
-                      autoComplete="new-password"
-                      value={deviceBackupPassphraseConfirm}
-                      onChange={(event) => setDeviceBackupPassphraseConfirm(event.target.value)}
-                    />
-                  </Field>
-                  <div>
-                    <Button
-                      type="submit"
-                      disabled={backupKeyBusy || !deviceBackupPassphrase || !deviceBackupPassphraseConfirm}
-                    >
-                      {backupKeyBusy && <Loader2 className="size-4 animate-spin" />}
-                      {backupKeyBusy ? "Unlocking" : "Unlock backups on this PC"}
-                    </Button>
-                  </div>
-                </form>
-              )}
+              {!backupKeyReady && <UnlockBackupsForm onDone={showDone} />}
 
               <PageRow
                 label="Back up every day"
