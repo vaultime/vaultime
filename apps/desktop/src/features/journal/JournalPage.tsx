@@ -118,13 +118,15 @@ export function JournalPage() {
   const weekGames = [
     ...new Set([...days].reverse().flatMap((day) => day.sessions.filter(countsAsPlay).map((session) => session.game_id))),
   ];
-  const colorOf = (gameId: string) => {
+  const paletteOf = (gameId: string) => {
     const summary = byGame.get(gameId);
-    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).color;
+    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).colors;
   };
-  const weekMarks = markColors(weekGames.map(colorOf), accentHues, mode);
+  const weekMarks = markColors(weekGames.map(paletteOf), accentHues, mode);
   const marks = new Map(weekGames.map((gameId, index) => [gameId, weekMarks[index]]));
-  const markOf = (gameId: string) => marks.get(gameId) ?? markColors([colorOf(gameId)], [], mode)[0];
+  const markFor = (gameId: string) => marks.get(gameId) ?? markColors([paletteOf(gameId)], [], mode)[0];
+  const markOf = (gameId: string) => markFor(gameId).color;
+  const fillOf = (gameId: string) => markFor(gameId).fill;
 
   /** A game's playtime up to a moment, with the playtime from before Vaultime. */
   const playedBefore = (gameId: string, moment: string) =>
@@ -206,6 +208,7 @@ export function JournalPage() {
             byGame={byGame}
             sessionsByGame={sessionsByGame}
             markOf={markOf}
+            fillOf={fillOf}
             events={events}
             now={now}
             notes={notes}
@@ -255,6 +258,7 @@ function DaySection({
   byGame,
   sessionsByGame,
   markOf,
+  fillOf,
   events,
   now,
   notes,
@@ -267,6 +271,8 @@ function DaySection({
   sessionsByGame: Map<string, Session[]>;
   /** The game's color in this week. */
   markOf: (gameId: string) => string;
+  /** What a game's time bars are filled with. */
+  fillOf: (gameId: string) => string;
   events: SessionEvent[];
   now: Date;
   notes: Record<string, string>;
@@ -302,7 +308,7 @@ function DaySection({
                 <span
                   key={session.id}
                   className="absolute inset-y-0 rounded-full"
-                  style={{ left: `${left}%`, width: `${width}%`, background: markOf(session.game_id) }}
+                  style={{ left: `${left}%`, width: `${width}%`, background: fillOf(session.game_id) }}
                 />
               );
             })}

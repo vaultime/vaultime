@@ -19,6 +19,8 @@ import {
   TINT_MIN_LIGHTNESS,
   TINT_MIN_STRENGTH,
   TINT_SAMPLE_PX,
+  TINT_SECOND_MIN_GAP_DEG,
+  TINT_SECOND_MIN_SHARE,
   TINT_TYPICAL_CHROMA,
 } from "@/lib/constants";
 import { maxSrgbChroma, srgbToOklab } from "@/lib/color";
@@ -31,13 +33,16 @@ export interface ArtColor {
   chroma: number;
 }
 
-// Tints and marks are CSS colors whose lightness is a token, so they follow
-// dark and light mode without being worked out again. The theme in
-// lib/theme.ts sets the tokens.
+// Tints are CSS colors whose lightness is a token, so they follow dark and
+// light mode without being worked out again. The theme in lib/theme.ts sets
+// the tokens. Marks are worked out for the mode.
 
 export interface GameTint {
-  /** The main color of the artwork, or of the title. Null for black, white and grey art. */
-  color: ArtColor | null;
+  /**
+   * The main colors of the artwork, the strongest first and at most two, or
+   * the color of the title. Empty for black, white and grey art.
+   */
+  colors: ArtColor[];
   /** Field for covers and tiles, dark in dark mode and pale in light mode. */
   fill: string;
   /** Border of that field. */
@@ -57,12 +62,12 @@ export interface GameTint {
  * `strength` scales colorfulness, 1 is the default and 0 is grey. The hue may
  * be a CSS value such as a token.
  */
-function tintFromHue(hue: number | string, strength: number, color: ArtColor | null): GameTint {
+function tintFromHue(hue: number | string, strength: number, colors: ArtColor[]): GameTint {
   const angle = typeof hue === "number" ? String(Math.round(hue)) : hue;
   const tone = (role: keyof typeof TINT_LEVELS) =>
     `oklch(var(--tint-${role}) ${(TINT_LEVELS[role].chroma * strength).toFixed(3)} ${angle})`;
   return {
-    color,
+    colors,
     fill: tone("fill"),
     edge: tone("edge"),
     ink: tone("ink"),
@@ -74,11 +79,11 @@ function tintFromHue(hue: number | string, strength: number, color: ArtColor | n
 
 /** A tint in the given hue at the default colorfulness. */
 function tintForHue(hue: number): GameTint {
-  return tintFromHue(hue, 1, { hue, chroma: MARK_LEVELS.chroma });
+  return tintFromHue(hue, 1, [{ hue, chroma: MARK_LEVELS.chroma }]);
 }
 
 /** The accent color, for pages that are not about one game. Violet unless the player picks another. */
-export const BRAND_TINT = tintFromHue("var(--accent-hue)", 1, { hue: BRAND_HUE_DEG, chroma: MARK_LEVELS.chroma });
+export const BRAND_TINT = tintFromHue("var(--accent-hue)", 1, [{ hue: BRAND_HUE_DEG, chroma: MARK_LEVELS.chroma }]);
 
 /** A stable tint per title, for games without artwork. */
 export function tintForTitle(title: string): GameTint {
@@ -91,6 +96,33 @@ function hueDistance(a: number, b: number): number {
   return Math.min(distance, 360 - distance);
 }
 
+/** The least distance from a hue to any of the placed ones, endless with none placed. */
+function roomFrom(hue: number, placed: number[]): number {
+  return Math.min(Infinity, ...placed.map((other) => hueDistance(hue, other)));
+}
+
+/** A hue moved as little as it can to keep `gap` from the placed ones. */
+function placeHue(hue: number, placed: number[], gap: number): number {
+  let best = hue;
+  let bestRoom = roomFrom(hue, placed);
+  for (let shift = 1; shift <= 180 && bestRoom < gap; shift += 1) {
+    for (const candidate of [hue + shift, hue - shift]) {
+      const candidateRoom = roomFrom(candidate, placed);
+      if (candidateRoom > bestRoom) {
+        best = candidate;
+        bestRoom = candidateRoom;
+      }
+      if (bestRoom >= gap) break;
+    }
+  }
+  return (best + 360) % 360;
+}
+
+/** The gap games keep between their hues, smaller when many share the wheel. */
+function hueGap(count: number): number {
+  return Math.min(MARK_MIN_HUE_GAP_DEG, 360 / Math.max(count, 1));
+}
+
 /**
  * Moves hues apart so games shown together are easy to tell apart. The first
  * hue stays where it is and each later one moves as little as it can, so
@@ -98,70 +130,67 @@ function hueDistance(a: number, b: number): number {
  * kept free, and with many games the gap shrinks to what fits around the wheel.
  */
 export function distinctHues(hues: number[], taken: number[] = []): number[] {
-  const gap = Math.min(MARK_MIN_HUE_GAP_DEG, 360 / Math.max(hues.length + taken.length, 1));
+  const gap = hueGap(hues.length + taken.length);
   const placed = [...taken];
-  for (const hue of hues) {
-    const room = (candidate: number) => Math.min(...placed.map((other) => hueDistance(candidate, other)));
-    let best = hue;
-    let bestRoom = room(hue);
-    for (let shift = 1; shift <= 180 && bestRoom < gap; shift += 1) {
-      for (const candidate of [hue + shift, hue - shift]) {
-        const candidateRoom = room(candidate);
-        if (candidateRoom > bestRoom) {
-          best = candidate;
-          bestRoom = candidateRoom;
-        }
-        if (bestRoom >= gap) break;
-      }
-    }
-    placed.push((best + 360) % 360);
-  }
+  for (const hue of hues) placed.push(placeHue(hue, placed, gap));
   return placed.slice(taken.length);
 }
 
-/**
- * Marks that tell the games shown together apart, in the main color of their
- * artwork, a little more colorful than the art and at a lightness that reads
- * on the ground of the mode. Black, white and grey art gets a grey, the first
- * one silver. A color only moves when it would look like an earlier game or
- * like a `taken` hue, and greys run out into tinted greys. One color per entry
- * of `colors`, in the same order.
- */
-export function markColors(colors: (ArtColor | null)[], taken: number[] = [], mode: ThemeMode = "dark"): string[] {
-  const greys = new Map<number, number>();
-  const hued: { index: number; hue: number; chroma: number }[] = [];
-  const greySteps = MARK_NEUTRAL_LIGHTNESS[mode];
-  for (const [index, color] of colors.entries()) {
-    if (color) hued.push({ index, hue: color.hue, chroma: color.chroma });
-    else if (greys.size < greySteps.length) greys.set(index, greySteps[greys.size]);
-    else hued.push({ index, hue: 0, chroma: MARK_MIN_CHROMA });
-  }
-
-  const marks: string[] = [];
-  for (const [index, lightness] of greys) marks[index] = `oklch(${lightness} 0 0)`;
-  const hues = distinctHues(
-    hued.map((entry) => entry.hue),
-    taken,
-  );
-  const lightness = MARK_LEVELS.lightness[mode];
-  for (const [order, entry] of hued.entries()) {
-    const hue = hues[order];
-    const chroma = Math.min(
-      Math.max(entry.chroma * MARK_CHROMA_BOOST, MARK_MIN_CHROMA),
-      MARK_MAX_CHROMA,
-      maxSrgbChroma(lightness, hue),
-    );
-    // Rounded down, so the color stays inside sRGB.
-    marks[entry.index] = `oklch(${lightness} ${(Math.floor(chroma * 1000) / 1000).toFixed(3)} ${Math.round(hue)})`;
-  }
-  return marks;
+/** How a game shows in the journal. */
+export interface Mark {
+  /** Its one color, for its name and for stretches it shares with other games. */
+  color: string;
+  /** What its time bars are filled with, the color blending into its second one for art with two. */
+  fill: string;
 }
 
 /**
- * The tint of RGBA pixels. Its hue is the strongest band of hues among the
- * colorful pixels, so a cover in red and blue stays red or blue instead of
- * a mix of both. Art with too few colorful pixels, like black, white or grey
- * art, gets a grey tint and no color.
+ * Marks that tell the games shown together apart, in the main colors of their
+ * artwork, a little more colorful than the art and at a lightness that reads
+ * on the ground of the mode. A game whose first color looks like an earlier
+ * game or a `taken` hue takes its second one, and only when neither has room
+ * does its color move. Black, white and grey art gets a grey, the first one
+ * silver, and greys run out into tinted greys. One mark per palette, in the
+ * same order.
+ */
+export function markColors(palettes: ArtColor[][], taken: number[] = [], mode: ThemeMode = "dark"): Mark[] {
+  const lightness = MARK_LEVELS.lightness[mode];
+  const greySteps = MARK_NEUTRAL_LIGHTNESS[mode];
+  let greys = 0;
+  const entries = palettes.map((palette) => {
+    if (palette.length > 0) return { palette };
+    if (greys < greySteps.length) return { grey: greySteps[greys++] };
+    return { palette: [{ hue: 0, chroma: MARK_MIN_CHROMA }] };
+  });
+
+  const tone = ({ hue, chroma }: ArtColor) => {
+    const shown = Math.min(Math.max(chroma * MARK_CHROMA_BOOST, MARK_MIN_CHROMA), MARK_MAX_CHROMA, maxSrgbChroma(lightness, hue));
+    // Rounded down, so the color stays inside sRGB.
+    return `oklch(${lightness} ${(Math.floor(shown * 1000) / 1000).toFixed(3)} ${Math.round(hue)})`;
+  };
+  const gap = hueGap(entries.filter((entry) => entry.palette).length + taken.length);
+  const placed = [...taken];
+  return entries.map((entry) => {
+    if (!entry.palette) {
+      const grey = `oklch(${entry.grey} 0 0)`;
+      return { color: grey, fill: grey };
+    }
+    const [first, ...others] = entry.palette;
+    const fitting = entry.palette.find((color) => roomFrom(color.hue, placed) >= gap);
+    const main = fitting ?? { ...first, hue: placeHue(first.hue, placed, gap) };
+    placed.push(main.hue);
+    const second = fitting && fitting !== first ? first : others[0];
+    const color = tone(main);
+    return { color, fill: second ? `linear-gradient(90deg, ${color}, ${tone(second)})` : color };
+  });
+}
+
+/**
+ * The tint of RGBA pixels. Its main colors are the strongest bands of hues
+ * among the colorful pixels, so a cover in red and blue gives red and blue
+ * instead of a mix of both. A second band counts when it is far enough from
+ * the first and nearly as strong. Art with too few colorful pixels, like
+ * black, white or grey art, gets a grey tint and no colors.
  */
 export function tintFromPixels(data: Uint8ClampedArray): GameTint {
   const bins = Array.from({ length: TINT_HUE_BINS }, () => ({ a: 0, b: 0, chroma: 0, count: 0 }));
@@ -186,24 +215,36 @@ export function tintFromPixels(data: Uint8ClampedArray): GameTint {
     bin.chroma += chroma;
     bin.count += 1;
   }
-  if (opaque === 0 || colorful / opaque < TINT_COLORFUL_MIN_SHARE) return tintFromHue(BRAND_HUE_DEG, 0, null);
+  if (opaque === 0 || colorful / opaque < TINT_COLORFUL_MIN_SHARE) return tintFromHue(BRAND_HUE_DEG, 0, []);
 
   // A band is a bin with its two neighbors, weighted by colorfulness.
   const band = (center: number) =>
     [center - 1, center, center + 1].map((index) => bins[(index + TINT_HUE_BINS) % TINT_HUE_BINS]);
   const weight = (center: number) => band(center).reduce((sum, bin) => sum + bin.chroma, 0);
-  let strongest = 0;
-  for (let center = 1; center < TINT_HUE_BINS; center += 1) {
-    if (weight(center) > weight(strongest)) strongest = center;
-  }
-  const picked = band(strongest);
-  const sum = (key: "a" | "b" | "chroma" | "count") => picked.reduce((total, bin) => total + bin[key], 0);
-  const hue = ((Math.atan2(sum("b"), sum("a")) * 180) / Math.PI + 360) % 360;
+  const colorOf = (center: number): ArtColor => {
+    const picked = band(center);
+    const sum = (key: "a" | "b" | "chroma" | "count") => picked.reduce((total, bin) => total + bin[key], 0);
+    return { hue: ((Math.atan2(sum("b"), sum("a")) * 180) / Math.PI + 360) % 360, chroma: sum("chroma") / sum("count") };
+  };
+  const centers = Array.from({ length: TINT_HUE_BINS }, (_, center) => center);
+  const strongest = centers.reduce((best, center) => (weight(center) > weight(best) ? center : best));
+  const binGap = Math.ceil((TINT_SECOND_MIN_GAP_DEG / 360) * TINT_HUE_BINS);
+  const apart = (center: number) => {
+    const distance = Math.abs(center - strongest);
+    return Math.min(distance, TINT_HUE_BINS - distance) >= binGap;
+  };
+  const runnerUp = centers.filter(apart).reduce<number | null>(
+    (best, center) => (best === null || weight(center) > weight(best) ? center : best),
+    null,
+  );
+
+  const colors = [colorOf(strongest)];
+  if (runnerUp !== null && weight(runnerUp) >= weight(strongest) * TINT_SECOND_MIN_SHARE) colors.push(colorOf(runnerUp));
   const strength = Math.min(
     TINT_MAX_STRENGTH,
     Math.max(TINT_MIN_STRENGTH, sumChroma / counted / TINT_TYPICAL_CHROMA),
   );
-  return tintFromHue(hue, strength, { hue, chroma: sum("chroma") / sum("count") });
+  return tintFromHue(colors[0].hue, strength, colors);
 }
 
 const imageTints = new Map<string, Promise<GameTint | null>>();

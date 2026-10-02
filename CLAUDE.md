@@ -147,9 +147,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   tables. Sessions read like a journal, with wording that varies from session
   to session but stays the same for each one.
 - In the journal, each game gets a mark in the main color of its artwork,
-  grey for black, white or grey art. It shifts only when it would look like
-  another game of the week or like the accent. Its title in the entries takes
-  that color.
+  grey for black, white or grey art. Art with two strong colors shows both in
+  its bars. A game whose first color looks like another game of the week or
+  like the accent takes its second color, and a color shifts only when
+  neither fits. Its title in the entries takes its mark color.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
   frame, with a violet pivot. The wordmark is Mona Sans 700 at full width
   (`font-wordmark`), and `scripts/build-brand.py` outlines it for the logo

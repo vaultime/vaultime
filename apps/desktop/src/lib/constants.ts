@@ -352,6 +352,10 @@ export const TINT_MAX_LIGHTNESS = 0.96;
 export const TINT_COLORFUL_MIN_CHROMA = 0.04;
 /** Art with a smaller share of colorful pixels is black, white or grey. */
 export const TINT_COLORFUL_MIN_SHARE = 0.05;
+/** A second main color of art is at least this far from the first around the color wheel, in degrees. */
+export const TINT_SECOND_MIN_GAP_DEG = 60;
+/** A second main color of art counts when it has at least this share of the colorfulness of the first. */
+export const TINT_SECOND_MIN_SHARE = 0.4;
 /** Bands the color wheel is cut into when looking for the main color of art. */
 export const TINT_HUE_BINS = 24;
 

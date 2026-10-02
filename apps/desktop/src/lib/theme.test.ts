@@ -99,8 +99,9 @@ describe("themeTokens", () => {
   it.each(MODES)("keeps journal marks apart from the ground in %s mode", (mode) => {
     const tokens = themeTokens(mode, "vault", "violet");
     const colors = Array.from({ length: 12 }, (_, index) => ({ hue: index * 30, chroma: 0.15 }));
-    for (const mark of [...markColors(colors, [], mode), ...markColors([null, null, null], [], mode)]) {
-      expect(contrastRatio(parse(mark), parse(tokens["--ink"]))).toBeGreaterThanOrEqual(3);
+    const marks = [...markColors(colors.map((color) => [color]), [], mode), ...markColors([[], [], []], [], mode)];
+    for (const { color } of marks) {
+      expect(contrastRatio(parse(color), parse(tokens["--ink"]))).toBeGreaterThanOrEqual(3);
     }
   });
 
