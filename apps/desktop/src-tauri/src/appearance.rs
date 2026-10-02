@@ -5,7 +5,7 @@
 //! folder, outside the artwork cache, so backups leave it out.
 
 use std::fs;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -81,11 +81,23 @@ impl BackgroundStore {
             .encode_image(&image.to_rgb8())
             .map_err(|error| failed("store the picture", error))?;
 
-        // Written next to the old picture first, so a failed write keeps it.
+        // Written next to the old picture first, under a name of its own so
+        // two pictures picked at once do not meet, and on the disk before it
+        // takes the old one's place. A failed write keeps the old picture.
         fs::create_dir_all(&self.dir).map_err(|error| failed("store the picture", error))?;
-        let staged = self.dir.join(format!("{BACKGROUND_FILE}.new"));
-        fs::write(&staged, &encoded).map_err(|error| failed("store the picture", error))?;
-        fs::rename(&staged, self.file()).map_err(|error| failed("store the picture", error))?;
+        let staged = self
+            .dir
+            .join(format!("{BACKGROUND_FILE}.{}.new", uuid::Uuid::new_v4()));
+        let stored = fs::File::create(&staged)
+            .and_then(|mut file| {
+                file.write_all(&encoded)?;
+                file.sync_all()
+            })
+            .and_then(|()| fs::rename(&staged, self.file()));
+        if let Err(error) = stored {
+            let _ = fs::remove_file(&staged);
+            return Err(failed("store the picture", error));
+        }
         Ok(data_url(&encoded))
     }
 
@@ -235,6 +247,22 @@ mod tests {
             stored_size(&store),
             (BACKGROUND_MAX_SIDE_PX, BACKGROUND_MAX_SIDE_PX / 2)
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn leaves_no_staged_file_behind() {
+        let root = temp_dir("background");
+        let source = root.join("picture.png");
+        write_png(&source, 40, 30);
+        let store = BackgroundStore::new(root.join("appearance"));
+        store.import(&source).unwrap();
+        store.import(&source).unwrap();
+        let names: Vec<String> = fs::read_dir(root.join("appearance"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, [BACKGROUND_FILE]);
         fs::remove_dir_all(root).unwrap();
     }
 
