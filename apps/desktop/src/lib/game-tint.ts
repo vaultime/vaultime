@@ -9,6 +9,7 @@ import {
   MARK_MIN_CHROMA,
   MARK_MIN_HUE_GAP_DEG,
   MARK_NEUTRAL_LIGHTNESS,
+  MARK_TINTED_GREY_CHROMA,
   TINT_COLORFUL_MIN_CHROMA,
   TINT_COLORFUL_MIN_SHARE,
   TINT_HUE_BINS,
@@ -123,19 +124,6 @@ function hueGap(count: number): number {
   return Math.min(MARK_MIN_HUE_GAP_DEG, 360 / Math.max(count, 1));
 }
 
-/**
- * Moves hues apart so games shown together are easy to tell apart. The first
- * hue stays where it is and each later one moves as little as it can, so
- * games keep the color of their cover where there is room. `taken` hues are
- * kept free, and with many games the gap shrinks to what fits around the wheel.
- */
-export function distinctHues(hues: number[], taken: number[] = []): number[] {
-  const gap = hueGap(hues.length + taken.length);
-  const placed = [...taken];
-  for (const hue of hues) placed.push(placeHue(hue, placed, gap));
-  return placed.slice(taken.length);
-}
-
 /** How a game shows in the journal. */
 export interface Mark {
   /** Its main color, for stretches it shares with other games. */
@@ -160,11 +148,13 @@ export function markColors(palettes: ArtColor[][], taken: number[] = [], mode: T
   const entries = palettes.map((palette) => {
     if (palette.length > 0) return { palette };
     if (greys < greySteps.length) return { grey: greySteps[greys++] };
-    return { palette: [{ hue: 0, chroma: MARK_MIN_CHROMA }] };
+    return { palette: [{ hue: 0, chroma: MARK_TINTED_GREY_CHROMA }], tinted: true };
   });
 
-  const tone = ({ hue, chroma }: ArtColor) => {
-    const shown = Math.min(Math.max(chroma * MARK_CHROMA_BOOST, MARK_MIN_CHROMA), MARK_MAX_CHROMA, maxSrgbChroma(lightness, hue));
+  // A tinted grey keeps its low chroma, art is made a little more colorful.
+  const tone = ({ hue, chroma }: ArtColor, tinted = false) => {
+    const wanted = tinted ? chroma : Math.min(Math.max(chroma * MARK_CHROMA_BOOST, MARK_MIN_CHROMA), MARK_MAX_CHROMA);
+    const shown = Math.min(wanted, maxSrgbChroma(lightness, hue));
     // Rounded down, so the color stays inside sRGB.
     return `oklch(${lightness} ${(Math.floor(shown * 1000) / 1000).toFixed(3)} ${Math.round(hue)})`;
   };
@@ -180,7 +170,7 @@ export function markColors(palettes: ArtColor[][], taken: number[] = [], mode: T
     const main = fitting ?? { ...first, hue: placeHue(first.hue, placed, gap) };
     placed.push(main.hue);
     const second = fitting && fitting !== first ? first : others[0];
-    const color = tone(main);
+    const color = tone(main, entry.tinted);
     return { color, fill: second ? `linear-gradient(90deg, ${color}, ${tone(second)})` : color };
   });
 }

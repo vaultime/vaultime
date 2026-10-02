@@ -9,6 +9,8 @@ import type { Phrase } from "@/lib/sentences";
  * of its own, or a blend of colors painted into its letters.
  */
 export function PhraseText({ phrase, emColor, emFill }: { phrase: Phrase; emColor?: string; emFill?: string }) {
+  // The padding gives the slant of the last italic letter room in the
+  // painted box, the margin keeps the spacing as it was.
   const style: CSSProperties | undefined = emFill
     ? {
         color: emColor,
@@ -16,6 +18,8 @@ export function PhraseText({ phrase, emColor, emFill }: { phrase: Phrase; emColo
         WebkitBackgroundClip: "text",
         backgroundClip: "text",
         WebkitTextFillColor: "transparent",
+        paddingRight: "0.12em",
+        marginRight: "-0.12em",
       }
     : emColor
       ? { color: emColor }

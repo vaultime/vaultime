@@ -3,8 +3,15 @@
 
 import { describe, expect, it } from "vitest";
 import { maxSrgbChroma } from "./color";
-import { MARK_CHROMA_BOOST, MARK_LEVELS, MARK_MAX_CHROMA, MARK_MIN_CHROMA, MARK_MIN_HUE_GAP_DEG } from "./constants";
-import { distinctHues, markColors, tintForTitle, tintFromPixels, type ArtColor } from "./game-tint";
+import {
+  MARK_CHROMA_BOOST,
+  MARK_LEVELS,
+  MARK_MAX_CHROMA,
+  MARK_MIN_CHROMA,
+  MARK_MIN_HUE_GAP_DEG,
+  MARK_TINTED_GREY_CHROMA,
+} from "./constants";
+import { markColors, tintForTitle, tintFromPixels, type ArtColor } from "./game-tint";
 
 const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
@@ -85,32 +92,6 @@ describe("tintFromPixels", () => {
   });
 });
 
-describe("distinctHues", () => {
-  it("keeps hues that are already far apart", () => {
-    expect(distinctHues([10, 120, 240])).toEqual([10, 120, 240]);
-    expect(distinctHues([200])).toEqual([200]);
-    expect(distinctHues([20, 350])).toEqual([20, 350]);
-  });
-
-  it("moves a close hue only as far as it needs to", () => {
-    expect(distinctHues([100, 110])).toEqual([100, 130]);
-    expect(distinctHues([20, 0])).toEqual([20, 350]);
-  });
-
-  it("keeps taken hues free", () => {
-    expect(distinctHues([290, 100], [293])).toEqual([263, 100]);
-  });
-
-  it("spreads many games around the wheel", () => {
-    const hues = distinctHues(Array.from({ length: 10 }, () => 0));
-    for (const [index, hue] of hues.entries()) {
-      for (const other of hues.slice(index + 1)) {
-        expect(distance(hue, other)).toBeGreaterThanOrEqual(MARK_MIN_HUE_GAP_DEG);
-      }
-    }
-  });
-});
-
 describe("markColors", () => {
   const color = (palettes: ArtColor[][], taken: number[] = [], mode: "dark" | "light" = "dark") =>
     markColors(palettes, taken, mode).map((mark) => oklch(mark.color));
@@ -187,10 +168,30 @@ describe("markColors", () => {
     expect(dark.lightness).toBeGreaterThan(light.lightness);
   });
 
-  it("tints greys once the grey steps run out", () => {
+  it("tints greys once the grey steps run out, and keeps them greyish", () => {
     const marks = color([[], [], [], []]);
     expect(marks.slice(0, 3).every((mark) => mark.chroma === 0)).toBe(true);
     expect(marks[3].chroma).toBeGreaterThan(0);
+    expect(marks[3].chroma).toBeLessThanOrEqual(MARK_TINTED_GREY_CHROMA);
+  });
+
+  it("keeps hues that are already far apart", () => {
+    const hues = color([[{ hue: 10, chroma: 0.1 }], [{ hue: 120, chroma: 0.1 }], [{ hue: 240, chroma: 0.1 }]]);
+    expect(hues.map((mark) => mark.hue)).toEqual([10, 120, 240]);
+  });
+
+  it("moves a close hue only as far as it needs to", () => {
+    expect(color([[{ hue: 100, chroma: 0.1 }], [{ hue: 110, chroma: 0.1 }]]).map((mark) => mark.hue)).toEqual([100, 130]);
+    expect(color([[{ hue: 20, chroma: 0.1 }], [{ hue: 0, chroma: 0.1 }]]).map((mark) => mark.hue)).toEqual([20, 350]);
+  });
+
+  it("spreads many games of one color around the wheel", () => {
+    const hues = color(Array.from({ length: 10 }, () => [{ hue: 0, chroma: 0.1 }])).map((mark) => mark.hue);
+    for (const [index, hue] of hues.entries()) {
+      for (const other of hues.slice(index + 1)) {
+        expect(distance(hue, other)).toBeGreaterThanOrEqual(MARK_MIN_HUE_GAP_DEG);
+      }
+    }
   });
 
   it("keeps taken hues free", () => {
