@@ -20,6 +20,7 @@ import { AppearanceSection } from "@/features/settings/AppearanceSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
+import { WindowSection } from "@/features/settings/WindowSection";
 import {
   AUTO_BACKUP_KEEP,
   COPYRIGHT_NOTICE,
@@ -365,6 +366,8 @@ export function SettingsPage() {
         </PageSection>
 
         <AppearanceSection />
+
+        <WindowSection />
 
         {hidden.length > 0 && (
           <PageSection

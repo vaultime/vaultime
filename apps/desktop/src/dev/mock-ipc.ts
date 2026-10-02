@@ -25,6 +25,8 @@ import type {
   Session,
   SessionEvent,
   SteamPlaytimePreview,
+  WindowSizeChoice,
+  WindowSizeState,
 } from "@/lib/types";
 
 const now = Date.now();
@@ -513,6 +515,28 @@ function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
   }
 }
 
+// Window size on a 1920 by 1080 screen with a taskbar. ?window=<choice> starts
+// with another choice, like extra_large, and ?screen=1536x816 sets the room
+// for the window.
+const MOCK_TITLE_BAR_PX = 32;
+const mockPresets = [
+  { name: "compact", width: 1024, height: 640 },
+  { name: "standard", width: 1280, height: 800 },
+  { name: "large", width: 1536, height: 960 },
+  { name: "extra_large", width: 1920, height: 1200 },
+] as const;
+const [mockScreenWidth, mockScreenHeight] = (params.get("screen") ?? "1920x1032").split("x").map(Number);
+let mockWindowChoice = (params.get("window") ?? "standard") as WindowSizeChoice;
+function mockWindowSize(): WindowSizeState {
+  const presets = mockPresets.map((preset) => ({
+    ...preset,
+    fits: preset.width <= mockScreenWidth && preset.height + MOCK_TITLE_BAR_PX <= mockScreenHeight,
+  }));
+  const chosen = presets.findIndex((preset) => preset.name === mockWindowChoice);
+  const applied = presets.slice(0, chosen + 1).filter((preset) => preset.fits).at(-1)?.name ?? "free";
+  return { choice: mockWindowChoice, applied: chosen < 0 ? "free" : applied, presets };
+}
+
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   const appearanceAnswer = appearanceIpc(cmd, args);
@@ -621,6 +645,11 @@ mockIPC((cmd, payload) => {
       return signedIn;
     case "tray_available":
       return true;
+    case "get_window_size":
+      return mockWindowSize();
+    case "set_window_size":
+      mockWindowChoice = args.choice as WindowSizeChoice;
+      return mockWindowSize();
     case "set_cloud_signed_in":
       return null;
     case "get_auto_backup_folder":

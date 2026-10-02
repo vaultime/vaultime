@@ -22,6 +22,8 @@ import type {
   GameStatusChange,
   SessionNote,
   SteamPlaytimePreview,
+  WindowSizeChoice,
+  WindowSizeState,
 } from "@/lib/types";
 
 /** The id of this PC, stored with its sessions and backups. */
@@ -273,6 +275,16 @@ export async function setSetting(
 
 export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
   return invoke<TrackingDiagnostics>("get_tracking_diagnostics");
+}
+
+/** The window size picked on this PC and which presets fit its screen. */
+export async function getWindowSize(): Promise<WindowSizeState> {
+  return invoke<WindowSizeState>("get_window_size");
+}
+
+/** Saves a window size for this PC, the window takes it right away. */
+export async function setWindowSize(choice: WindowSizeChoice): Promise<WindowSizeState> {
+  return invoke<WindowSizeState>("set_window_size", { choice });
 }
 
 /** Whether this system shows a tray icon, so closing the window can keep tracking. */

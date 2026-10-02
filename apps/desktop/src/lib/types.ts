@@ -81,6 +81,26 @@ export interface Setting {
 }
 
 /** Runtime tracking capabilities reported by the core. */
+/** A window size preset or `free`, see `WINDOW_PRESETS` in constants.rs. */
+export type WindowSizeChoice = "compact" | "standard" | "large" | "extra_large" | "free";
+
+/** Mirrors the Rust `WindowPresetView` struct. */
+export interface WindowPresetView {
+  name: Exclude<WindowSizeChoice, "free">;
+  width: number;
+  height: number;
+  /** Whether the window fits the screen it is on at this size. */
+  fits: boolean;
+}
+
+/** Mirrors the Rust `WindowSizeState` struct. */
+export interface WindowSizeState {
+  choice: WindowSizeChoice;
+  /** What the window uses, a smaller preset or `free` when the choice does not fit this screen. */
+  applied: WindowSizeChoice;
+  presets: WindowPresetView[];
+}
+
 export interface TrackingDiagnostics {
   platform: string;
   running: boolean;
