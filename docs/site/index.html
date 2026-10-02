@@ -35,7 +35,7 @@
   <main>
     <section class="hero">
       <div class="wrap">
-        <div class="caps">Playtime tracker for Windows and Linux</div>
+        <div class="caps">Free playtime tracker for Windows and Linux</div>
         <h1 class="display">Every hour you play, honestly counted.</h1>
         <p class="sentence">Vaultime notices when a game starts, keeps active and idle time apart and writes your play down like a journal. Everything stays on your PC.</p>
         <div class="actions">
@@ -120,23 +120,30 @@
       <section class="doc" id="download">
         <div>
           <h2 class="display">Download</h2>
-          <p class="lead">Free, for Windows and Linux.</p>
+          <p class="lead">Free and open source, for Windows and Linux. No account needed.</p>
           <p class="release" id="release" hidden></p>
         </div>
         <div>
           <div class="row">
             <div><h3>Windows</h3><p>Installs for your user account, no admin rights needed. The .msi is for managed installs.</p></div>
-            <div class="buttons">
+            <div class="buttons" data-from-site>
               <a class="button solid" href="/downloads/latest/Vaultime-setup.exe">Download</a>
               <a class="button line" href="/downloads/latest/Vaultime.msi">.msi</a>
             </div>
           </div>
           <div class="row">
             <div><h3>Linux</h3><p>.deb for Debian and Ubuntu, .rpm for Fedora, the AppImage for Arch, openSUSE and everything else. Every release is installed and started on Debian, Ubuntu, Fedora, Arch and openSUSE before it is published.</p></div>
-            <div class="buttons">
+            <div class="buttons" data-from-site>
               <a class="button line" href="/downloads/latest/Vaultime.deb">.deb</a>
               <a class="button line" href="/downloads/latest/Vaultime.rpm">.rpm</a>
               <a class="button line" href="/downloads/latest/Vaultime.AppImage">AppImage</a>
+            </div>
+          </div>
+          <div class="row">
+            <div><h3>GitHub</h3><p>The same installers are on GitHub with every release, next to the source code.</p></div>
+            <div class="buttons">
+              <a class="button line" href="https://github.com/vaultime/vaultime/releases/latest">Releases</a>
+              <a class="button line" href="https://github.com/vaultime/vaultime">Source</a>
             </div>
           </div>
         </div>
@@ -145,7 +152,7 @@
       <section class="doc" id="beta">
         <div>
           <h2 class="display">Cloud beta</h2>
-          <p class="lead">Cloud backup is invite-only while it is tested. Tell us where to send an invite.</p>
+          <p class="lead">Cloud backup is optional. Vaultime works fully without it and without an account. It is a free private beta for people we invite, offered as is and without any promise that it keeps running. If you would like to try it, tell us where to send an invite.</p>
         </div>
         <form class="apply" method="post" action="/v1/beta/apply">
           <label class="field">
@@ -179,8 +186,9 @@
 
   <footer>
     <div class="wrap">
-      <span>&copy; 2026 Dominik Schwimmbeck</span>
+      <span>&copy; 2026 Dominik Schwimmbeck. Free and open source, no ads, nothing to pay.</span>
       <nav aria-label="More">
+        <a href="https://github.com/vaultime/vaultime">GitHub</a>
         <a href="/privacy.html">Privacy</a>
         <a href="/terms.html">Terms</a>
         <a href="/changelog.html">Changelog</a>
