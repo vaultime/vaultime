@@ -32,6 +32,8 @@ if [ "${1:-}" != "--test" ]; then
         --exclude=dist-linux --exclude=.git -cf - . | tar -C /build -xf -
       cd /build/apps/desktop/src-tauri && rustup toolchain install >/dev/null
       cd /build/apps/desktop && npm ci --no-audit --no-fund >/dev/null
+      # Bundles of earlier versions stay in the cached target folder otherwise.
+      rm -rf src-tauri/target/release/bundle
       npx tauri build 2>&1 | grep -E "Finished|Error|error|warning: unused" || true
       rm -f /out/*
       cp src-tauri/target/release/bundle/deb/*.deb \
