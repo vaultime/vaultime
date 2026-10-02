@@ -80,7 +80,6 @@ export interface Setting {
   updated_at: string;
 }
 
-/** Runtime tracking capabilities reported by the core. */
 /** A window size preset or `free`, see `WINDOW_PRESETS` in constants.rs. */
 export type WindowSizeChoice = "compact" | "standard" | "large" | "extra_large" | "free";
 
@@ -95,6 +94,8 @@ export interface WindowPresetView {
 
 /** Mirrors the Rust `WindowLook` struct. Each color is `#rrggbb`. */
 export interface WindowLook {
+  /** The mode the player chose, which the title bar follows. */
+  theme: "dark" | "light" | "system";
   /** Accent of the logo in the tray, the taskbar and the title bar. */
   iconAccent: string;
   titleBar: string;
@@ -110,6 +111,7 @@ export interface WindowSizeState {
   presets: WindowPresetView[];
 }
 
+/** Runtime tracking capabilities reported by the core. */
 export interface TrackingDiagnostics {
   platform: string;
   running: boolean;

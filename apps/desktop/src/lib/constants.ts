@@ -188,6 +188,8 @@ export const CROP_KEY_PAN_SHARE = 0.02;
 export const CROP_ZOOM_STEP = 1.1;
 /** Wheel distance in pixels that counts as one notch. */
 export const CROP_WHEEL_NOTCH_PX = 100;
+/** Crops closer than this in every edge, in fractions of the image, are the same crop. */
+export const CROP_SAME_TOLERANCE = 1e-6;
 /** Slider steps between the smallest and largest zoom. */
 export const CROP_SLIDER_STEPS = 200;
 
@@ -213,6 +215,14 @@ export const ARTWORK_EXTENSIONS = [
   "pnm",
   "pam",
   "svg",
+];
+/**
+ * The same types for the file dialog. GTK on Linux matches extensions with
+ * their case, so the upper case spelling is offered too.
+ */
+export const ARTWORK_DIALOG_EXTENSIONS = [
+  ...ARTWORK_EXTENSIONS,
+  ...ARTWORK_EXTENSIONS.map((extension) => extension.toUpperCase()),
 ];
 
 // Journal
@@ -331,6 +341,9 @@ export const MARK_MAX_CHROMA = 0.21;
  * and light mode, the first game of the week takes the first.
  */
 export const MARK_NEUTRAL_LIGHTNESS = { dark: [0.84, 0.64, 0.95], light: [0.42, 0.6, 0.24] };
+
+/** Chroma of the tinted greys that black, white and grey art gets once the grey steps run out. */
+export const MARK_TINTED_GREY_CHROMA = 0.04;
 
 /** Games shown side by side keep their hues at least this far apart, in degrees. */
 export const MARK_MIN_HUE_GAP_DEG = 30;
@@ -456,12 +469,18 @@ export const BACKGROUND_DIM_PERCENT = { min: 40, max: 95, default: 78 };
 export const BACKGROUND_BLUR_PX = { min: 0, max: 48, default: 16 };
 /** Opacity of tinted headers in front of a background picture, in percent. */
 export const BACKGROUND_HEADER_OPACITY_PERCENT = 86;
-/** Wait after the last slider move before the value is saved. */
-export const BACKGROUND_SAVE_DELAY_MS = 400;
+/** Wait after the last move of a slider or the color picker before the value is saved. */
+export const APPEARANCE_SAVE_DELAY_MS = 400;
+/** The background picture reaches this many blur radii past each edge, so the blur does not fade there. */
+export const BACKGROUND_BLUR_BLEED = 2;
+/** Hues around the wheel on the swatch that opens the color picker. */
+export const ACCENT_WHEEL_STEPS = 6;
+/** The look of a new install, Vaultime as it started. */
+export const DEFAULT_LOOK = { mode: "dark", ground: "vault", accent: "violet" } as const;
 /**
  * Least time between two updates of the icons and the title bar, while a color
  * is dragged in the picker. A single change goes out at once.
  */
 export const WINDOW_LOOK_INTERVAL_MS = 120;
-/** Key of the copy of the look in local storage, read before the first paint. */
+/** Key of the copy of the look in local storage, read before the first paint. public/theme-boot.js repeats it. */
 export const APPEARANCE_CACHE_KEY = "vaultime.appearance";

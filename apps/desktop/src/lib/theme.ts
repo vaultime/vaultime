@@ -13,6 +13,7 @@ import {
   ACCENT_SWATCHES,
   BACKGROUND_BLUR_PX,
   BACKGROUND_DIM_PERCENT,
+  DEFAULT_LOOK,
   GLINT_LIGHTNESS,
   GROUND_LEVELS,
   GROUNDS,
@@ -29,7 +30,7 @@ export type ModeChoice = ThemeMode | "system";
 export type GroundId = keyof typeof GROUNDS;
 export type AccentSwatch = keyof typeof ACCENT_SWATCHES;
 
-export const MODE_CHOICES: ModeChoice[] = ["dark", "light", "system"];
+const MODE_CHOICES: ModeChoice[] = ["dark", "light", "system"];
 export const GROUND_IDS = Object.keys(GROUNDS) as GroundId[];
 export const ACCENT_SWATCH_IDS = Object.keys(ACCENT_SWATCHES) as AccentSwatch[];
 
@@ -45,9 +46,9 @@ export interface Appearance {
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  mode: "dark",
-  ground: "vault",
-  accent: "violet",
+  mode: DEFAULT_LOOK.mode,
+  ground: DEFAULT_LOOK.ground,
+  accent: DEFAULT_LOOK.accent,
   dim: BACKGROUND_DIM_PERCENT.default,
   blur: BACKGROUND_BLUR_PX.default,
 };
@@ -73,7 +74,7 @@ function clampedNumber(value: string | undefined, range: { min: number; max: num
 }
 
 /** The setting that stores each part of the look. */
-export const APPEARANCE_SETTING_KEYS: Record<keyof Appearance, string> = {
+const APPEARANCE_SETTING_KEYS: Record<keyof Appearance, string> = {
   mode: SETTING_KEYS.appearanceMode,
   ground: SETTING_KEYS.appearanceGround,
   accent: SETTING_KEYS.appearanceAccent,
@@ -95,6 +96,19 @@ export function appearanceFromSettings(values: Record<string, string | undefined
   };
 }
 
+/**
+ * The look from stored settings that arrive after the player already changed
+ * parts of it. The player's changes win.
+ */
+export function withChanges(loaded: Appearance, current: Appearance, changed: Iterable<keyof Appearance>): Appearance {
+  const merged = { ...loaded };
+  const keep = <Part extends keyof Appearance>(part: Part) => {
+    merged[part] = current[part];
+  };
+  for (const part of changed) keep(part);
+  return merged;
+}
+
 /** The stored value of each appearance setting. */
 export function appearanceSettings(appearance: Partial<Appearance>): [string, string][] {
   return (Object.keys(appearance) as (keyof Appearance)[]).map((part) => [
@@ -103,7 +117,7 @@ export function appearanceSettings(appearance: Partial<Appearance>): [string, st
   ]);
 }
 
-export interface AccentColor extends Oklch {
+interface AccentColor extends Oklch {
   /** A grey accent has no hue to keep free. */
   grey: boolean;
 }
@@ -116,7 +130,7 @@ export function accentColor(accent: string, mode: ThemeMode): AccentColor {
   const levels = ACCENT_LEVELS[mode];
   const picked = isSwatch(accent)
     ? ACCENT_SWATCHES[accent]
-    : (hexToOklch(accent) ?? ACCENT_SWATCHES[DEFAULT_APPEARANCE.accent as AccentSwatch]);
+    : (hexToOklch(accent) ?? ACCENT_SWATCHES[DEFAULT_LOOK.accent]);
   if (picked.chroma < ACCENT_GREY_MAX_CHROMA) {
     return { lightness: levels.grey, chroma: 0, hue: 0, grey: true };
   }
@@ -179,11 +193,13 @@ export function themeTokens(mode: ThemeMode, groundId: GroundId, accent: string)
 }
 
 /**
- * Colors for the window around the page. The logo keeps its own dark tile,
- * so it takes the accent of dark mode in either mode.
+ * Colors for the window around the page and the mode the player chose, for
+ * the title bar. The logo keeps its own dark tile, so it takes the accent of
+ * dark mode in either mode.
  */
-export function windowLook(mode: ThemeMode, groundId: GroundId, accent: string): WindowLook {
+export function windowLook(mode: ThemeMode, groundId: GroundId, accent: string, choice: ModeChoice): WindowLook {
   return {
+    theme: choice,
     iconAccent: oklchToHex(accentColor(accent, "dark")),
     titleBar: oklchToHex(groundColor(mode, groundId, "ink")),
     titleText: oklchToHex(groundColor(mode, groundId, "text")),

@@ -13,8 +13,11 @@ export interface AppearanceState {
   accentHues: number[];
   /** The background picture as a data URL, null without one. */
   background: string | null;
-  /** Applies a change at once and saves it. */
-  change: (next: Partial<Appearance>) => void;
+  /**
+   * Applies a change at once and saves it. A `gradual` change, like a slider
+   * being dragged, is saved once it stops.
+   */
+  change: (next: Partial<Appearance>, options?: { gradual?: boolean }) => void;
   /** Uses a picture file as the background. */
   chooseBackground: (path: string) => Promise<void>;
   /** Uses a game's artwork as the background. */

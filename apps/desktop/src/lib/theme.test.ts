@@ -16,6 +16,7 @@ import {
   resolveMode,
   themeTokens,
   windowLook,
+  withChanges,
   type ThemeMode,
 } from "./theme";
 
@@ -188,27 +189,42 @@ describe("resolveMode", () => {
 describe("windowLook", () => {
   it("gives plain colors for every combination", () => {
     for (const { mode, ground, accent } of COMBINATIONS) {
-      for (const color of Object.values(windowLook(mode, ground, accent))) expect(color).toMatch(/^#[0-9a-f]{6}$/);
+      const { theme, ...colors } = windowLook(mode, ground, accent, mode);
+      expect(theme).toBe(mode);
+      for (const color of Object.values(colors)) expect(color).toMatch(/^#[0-9a-f]{6}$/);
     }
   });
 
   it("draws the logo in the dark accent in either mode", () => {
-    expect(windowLook("light", "umber", "orange").iconAccent).toBe(windowLook("dark", "umber", "orange").iconAccent);
-    expect(windowLook("dark", "vault", "violet").iconAccent).not.toBe(windowLook("dark", "vault", "orange").iconAccent);
+    expect(windowLook("light", "umber", "orange", "light").iconAccent).toBe(windowLook("dark", "umber", "orange", "dark").iconAccent);
+    expect(windowLook("dark", "vault", "violet", "dark").iconAccent).not.toBe(windowLook("dark", "vault", "orange", "dark").iconAccent);
   });
 
   it("matches the title bar to the page", () => {
-    const dark = windowLook("dark", "umber", "orange");
-    const light = windowLook("light", "umber", "orange");
+    const dark = windowLook("dark", "umber", "orange", "dark");
+    const light = windowLook("light", "umber", "orange", "light");
     expect(dark.titleBar).toBe(oklchToHex(parse(themeTokens("dark", "umber", "orange")["--ink"])));
     expect(contrastRatio(hexToOklch(dark.titleText)!, hexToOklch(dark.titleBar)!)).toBeGreaterThan(7);
     expect(contrastRatio(hexToOklch(light.titleText)!, hexToOklch(light.titleBar)!)).toBeGreaterThan(7);
     expect(light.border).toBe(oklchToHex(accentColor("orange", "light")));
   });
 
+  it("passes the chosen mode on for the title bar", () => {
+    expect(windowLook("dark", "vault", "violet", "system").theme).toBe("system");
+  });
+
   it("keeps the default violet of the logo files", () => {
     const channels = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
-    const drawn = channels(windowLook("dark", "vault", "violet").iconAccent);
+    const drawn = channels(windowLook("dark", "vault", "violet", "dark").iconAccent);
     for (const [index, channel] of channels("#9d7cff").entries()) expect(Math.abs(drawn[index] - channel)).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("withChanges", () => {
+  it("keeps what the player changed before the stored look arrived", () => {
+    const loaded = { ...DEFAULT_APPEARANCE, mode: "light" as const, ground: "moss" as const, dim: 60 };
+    const current = { ...DEFAULT_APPEARANCE, ground: "umber" as const };
+    expect(withChanges(loaded, current, new Set(["ground"] as const))).toEqual({ ...loaded, ground: "umber" });
+    expect(withChanges(loaded, current, [])).toEqual(loaded);
   });
 });

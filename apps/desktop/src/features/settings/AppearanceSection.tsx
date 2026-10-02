@@ -12,7 +12,14 @@ import { Slider } from "@/components/ui/slider";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary } from "@/features/library/library-context";
 import { formatOklch, oklchToHex } from "@/lib/color";
-import { ACCENT_LEVELS, ARTWORK_EXTENSIONS, BACKGROUND_BLUR_PX, BACKGROUND_DIM_PERCENT } from "@/lib/constants";
+import {
+  ACCENT_LEVELS,
+  ACCENT_WHEEL_STEPS,
+  ARTWORK_DIALOG_EXTENSIONS,
+  BACKGROUND_BLUR_PX,
+  BACKGROUND_DIM_PERCENT,
+} from "@/lib/constants";
+import { onRadioKeys, radioTabIndex } from "@/lib/radio-group";
 import {
   ACCENT_SWATCH_IDS,
   GROUND_IDS,
@@ -48,9 +55,6 @@ const ACCENT_NAMES: Record<AccentSwatch, string> = {
   rose: "Rose",
 };
 
-/** Hues around the wheel for the swatch that opens the color picker. */
-const WHEEL_STEPS = 6;
-
 /** A label and hint with the controls below, for choices too wide to sit beside them. */
 function StackedRow({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -72,8 +76,8 @@ export function AppearanceSection() {
   const withArt = summaries.filter((summary) => summary.cover);
   const custom = appearance.accent.startsWith("#");
   const accentLightness = ACCENT_LEVELS[mode].lightness;
-  const wheel = Array.from({ length: WHEEL_STEPS + 1 }, (_, step) =>
-    formatOklch({ lightness: accentLightness, chroma: accentColor("violet", mode).chroma, hue: (step * 360) / WHEEL_STEPS }),
+  const wheel = Array.from({ length: ACCENT_WHEEL_STEPS + 1 }, (_, step) =>
+    formatOklch({ lightness: accentLightness, chroma: accentColor("violet", mode).chroma, hue: (step * 360) / ACCENT_WHEEL_STEPS }),
   );
 
   async function run(task: () => Promise<void>) {
@@ -94,7 +98,7 @@ export function AppearanceSection() {
         multiple: false,
         directory: false,
         title: "Choose a background picture",
-        filters: [{ name: "Pictures", extensions: ARTWORK_EXTENSIONS }],
+        filters: [{ name: "Pictures", extensions: ARTWORK_DIALOG_EXTENSIONS }],
       });
       if (typeof selected === "string") await chooseBackground(selected);
     });
@@ -105,13 +109,19 @@ export function AppearanceSection() {
       description="How Vaultime looks on this PC. Backups leave the look and the picture out."
     >
       <StackedRow label="Mode" hint="System follows the dark or light setting of your PC.">
-        <div role="radiogroup" aria-label="Mode" className="inline-flex rounded-full border border-hairline p-0.5">
-          {MODES.map((option) => (
+        <div
+          role="radiogroup"
+          aria-label="Mode"
+          onKeyDown={onRadioKeys}
+          className="inline-flex rounded-full border border-hairline p-0.5"
+        >
+          {MODES.map((option, index) => (
             <button
               key={option.value}
               type="button"
               role="radio"
               aria-checked={appearance.mode === option.value}
+              tabIndex={radioTabIndex(appearance.mode === option.value, index, true)}
               onClick={() => change({ mode: option.value })}
               className={cn(
                 "h-8 rounded-full px-4 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
@@ -128,9 +138,10 @@ export function AppearanceSection() {
         <div
           role="radiogroup"
           aria-label="Ground"
+          onKeyDown={onRadioKeys}
           className="grid max-w-[600px] grid-cols-3 gap-x-3 gap-y-4 @min-[800px]:grid-cols-6"
         >
-          {GROUND_IDS.map((ground) => {
+          {GROUND_IDS.map((ground, index) => {
             const tone = (role: Parameters<typeof groundColor>[2]) => formatOklch(groundColor(mode, ground, role));
             const selected = appearance.ground === ground;
             return (
@@ -139,6 +150,7 @@ export function AppearanceSection() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                tabIndex={radioTabIndex(selected, index, true)}
                 onClick={() => change({ ground })}
                 className="group flex min-w-0 flex-col items-start gap-2 rounded-md focus-visible:outline-none"
               >
@@ -165,28 +177,31 @@ export function AppearanceSection() {
       </StackedRow>
 
       <StackedRow label="Accent" hint="The color of active time, buttons and highlights. Any color you pick is brought to a lightness that reads well.">
-        <div role="radiogroup" aria-label="Accent" className="flex flex-wrap items-center gap-3">
-          {ACCENT_SWATCH_IDS.map((swatch) => {
-            const selected = appearance.accent === swatch;
-            return (
-              <button
-                key={swatch}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                aria-label={ACCENT_NAMES[swatch]}
-                title={ACCENT_NAMES[swatch]}
-                onClick={() => change({ accent: swatch })}
-                className={cn(
-                  "flex size-8 items-center justify-center rounded-full transition-shadow focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none",
-                  selected && "ring-2 ring-text ring-offset-2 ring-offset-ink",
-                )}
-                style={{ background: formatOklch(accentColor(swatch, mode)) }}
-              >
-                {selected && <Check className="size-4 text-violet-ink" strokeWidth={2.4} />}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="radiogroup" aria-label="Accent" onKeyDown={onRadioKeys} className="flex flex-wrap items-center gap-3">
+            {ACCENT_SWATCH_IDS.map((swatch, index) => {
+              const selected = appearance.accent === swatch;
+              return (
+                <button
+                  key={swatch}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  tabIndex={radioTabIndex(selected, index, !custom)}
+                  aria-label={ACCENT_NAMES[swatch]}
+                  title={ACCENT_NAMES[swatch]}
+                  onClick={() => change({ accent: swatch })}
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-full transition-shadow focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none",
+                    selected && "ring-2 ring-text ring-offset-2 ring-offset-ink",
+                  )}
+                  style={{ background: formatOklch(accentColor(swatch, mode)) }}
+                >
+                  {selected && <Check className="size-4 text-violet-ink" strokeWidth={2.4} />}
+                </button>
+              );
+            })}
+          </div>
           <label
             title="Your own color"
             className={cn(
@@ -199,9 +214,9 @@ export function AppearanceSection() {
           >
             <input
               type="color"
-              aria-label="Your own color"
+              aria-label={custom ? `Your own color, ${appearance.accent}, in use` : "Your own color"}
               value={custom ? appearance.accent : oklchToHex(accentColor(appearance.accent, mode))}
-              onChange={(event) => change({ accent: event.target.value.toLowerCase() })}
+              onChange={(event) => change({ accent: event.target.value.toLowerCase() }, { gradual: true })}
               className="absolute inset-0 size-full cursor-pointer opacity-0"
             />
             {custom ? (
@@ -274,7 +289,7 @@ export function AppearanceSection() {
                 min={BACKGROUND_DIM_PERCENT.min}
                 max={BACKGROUND_DIM_PERCENT.max}
                 valueText={(value) => `${value} percent`}
-                onChange={(dim) => change({ dim })}
+                onChange={(dim) => change({ dim }, { gradual: true })}
               />
             </SliderRow>
             <SliderRow label="Blur" value={`${appearance.blur} px`} hint="Softens the picture so text stands out.">
@@ -284,7 +299,7 @@ export function AppearanceSection() {
                 min={BACKGROUND_BLUR_PX.min}
                 max={BACKGROUND_BLUR_PX.max}
                 valueText={(value) => `${value} pixels`}
-                onChange={(blur) => change({ blur })}
+                onChange={(blur) => change({ blur }, { gradual: true })}
               />
             </SliderRow>
           </div>

@@ -25,7 +25,7 @@ import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
   ACTIVITY_CHART_DAYS,
-  ARTWORK_EXTENSIONS,
+  ARTWORK_DIALOG_EXTENSIONS,
   EVENT_LOG_LIMIT,
   GAME_RECENT_SESSIONS,
   MINUTE_MS,
@@ -424,7 +424,7 @@ function CoverPicker({
         multiple: false,
         directory: false,
         title: "Choose a cover image",
-        filters: [{ name: "Images", extensions: ARTWORK_EXTENSIONS }],
+        filters: [{ name: "Images", extensions: ARTWORK_DIALOG_EXTENSIONS }],
       });
       if (!selected) return null;
       const source = await api.openArtworkFile(selected);

@@ -53,7 +53,7 @@ function toLinearSrgb({ lightness, chroma, hue }: Oklch): [number, number, numbe
 }
 
 /** Whether an OKLCH color fits inside sRGB. */
-export function insideSrgb(color: Oklch): boolean {
+function insideSrgb(color: Oklch): boolean {
   return toLinearSrgb(color).every((channel) => channel >= 0 && channel <= 1);
 }
 

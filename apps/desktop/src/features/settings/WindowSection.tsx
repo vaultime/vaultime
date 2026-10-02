@@ -42,6 +42,9 @@ export function WindowSection() {
   }, []);
 
   async function choose(choice: WindowSizeChoice) {
+    // The radios stay enabled while the window changes, so the focus stays on
+    // them, and a second change waits for the first.
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -83,7 +86,7 @@ export function WindowSection() {
                 key={choice}
                 className={cn(
                   "relative flex items-center gap-4 border-b border-rule py-3.5 first:pt-0 last:border-b-0",
-                  fits && !busy ? "cursor-pointer" : "cursor-not-allowed",
+                  fits ? "cursor-pointer" : "cursor-not-allowed",
                 )}
               >
                 <input
@@ -91,7 +94,7 @@ export function WindowSection() {
                   name="window-size"
                   value={choice}
                   checked={checked}
-                  disabled={busy || !fits}
+                  disabled={!fits}
                   onChange={() => void choose(choice)}
                   className="peer sr-only"
                 />
