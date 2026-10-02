@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { COVER_ASPECT, CROP_FIT_MIN_ASPECT, CROP_MAX_ZOOM_OF_FILL, CROP_MIN_ZOOM_OF_FIT } from "@/lib/constants";
+import {
+  COVER_ASPECT,
+  CROP_FIT_MIN_ASPECT,
+  CROP_MAX_ZOOM_OF_FILL,
+  CROP_MIN_ZOOM_OF_FIT,
+  CROP_SAME_TOLERANCE,
+} from "@/lib/constants";
 import type { CropRect } from "@/lib/types";
 
 export interface ImageSize {
@@ -40,9 +46,12 @@ export function fitZoom(size: ImageSize): number {
   return fillWidth(size) / fitWidth(size);
 }
 
-/** How far the frame may zoom out, past fitting for a margin around a logo, and in. */
+/**
+ * How far the frame may zoom out, past fitting for a margin around a logo,
+ * and in, never to a frame narrower than a pixel of the image.
+ */
 export function zoomBounds(size: ImageSize): { min: number; max: number } {
-  return { min: fitZoom(size) * CROP_MIN_ZOOM_OF_FIT, max: CROP_MAX_ZOOM_OF_FILL };
+  return { min: fitZoom(size) * CROP_MIN_ZOOM_OF_FIT, max: Math.min(CROP_MAX_ZOOM_OF_FILL, fillWidth(size)) };
 }
 
 function frameSize(view: CropView, size: ImageSize) {
@@ -160,8 +169,9 @@ export function imagePlacement(view: CropView, size: ImageSize, frameWidth: numb
 
 /** Whether two views show the same crop, give or take rounding. */
 export function sameView(a: CropView, b: CropView, size: ImageSize): boolean {
-  const tolerance = 1e-6;
   const first = toCrop(a, size);
   const second = toCrop(b, size);
-  return (["x", "y", "width", "height"] as const).every((key) => Math.abs(first[key] - second[key]) < tolerance);
+  return (["x", "y", "width", "height"] as const).every(
+    (key) => Math.abs(first[key] - second[key]) < CROP_SAME_TOLERANCE,
+  );
 }

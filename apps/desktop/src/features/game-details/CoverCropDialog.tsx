@@ -60,15 +60,29 @@ export function CoverCropDialog({
   onClose: () => void;
   onSaved: (assets: GameAssetView[]) => void;
 }) {
+  // The last image stays while the dialog animates out, and a dialog that is
+  // saving does not close.
+  const [shown, setShown] = useState(target);
+  const [saving, setSaving] = useState(false);
+  if (target && target !== shown) setShown(target);
+  const close = () => {
+    if (!saving) onClose();
+  };
   return (
-    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={target !== null}
+      onOpenChange={(open) => !open && close()}
+      onOpenChangeComplete={(open) => !open && setShown(null)}
+    >
       <DialogContent className="sm:max-w-[720px]">
-        {target && (
+        {shown && (
           <CropEditor
-            key={target.source.preview_data_url}
+            key={shown.source.preview_data_url}
             gameTitle={gameTitle}
-            target={target}
-            onClose={onClose}
+            target={shown}
+            saving={saving}
+            onSavingChange={setSaving}
+            onClose={close}
             onSaved={onSaved}
           />
         )}
@@ -80,18 +94,21 @@ export function CoverCropDialog({
 function CropEditor({
   gameTitle,
   target,
+  saving,
+  onSavingChange,
   onClose,
   onSaved,
 }: {
   gameTitle: string;
   target: CropTarget;
+  saving: boolean;
+  onSavingChange: (saving: boolean) => void;
   onClose: () => void;
   onSaved: (assets: GameAssetView[]) => void;
 }) {
   const { source } = target;
   const [size] = useState<ImageSize>(() => ({ width: source.width, height: source.height }));
   const [view, setView] = useState<CropView>(() => initialView(size, source.crop));
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -151,14 +168,16 @@ function CropEditor({
   }
 
   async function save() {
-    setSaving(true);
+    onSavingChange(true);
     setError(null);
     try {
-      onSaved(await target.save(toCrop(view, size)));
+      const saved = await target.save(toCrop(view, size));
+      onSavingChange(false);
+      onSaved(saved);
       onClose();
     } catch (saveError) {
       setError(describeError(saveError));
-      setSaving(false);
+      onSavingChange(false);
     }
   }
 
@@ -273,14 +292,13 @@ function CropEditor({
               </div>
             </div>
           </section>
-
         </div>
       </div>
 
       {error && <Notice tone="warning">{error}</Notice>}
 
       <DialogFooter>
-        <Button type="button" variant="ghost" onClick={onClose}>
+        <Button type="button" variant="ghost" disabled={saving} onClick={onClose}>
           Cancel
         </Button>
         <Button type="button" disabled={saving} onClick={() => void save()}>

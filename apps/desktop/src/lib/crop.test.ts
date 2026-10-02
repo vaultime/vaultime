@@ -77,6 +77,13 @@ describe("clampView", () => {
     expect(clampView({ zoom: 0, centerX: 800, centerY: 200 }, wide).zoom).toBe(min);
   });
 
+  it("never zooms a tiny image to a frame narrower than one of its pixels", () => {
+    const tiny = { width: 2, height: 3 };
+    const { max } = zoomBounds(tiny);
+    expect(max).toBe(2);
+    expect(toCrop(clampView({ zoom: 100, centerX: 1, centerY: 1.5 }, tiny), tiny).width * tiny.width).toBeGreaterThanOrEqual(1);
+  });
+
   it("keeps a filled frame inside the image", () => {
     const view = clampView({ zoom: 1, centerX: 0, centerY: 0 }, wide);
     const crop = toCrop(view, wide);
