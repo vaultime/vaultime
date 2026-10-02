@@ -3,27 +3,28 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Game,
-  CreateGameInput,
-  UpdateGameInput,
+  ArtworkSource,
   BackupSnapshot,
+  CloudBackupRestoreResult,
+  CloudBackupUploadResult,
+  CreateGameInput,
+  CropRect,
+  DiscoveredGame,
+  EarlierPlaytime,
+  ExportFormat,
+  Game,
+  GameAssetView,
+  GameStatus,
+  GameStatusChange,
   LocalBackupSummary,
   Session,
   SessionEvent,
-  Setting,
-  TrackingDiagnostics,
-  GameAssetView,
-  ArtworkSource,
-  CropRect,
-  DiscoveredGame,
-  CloudBackupRestoreResult,
-  CloudBackupUploadResult,
-  EarlierPlaytime,
-  ExportFormat,
-  GameStatus,
-  GameStatusChange,
   SessionNote,
+  Setting,
   SteamPlaytimePreview,
+  TrackingDiagnostics,
+  UpdateGameInput,
+  WindowLook,
   WindowSizeChoice,
   WindowSizeState,
 } from "@/lib/types";
@@ -350,4 +351,9 @@ export async function setBackgroundFromGame(gameId: string): Promise<string> {
 
 export async function clearBackgroundImage(): Promise<boolean> {
   return invoke<boolean>("clear_background_image");
+}
+
+/** Colors the icons and the title bar like the page. False when nothing changed. */
+export async function setWindowLook(look: WindowLook): Promise<boolean> {
+  return invoke<boolean>("set_window_look", { look });
 }

@@ -209,7 +209,7 @@ pub fn get_session_events_for_game(
     session_events::list_events_for_game(&db, &game_id)
 }
 
-/// Turns the tray and taskbar icon violet while signed in to cloud backup.
+/// Turns the tray and taskbar icon into the accent while signed in to cloud backup.
 #[tauri::command]
 pub fn set_cloud_signed_in(app: tauri::AppHandle, signed_in: bool) {
     crate::tray::show_cloud_state(&app, signed_in);

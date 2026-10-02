@@ -327,3 +327,10 @@ pub const BACKGROUND_MAX_SIDE_PX: u32 = 2560;
 pub const BACKGROUND_JPEG_QUALITY: u8 = 86;
 /// Largest picture file read as a background, in bytes.
 pub const BACKGROUND_SOURCE_MAX_BYTES: u64 = 64 * 1024 * 1024;
+/// Setting with the colors of the window around the page, as JSON. The core
+/// keeps it, so the next start draws the icons and the title bar before the
+/// page loads. Belongs to this PC, a restore keeps it.
+pub const WINDOW_LOOK_SETTING: &str = "window_look";
+/// Size the icon of the tray, the taskbar and the title bar is drawn at, the
+/// size of `icons/signed-in.png`.
+pub const WINDOW_ICON_PX: u32 = 256;

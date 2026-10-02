@@ -18,12 +18,14 @@ use crate::db::repo::sessions::{self, SessionSpan};
 use crate::db::repo::settings;
 use crate::error::Result;
 use crate::integrity;
+use crate::window_look::{WindowLookState, draw_icon};
 
 /// Passed by the login item, so Vaultime starts in the tray.
 pub const MINIMIZED_ARG: &str = "--minimized";
 
-/// Tray and window icon while signed in to cloud backup, violet like the logo
-/// in the app. `scripts/build-brand.py` describes how it is made.
+/// Tray and window icon while signed in to cloud backup, in violet, until the
+/// page tells the core its accent. `scripts/build-brand.py` describes how it
+/// is made.
 const SIGNED_IN_ICON: &[u8] = include_bytes!("../icons/signed-in.png");
 const TRAY_ID: &str = "main";
 const TOOLTIP: &str = "Vaultime";
@@ -244,15 +246,23 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Shows in the tray and the taskbar whether this PC is signed in to cloud
-/// backup, the way the logo in the app does.
+/// backup, the way the logo in the app does, in the accent of the app.
 pub fn show_cloud_state<R: Runtime>(app: &AppHandle<R>, signed_in: bool) {
-    let icon = if signed_in {
-        Image::from_bytes(SIGNED_IN_ICON)
-            .inspect_err(|error| warn!("failed to load the signed in icon: {error}"))
-            .ok()
-    } else {
-        app.default_window_icon().cloned()
-    };
+    let accent = app
+        .try_state::<WindowLookState>()
+        .and_then(|state| state.set_signed_in(signed_in));
+    // The bundled icons until the page has told the core its accent.
+    let icon = accent
+        .and_then(|accent| draw_icon(&accent, signed_in))
+        .or_else(|| {
+            if signed_in {
+                Image::from_bytes(SIGNED_IN_ICON)
+                    .inspect_err(|error| warn!("failed to load the signed in icon: {error}"))
+                    .ok()
+            } else {
+                app.default_window_icon().cloned()
+            }
+        });
     let Some(icon) = icon else {
         return;
     };
@@ -265,6 +275,8 @@ pub fn show_cloud_state<R: Runtime>(app: &AppHandle<R>, signed_in: bool) {
         }));
     }
     if let Some(window) = app.get_webview_window("main") {
+        #[cfg(windows)]
+        crate::window_look::set_taskbar_icon(&window, &icon);
         let _ = window.set_icon(icon);
     }
 }

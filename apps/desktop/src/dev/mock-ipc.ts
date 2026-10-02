@@ -514,6 +514,8 @@ function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
     case "clear_background_image":
       backgroundPicture = null;
       return true;
+    case "set_window_look":
+      return true;
     default:
       return undefined;
   }

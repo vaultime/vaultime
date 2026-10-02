@@ -19,6 +19,7 @@ pub mod platform;
 pub mod secure_storage;
 pub mod tracking;
 pub mod tray;
+pub mod window_look;
 pub mod window_size;
 
 use std::fs;
@@ -160,6 +161,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         appearance::set_background_image,
         appearance::set_background_from_game,
         appearance::clear_background_image,
+        window_look::set_window_look,
     ]
 }
 
@@ -179,6 +181,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let first_start = !db_path.exists();
     let device_id = device_id(&app_dir, !first_start);
     let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
+    app.manage(window_look::WindowLookState::load(&database));
 
     let platform = std::env::consts::OS.to_string();
     let version = env!("CARGO_PKG_VERSION").to_string();
@@ -229,6 +232,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // or without one. Opening Vaultime again shows the window of this instance.
     // It takes its size while still hidden, so it never shows at another one.
     app.manage(tray::create(app.handle()));
+    window_look::show_stored(app.handle());
     window_size::fit_main_window(app.handle(), true);
     if std::env::args().any(|arg| arg == tray::MINIMIZED_ARG) {
         tray::hide_main_window(app.handle());

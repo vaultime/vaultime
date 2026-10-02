@@ -23,7 +23,8 @@ import {
   SIGNAL_LEVELS,
   TINT_LEVELS,
 } from "@/lib/constants";
-import { formatOklch, hexToOklch, maxSrgbChroma, type Oklch } from "@/lib/color";
+import { formatOklch, hexToOklch, maxSrgbChroma, oklchToHex, type Oklch } from "@/lib/color";
+import type { WindowLook } from "@/lib/types";
 
 export type ThemeMode = "dark" | "light";
 export type ModeChoice = ThemeMode | "system";
@@ -181,6 +182,19 @@ export function themeTokens(mode: ThemeMode, groundId: GroundId, accent: string)
     tokens[`--mark-grey-${index + 1}`] = String(lightness);
   }
   return tokens;
+}
+
+/**
+ * Colors for the window around the page. The logo keeps its own dark tile,
+ * so it takes the accent of dark mode in either mode.
+ */
+export function windowLook(mode: ThemeMode, groundId: GroundId, accent: string): WindowLook {
+  return {
+    iconAccent: oklchToHex(accentColor(accent, "dark")),
+    titleBar: oklchToHex(groundColor(mode, groundId, "ink")),
+    titleText: oklchToHex(groundColor(mode, groundId, "text")),
+    border: oklchToHex(accentColor(accent, mode)),
+  };
 }
 
 /** The ground and text colors of a combination, for previews and tests. */

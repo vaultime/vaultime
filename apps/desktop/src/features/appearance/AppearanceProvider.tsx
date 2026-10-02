@@ -4,7 +4,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppearanceContext, type AppearanceState } from "@/features/appearance/appearance-context";
-import { APPEARANCE_CACHE_KEY, BACKGROUND_HEADER_OPACITY_PERCENT, BACKGROUND_SAVE_DELAY_MS } from "@/lib/constants";
+import {
+  APPEARANCE_CACHE_KEY,
+  BACKGROUND_HEADER_OPACITY_PERCENT,
+  BACKGROUND_SAVE_DELAY_MS,
+  WINDOW_LOOK_DELAY_MS,
+} from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import {
   DEFAULT_APPEARANCE,
@@ -13,6 +18,7 @@ import {
   appearanceSettings,
   resolveMode,
   themeTokens,
+  windowLook,
   type Appearance,
   type ThemeMode,
 } from "@/lib/theme";
@@ -134,6 +140,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       // Not inside a Vaultime window, as in the browser preview.
     }
   }, [appearance.mode]);
+
+  // The icons in the tray and the taskbar and the title bar take the accent
+  // and the ground. A color dragged around in the picker sends only where it stops.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      api.setWindowLook(windowLook(mode, appearance.ground, appearance.accent)).catch(() => {});
+    }, WINDOW_LOOK_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [mode, appearance.ground, appearance.accent]);
 
   useLayoutEffect(() => {
     document.documentElement.style.setProperty(

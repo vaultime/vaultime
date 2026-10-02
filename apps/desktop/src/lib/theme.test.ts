@@ -15,6 +15,7 @@ import {
   appearanceSettings,
   resolveMode,
   themeTokens,
+  windowLook,
   type ThemeMode,
 } from "./theme";
 
@@ -180,5 +181,33 @@ describe("resolveMode", () => {
     expect(resolveMode("system", false)).toBe("light");
     expect(resolveMode("light", true)).toBe("light");
     expect(resolveMode("dark", false)).toBe("dark");
+  });
+});
+
+describe("windowLook", () => {
+  it("gives plain colors for every combination", () => {
+    for (const { mode, ground, accent } of COMBINATIONS) {
+      for (const color of Object.values(windowLook(mode, ground, accent))) expect(color).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it("draws the logo in the dark accent in either mode", () => {
+    expect(windowLook("light", "umber", "orange").iconAccent).toBe(windowLook("dark", "umber", "orange").iconAccent);
+    expect(windowLook("dark", "vault", "violet").iconAccent).not.toBe(windowLook("dark", "vault", "orange").iconAccent);
+  });
+
+  it("matches the title bar to the page", () => {
+    const dark = windowLook("dark", "umber", "orange");
+    const light = windowLook("light", "umber", "orange");
+    expect(dark.titleBar).toBe(oklchToHex(parse(themeTokens("dark", "umber", "orange")["--ink"])));
+    expect(contrastRatio(hexToOklch(dark.titleText)!, hexToOklch(dark.titleBar)!)).toBeGreaterThan(7);
+    expect(contrastRatio(hexToOklch(light.titleText)!, hexToOklch(light.titleBar)!)).toBeGreaterThan(7);
+    expect(light.border).toBe(oklchToHex(accentColor("orange", "light")));
+  });
+
+  it("keeps the default violet of the logo files", () => {
+    const channels = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+    const drawn = channels(windowLook("dark", "vault", "violet").iconAccent);
+    for (const [index, channel] of channels("#9d7cff").entries()) expect(Math.abs(drawn[index] - channel)).toBeLessThanOrEqual(2);
   });
 });

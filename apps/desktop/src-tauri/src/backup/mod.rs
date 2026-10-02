@@ -23,7 +23,7 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
-    DATABASE_FILE, HASH_BUFFER_BYTES, WINDOW_SIZE_SETTING,
+    DATABASE_FILE, HASH_BUFFER_BYTES, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -46,6 +46,7 @@ const DEVICE_SETTINGS: &[&str] = &[
     BACKGROUND_DIM_SETTING,
     BACKGROUND_BLUR_SETTING,
     WINDOW_SIZE_SETTING,
+    WINDOW_LOOK_SETTING,
 ];
 /// Where a restore keeps the current artwork until the new one is in place.
 const PREVIOUS_CACHE_DIR: &str = "previous-asset-cache";

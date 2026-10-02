@@ -54,6 +54,7 @@ zbus = "5"
 windows-registry = "0.100"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Storage_FileSystem",
     "Win32_System_SystemInformation",
     "Win32_System_WindowsProgramming",

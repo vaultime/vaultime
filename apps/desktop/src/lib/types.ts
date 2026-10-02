@@ -93,6 +93,15 @@ export interface WindowPresetView {
   fits: boolean;
 }
 
+/** Mirrors the Rust `WindowLook` struct. Each color is `#rrggbb`. */
+export interface WindowLook {
+  /** Accent of the logo in the tray, the taskbar and the title bar. */
+  iconAccent: string;
+  titleBar: string;
+  titleText: string;
+  border: string;
+}
+
 /** Mirrors the Rust `WindowSizeState` struct. */
 export interface WindowSizeState {
   choice: WindowSizeChoice;

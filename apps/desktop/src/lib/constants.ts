@@ -447,5 +447,7 @@ export const BACKGROUND_BLUR_PX = { min: 0, max: 48, default: 16 };
 export const BACKGROUND_HEADER_OPACITY_PERCENT = 86;
 /** Wait after the last slider move before the value is saved. */
 export const BACKGROUND_SAVE_DELAY_MS = 400;
+/** Wait after the last change of the look before the icons and the title bar follow. */
+export const WINDOW_LOOK_DELAY_MS = 150;
 /** Key of the copy of the look in local storage, read before the first paint. */
 export const APPEARANCE_CACHE_KEY = "vaultime.appearance";
