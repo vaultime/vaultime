@@ -71,6 +71,10 @@ export const DEFAULT_IDLE_THRESHOLD_SECS = 300;
 
 /** Lowest idle threshold the settings accept. Same as MIN_IDLE_THRESHOLD_SECS in constants.rs. */
 export const MIN_IDLE_THRESHOLD_SECS = 5;
+/** Lowest idle time the minus button steps to, in minutes. Typing can go lower. */
+export const IDLE_STEP_MIN_MINUTES = 1;
+/** Wait after the last change of the idle time before saving it. */
+export const IDLE_SAVE_DELAY_MS = 600;
 
 // Cloud
 

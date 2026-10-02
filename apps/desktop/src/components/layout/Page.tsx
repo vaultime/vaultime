@@ -85,25 +85,31 @@ export function PageRow({
   );
 }
 
-/** A round arrow button that steps through weeks or years in a page header. */
+/** A round button that steps through weeks or years in a page header, or a value up and down. */
 export function StepButton({
   label,
   disabled,
   onClick,
+  className,
   children,
 }: {
   label: string;
   disabled: boolean;
   onClick: () => void;
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
+      title={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex size-11 items-center justify-center rounded-full border border-hairline text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:border-rule disabled:text-faint/50 disabled:hover:bg-transparent"
+      className={cn(
+        "flex size-11 shrink-0 items-center justify-center rounded-full border border-hairline text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:border-rule disabled:text-faint/50 disabled:hover:bg-transparent",
+        className,
+      )}
     >
       {children}
     </button>

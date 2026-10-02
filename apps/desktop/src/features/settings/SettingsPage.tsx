@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -14,16 +14,15 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArchiveRestore, Download, ExternalLink, Eye, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
+import { IdleStepper } from "@/features/settings/IdleStepper";
 import {
   AUTO_BACKUP_KEEP,
   DEFAULT_IDLE_THRESHOLD_SECS,
-  MIN_IDLE_THRESHOLD_SECS,
-  SECONDS_PER_MINUTE,
+  IDLE_SAVE_DELAY_MS,
   SETTING_KEYS,
   VAULTIME_URL,
 } from "@/lib/constants";
@@ -73,10 +72,11 @@ export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [idleMinutes, setIdleMinutes] = useState(String(DEFAULT_IDLE_THRESHOLD_SECS / SECONDS_PER_MINUTE));
+  const [idleSeconds, setIdleSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
+  // The idle time saved last, and a change still waiting to be saved.
+  const savedIdle = useRef(DEFAULT_IDLE_THRESHOLD_SECS);
+  const pendingIdle = useRef<{ seconds: number; timer: number } | null>(null);
   const [backgroundActive, setBackgroundActive] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [diagnostics, setDiagnostics] = useState<TrackingDiagnostics | null>(null);
   const [snapshots, setSnapshots] = useState<BackupSnapshot[]>([]);
   const [appVersion, setAppVersion] = useState<string | null>(null);
@@ -114,7 +114,8 @@ export function SettingsPage() {
         setDeviceId(thisDevice);
         setAutostart(Boolean(startsAtLogin));
         const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
-        setIdleMinutes(String(seconds / SECONDS_PER_MINUTE));
+        savedIdle.current = Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS;
+        setIdleSeconds(savedIdle.current);
         setBackgroundActive(values[SETTING_KEYS.backgroundActive] === "true");
         setDiagnostics(nextDiagnostics);
         setSnapshots(nextSnapshots);
@@ -131,24 +132,54 @@ export function SettingsPage() {
     };
   }, []);
 
-  async function saveTracking() {
-    const seconds = Math.round(Number(idleMinutes) * SECONDS_PER_MINUTE);
-    if (!Number.isFinite(seconds) || seconds < MIN_IDLE_THRESHOLD_SECS) {
-      setError(`The idle time needs to be at least ${MIN_IDLE_THRESHOLD_SECS} seconds.`);
-      return;
-    }
+  const refreshLibrary = useRef(refresh);
+  useEffect(() => {
+    refreshLibrary.current = refresh;
+  }, [refresh]);
+
+  // A change still waiting when the page closes is saved right away.
+  useEffect(
+    () => () => {
+      const pending = pendingIdle.current;
+      if (!pending) return;
+      pendingIdle.current = null;
+      window.clearTimeout(pending.timer);
+      void api
+        .setSetting(SETTING_KEYS.idleThreshold, String(pending.seconds))
+        .then(() => refreshLibrary.current(), () => {});
+    },
+    [],
+  );
+
+  /** Saves the idle time shortly after the last change, so stepping through values saves once. */
+  function changeIdle(next: number) {
+    setIdleSeconds(next);
+    if (pendingIdle.current) window.clearTimeout(pendingIdle.current.timer);
+    const timer = window.setTimeout(() => {
+      pendingIdle.current = null;
+      api
+        .setSetting(SETTING_KEYS.idleThreshold, String(next))
+        .then(() => {
+          savedIdle.current = next;
+          setError(null);
+          // The live bar shows the idle threshold, so the library reloads it.
+          return refresh();
+        })
+        .catch((saveError) => {
+          setIdleSeconds(savedIdle.current);
+          setError(describeError(saveError));
+        });
+    }, IDLE_SAVE_DELAY_MS);
+    pendingIdle.current = { seconds: next, timer };
+  }
+
+  async function changeBackgroundActive(next: boolean) {
+    setBackgroundActive(next);
     try {
-      setSaving(true);
-      setError(null);
-      await api.setSetting(SETTING_KEYS.idleThreshold, String(seconds));
-      await api.setSetting(SETTING_KEYS.backgroundActive, String(backgroundActive));
-      setSaved(true);
-      // The live bar shows the idle threshold, so the library reloads it.
-      await refresh();
+      await api.setSetting(SETTING_KEYS.backgroundActive, String(next));
     } catch (saveError) {
+      setBackgroundActive(!next);
       setError(describeError(saveError));
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -285,21 +316,7 @@ export function SettingsPage() {
             htmlFor="idle-minutes"
             hint="With no key press, mouse move or controller input for this long, time counts as idle instead of active."
           >
-            <span className="flex items-center gap-2.5 text-sm text-faint">
-              <Input
-                id="idle-minutes"
-                type="number"
-                min={MIN_IDLE_THRESHOLD_SECS / SECONDS_PER_MINUTE}
-                step="any"
-                value={idleMinutes}
-                onChange={(event) => {
-                  setIdleMinutes(event.target.value);
-                  setSaved(false);
-                }}
-                className="w-20 text-right font-mono"
-              />
-              min
-            </span>
+            <IdleStepper id="idle-minutes" seconds={idleSeconds} onChange={changeIdle} />
           </PageRow>
           <PageRow
             label="Count background games as active"
@@ -309,19 +326,9 @@ export function SettingsPage() {
             <Switch
               id="background-active"
               checked={backgroundActive}
-              onCheckedChange={(checked) => {
-                setBackgroundActive(checked);
-                setSaved(false);
-              }}
+              onCheckedChange={(checked) => void changeBackgroundActive(checked)}
             />
           </PageRow>
-          <div className="mt-5 flex items-center gap-4">
-            <Button onClick={saveTracking} disabled={saving}>
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              Save
-            </Button>
-            {saved && <span className="text-sm text-faint">Saved. Tracking uses these rules from now on.</span>}
-          </div>
         </PageSection>
 
         <PageSection title="In the background" description="Vaultime counts games only while it runs.">
