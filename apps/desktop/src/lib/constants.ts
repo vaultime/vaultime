@@ -80,6 +80,9 @@ export const IDLE_SAVE_DELAY_MS = 600;
 
 /** Address of the website and the cloud server. Same as CLOUD_API_BASE_URL in constants.rs. */
 export const VAULTIME_URL = "https://vaultime.codfishcloud.de";
+
+/** Copyright notice in the rail and in Settings, the holder of the SPDX headers. */
+export const COPYRIGHT_NOTICE = "© 2026 Dominik Schwimmbeck";
 /** Prefix of invite codes. Same as INVITE_PREFIX in apps/api/src/constants.rs. */
 export const INVITE_CODE_PREFIX = "VTLINV";
 

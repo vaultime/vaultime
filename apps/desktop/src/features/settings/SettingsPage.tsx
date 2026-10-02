@@ -21,6 +21,7 @@ import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
 import {
   AUTO_BACKUP_KEEP,
+  COPYRIGHT_NOTICE,
   DEFAULT_IDLE_THRESHOLD_SECS,
   IDLE_SAVE_DELAY_MS,
   SETTING_KEYS,
@@ -511,6 +512,7 @@ export function SettingsPage() {
           <PageRow label="Version">
             <span className="font-mono">{appVersion ?? "unknown"}</span>
           </PageRow>
+          <PageRow label="Copyright">{COPYRIGHT_NOTICE}</PageRow>
           <PageRow label="License">GPL 3.0 or later</PageRow>
           <div className="mt-5 flex flex-wrap gap-2">
             {LINKS.map((link) => (

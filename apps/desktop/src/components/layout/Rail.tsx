@@ -18,7 +18,7 @@ import { Cover } from "@/components/media/Cover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
-import { SETTING_KEYS } from "@/lib/constants";
+import { COPYRIGHT_NOTICE, SETTING_KEYS } from "@/lib/constants";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
@@ -59,7 +59,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
 
   return (
     <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 xl:px-5">
-      <Logo className="px-2" signedIn={session !== null} />
+      <Logo className="justify-center" signedIn={session !== null} />
 
       <button
         type="button"
@@ -159,7 +159,12 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
         </ul>
       </div>
 
-      {appVersion && <span className="px-3 font-mono text-[11px] text-faint">v{appVersion}</span>}
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-faint">
+        {appVersion && <span className="font-mono">v{appVersion}</span>}
+        {/* Only where both fit on one line, the narrow rail puts them on two. */}
+        {appVersion && <span aria-hidden="true" className="hidden size-[3px] rounded-full bg-faint/60 xl:block" />}
+        <span>{COPYRIGHT_NOTICE}</span>
+      </div>
     </nav>
   );
 }
