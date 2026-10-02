@@ -135,7 +135,7 @@ export function StatsPage() {
           />
 
           <div className="px-8 xl:px-14">
-            <PageSection title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
+            <PageSection wide title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
               <YearHeatmap year={year} activeByDay={stats.activeByDay} now={now} />
             </PageSection>
 

@@ -41,19 +41,31 @@ export function PageHeader({
 export function PageSection({
   title,
   description,
+  wide = false,
   children,
 }: {
   title: string;
   description?: ReactNode;
+  /** Content that needs room, like a year of days. It sits beside the title only when the section is wide. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-x-12 gap-y-4 border-b border-rule py-9 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <div>
-        <h2 className="font-display text-[28px] leading-tight">{title}</h2>
-        {description && <p className="mt-2 text-sm leading-relaxed text-pretty text-faint">{description}</p>}
+    <section className="@container border-b border-rule py-9">
+      <div
+        className={cn(
+          "grid gap-x-12 gap-y-4",
+          wide ? "@min-[1100px]:grid-cols-[260px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]",
+        )}
+      >
+        <div>
+          <h2 className="font-display text-[28px] leading-tight">{title}</h2>
+          {description && (
+            <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-pretty text-faint">{description}</p>
+          )}
+        </div>
+        <div className="min-w-0">{children}</div>
       </div>
-      <div className="min-w-0">{children}</div>
     </section>
   );
 }
