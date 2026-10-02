@@ -230,6 +230,15 @@ export const TINT_LEVELS = {
   wash: { lightness: 0.19, chroma: 0.035 },
 };
 
+/**
+ * Lightness and chroma of the marks that tell games apart, as in the journal.
+ * Stays inside sRGB at every hue, so no hue gets clipped.
+ */
+export const MARK_LEVELS = { lightness: 0.74, chroma: 0.125 };
+
+/** Games shown side by side keep their hues at least this far apart, in degrees. */
+export const MARK_MIN_HUE_GAP_DEG = 50;
+
 /** Covers are scaled down to this many pixels square before reading colors. */
 export const TINT_SAMPLE_PX = 32;
 

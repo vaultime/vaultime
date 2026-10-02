@@ -3,6 +3,8 @@
 
 import {
   BRAND_HUE_DEG,
+  MARK_LEVELS,
+  MARK_MIN_HUE_GAP_DEG,
   TINT_LEVELS,
   TINT_MAX_LIGHTNESS,
   TINT_MAX_STRENGTH,
@@ -12,8 +14,11 @@ import {
   TINT_SAMPLE_PX,
   TINT_TYPICAL_CHROMA,
 } from "@/lib/constants";
+import { stableHash } from "@/lib/utils";
 
 export interface GameTint {
+  /** Hue in OKLCH degrees, from the cover or the title. */
+  hue: number;
   /** Dark field for covers and tiles. */
   fill: string;
   /** Border of that field. */
@@ -36,6 +41,7 @@ function tintFromHue(hue: number, chroma = 1): GameTint {
   const color = ({ lightness, chroma: base }: { lightness: number; chroma: number }) =>
     `oklch(${lightness} ${(base * chroma).toFixed(3)} ${Math.round(hue)})`;
   return {
+    hue: Math.round(hue),
     fill: color(TINT_LEVELS.fill),
     edge: color(TINT_LEVELS.edge),
     ink: color(TINT_LEVELS.ink),
@@ -50,11 +56,46 @@ export const BRAND_TINT = tintFromHue(BRAND_HUE_DEG);
 
 /** A stable tint per title, for games without artwork. */
 export function tintForTitle(title: string): GameTint {
-  let hash = 0;
-  for (const char of title) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return tintFromHue(stableHash(title) % 360);
+}
+
+/** A strong color that tells a game apart from others, whatever the colorfulness of its cover. */
+export function markColor(hue: number): string {
+  return `oklch(${MARK_LEVELS.lightness} ${MARK_LEVELS.chroma} ${Math.round(hue)})`;
+}
+
+/** Distance between two hues around the color wheel, in degrees. */
+function hueDistance(a: number, b: number): number {
+  const distance = Math.abs(a - b) % 360;
+  return Math.min(distance, 360 - distance);
+}
+
+/**
+ * Moves hues apart so games shown together are easy to tell apart. The first
+ * hue stays where it is and each later one moves as little as it can, so
+ * games keep the color of their cover where there is room. `taken` hues are
+ * kept free, and with many games the gap shrinks to what fits around the wheel.
+ */
+export function distinctHues(hues: number[], taken: number[] = []): number[] {
+  const gap = Math.min(MARK_MIN_HUE_GAP_DEG, 360 / Math.max(hues.length + taken.length, 1));
+  const placed = [...taken];
+  for (const hue of hues) {
+    const room = (candidate: number) => Math.min(...placed.map((other) => hueDistance(candidate, other)));
+    let best = hue;
+    let bestRoom = room(hue);
+    for (let shift = 1; shift <= 180 && bestRoom < gap; shift += 1) {
+      for (const candidate of [hue + shift, hue - shift]) {
+        const candidateRoom = room(candidate);
+        if (candidateRoom > bestRoom) {
+          best = candidate;
+          bestRoom = candidateRoom;
+        }
+        if (bestRoom >= gap) break;
+      }
+    }
+    placed.push((best + 360) % 360);
   }
-  return tintFromHue(hash % 360);
+  return placed.slice(taken.length);
 }
 
 /** sRGB bytes to OKLab, see https://bottosson.github.io/posts/oklab/ */

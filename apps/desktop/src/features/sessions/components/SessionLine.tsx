@@ -19,6 +19,7 @@ export function SessionLine({
   session,
   events,
   gameTitle,
+  titleColor,
   gameSessions,
   earlierMs,
   when,
@@ -32,6 +33,8 @@ export function SessionLine({
   events: SessionEvent[];
   /** Set when the list mixes games. */
   gameTitle?: string;
+  /** Color of the title, matching the game's marks elsewhere on the page. */
+  titleColor?: string;
   /** All sessions of the game, so the line can tell a first session, a return or a record. */
   gameSessions?: Session[];
   /** The game's playtime from before Vaultime. */
@@ -80,7 +83,7 @@ export function SessionLine({
       </span>
       <div className="min-w-0 flex-1">
         <div className={cn("font-display text-[22px] leading-snug", live && "text-violet")}>
-          <PhraseText phrase={describeSession(session, { gameTitle, gameSessions, earlierMs })} />
+          <PhraseText phrase={describeSession(session, { gameTitle, gameSessions, earlierMs })} emColor={titleColor} />
         </div>
         <div className="mt-1 text-[13px] text-faint">
           {sessionAmounts(session)}

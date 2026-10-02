@@ -9,12 +9,13 @@ import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
+  BRAND_HUE_DEG,
   DAYS_PER_WEEK,
   HOURS_PER_DAY,
   JOURNAL_MIN_SPAN_PERCENT,
   JOURNAL_TICK_HOURS,
 } from "@/lib/constants";
-import { tintForTitle, type GameTint } from "@/lib/game-tint";
+import { distinctHues, markColor, tintForTitle } from "@/lib/game-tint";
 import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
 import { countsAsPlay, playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
@@ -111,9 +112,19 @@ export function JournalPage() {
 
   const days = groupWeek(sessions, statusChanges, weekStart, now);
 
+  // A game keeps one color through the week, far enough from the others to tell
+  // them apart. Games keep their cover's hue in the order they first show up.
+  // Violet stays free for active time.
   const weekGames = [
     ...new Set([...days].reverse().flatMap((day) => day.sessions.filter(countsAsPlay).map((session) => session.game_id))),
   ];
+  const hueOf = (gameId: string) => {
+    const summary = byGame.get(gameId);
+    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).hue;
+  };
+  const weekHues = distinctHues(weekGames.map(hueOf), [BRAND_HUE_DEG]);
+  const marks = new Map(weekGames.map((gameId, index) => [gameId, markColor(weekHues[index])]));
+  const markOf = (gameId: string) => marks.get(gameId) ?? markColor(hueOf(gameId));
 
   /** A game's playtime up to a moment, with the playtime from before Vaultime. */
   const playedBefore = (gameId: string, moment: string) =>
@@ -189,6 +200,7 @@ export function JournalPage() {
             day={day}
             byGame={byGame}
             sessionsByGame={sessionsByGame}
+            markOf={markOf}
             events={events}
             now={now}
             notes={notes}
@@ -237,6 +249,7 @@ function DaySection({
   day,
   byGame,
   sessionsByGame,
+  markOf,
   events,
   now,
   notes,
@@ -247,6 +260,8 @@ function DaySection({
   day: JournalDay;
   byGame: Map<string, GameSummary>;
   sessionsByGame: Map<string, Session[]>;
+  /** The game's color in this week. */
+  markOf: (gameId: string) => string;
   events: SessionEvent[];
   now: Date;
   notes: Record<string, string>;
@@ -254,10 +269,6 @@ function DaySection({
   onCorrected: () => void;
   playedBefore: (gameId: string, moment: string) => number;
 }) {
-  const tintOf = (gameId: string): GameTint => {
-    const summary = byGame.get(gameId);
-    return summary?.tint ?? tintForTitle(summary?.game.title ?? "");
-  };
   const shared = sideBySide(day.sessions, now);
   const sharedGames = [...new Set(shared.flatMap((stretch) => stretch.gameIds))];
   const sharedMs = shared.reduce((sum, stretch) => sum + stretch.end.getTime() - stretch.start.getTime(), 0);
@@ -286,7 +297,7 @@ function DaySection({
                 <span
                   key={session.id}
                   className="absolute inset-y-0 rounded-full"
-                  style={{ left: `${left}%`, width: `${width}%`, background: tintOf(session.game_id).muted }}
+                  style={{ left: `${left}%`, width: `${width}%`, background: markOf(session.game_id) }}
                 />
               );
             })}
@@ -296,7 +307,7 @@ function DaySection({
                 stretch={stretch}
                 day={day}
                 now={now}
-                colors={stretch.gameIds.map((gameId) => tintOf(gameId).muted)}
+                colors={stretch.gameIds.map(markOf)}
               />
             ))}
           </div>
@@ -310,7 +321,7 @@ function DaySection({
               <span
                 aria-hidden="true"
                 className="h-2.5 w-6 shrink-0 rounded-full"
-                style={{ backgroundImage: hatch(shared[0].gameIds.map((gameId) => tintOf(gameId).muted)) }}
+                style={{ backgroundImage: hatch(shared[0].gameIds.map(markOf)) }}
               />
               {sideBySideSentence(
                 sharedGames.map((gameId) => byGame.get(gameId)?.game.title ?? "a removed game"),
@@ -354,6 +365,7 @@ function DaySection({
                 session={session}
                 events={events}
                 gameTitle={byGame.get(session.game_id)?.game.title ?? "a removed game"}
+                titleColor={markOf(session.game_id)}
                 gameSessions={sessionsByGame.get(session.game_id)}
                 earlierMs={byGame.get(session.game_id)?.earlier?.earlier_ms}
                 when={`${start} to ${end}`}

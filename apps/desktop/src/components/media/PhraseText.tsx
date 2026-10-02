@@ -3,12 +3,12 @@
 
 import type { Phrase } from "@/lib/sentences";
 
-/** A sentence from lib/sentences with its italic part. */
-export function PhraseText({ phrase }: { phrase: Phrase }) {
+/** A sentence from lib/sentences with its italic part, which may take a color of its own. */
+export function PhraseText({ phrase, emColor }: { phrase: Phrase; emColor?: string }) {
   return (
     <>
       {phrase.before}
-      {phrase.em && <em>{phrase.em}</em>}
+      {phrase.em && <em style={emColor ? { color: emColor } : undefined}>{phrase.em}</em>}
       {phrase.after}
     </>
   );
