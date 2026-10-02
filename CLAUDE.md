@@ -141,6 +141,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   from the cover art.
 - Shell like a music player: library rail on the left with search, a Ctrl+K
   command palette, and a live session bar at the bottom.
+- The window opens at a fixed preset size unless the player picks Free, so
+  pages are laid out for those sizes, down to 1024x640.
 - Write about play in plain sentences ("A long evening in Elden Ring"), not
   tables. Sessions read like a journal, with wording that varies from session
   to session but stays the same for each one.

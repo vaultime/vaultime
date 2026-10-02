@@ -11,7 +11,7 @@ rust-version = "1.98"
 name = "vaultime_lib"
 
 [build-dependencies]
-tauri-build = "2.7"
+tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
 tauri = { version = "2.12", features = ["image-png", "tray-icon"] }
