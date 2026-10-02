@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Effective date:** September 30, 2026
+**Effective date:** October 2, 2026
 
 These terms govern your use of the Vaultime website and the optional invite-only cloud backup service for the Vaultime desktop application.
 
@@ -39,15 +39,15 @@ Your data is handled as described in the [Privacy Policy](privacy-policy.md). In
 
 Vaultime labels sessions as Local, Suspicious, Recovered, Edited or Manual. These labels are heuristic and informational. They are not proof of tampering or fraud and should not be treated as authoritative evidence.
 
-## 8. Disclaimer of Warranties
+## 8. A Free Beta, Without Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. See the GNU General Public License for the full disclaimer.
 
-The cloud service is provided on a best-effort basis. We do not guarantee uninterrupted availability or that remote backups can never be lost. Keep a local backup of anything important.
+The cloud service is a free beta, offered privately to people we invite. It runs on a single server that is looked after in spare time. It can be slow, go offline, change or end at any time, and backups stored on it can be lost. There is no promise of availability, support or response times. Keep a local backup of anything important. You use the cloud service at your own risk.
 
-## 9. Limitation of Liability
+## 9. Liability
 
-To the maximum extent permitted by law, the maintainers and contributors are not liable for any indirect, incidental or consequential damages arising from your use of the software or the cloud service.
+The software and the cloud service are free of charge. We are liable only for damage caused intentionally or through gross negligence. Liability for injury to life, body or health and liability under the German Product Liability Act stay as the law sets them. Beyond that, any liability is excluded, in particular for lost or damaged backups, for outages and for indirect or consequential damage. The same applies to everyone who contributes to Vaultime.
 
 ## 10. Changes
 
