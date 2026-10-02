@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the Vaultime logo files.
 
-The wordmark is converted to outlines from the bundled Fraunces font, so the
+The wordmark is converted to outlines from the bundled Mona Sans font, so the
 files look the same everywhere, with or without the font installed.
 
     pip install fonttools brotli uharfbuzz
@@ -35,7 +35,7 @@ from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 
 ROOT = Path(__file__).resolve().parent.parent
-FONT = ROOT / "apps/desktop/node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2"
+FONT = ROOT / "apps/desktop/node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-standard-normal.woff2"
 ASSETS = ROOT / "assets"
 
 TILE = "#1A1230"
@@ -85,9 +85,10 @@ def tile_svg(size, margin=0.06, rounded=True, ink=LIGHT, pivot=VIOLET):
     )
 
 
-def wordmark_outline(text="Vaultime", tracking=-0.02):
+def wordmark_outline(text="Vaultime", tracking=-0.03):
+    """The wordmark as in the app: Mona Sans bold at full width."""
     variable = TTFont(FONT)
-    font = instantiateVariableFont(variable, {"wght": 600, "opsz": 72, "SOFT": 50, "WONK": 1})
+    font = instantiateVariableFont(variable, {"wght": 700, "wdth": 125})
     font.flavor = None
     data = io.BytesIO()
     font.save(data)
