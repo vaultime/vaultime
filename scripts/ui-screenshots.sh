@@ -9,7 +9,7 @@
 #   bash ../../scripts/ui-screenshots.sh <output-folder> [page ...]
 #
 # WIDTH and HEIGHT set the window, 1440 by 900 by default. The app's smallest
-# window is 900 by 600.
+# window is 900 by 600. PORT is the preview port, 4173 by default.
 # Uses the Microsoft Edge that ships with Windows, in headless mode.
 set -euo pipefail
 
@@ -23,6 +23,7 @@ fi
 edge="/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
 width=${WIDTH:-1440}
 height=${HEIGHT:-900}
+port=${PORT:-4173}
 # How long a page may render before the capture, in milliseconds.
 render_budget_ms=4000
 mkdir -p "$out"
@@ -32,6 +33,6 @@ for page in "${pages[@]}"; do
   name=$(echo "$page" | tr '/?=&' '----')
   "$edge" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
     --window-size="$width,$height" --virtual-time-budget="$render_budget_ms" \
-    --screenshot="$out_win\\$name.png" "http://localhost:4173/$page" >/dev/null 2>&1
+    --screenshot="$out_win\\$name.png" "http://localhost:$port/$page" >/dev/null 2>&1
   echo "$out/$name.png"
 done
