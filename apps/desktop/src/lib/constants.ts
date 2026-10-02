@@ -314,7 +314,7 @@ export const TINT_LEVELS = {
  * Lightness of the marks that tell games apart, as in the journal, in dark
  * and light mode, and the chroma of marks for games without artwork.
  */
-export const MARK_LEVELS = { lightness: { dark: 0.74, light: 0.55 }, chroma: 0.125 };
+export const MARK_LEVELS = { lightness: { dark: 0.74, light: 0.53 }, chroma: 0.125 };
 
 /** Marks take at least this chroma, so a muted cover still reads as a color. */
 export const MARK_MIN_CHROMA = 0.07;
@@ -325,7 +325,7 @@ export const MARK_MAX_CHROMA = 0.17;
  * OKLCH lightness of the grey marks for black, white and grey artwork in dark
  * and light mode, the first game of the week takes the first.
  */
-export const MARK_NEUTRAL_LIGHTNESS = { dark: [0.84, 0.64, 0.95], light: [0.42, 0.64, 0.24] };
+export const MARK_NEUTRAL_LIGHTNESS = { dark: [0.84, 0.64, 0.95], light: [0.42, 0.6, 0.24] };
 
 /** Games shown side by side keep their hues at least this far apart, in degrees. */
 export const MARK_MIN_HUE_GAP_DEG = 30;
@@ -378,20 +378,21 @@ export const GROUNDS = {
 /**
  * Lightness and chroma of each ground token in dark and light mode, at a
  * ground chroma of 1. Dark mode with the vault ground is the palette of
- * Vaultime 0.2.
+ * Vaultime 0.2. Light grounds are tinted paper, colorful enough that each
+ * ground tone shows, with surfaces a little lighter than the page.
  */
 export const GROUND_LEVELS = {
-  ink: { dark: { lightness: 0.158, chroma: 0.019 }, light: { lightness: 0.975, chroma: 0.006 } },
-  bar: { dark: { lightness: 0.175, chroma: 0.023 }, light: { lightness: 0.955, chroma: 0.009 } },
-  surface: { dark: { lightness: 0.193, chroma: 0.025 }, light: { lightness: 0.993, chroma: 0.003 } },
-  raised: { dark: { lightness: 0.209, chroma: 0.03 }, light: { lightness: 0.935, chroma: 0.013 } },
-  rule: { dark: { lightness: 0.245, chroma: 0.04 }, light: { lightness: 0.905, chroma: 0.015 } },
-  hairline: { dark: { lightness: 0.272, chroma: 0.041 }, light: { lightness: 0.875, chroma: 0.018 } },
-  "hairline-strong": { dark: { lightness: 0.335, chroma: 0.056 }, light: { lightness: 0.8, chroma: 0.025 } },
-  idle: { dark: { lightness: 0.395, chroma: 0.054 }, light: { lightness: 0.77, chroma: 0.035 } },
-  faint: { dark: { lightness: 0.72, chroma: 0.043 }, light: { lightness: 0.5, chroma: 0.035 } },
-  soft: { dark: { lightness: 0.873, chroma: 0.03 }, light: { lightness: 0.34, chroma: 0.03 } },
-  text: { dark: { lightness: 0.94, chroma: 0.02 }, light: { lightness: 0.21, chroma: 0.025 } },
+  ink: { dark: { lightness: 0.158, chroma: 0.019 }, light: { lightness: 0.955, chroma: 0.02 } },
+  bar: { dark: { lightness: 0.175, chroma: 0.023 }, light: { lightness: 0.935, chroma: 0.026 } },
+  surface: { dark: { lightness: 0.193, chroma: 0.025 }, light: { lightness: 0.985, chroma: 0.009 } },
+  raised: { dark: { lightness: 0.209, chroma: 0.03 }, light: { lightness: 0.915, chroma: 0.03 } },
+  rule: { dark: { lightness: 0.245, chroma: 0.04 }, light: { lightness: 0.885, chroma: 0.032 } },
+  hairline: { dark: { lightness: 0.272, chroma: 0.041 }, light: { lightness: 0.855, chroma: 0.036 } },
+  "hairline-strong": { dark: { lightness: 0.335, chroma: 0.056 }, light: { lightness: 0.78, chroma: 0.045 } },
+  idle: { dark: { lightness: 0.395, chroma: 0.054 }, light: { lightness: 0.75, chroma: 0.05 } },
+  faint: { dark: { lightness: 0.72, chroma: 0.043 }, light: { lightness: 0.48, chroma: 0.042 } },
+  soft: { dark: { lightness: 0.873, chroma: 0.03 }, light: { lightness: 0.33, chroma: 0.035 } },
+  text: { dark: { lightness: 0.94, chroma: 0.02 }, light: { lightness: 0.2, chroma: 0.03 } },
 };
 
 /**
@@ -414,7 +415,7 @@ export const ACCENT_SWATCHES = {
  */
 export const ACCENT_LEVELS = {
   dark: { lightness: 0.678, hover: 0.748, ink: 0.183, inkChroma: 0.04, grey: 0.86, greyHover: 0.93 },
-  light: { lightness: 0.5, hover: 0.43, ink: 0.985, inkChroma: 0.01, grey: 0.3, greyHover: 0.22 },
+  light: { lightness: 0.48, hover: 0.41, ink: 0.985, inkChroma: 0.01, grey: 0.3, greyHover: 0.22 },
 };
 
 /** Chroma of the accent under the pointer, relative to the accent. */
@@ -426,11 +427,11 @@ export const ACCENT_MIN_CHROMA = 0.08;
 
 /** Warning, recovered and error colors per mode. */
 export const SIGNAL_LEVELS = {
-  amber: { dark: { lightness: 0.808, chroma: 0.127, hue: 75 }, light: { lightness: 0.53, chroma: 0.12, hue: 62 } },
-  sky: { dark: { lightness: 0.755, chroma: 0.126, hue: 260 }, light: { lightness: 0.51, chroma: 0.15, hue: 258 } },
+  amber: { dark: { lightness: 0.808, chroma: 0.127, hue: 75 }, light: { lightness: 0.5, chroma: 0.115, hue: 62 } },
+  sky: { dark: { lightness: 0.755, chroma: 0.126, hue: 260 }, light: { lightness: 0.49, chroma: 0.15, hue: 258 } },
   destructive: {
     dark: { lightness: 0.737, chroma: 0.162, hue: 17 },
-    light: { lightness: 0.55, chroma: 0.19, hue: 22 },
+    light: { lightness: 0.52, chroma: 0.185, hue: 22 },
   },
 };
 
