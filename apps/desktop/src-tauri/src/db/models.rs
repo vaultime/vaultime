@@ -60,6 +60,10 @@ pub struct GameMetadata {
     /// How the player cut each cover from its original file, by asset id.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cover_crops: BTreeMap<String, CropRect>,
+    /// Fields this version does not know, as a newer one wrote them, kept so
+    /// that a write here does not drop them.
+    #[serde(flatten)]
+    pub other: serde_json::Map<String, serde_json::Value>,
 }
 
 /// The part of an image that becomes a cover, in fractions of the image width

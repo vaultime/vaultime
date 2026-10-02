@@ -177,6 +177,9 @@ pub const SCREENSHOT_MAX_HEIGHT_PX: u32 = 720;
 pub const ARTWORK_BACKFILL_SETTING: &str = "artwork_backfill";
 /// Raise it to scan Steam games for artwork once more after an artwork change.
 pub const ARTWORK_BACKFILL_VERSION: &str = "1";
+/// Cached images no asset uses are removed at start once they are this old,
+/// so an image a scan is writing right now stays.
+pub const ARTWORK_SWEEP_MIN_AGE: Duration = Duration::from_hours(1);
 /// Event that tells the frontend to reload the library. Same as
 /// `LIBRARY_CHANGED_EVENT` in `lib/constants.ts`.
 pub const LIBRARY_CHANGED_EVENT: &str = "library-changed";

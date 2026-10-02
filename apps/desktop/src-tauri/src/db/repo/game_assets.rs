@@ -88,18 +88,22 @@ pub fn delete_asset(db: &Database, asset_id: &str) -> Result<bool> {
     })
 }
 
-/// Points an asset at a new cached image, as after the player cropped it.
+/// Points an asset at a new cached image cut from `file_path`, as after the
+/// player cropped it.
 pub fn replace_asset_image(
     db: &Database,
     asset_id: &str,
     asset_type: &str,
     source: &str,
+    file_path: &str,
     cache_path: &str,
 ) -> Result<GameAsset> {
     db.with_conn(|conn| {
         conn.execute(
-            "UPDATE game_assets SET asset_type = ?2, source = ?3, cache_path = ?4 WHERE id = ?1",
-            params![asset_id, asset_type, source, cache_path],
+            "UPDATE game_assets
+             SET asset_type = ?2, source = ?3, file_path = ?4, cache_path = ?5
+             WHERE id = ?1",
+            params![asset_id, asset_type, source, file_path, cache_path],
         )
         .map_err(map_db)?;
         conn.query_row(
@@ -108,5 +112,36 @@ pub fn replace_asset_image(
             row_to_asset,
         )
         .map_err(map_db)
+    })
+}
+
+/// Points a found image at a fresh cached copy after its file changed.
+pub fn refresh_asset_image(
+    db: &Database,
+    asset_id: &str,
+    asset_type: &str,
+    cache_path: &str,
+    hash: &str,
+) -> Result<()> {
+    db.with_conn(|conn| {
+        conn.execute(
+            "UPDATE game_assets SET asset_type = ?2, cache_path = ?3, hash = ?4 WHERE id = ?1",
+            params![asset_id, asset_type, cache_path, hash],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    })
+}
+
+/// The cached file of every asset, for clearing out files no asset uses.
+pub fn list_cache_paths(db: &Database) -> Result<Vec<String>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare("SELECT cache_path FROM game_assets WHERE cache_path IS NOT NULL")
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(map_db)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })
 }

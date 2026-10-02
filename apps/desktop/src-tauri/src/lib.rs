@@ -216,6 +216,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(error) => log::warn!("artwork backfill failed: {error}"),
         }
+        match assets::sweep_cache(&backfill_db, &backfill_assets) {
+            Ok(0) => {}
+            Ok(count) => info!("removed {count} cached images no game uses"),
+            Err(error) => log::warn!("artwork cache sweep failed: {error}"),
+        }
     });
 
     app.manage(database);
