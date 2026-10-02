@@ -14,8 +14,8 @@ use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use tauri::State;
 
-use crate::assets::AssetManager;
 use crate::assets::crop::decode_artwork;
+use crate::assets::{AssetManager, read_file_limited};
 use crate::constants::{
     BACKGROUND_FILE, BACKGROUND_JPEG_QUALITY, BACKGROUND_MAX_SIDE_PX, BACKGROUND_SOURCE_MAX_BYTES,
 };
@@ -52,16 +52,16 @@ impl BackgroundStore {
     /// Stores a scaled down copy of an image as the picture and returns it as
     /// a data URL. A file that is no image leaves the current picture alone.
     pub fn import(&self, source: &Path) -> Result<String> {
-        let size = fs::metadata(source)
-            .map_err(|error| failed("read the picture", error))?
-            .len();
-        if size > BACKGROUND_SOURCE_MAX_BYTES {
-            return Err(VaultimeError::Invalid(format!(
-                "This picture is too large. Pick one under {} MB.",
-                BACKGROUND_SOURCE_MAX_BYTES / BYTES_PER_MEGABYTE
-            )));
-        }
-        let bytes = fs::read(source).map_err(|error| failed("read the picture", error))?;
+        let bytes = read_file_limited(source, BACKGROUND_SOURCE_MAX_BYTES).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::FileTooLarge {
+                VaultimeError::Invalid(format!(
+                    "This picture is too large. Pick one under {} MB.",
+                    BACKGROUND_SOURCE_MAX_BYTES / BYTES_PER_MEGABYTE
+                ))
+            } else {
+                failed("read the picture", error)
+            }
+        })?;
         let image = decode_artwork(&bytes, source).map_err(|_| {
             VaultimeError::Invalid("This file is not a picture Vaultime can read.".into())
         })?;

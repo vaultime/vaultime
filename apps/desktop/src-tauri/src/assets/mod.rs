@@ -7,7 +7,7 @@ pub mod crop;
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
 
 use base64::Engine;
@@ -385,10 +385,12 @@ fn game_and_asset(db: &Database, game_id: &str, asset_id: &str) -> Result<(Game,
 
 /// The original file when it still matches the hash taken when it was added,
 /// so a moved or changed file, or a path from another PC, is never used.
-/// Otherwise the cached copy.
+/// Otherwise the cached copy. The original is read only when it is a local
+/// path, as it may come from a restored backup.
 fn asset_source(asset: &GameAsset) -> Result<(image::DynamicImage, bool)> {
     let original = Path::new(&asset.file_path);
     if let Some(expected) = asset.hash.as_deref()
+        && is_local_path(original)
         && let Ok(bytes) = read_artwork(original)
         && crate::hex::encode(&Sha256::digest(&bytes)) == expected
         && let Ok(image) = decode_artwork(&bytes, original)
@@ -773,20 +775,57 @@ fn process_image(image: image::DynamicImage, asset_type: &str) -> image::Dynamic
 
 /// Reads an image file unless it is too large to be artwork.
 fn read_artwork(path: &Path) -> Result<Vec<u8>> {
-    let failed = |error: std::io::Error| {
+    read_file_limited(path, MAX_ARTWORK_SOURCE_BYTES).map_err(|error| {
         VaultimeError::Asset(format!(
             "failed to read artwork {}: {error}",
             path.display()
         ))
-    };
-    let size = fs::metadata(path).map_err(failed)?.len();
-    if size > MAX_ARTWORK_SOURCE_BYTES {
-        return Err(VaultimeError::Asset(format!(
-            "{} is too large to be artwork",
-            path.display()
-        )));
+    })
+}
+
+/// Reads a regular file of at most `limit` bytes. A device, pipe or folder is
+/// refused before it is opened, as opening a pipe waits for a writer, and
+/// again on the opened file. Reading stops past the limit, so a file that
+/// grows meanwhile cannot fill the memory either.
+pub(crate) fn read_file_limited(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+    let not_a_file = || io::Error::new(ErrorKind::InvalidInput, "not a regular file");
+    let too_large = || io::Error::new(ErrorKind::FileTooLarge, "too large");
+    if !fs::metadata(path)?.is_file() {
+        return Err(not_a_file());
     }
-    fs::read(path).map_err(failed)
+    let file = fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(not_a_file());
+    }
+    if metadata.len() > limit {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limit {
+        return Err(too_large());
+    }
+    Ok(bytes)
+}
+
+/// Whether a path names a file on this PC. On Windows a network path makes
+/// the system connect to that host and hand it the player's sign-in, so a
+/// path that came from a restored backup is never opened when it is one.
+fn is_local_path(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        use std::path::Prefix;
+        matches!(
+            path.components().next(),
+            Some(Component::Prefix(prefix))
+                if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        path.is_absolute()
+    }
 }
 
 /// Deletes cached copies, never a file outside the cache.
@@ -1370,5 +1409,41 @@ mod tests {
             score_candidate(Path::new("/games/cover.png"))
                 > score_candidate(Path::new("/games/screenshots/shot01.png"))
         );
+    }
+
+    #[test]
+    fn reads_only_regular_files_within_the_limit() {
+        let dir = test_cache();
+        let file = dir.cache_dir().join("small.bin");
+        fs::write(&file, [7_u8; 16]).unwrap();
+        assert_eq!(read_file_limited(&file, 16).unwrap().len(), 16);
+        assert_eq!(
+            read_file_limited(&file, 15).unwrap_err().kind(),
+            ErrorKind::FileTooLarge
+        );
+        assert_eq!(
+            read_file_limited(dir.cache_dir(), 16).unwrap_err().kind(),
+            ErrorKind::InvalidInput
+        );
+        #[cfg(unix)]
+        assert!(read_file_limited(Path::new("/dev/zero"), 16).is_err());
+        fs::remove_dir_all(dir.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn opens_originals_only_on_this_pc() {
+        #[cfg(windows)]
+        {
+            assert!(is_local_path(Path::new(r"C:\Games\cover.png")));
+            assert!(is_local_path(Path::new(r"\\?\C:\Games\cover.png")));
+            assert!(!is_local_path(Path::new(r"\\host\share\cover.png")));
+            assert!(!is_local_path(Path::new(r"\\?\UNC\host\share\cover.png")));
+            assert!(!is_local_path(Path::new("cover.png")));
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(is_local_path(Path::new("/games/cover.png")));
+            assert!(!is_local_path(Path::new("cover.png")));
+        }
     }
 }

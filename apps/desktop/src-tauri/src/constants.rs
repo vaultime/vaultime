@@ -94,6 +94,11 @@ pub const WINDOW_MIN_HEIGHT_PX: f64 = 600.0;
 /// Height of the title bar in logical pixels, for when the system reports a
 /// smaller frame, as before the window was first shown.
 pub const WINDOW_TITLE_BAR_MIN_PX: f64 = 32.0;
+/// The same on Linux, where GNOME's header bar takes about 37 to 46 pixels.
+pub const WINDOW_TITLE_BAR_MIN_LINUX_PX: f64 = 48.0;
+/// Room left for a top bar or dock on Wayland, where the work area is the
+/// whole monitor, in logical pixels.
+pub const WINDOW_WAYLAND_PANEL_PX: f64 = 64.0;
 
 // Logging
 
@@ -135,6 +140,14 @@ pub const MAX_LIBRARY_PREVIEWS: usize = 20;
 /// Largest image file read as artwork, in bytes. Covers are far smaller, so
 /// a huge file in a game folder cannot fill the memory.
 pub const MAX_ARTWORK_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+/// Widest and tallest image decoded as artwork, in pixels. A small file can
+/// claim a huge image, and decoding it would fill the memory.
+pub const ARTWORK_MAX_SIDE_PX: u32 = 16_384;
+/// Memory the decoder may take for one image, in bytes.
+pub const ARTWORK_DECODE_MAX_BYTES: u64 = 256 * 1024 * 1024;
+/// Source of an image the player added or framed. Same as
+/// `PLAYER_ARTWORK_SOURCE` in `lib/constants.ts`.
+pub const PLAYER_ARTWORK_SOURCE: &str = "user_picked";
 /// Score of the cover from Steam's own library cache, above anything a
 /// folder scan finds.
 pub const ARTWORK_SCORE_STEAM_COVER: i32 = 1_000;
@@ -183,6 +196,19 @@ pub const COVER_HEIGHT_PX: u32 = 960;
 pub const CROP_PREVIEW_MAX_PX: u32 = 1200;
 /// Longest edge an SVG is drawn at before it is cropped.
 pub const SVG_RENDER_MAX_PX: u32 = 2048;
+/// An SVG that needs a smaller drawing than this to stay within
+/// `SVG_MAX_LAYER_BYTES` is refused, in pixels on the longest edge.
+pub const SVG_RENDER_MIN_PX: u32 = 256;
+/// Memory the layers of nested see-through, clipped, masked or filtered
+/// groups of an SVG may take at once, in bytes. resvg gives each such group a
+/// layer of its own, up to five times the drawing each way.
+pub const SVG_MAX_LAYER_BYTES: u64 = 256 * 1024 * 1024;
+/// Deepest nesting of such groups an SVG may have.
+pub const SVG_MAX_LAYER_DEPTH: usize = 8;
+/// Most shapes and groups an SVG may have, so drawing it stays quick.
+pub const SVG_MAX_NODES: usize = 20_000;
+/// Most filters an SVG may use, as each one is drawn into layers of its own.
+pub const SVG_MAX_FILTERS: usize = 32;
 /// A crop frame may be this many times the frame that holds the whole image.
 /// The dialog stops at `CROP_MIN_ZOOM_OF_FIT` in `lib/constants.ts`, well
 /// before it, so rounding never refuses a crop the dialog made.
@@ -191,7 +217,7 @@ pub const CROP_MAX_FRAME_OF_FIT: f64 = 4.0;
 /// height follows the cover.
 pub const CROP_BACKDROP_WIDTH_PX: u32 = 90;
 /// Blur of the backdrop, in its own small pixels.
-pub const CROP_BACKDROP_BLUR_SIGMA: f32 = 3.0;
+pub const CROP_BACKDROP_BLUR_SIGMA_PX: f32 = 3.0;
 /// Share of its brightness the blurred image keeps in the backdrop, so the
 /// cover in front of it stands out.
 pub const CROP_BACKDROP_BRIGHTNESS: f32 = 0.45;
@@ -208,8 +234,8 @@ pub const CROP_BACKDROP_LIGHT_ART_LUMA: f64 = 0.5;
 pub const CROP_BACKDROP_DARK_PLAIN_LUMA: f64 = 0.12;
 /// Luma of the light plain behind dark art.
 pub const CROP_BACKDROP_LIGHT_PLAIN_LUMA: f64 = 0.82;
-/// Plain behind art without a single opaque pixel. Same as `--surface` in
-/// `index.css`.
+/// Plain behind art without a single opaque pixel. Same as the default
+/// `--surface` in `index.css`.
 pub const CROP_BACKDROP_FALLBACK_RGB: [u8; 3] = [22, 18, 30];
 
 // Backups

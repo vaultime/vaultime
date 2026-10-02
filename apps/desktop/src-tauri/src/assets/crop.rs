@@ -14,11 +14,12 @@ use resvg::{tiny_skia, usvg};
 use serde::Serialize;
 
 use crate::constants::{
-    CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX, CROP_BACKDROP_BLUR_SIGMA,
-    CROP_BACKDROP_BRIGHTNESS, CROP_BACKDROP_DARK_PLAIN_LUMA, CROP_BACKDROP_FALLBACK_RGB,
-    CROP_BACKDROP_LIGHT_ART_LUMA, CROP_BACKDROP_LIGHT_PLAIN_LUMA, CROP_BACKDROP_OPAQUE_COVERAGE,
-    CROP_BACKDROP_SAMPLE_PX, CROP_BACKDROP_WIDTH_PX, CROP_MAX_FRAME_OF_FIT, CROP_PREVIEW_MAX_PX,
-    SVG_RENDER_MAX_PX,
+    ARTWORK_DECODE_MAX_BYTES, ARTWORK_MAX_SIDE_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX,
+    COVER_WIDTH_PX, CROP_BACKDROP_BLUR_SIGMA_PX, CROP_BACKDROP_BRIGHTNESS,
+    CROP_BACKDROP_DARK_PLAIN_LUMA, CROP_BACKDROP_FALLBACK_RGB, CROP_BACKDROP_LIGHT_ART_LUMA,
+    CROP_BACKDROP_LIGHT_PLAIN_LUMA, CROP_BACKDROP_OPAQUE_COVERAGE, CROP_BACKDROP_SAMPLE_PX,
+    CROP_BACKDROP_WIDTH_PX, CROP_MAX_FRAME_OF_FIT, CROP_PREVIEW_MAX_PX, SVG_MAX_FILTERS,
+    SVG_MAX_LAYER_BYTES, SVG_MAX_LAYER_DEPTH, SVG_MAX_NODES, SVG_RENDER_MAX_PX, SVG_RENDER_MIN_PX,
 };
 use crate::db::models::CropRect;
 use crate::error::{Result, VaultimeError};
@@ -62,7 +63,8 @@ impl ArtworkSource {
 
 /// Decodes an image file. SVG is drawn by resvg, everything else is read by
 /// the image crate, which falls back to the file extension for formats
-/// without a signature, such as TGA.
+/// without a signature, such as TGA. Images too large to decode safely are
+/// refused.
 pub fn decode_artwork(bytes: &[u8], path: &Path) -> Result<DynamicImage> {
     let extension = path
         .extension()
@@ -85,6 +87,11 @@ pub fn decode_artwork(bytes: &[u8], path: &Path) -> Result<DynamicImage> {
     {
         reader.set_format(format);
     }
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(ARTWORK_MAX_SIDE_PX);
+    limits.max_image_height = Some(ARTWORK_MAX_SIDE_PX);
+    limits.max_alloc = Some(ARTWORK_DECODE_MAX_BYTES);
+    reader.limits(limits);
     reader.decode().map_err(|error| {
         VaultimeError::Asset(format!(
             "failed to decode image {}: {error}",
@@ -94,7 +101,9 @@ pub fn decode_artwork(bytes: &[u8], path: &Path) -> Result<DynamicImage> {
 }
 
 fn draw_svg(bytes: &[u8], path: &Path) -> Result<DynamicImage> {
-    // Images inside the file are drawn, other files it names are never read.
+    // Other files the drawing names are never read. resvg is built without
+    // raster images and text, so pictures inside the file and text that was
+    // not turned into paths are left out.
     let options = usvg::Options {
         image_href_resolver: usvg::ImageHrefResolver {
             resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
@@ -110,7 +119,11 @@ fn draw_svg_with(bytes: &[u8], path: &Path, options: &usvg::Options) -> Result<D
         |error: String| VaultimeError::Asset(format!("failed to draw {}: {error}", path.display()));
     let tree = usvg::Tree::from_data(bytes, options).map_err(|error| failed(error.to_string()))?;
     let size = tree.size();
-    let scale = f64::from(SVG_RENDER_MAX_PX) / f64::from(size.width().max(size.height()));
+    let longest = f64::from(size.width().max(size.height()));
+    let scale = svg_scale(&tree, f64::from(SVG_RENDER_MAX_PX) / longest).map_err(failed)?;
+    if longest * scale < f64::from(SVG_RENDER_MIN_PX) {
+        return Err(failed("it needs too much memory to draw".into()));
+    }
     let width = whole_pixels(f64::from(size.width()) * scale).max(1);
     let height = whole_pixels(f64::from(size.height()) * scale).max(1);
     let mut pixmap =
@@ -123,6 +136,98 @@ fn draw_svg_with(bytes: &[u8], path: &Path, options: &usvg::Options) -> Result<D
     RgbaImage::from_raw(width, height, pixmap.take_demultiplied())
         .map(DynamicImage::ImageRgba8)
         .ok_or_else(|| failed("the drawing has the wrong size".into()))
+}
+
+/// What drawing an SVG at scale 1 asks of resvg.
+#[derive(Debug, Default)]
+struct SvgLoad {
+    nodes: usize,
+    filters: usize,
+    /// Largest sum of layer areas held at once, in square drawing units.
+    layer_area: f64,
+}
+
+/// The scale an SVG can be drawn at, at most `wanted`. Layers grow with the
+/// square of the scale, so a drawing whose nested layers would need more than
+/// `SVG_MAX_LAYER_BYTES` is drawn smaller. Too many shapes, filters or nested
+/// layers are refused outright.
+fn svg_scale(tree: &usvg::Tree, wanted: f64) -> std::result::Result<f64, String> {
+    let size = tree.size();
+    let (width, height) = (f64::from(size.width()), f64::from(size.height()));
+    // resvg clips each layer to the drawing with twice its size around it.
+    let bounds = Bounds {
+        left: -2.0 * width,
+        top: -2.0 * height,
+        right: 3.0 * width,
+        bottom: 3.0 * height,
+    };
+    let mut load = SvgLoad::default();
+    measure_group(tree.root(), 0, 0.0, bounds, &mut load)?;
+    if load.layer_area <= 0.0 {
+        return Ok(wanted);
+    }
+    // Four bytes per pixel.
+    #[allow(clippy::cast_precision_loss, reason = "a byte budget fits f64")]
+    let budget = SVG_MAX_LAYER_BYTES as f64 / 4.0;
+    Ok(wanted.min((budget / load.layer_area).sqrt()))
+}
+
+/// A rectangle in drawing units.
+#[derive(Debug, Clone, Copy)]
+struct Bounds {
+    left: f64,
+    top: f64,
+    right: f64,
+    bottom: f64,
+}
+
+/// Counts the shapes, filters and the layer area of a group and what it
+/// holds, as resvg would allocate it.
+fn measure_group(
+    group: &usvg::Group,
+    depth: usize,
+    area_above: f64,
+    bounds: Bounds,
+    load: &mut SvgLoad,
+) -> std::result::Result<(), String> {
+    for node in group.children() {
+        load.nodes += 1;
+        if load.nodes > SVG_MAX_NODES {
+            return Err("it has too many shapes".into());
+        }
+        // Clip paths, masks and patterns hold groups of their own.
+        let mut nested = Ok(());
+        node.subroots(|root| {
+            if nested.is_ok() {
+                nested = measure_group(root, depth, area_above, bounds, load);
+            }
+        });
+        nested?;
+        let usvg::Node::Group(child) = node else {
+            continue;
+        };
+        let (depth, area) = if child.should_isolate() {
+            load.filters += child.filters().len();
+            if load.filters > SVG_MAX_FILTERS {
+                return Err("it has too many filters".into());
+            }
+            if depth + 1 > SVG_MAX_LAYER_DEPTH {
+                return Err("it nests too many layers".into());
+            }
+            let rect = child.abs_layer_bounding_box();
+            let width =
+                f64::from(rect.right()).min(bounds.right) - f64::from(rect.left()).max(bounds.left);
+            let height =
+                f64::from(rect.bottom()).min(bounds.bottom) - f64::from(rect.top()).max(bounds.top);
+            let area = area_above + width.max(0.0) * height.max(0.0);
+            load.layer_area = load.layer_area.max(area);
+            (depth + 1, area)
+        } else {
+            (depth, area_above)
+        };
+        measure_group(child, depth, area, bounds, load)?;
+    }
+    Ok(())
 }
 
 /// The crop that fills the cover with the middle of an image, the cut
@@ -220,17 +325,22 @@ pub fn render_cover(image: &DynamicImage, crop: CropRect) -> Result<RgbaImage> {
     let bottom = (rect.top + rect.height).min(f64::from(height)).ceil();
     let target_width = whole_pixels((right - left) * scale).max(1);
     let target_height = whole_pixels((bottom - top) * scale).max(1);
-    let piece = image
-        .crop_imm(
+    // Resized from a view, so a large image is not copied first.
+    let piece = imageops::resize(
+        &*imageops::crop_imm(
+            image,
             whole_pixels(left),
             whole_pixels(top),
             whole_pixels(right - left),
             whole_pixels(bottom - top),
-        )
-        .resize_exact(target_width, target_height, FilterType::Lanczos3);
+        ),
+        target_width,
+        target_height,
+        FilterType::Lanczos3,
+    );
     imageops::overlay(
         &mut cover,
-        &piece.to_rgba8(),
+        &piece,
         ((left - rect.left) * scale).round() as i64,
         ((top - rect.top) * scale).round() as i64,
     );
@@ -264,7 +374,7 @@ fn small_backdrop(image: &DynamicImage) -> RgbaImage {
         &image
             .resize_to_fill(width, height, FilterType::Triangle)
             .to_rgba8(),
-        CROP_BACKDROP_BLUR_SIGMA,
+        CROP_BACKDROP_BLUR_SIGMA_PX,
     );
     for pixel in blurred.pixels_mut() {
         for channel in &mut pixel.0[..3] {
@@ -572,6 +682,35 @@ mod tests {
     fn refuses_files_that_are_not_images() {
         assert!(decode_artwork(b"not an image", Path::new("logo.png")).is_err());
         assert!(decode_artwork(b"<svg", Path::new("logo.svg")).is_err());
+    }
+
+    #[test]
+    fn refuses_images_too_large_to_decode() {
+        let wide = DynamicImage::ImageRgb8(RgbImage::new(ARTWORK_MAX_SIDE_PX + 1, 1));
+        assert!(decode_artwork(&encode(ImageFormat::Png, &wide), Path::new("wide.png")).is_err());
+    }
+
+    #[test]
+    fn refuses_svg_with_deeply_nested_layers() {
+        let depth = SVG_MAX_LAYER_DEPTH + 1;
+        let svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">{}<rect x="-100000" y="-100000" width="200000" height="200000"/>{}</svg>"#,
+            r#"<g opacity="0.9">"#.repeat(depth),
+            "</g>".repeat(depth),
+        );
+        let started = std::time::Instant::now();
+        assert!(decode_artwork(svg.as_bytes(), Path::new("bomb.svg")).is_err());
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn draws_svg_with_large_layers_smaller() {
+        // Three nested layers as large as resvg allows would need far more
+        // than the budget at the full size.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><g opacity="0.9"><g opacity="0.9"><g opacity="0.9"><rect x="-100000" y="-100000" width="200000" height="200000" fill="red"/></g></g></g></svg>"#;
+        let decoded = decode_artwork(svg.as_bytes(), Path::new("layers.svg")).unwrap();
+        assert!(decoded.width() < SVG_RENDER_MAX_PX);
+        assert!(decoded.width() >= SVG_RENDER_MIN_PX);
     }
 
     #[test]
