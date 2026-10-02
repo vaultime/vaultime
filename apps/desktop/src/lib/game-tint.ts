@@ -3,6 +3,7 @@
 
 import {
   BRAND_HUE_DEG,
+  MARK_CHROMA_BOOST,
   MARK_LEVELS,
   MARK_MAX_CHROMA,
   MARK_MIN_CHROMA,
@@ -21,6 +22,7 @@ import {
   TINT_TYPICAL_CHROMA,
 } from "@/lib/constants";
 import { maxSrgbChroma, srgbToOklab } from "@/lib/color";
+import type { ThemeMode } from "@/lib/theme";
 import { stableHash } from "@/lib/utils";
 
 /** A color by OKLCH hue in degrees and chroma. */
@@ -119,38 +121,38 @@ export function distinctHues(hues: number[], taken: number[] = []): number[] {
 
 /**
  * Marks that tell the games shown together apart, in the main color of their
- * artwork at a lightness that reads on the ground of either mode. Black,
- * white and grey art gets a grey, the first one silver. A color only moves
- * when it would look like an earlier game or like a `taken` hue, and greys
- * run out into tinted greys. One color per entry of `colors`, in the same
- * order.
+ * artwork, a little more colorful than the art and at a lightness that reads
+ * on the ground of the mode. Black, white and grey art gets a grey, the first
+ * one silver. A color only moves when it would look like an earlier game or
+ * like a `taken` hue, and greys run out into tinted greys. One color per entry
+ * of `colors`, in the same order.
  */
-export function markColors(colors: (ArtColor | null)[], taken: number[] = []): string[] {
+export function markColors(colors: (ArtColor | null)[], taken: number[] = [], mode: ThemeMode = "dark"): string[] {
   const greys = new Map<number, number>();
   const hued: { index: number; hue: number; chroma: number }[] = [];
-  const greySteps = MARK_NEUTRAL_LIGHTNESS.dark.length;
+  const greySteps = MARK_NEUTRAL_LIGHTNESS[mode];
   for (const [index, color] of colors.entries()) {
     if (color) hued.push({ index, hue: color.hue, chroma: color.chroma });
-    else if (greys.size < greySteps) greys.set(index, greys.size + 1);
+    else if (greys.size < greySteps.length) greys.set(index, greySteps[greys.size]);
     else hued.push({ index, hue: 0, chroma: MARK_MIN_CHROMA });
   }
 
   const marks: string[] = [];
-  for (const [index, step] of greys) marks[index] = `oklch(var(--mark-grey-${step}) 0 0)`;
+  for (const [index, lightness] of greys) marks[index] = `oklch(${lightness} 0 0)`;
   const hues = distinctHues(
     hued.map((entry) => entry.hue),
     taken,
   );
-  const { dark, light } = MARK_LEVELS.lightness;
+  const lightness = MARK_LEVELS.lightness[mode];
   for (const [order, entry] of hued.entries()) {
     const hue = hues[order];
     const chroma = Math.min(
-      Math.max(entry.chroma, MARK_MIN_CHROMA),
+      Math.max(entry.chroma * MARK_CHROMA_BOOST, MARK_MIN_CHROMA),
       MARK_MAX_CHROMA,
-      maxSrgbChroma(dark, hue),
-      maxSrgbChroma(light, hue),
+      maxSrgbChroma(lightness, hue),
     );
-    marks[entry.index] = `oklch(var(--mark-lightness) ${chroma.toFixed(3)} ${Math.round(hue)})`;
+    // Rounded down, so the color stays inside sRGB.
+    marks[entry.index] = `oklch(${lightness} ${(Math.floor(chroma * 1000) / 1000).toFixed(3)} ${Math.round(hue)})`;
   }
   return marks;
 }

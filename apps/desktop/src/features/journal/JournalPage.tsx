@@ -89,7 +89,7 @@ function hatch(colors: string[]): string {
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
   const { sessions, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
-  const { accentHues } = useAppearance();
+  const { accentHues, mode } = useAppearance();
   // 0 is this week, -1 the week before and so on.
   const [offset, setOffset] = useState(0);
   const [events, setEvents] = useState<SessionEvent[]>([]);
@@ -122,9 +122,9 @@ export function JournalPage() {
     const summary = byGame.get(gameId);
     return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).color;
   };
-  const weekMarks = markColors(weekGames.map(colorOf), accentHues);
+  const weekMarks = markColors(weekGames.map(colorOf), accentHues, mode);
   const marks = new Map(weekGames.map((gameId, index) => [gameId, weekMarks[index]]));
-  const markOf = (gameId: string) => marks.get(gameId) ?? markColors([colorOf(gameId)])[0];
+  const markOf = (gameId: string) => marks.get(gameId) ?? markColors([colorOf(gameId)], [], mode)[0];
 
   /** A game's playtime up to a moment, with the playtime from before Vaultime. */
   const playedBefore = (gameId: string, moment: string) =>

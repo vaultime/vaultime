@@ -3,9 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { maxSrgbChroma } from "./color";
-import { MARK_LEVELS, MARK_MIN_HUE_GAP_DEG } from "./constants";
+import { MARK_CHROMA_BOOST, MARK_LEVELS, MARK_MAX_CHROMA, MARK_MIN_CHROMA, MARK_MIN_HUE_GAP_DEG } from "./constants";
 import { distinctHues, markColors, tintForTitle, tintFromPixels } from "./game-tint";
-import { themeTokens, type ThemeMode } from "./theme";
 
 const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
@@ -18,11 +17,9 @@ function pixels(...runs: [count: number, red: number, green: number, blue: numbe
   return new Uint8ClampedArray(data);
 }
 
-/** Parses `oklch(l c h)`, with the tokens of a mode put in. */
-function oklch(color: string, mode: ThemeMode = "dark") {
-  const tokens = themeTokens(mode, "vault", "violet");
-  const resolved = color.replace(/var\((--[a-z0-9-]+)\)/g, (_, name: string) => tokens[name]);
-  const [lightness, chroma, hue] = resolved.slice("oklch(".length, -1).split(" ").map(Number);
+/** Parses `oklch(l c h)`. */
+function oklch(color: string) {
+  const [lightness, chroma, hue] = color.slice("oklch(".length, -1).split(" ").map(Number);
   return { lightness, chroma, hue };
 }
 
@@ -103,13 +100,33 @@ describe("markColors", () => {
     expect(first.lightness).not.toBe(second.lightness);
   });
 
-  it("keeps the hue and colorfulness of the art when there is room", () => {
+  it("keeps the hue of the art and makes it a little more colorful", () => {
     const [red, green] = markColors([
-      { hue: 27, chroma: 0.12 },
+      { hue: 27, chroma: 0.1 },
       { hue: 145, chroma: 0.09 },
     ]).map((color) => oklch(color));
-    expect(red).toEqual({ lightness: MARK_LEVELS.lightness.dark, chroma: 0.12, hue: 27 });
-    expect(green).toEqual({ lightness: MARK_LEVELS.lightness.dark, chroma: 0.09, hue: 145 });
+    expect(red.hue).toBe(27);
+    expect(red.chroma).toBeCloseTo(0.1 * MARK_CHROMA_BOOST, 3);
+    expect(green.hue).toBe(145);
+    expect(green.chroma).toBeCloseTo(0.09 * MARK_CHROMA_BOOST, 3);
+    expect(red.lightness).toBe(MARK_LEVELS.lightness.dark);
+  });
+
+  it("keeps muted art a color and vivid art from glaring", () => {
+    const [muted, vivid] = markColors([
+      { hue: 145, chroma: 0.02 },
+      { hue: 330, chroma: 0.3 },
+    ]).map((color) => oklch(color));
+    expect(muted.chroma).toBe(MARK_MIN_CHROMA);
+    expect(vivid.chroma).toBe(MARK_MAX_CHROMA);
+  });
+
+  it("uses all the color each mode allows", () => {
+    // Yellow has little room in light mode and blue little in dark mode.
+    const [yellowDark] = markColors([{ hue: 90, chroma: 0.12 }], [], "dark").map((color) => oklch(color));
+    const [blueLight] = markColors([{ hue: 264, chroma: 0.12 }], [], "light").map((color) => oklch(color));
+    expect(yellowDark.chroma).toBeGreaterThan(maxSrgbChroma(MARK_LEVELS.lightness.light, 90));
+    expect(blueLight.chroma).toBeGreaterThan(maxSrgbChroma(MARK_LEVELS.lightness.dark, 264));
   });
 
   it("nudges a game that would look like an earlier one", () => {
@@ -124,7 +141,7 @@ describe("markColors", () => {
   it("keeps marks inside sRGB in both modes", () => {
     const hues = [{ hue: 264, chroma: 0.3 }, { hue: 100, chroma: 0.3 }, { hue: 200, chroma: 0.3 }];
     for (const mode of ["dark", "light"] as const) {
-      for (const mark of markColors(hues).map((color) => oklch(color, mode))) {
+      for (const mark of markColors(hues, [], mode).map((color) => oklch(color))) {
         expect(mark.lightness).toBe(MARK_LEVELS.lightness[mode]);
         expect(mark.chroma).toBeLessThanOrEqual(maxSrgbChroma(mark.lightness, mark.hue));
       }
@@ -132,7 +149,7 @@ describe("markColors", () => {
   });
 
   it("gives greys a lightness that reads in light mode too", () => {
-    const [dark, light] = (["dark", "light"] as const).map((mode) => oklch(markColors([null])[0], mode));
+    const [dark, light] = (["dark", "light"] as const).map((mode) => oklch(markColors([null], [], mode)[0]));
     expect(dark.lightness).toBeGreaterThan(light.lightness);
   });
 

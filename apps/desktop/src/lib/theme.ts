@@ -16,8 +16,6 @@ import {
   GLINT_LIGHTNESS,
   GROUND_LEVELS,
   GROUNDS,
-  MARK_LEVELS,
-  MARK_NEUTRAL_LIGHTNESS,
   SCRIM_LIGHTNESS,
   SETTING_KEYS,
   SIGNAL_LEVELS,
@@ -176,10 +174,6 @@ export function themeTokens(mode: ThemeMode, groundId: GroundId, accent: string)
 
   for (const [role, level] of Object.entries(TINT_LEVELS)) {
     tokens[`--tint-${role}`] = String(level[mode]);
-  }
-  tokens["--mark-lightness"] = String(MARK_LEVELS.lightness[mode]);
-  for (const [index, lightness] of MARK_NEUTRAL_LIGHTNESS[mode].entries()) {
-    tokens[`--mark-grey-${index + 1}`] = String(lightness);
   }
   return tokens;
 }

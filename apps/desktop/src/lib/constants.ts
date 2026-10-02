@@ -314,12 +314,14 @@ export const TINT_LEVELS = {
  * Lightness of the marks that tell games apart, as in the journal, in dark
  * and light mode, and the chroma of marks for games without artwork.
  */
-export const MARK_LEVELS = { lightness: { dark: 0.74, light: 0.53 }, chroma: 0.125 };
+export const MARK_LEVELS = { lightness: { dark: 0.72, light: 0.53 }, chroma: 0.125 };
 
+/** Marks are this much more colorful than the art, which reads as dull at the size of a bar. */
+export const MARK_CHROMA_BOOST = 1.5;
 /** Marks take at least this chroma, so a muted cover still reads as a color. */
-export const MARK_MIN_CHROMA = 0.07;
+export const MARK_MIN_CHROMA = 0.1;
 /** Marks take at most this chroma, so a vivid cover does not glare. */
-export const MARK_MAX_CHROMA = 0.17;
+export const MARK_MAX_CHROMA = 0.21;
 
 /**
  * OKLCH lightness of the grey marks for black, white and grey artwork in dark
