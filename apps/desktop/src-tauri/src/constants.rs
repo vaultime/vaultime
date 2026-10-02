@@ -187,6 +187,11 @@ pub const PAGE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
     CLOUD_AUTO_BACKUP_SETTING,
     RAIL_SORT_SETTING,
+    APPEARANCE_MODE_SETTING,
+    APPEARANCE_GROUND_SETTING,
+    APPEARANCE_ACCENT_SETTING,
+    BACKGROUND_DIM_SETTING,
+    BACKGROUND_BLUR_SETTING,
 ];
 /// Folder name prefix of automatic backups, so pruning never touches others.
 pub const AUTO_BACKUP_PREFIX: &str = "vaultime-auto";
@@ -227,3 +232,33 @@ pub const CLOUD_API_BASE_URL: &str = "https://vaultime.codfishcloud.de";
 /// Most artwork ids asked about in one request. Same as
 /// `MAX_BLOB_IDS_PER_REQUEST` in the API's `constants.rs`.
 pub const MAX_ARTWORK_IDS_PER_REQUEST: usize = 10_000;
+
+// Appearance
+
+/// Setting with dark, light or the system's mode. Same as
+/// `SETTING_KEYS.appearanceMode` in `lib/constants.ts`.
+pub const APPEARANCE_MODE_SETTING: &str = "appearance_mode";
+/// Setting with the ground tone. Same as `SETTING_KEYS.appearanceGround` in
+/// `lib/constants.ts`.
+pub const APPEARANCE_GROUND_SETTING: &str = "appearance_ground";
+/// Setting with the accent color. Same as `SETTING_KEYS.appearanceAccent` in
+/// `lib/constants.ts`.
+pub const APPEARANCE_ACCENT_SETTING: &str = "appearance_accent";
+/// Setting with how far the background picture is dimmed. Same as
+/// `SETTING_KEYS.backgroundDim` in `lib/constants.ts`.
+pub const BACKGROUND_DIM_SETTING: &str = "background_dim";
+/// Setting with how far the background picture is blurred. Same as
+/// `SETTING_KEYS.backgroundBlur` in `lib/constants.ts`.
+pub const BACKGROUND_BLUR_SETTING: &str = "background_blur";
+/// Folder in Vaultime's data folder for the background picture. Backups
+/// leave it out.
+pub const APPEARANCE_DIR: &str = "appearance";
+/// File name of the stored background picture.
+pub const BACKGROUND_FILE: &str = "background.jpg";
+/// Longest side of the stored background picture, enough for a large window
+/// on a 4K screen.
+pub const BACKGROUND_MAX_SIDE_PX: u32 = 2560;
+/// JPEG quality of the stored background picture.
+pub const BACKGROUND_JPEG_QUALITY: u8 = 86;
+/// Largest picture file read as a background, in bytes.
+pub const BACKGROUND_SOURCE_MAX_BYTES: u64 = 64 * 1024 * 1024;

@@ -21,7 +21,9 @@ use walkdir::WalkDir;
 use crate::AppContext;
 use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
-    ASSET_CACHE_DIR, AUTO_BACKUP_FOLDER_SETTING, BACKUP_VERSION, DATABASE_FILE, HASH_BUFFER_BYTES,
+    APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
+    AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
+    DATABASE_FILE, HASH_BUFFER_BYTES,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -33,8 +35,16 @@ use crate::platform::process::file_name;
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 /// Settings that belong to this PC. A restore keeps the local values, so a
-/// backup cannot send the daily backups to a folder of its choosing.
-const DEVICE_SETTINGS: &[&str] = &[AUTO_BACKUP_FOLDER_SETTING];
+/// backup cannot send the daily backups to a folder of its choosing, and the
+/// look stays with the background picture, which backups leave out.
+const DEVICE_SETTINGS: &[&str] = &[
+    AUTO_BACKUP_FOLDER_SETTING,
+    APPEARANCE_MODE_SETTING,
+    APPEARANCE_GROUND_SETTING,
+    APPEARANCE_ACCENT_SETTING,
+    BACKGROUND_DIM_SETTING,
+    BACKGROUND_BLUR_SETTING,
+];
 /// Where a restore keeps the current artwork until the new one is in place.
 const PREVIOUS_CACHE_DIR: &str = "previous-asset-cache";
 /// Why sessions that a backup caught while they ran are closed after a restore.
@@ -1258,6 +1268,24 @@ mod tests {
             setting(crate::constants::IDLE_THRESHOLD_SETTING).as_deref(),
             Some("600")
         );
+        fixture.finish();
+    }
+
+    #[test]
+    fn keeps_the_look_of_this_pc() {
+        let fixture = Fixture::new();
+        crate::db::repo::settings::set_setting(&fixture.db, APPEARANCE_ACCENT_SETTING, "teal")
+            .unwrap();
+        let fixture = fixture.back_up();
+        crate::db::repo::settings::set_setting(&fixture.db, APPEARANCE_ACCENT_SETTING, "rose")
+            .unwrap();
+        crate::db::repo::settings::set_setting(&fixture.db, APPEARANCE_MODE_SETTING, "light")
+            .unwrap();
+
+        fixture.restore().unwrap();
+        let setting = |key| crate::db::repo::settings::get_setting(&fixture.db, key).unwrap();
+        assert_eq!(setting(APPEARANCE_ACCENT_SETTING).as_deref(), Some("rose"));
+        assert_eq!(setting(APPEARANCE_MODE_SETTING).as_deref(), Some("light"));
         fixture.finish();
     }
 

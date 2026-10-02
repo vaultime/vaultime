@@ -3,6 +3,7 @@
 
 //! Tauri application setup and command registration.
 
+pub mod appearance;
 pub mod assets;
 pub mod backup;
 pub mod commands;
@@ -27,10 +28,12 @@ use log::{LevelFilter, info};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
+use appearance::BackgroundStore;
 use assets::AssetManager;
 use constants::{
-    ASSET_CACHE_DIR, AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL, AUTO_BACKUP_ON_QUIT_MIN_AGE,
-    DATABASE_FILE, DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
+    APPEARANCE_DIR, ASSET_CACHE_DIR, AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL,
+    AUTO_BACKUP_ON_QUIT_MIN_AGE, DATABASE_FILE, DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT,
+    LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
 };
 use db::connection::Database;
 use db::repo::devices;
@@ -129,6 +132,10 @@ pub fn run() {
             commands::preview_steam_playtime,
             commands::import_steam_playtime,
             commands::remove_steam_playtime,
+            appearance::get_background_image,
+            appearance::set_background_image,
+            appearance::set_background_from_game,
+            appearance::clear_background_image,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Vaultime")
@@ -151,6 +158,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     fs::create_dir_all(&app_dir).expect("failed to create app data directory");
     let asset_cache_dir = app_dir.join(ASSET_CACHE_DIR);
+    let appearance_dir = app_dir.join(APPEARANCE_DIR);
     fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
 
     let db_path = app_dir.join(DATABASE_FILE);
@@ -194,6 +202,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     app.manage(database);
     app.manage(AssetManager::new(asset_cache_dir));
+    app.manage(BackgroundStore::new(appearance_dir));
     app.manage(engine);
 
     // New installs start with the system, so the first game of the day counts.
