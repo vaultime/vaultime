@@ -243,8 +243,10 @@ pub fn show_stored<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Takes the colors of the page for the icons and the title bar, and keeps
-/// them for the next start.
-#[tauri::command]
+/// them for the next start. The border and the title bar go first, as they
+/// are the quickest, the icons are drawn only when the accent changed. Runs
+/// off the main thread, so drawing the icons never holds up the window.
+#[tauri::command(async)]
 pub fn set_window_look(
     app: AppHandle,
     db: State<'_, Arc<Database>>,
@@ -256,20 +258,26 @@ pub fn set_window_look(
             "window colors must be given as #rrggbb".into(),
         ));
     }
-    let signed_in = {
+    let (accent_changed, signed_in) = {
         let mut shown = state.shown();
         if shown.look.as_ref() == Some(&look) {
             return Ok(false);
         }
+        let accent_changed = shown
+            .look
+            .as_ref()
+            .is_none_or(|shown| shown.icon_accent != look.icon_accent);
         shown.look = Some(look.clone());
-        shown.signed_in
+        (accent_changed, shown.signed_in)
     };
+    paint_title_bar(&app, &look);
+    if accent_changed {
+        crate::tray::show_cloud_state(&app, signed_in);
+    }
     let stored = serde_json::to_string(&look).map_err(|error| {
         VaultimeError::Invalid(format!("failed to store the window colors: {error}"))
     })?;
     settings::set_setting(&db, WINDOW_LOOK_SETTING, &stored)?;
-    crate::tray::show_cloud_state(&app, signed_in);
-    paint_title_bar(&app, &look);
     Ok(true)
 }
 

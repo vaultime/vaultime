@@ -8,7 +8,7 @@ import {
   APPEARANCE_CACHE_KEY,
   BACKGROUND_HEADER_OPACITY_PERCENT,
   BACKGROUND_SAVE_DELAY_MS,
-  WINDOW_LOOK_DELAY_MS,
+  WINDOW_LOOK_INTERVAL_MS,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import {
@@ -142,11 +142,20 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }, [appearance.mode]);
 
   // The icons in the tray and the taskbar and the title bar take the accent
-  // and the ground. A color dragged around in the picker sends only where it stops.
+  // and the ground. A change goes out at once, a color dragged around in the
+  // picker at most once per interval and once more where it stops.
+  const windowLookSentAt = useRef(Number.NEGATIVE_INFINITY);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    const send = () => {
+      windowLookSentAt.current = performance.now();
       api.setWindowLook(windowLook(mode, appearance.ground, appearance.accent)).catch(() => {});
-    }, WINDOW_LOOK_DELAY_MS);
+    };
+    const wait = windowLookSentAt.current + WINDOW_LOOK_INTERVAL_MS - performance.now();
+    if (wait <= 0) {
+      send();
+      return;
+    }
+    const timer = window.setTimeout(send, wait);
     return () => window.clearTimeout(timer);
   }, [mode, appearance.ground, appearance.accent]);
 
