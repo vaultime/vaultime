@@ -58,13 +58,13 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
   }
 
   return (
-    <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 xl:px-5">
+    <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 short:gap-4 short:pt-5 xl:px-5">
       <Logo className="justify-center" signedIn={session !== null} />
 
       <button
         type="button"
         onClick={onSearch}
-        className="flex h-11 items-center gap-2.5 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-hairline-strong hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+        className="flex h-11 items-center gap-2.5 short:h-9 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-hairline-strong hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
       >
         <Search className="size-4 shrink-0" strokeWidth={1.6} />
         <span className="min-w-0 flex-1 truncate">Search</span>
@@ -79,7 +79,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
             end={to !== "/library"}
             className={({ isActive }) =>
               cn(
-                "flex h-11 items-center gap-3 rounded-[10px] px-3 text-[15px] font-medium transition-colors",
+                "flex h-11 items-center gap-3 short:h-9 rounded-[10px] px-3 text-[15px] font-medium transition-colors",
                 isActive ? "bg-raised text-text" : "text-faint hover:bg-raised/60 hover:text-soft",
               )
             }
@@ -159,7 +159,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
         </ul>
       </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-faint">
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-faint short:hidden">
         {appVersion && <span className="font-mono">v{appVersion}</span>}
         {/* Only where both fit on one line, the narrow rail puts them on two. */}
         {appVersion && <span aria-hidden="true" className="hidden size-[3px] rounded-full bg-faint/60 xl:block" />}

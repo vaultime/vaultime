@@ -11,6 +11,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Windows lower than the standard size, like the compact one. */
+@custom-variant short (@media (max-height: 760px));
+
 /* State variants from shadcn/tailwind.css, inlined so the shadcn CLI is not a dependency. */
 @custom-variant data-open {
   &:where([data-state="open"]),
