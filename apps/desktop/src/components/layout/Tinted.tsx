@@ -71,7 +71,7 @@ export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
       const available = line.clientWidth;
       let needed = title.offsetWidth;
       let size = parseFloat(getComputedStyle(line).fontSize);
-      // Fraunces draws wider at smaller sizes, so one step can fall short.
+      // Letter spacing and hinting do not scale exactly, so one step can fall short.
       while (needed > available && size > HERO_TITLE_MIN_FONT_PX) {
         size = Math.max(Math.floor((size * available) / needed), HERO_TITLE_MIN_FONT_PX);
         title.style.fontSize = `${size}px`;
@@ -85,7 +85,7 @@ export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(line);
-    // Fraunces may still be loading, and it sets different widths.
+    // The font may still be loading, and it sets different widths.
     void document.fonts.ready.then(fit);
     return () => observer.disconnect();
   }, [text]);
@@ -93,7 +93,7 @@ export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
   return (
     <h1
       ref={lineRef}
-      className="font-display mt-3.5 text-[clamp(48px,5.4vw,80px)] leading-[0.95] font-medium tracking-[-0.03em] whitespace-nowrap"
+      className="font-display mt-3.5 text-[clamp(48px,5.4vw,80px)] leading-[0.95] whitespace-nowrap"
       style={{ color: tint.ink }}
     >
       {/* The line keeps the full size height, the shrunk title sits on its baseline. */}
@@ -115,7 +115,7 @@ export function TintedSentence({
 }) {
   return (
     <p
-      className={cn("font-display mt-5 max-w-[620px] text-2xl leading-[1.3] text-pretty", className)}
+      className={cn("font-prose mt-5 max-w-[620px] text-2xl leading-[1.3] text-pretty", className)}
       style={{ color: tint.soft }}
     >
       {children}

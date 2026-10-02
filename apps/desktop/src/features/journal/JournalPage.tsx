@@ -345,7 +345,7 @@ function DaySection({
                   <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
                     {formatClockTime(parseVaultimeDate(change.changed_at))}
                   </span>
-                  <p className="font-display flex min-w-0 flex-1 items-baseline gap-2.5 text-[20px] leading-snug">
+                  <p className="font-prose flex min-w-0 flex-1 items-baseline gap-2.5 text-[20px] leading-snug">
                     <GameStatusIcon status={change.status} className="size-4 shrink-0 translate-y-0.5 text-violet" />
                     <span>
                       <PhraseText

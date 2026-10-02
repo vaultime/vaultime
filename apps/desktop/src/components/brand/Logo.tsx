@@ -40,7 +40,7 @@ export function Logo({ className, signedIn = false }: { className?: string; sign
       title={signedIn ? "Signed in to cloud backup" : undefined}
     >
       <LogoMark className="size-[28px] shrink-0" pivotClassName={signedIn ? "fill-text" : "fill-violet"} />
-      <span className="font-display text-[25px] leading-none font-semibold tracking-[-0.02em]">
+      <span className="font-wordmark text-[25px] leading-none">
         Vaultime
       </span>
     </span>

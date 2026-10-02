@@ -3,10 +3,11 @@
 
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/fraunces/full.css";
-@import "@fontsource-variable/fraunces/full-italic.css";
-@import "@fontsource-variable/hanken-grotesk";
-@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/mona-sans/standard.css";
+@import "@fontsource-variable/mona-sans/standard-italic.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist/wght-italic.css";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -48,9 +49,26 @@
   }
 }
 
-/* Fraunces with softened corners and its slightly wonky details. */
+/* Mona Sans at full width, for titles. */
 @utility font-display {
-  font-variation-settings: "SOFT" 50, "WONK" 1;
+  font-stretch: 125%;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* Mona Sans at normal width and a little lighter, for sentences about play. */
+@utility font-prose {
+  @apply font-display;
+  font-stretch: 100%;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+}
+
+/* The wordmark, Mona Sans at full width, bold and tight. */
+@utility font-wordmark {
+  @apply font-display;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 /* Small uppercase labels above values and sections. */
@@ -89,9 +107,9 @@
 }
 
 @theme inline {
-  --font-display: "Fraunces Variable", Georgia, serif;
-  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-display: "Mona Sans Variable", system-ui, sans-serif;
+  --font-sans: "Geist Variable", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
   /* Named palette. */
   --color-ink: var(--ink);

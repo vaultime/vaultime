@@ -54,7 +54,7 @@ export function GameGrid({
     <section id="all-games" aria-labelledby="all-games-title" className="scroll-mt-6 px-8 pt-12 xl:px-14">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <h2 id="all-games-title" className="font-display text-[34px] font-normal">
+          <h2 id="all-games-title" className="font-display text-[34px]">
             All games
           </h2>
           <span className="font-mono text-sm text-faint">{sorted.length}</span>

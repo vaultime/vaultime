@@ -25,7 +25,7 @@ export function Shelf({
   return (
     <section aria-labelledby="shelf-title" className="@container px-8 pt-8 xl:px-14">
       <div className="flex items-baseline justify-between">
-        <h2 id="shelf-title" className="font-display text-[34px] font-normal">
+        <h2 id="shelf-title" className="font-display text-[34px]">
           Continue playing
         </h2>
         <button

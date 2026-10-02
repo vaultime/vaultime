@@ -82,7 +82,7 @@ export function SessionLine({
         {when ?? formatSessionStart(session.started_at_wall)}
       </span>
       <div className="min-w-0 flex-1">
-        <div className={cn("font-display text-[22px] leading-snug", live && "text-violet")}>
+        <div className={cn("font-prose text-[22px] leading-snug text-pretty", live && "text-violet")}>
           <PhraseText phrase={describeSession(session, { gameTitle, gameSessions, earlierMs })} emColor={titleColor} />
         </div>
         <div className="mt-1 text-[13px] text-faint">
@@ -113,7 +113,7 @@ export function SessionLine({
             {error && <p className="w-full text-[13px] text-amber">{error}</p>}
           </form>
         ) : (
-          note && <p className="font-display mt-1.5 text-[17px] leading-snug text-soft italic">“{note}”</p>
+          note && <p className="font-prose mt-1.5 text-[17px] leading-snug text-soft italic">“{note}”</p>
         )}
       </div>
       {!editing && (onSaveNote || (onCorrected && !live)) && (

@@ -24,11 +24,11 @@ export function PageHeader({
     <header className="flex items-end justify-between gap-10 border-b border-rule px-8 pt-12 pb-8 xl:px-14">
       <div className="min-w-0">
         <div className="label-caps">{overline}</div>
-        <h1 className="font-display mt-3 text-[clamp(56px,6vw,84px)] leading-[0.95] font-medium tracking-[-0.03em]">
+        <h1 className="font-display mt-3 text-[clamp(56px,6vw,84px)] leading-[0.95]">
           {title}
         </h1>
         {children && (
-          <p className="font-display mt-4 max-w-[640px] text-[23px] leading-[1.3] text-pretty text-soft">
+          <p className="font-prose mt-4 max-w-[640px] text-[23px] leading-[1.3] text-pretty text-soft">
             {children}
           </p>
         )}
