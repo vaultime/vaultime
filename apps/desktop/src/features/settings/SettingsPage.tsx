@@ -164,10 +164,11 @@ export function SettingsPage() {
           savedIdle.current = next;
           setError(null);
           // The live bar shows the idle threshold, so the library reloads it.
-          return refresh();
+          refresh().catch(() => {});
         })
         .catch((saveError) => {
-          setIdleSeconds(savedIdle.current);
+          // A newer change still waiting stays in the field.
+          if (!pendingIdle.current) setIdleSeconds(savedIdle.current);
           setError(describeError(saveError));
         });
     }, IDLE_SAVE_DELAY_MS);
