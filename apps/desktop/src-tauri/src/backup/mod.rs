@@ -23,7 +23,7 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
-    DATABASE_FILE, HASH_BUFFER_BYTES,
+    DATABASE_FILE, HASH_BUFFER_BYTES, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -35,8 +35,9 @@ use crate::platform::process::file_name;
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 /// Settings that belong to this PC. A restore keeps the local values, so a
-/// backup cannot send the daily backups to a folder of its choosing, and the
-/// look stays with the background picture, which backups leave out.
+/// backup cannot send the daily backups to a folder of its choosing, the
+/// look stays with the background picture, which backups leave out, and the
+/// window keeps a size made for this screen.
 const DEVICE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
     APPEARANCE_MODE_SETTING,
@@ -44,6 +45,7 @@ const DEVICE_SETTINGS: &[&str] = &[
     APPEARANCE_ACCENT_SETTING,
     BACKGROUND_DIM_SETTING,
     BACKGROUND_BLUR_SETTING,
+    WINDOW_SIZE_SETTING,
 ];
 /// Where a restore keeps the current artwork until the new one is in place.
 const PREVIOUS_CACHE_DIR: &str = "previous-asset-cache";
@@ -1257,6 +1259,8 @@ mod tests {
         let fixture = fixture.back_up();
         crate::db::repo::settings::set_setting(&fixture.db, AUTO_BACKUP_FOLDER_SETTING, "D:/Mine")
             .unwrap();
+        crate::db::repo::settings::set_setting(&fixture.db, WINDOW_SIZE_SETTING, "compact")
+            .unwrap();
 
         fixture.restore().unwrap();
         let setting = |key| crate::db::repo::settings::get_setting(&fixture.db, key).unwrap();
@@ -1268,6 +1272,7 @@ mod tests {
             setting(crate::constants::IDLE_THRESHOLD_SETTING).as_deref(),
             Some("600")
         );
+        assert_eq!(setting(WINDOW_SIZE_SETTING).as_deref(), Some("compact"));
         fixture.finish();
     }
 

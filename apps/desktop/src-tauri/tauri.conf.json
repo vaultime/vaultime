@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Vaultime",
-        "width": 1280,
-        "height": 800,
+        "width": 1024,
+        "height": 640,
         "minWidth": 900,
         "minHeight": 600,
         "resizable": true,

@@ -19,6 +19,7 @@ pub mod platform;
 pub mod secure_storage;
 pub mod tracking;
 pub mod tray;
+pub mod window_size;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -52,17 +53,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main_window(app);
         }))
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .level(LevelFilter::Info)
-                .targets([
-                    Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::LogDir { file_name: None }),
-                ])
-                .max_file_size(LOG_MAX_FILE_BYTES)
-                .rotation_strategy(RotationStrategy::KeepSome(LOG_FILES_KEPT))
-                .build(),
-        )
+        .plugin(log_plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -114,6 +105,8 @@ pub fn run() {
             commands::set_setting,
             commands::get_tracking_diagnostics,
             commands::tray_available,
+            commands::get_window_size,
+            commands::set_window_size,
             commands::set_cloud_signed_in,
             commands::discover_games,
             commands::discover_steam_games,
@@ -147,6 +140,19 @@ pub fn run() {
                 back_up_on_quit(app);
             }
         });
+}
+
+/// Logs to the console and to rotated files in the app's log folder.
+fn log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri_plugin_log::Builder::new()
+        .level(LevelFilter::Info)
+        .targets([
+            Target::new(TargetKind::Stdout),
+            Target::new(TargetKind::LogDir { file_name: None }),
+        ])
+        .max_file_size(LOG_MAX_FILE_BYTES)
+        .rotation_strategy(RotationStrategy::KeepSome(LOG_FILES_KEPT))
+        .build()
 }
 
 /// Opens the database, registers this device, starts tracking and creates the tray.
@@ -213,7 +219,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // The window starts hidden and a login item leaves it that way, in the tray
     // or without one. Opening Vaultime again shows the window of this instance.
+    // It takes its size while still hidden, so it never shows at another one.
     app.manage(tray::create(app.handle()));
+    window_size::fit_main_window(app.handle(), true);
     if std::env::args().any(|arg| arg == tray::MINIMIZED_ARG) {
         tray::hide_main_window(app.handle());
     } else {

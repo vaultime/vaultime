@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use log::warn;
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::AppContext;
 use crate::assets::{self, AssetManager, GameAssetView};
@@ -19,6 +19,7 @@ use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult}
 use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{
     BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, POLL_INTERVAL, STEAM_SOURCE,
+    WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::models::{
@@ -36,6 +37,7 @@ use crate::platform::activity::{foreground_detection_strategy, idle_detection_st
 use crate::platform::controller;
 use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
+use crate::window_size::{self, WindowSizeState};
 
 #[tauri::command]
 pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
@@ -408,6 +410,39 @@ pub struct TrackingDiagnostics {
 #[tauri::command]
 pub fn tray_available(tray: State<'_, crate::tray::TrayState>) -> bool {
     tray.available
+}
+
+fn main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, VaultimeError> {
+    app.get_webview_window("main")
+        .ok_or_else(|| VaultimeError::Invalid("the Vaultime window is not open".into()))
+}
+
+/// The window size picked on this PC and which presets fit its screen.
+#[tauri::command]
+pub fn get_window_size(
+    app: AppHandle,
+    db: State<'_, Arc<Database>>,
+) -> Result<WindowSizeState, VaultimeError> {
+    Ok(window_size::state(
+        &main_window(&app)?,
+        window_size::saved_choice(&db),
+    ))
+}
+
+/// Saves a window size for this PC and gives the window that size right away.
+#[tauri::command]
+pub fn set_window_size(
+    app: AppHandle,
+    db: State<'_, Arc<Database>>,
+    choice: String,
+) -> Result<WindowSizeState, VaultimeError> {
+    if !window_size::is_choice(&choice) {
+        return Err(VaultimeError::Invalid(format!(
+            "{choice} is not a window size"
+        )));
+    }
+    settings::set_setting(&db, WINDOW_SIZE_SETTING, &choice)?;
+    Ok(window_size::apply(&main_window(&app)?, &choice, false))
 }
 
 #[tauri::command]

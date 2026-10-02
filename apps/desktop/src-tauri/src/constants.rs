@@ -65,6 +65,36 @@ pub const ASSET_CACHE_DIR: &str = "asset-cache";
 /// File next to the database that holds this PC's device id.
 pub const DEVICE_ID_FILE: &str = "device-id";
 
+// Window
+
+/// Setting with the window size picked in Settings, the name of a preset or
+/// [`FREE_WINDOW`]. Belongs to this PC, a restore keeps it.
+pub const WINDOW_SIZE_SETTING: &str = "window_size";
+/// Fixed window sizes as name, width and height of the page in logical
+/// pixels, smallest first. All keep the 16:10 shape. The window in
+/// `tauri.conf.json` is created at the smallest, because GTK never shrinks a
+/// window that cannot be resized below the size it was created with. The
+/// names are the `WindowSizeChoice` values in `lib/types.ts`.
+pub const WINDOW_PRESETS: [(&str, u32, u32); 4] = [
+    ("compact", 1024, 640),
+    ("standard", 1280, 800),
+    ("large", 1536, 960),
+    ("extra_large", 1920, 1200),
+];
+/// The preset of a new install and the size a free window opens at.
+pub const DEFAULT_WINDOW_PRESET: &str = "standard";
+/// Window size choice that lets the player resize and maximize the window.
+pub const FREE_WINDOW: &str = "free";
+/// Narrowest page of a free window, in logical pixels. Same as `minWidth` in
+/// `tauri.conf.json`.
+pub const WINDOW_MIN_WIDTH_PX: f64 = 900.0;
+/// Lowest page of a free window, in logical pixels. Same as `minHeight` in
+/// `tauri.conf.json`.
+pub const WINDOW_MIN_HEIGHT_PX: f64 = 600.0;
+/// Height of the title bar in logical pixels, for when the system reports a
+/// smaller frame, as before the window was first shown.
+pub const WINDOW_TITLE_BAR_MIN_PX: f64 = 32.0;
+
 // Logging
 
 /// Size at which the log file is rotated.

@@ -237,6 +237,8 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         let _ = webview.show();
         let _ = window.show();
         let _ = window.unminimize();
+        // The screen may have changed while the window was away.
+        crate::window_size::fit_main_window(app, false);
         let _ = window.set_focus();
     }
 }
