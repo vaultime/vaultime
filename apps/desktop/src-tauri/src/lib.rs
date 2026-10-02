@@ -66,12 +66,18 @@ pub fn run() {
         )
         .setup(setup)
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event
-                && window.label() == "main"
-                && tray::close_to_tray(window.app_handle())
-            {
-                api.prevent_close();
-                tray::hide_main_window(window.app_handle());
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                WindowEvent::CloseRequested { api, .. }
+                    if tray::close_to_tray(window.app_handle()) =>
+                {
+                    api.prevent_close();
+                    tray::hide_main_window(window.app_handle());
+                }
+                WindowEvent::Resized(_) => window_size::on_main_resized(window.app_handle()),
+                _ => {}
             }
         })
         .invoke_handler(command_handler())

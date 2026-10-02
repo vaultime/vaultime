@@ -4,11 +4,13 @@
 //! Fixed window sizes, like a game client, or a free window.
 //!
 //! A preset locks the window: it cannot be resized or maximized. Windows then
-//! also leaves out Snap and the maximize on a title bar double click. GTK sizes
-//! a window that cannot be resized itself and asks the window manager for
-//! exactly that size, so it cannot be maximized either.
+//! also leaves out Snap and the maximize on a title bar double click. On Linux
+//! the window also gets its size as smallest and largest size, as tao makes it
+//! resizable again on the first configure, and a window manager that gets the
+//! same size for both cannot resize or maximize it.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use log::warn;
 use serde::Serialize;
@@ -16,7 +18,8 @@ use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Runtime, WebviewW
 
 use crate::constants::{
     DEFAULT_WINDOW_PRESET, FREE_WINDOW, WINDOW_MIN_HEIGHT_PX, WINDOW_MIN_WIDTH_PX, WINDOW_PRESETS,
-    WINDOW_SIZE_SETTING, WINDOW_TITLE_BAR_MIN_PX,
+    WINDOW_SIZE_SETTING, WINDOW_TITLE_BAR_MIN_LINUX_PX, WINDOW_TITLE_BAR_MIN_PX,
+    WINDOW_WAYLAND_PANEL_PX,
 };
 use crate::db::connection::Database;
 use crate::db::repo::settings;
@@ -123,6 +126,30 @@ pub fn free_page(wanted: Extent, screen: Screen) -> Extent {
     }
 }
 
+/// The room a work area leaves for a window. On Wayland the work area is the
+/// whole monitor, as there is no way to ask for panels, so room for one is
+/// left when the two match.
+pub fn usable_area(work_area: Extent, monitor: Extent, linux: bool) -> Extent {
+    if linux && work_area.matches(monitor) {
+        Extent {
+            width: work_area.width,
+            height: work_area.height - WINDOW_WAYLAND_PANEL_PX,
+        }
+    } else {
+        work_area
+    }
+}
+
+/// The least title bar to count with when the system reports less, as
+/// before the window was first shown. GNOME's header bar is taller.
+pub fn title_bar_allowance(linux: bool) -> f64 {
+    if linux {
+        WINDOW_TITLE_BAR_MIN_LINUX_PX
+    } else {
+        WINDOW_TITLE_BAR_MIN_PX
+    }
+}
+
 /// A preset for Settings.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct WindowPresetView {
@@ -190,6 +217,19 @@ fn placement<R: Runtime>(window: &WebviewWindow<R>) -> Option<Placement> {
     let scale = monitor.scale_factor();
     let work_area = monitor.work_area();
     let area: LogicalSize<f64> = work_area.size.to_logical(scale);
+    let whole: LogicalSize<f64> = monitor.size().to_logical(scale);
+    let linux = cfg!(target_os = "linux");
+    let area = usable_area(
+        Extent {
+            width: area.width,
+            height: area.height,
+        },
+        Extent {
+            width: whole.width,
+            height: whole.height,
+        },
+        linux,
+    );
     let page: LogicalSize<f64> = window.inner_size().ok()?.to_logical(scale);
     let outer: LogicalSize<f64> = window.outer_size().ok()?.to_logical(scale);
     let frame = Extent {
@@ -206,13 +246,10 @@ fn placement<R: Runtime>(window: &WebviewWindow<R>) -> Option<Placement> {
     };
     Some(Placement {
         screen: Screen {
-            area: Extent {
-                width: area.width,
-                height: area.height,
-            },
+            area,
             frame: Extent {
                 width: frame.width,
-                height: (frame.height - hidden_bottom).max(WINDOW_TITLE_BAR_MIN_PX),
+                height: (frame.height - hidden_bottom).max(title_bar_allowance(linux)),
             },
         },
         origin: work_area.position,
@@ -223,6 +260,19 @@ fn placement<R: Runtime>(window: &WebviewWindow<R>) -> Option<Placement> {
         },
         scale,
     })
+}
+
+/// Set when the window has to be fitted once more after its next resize: on
+/// Linux after it left the maximized state, as Wayland ends the app on size
+/// changes sent while that is under way, and when no monitor could be found
+/// yet, as for a hidden window on Wayland.
+static FIT_AFTER_RESIZE: AtomicBool = AtomicBool::new(false);
+
+/// Fits the main window again when a fit waited for this resize.
+pub fn on_main_resized<R: Runtime>(app: &AppHandle<R>) {
+    if FIT_AFTER_RESIZE.swap(false, Ordering::SeqCst) {
+        fit_main_window(app, false);
+    }
 }
 
 /// What the window and its screen allow for `choice`, without changing anything.
@@ -240,6 +290,11 @@ pub fn apply<R: Runtime>(
     opening: bool,
 ) -> WindowSizeState {
     let placement = placement(window);
+    let linux = cfg!(target_os = "linux");
+    // Once, so a monitor that never shows up cannot start a loop of fits.
+    if linux && opening && placement.is_none() {
+        FIT_AFTER_RESIZE.store(true, Ordering::SeqCst);
+    }
     let screen = placement.as_ref().map(|placement| placement.screen);
     let page = placement.as_ref().map(|placement| placement.page);
     let was_resizable = window.is_resizable().unwrap_or(true);
@@ -249,6 +304,11 @@ pub fn apply<R: Runtime>(
 
     if locked && window.is_maximized().unwrap_or(false) {
         report(window.unmaximize(), "leave the maximized window");
+        // Locked and sized once the window manager has let go of it.
+        if linux {
+            FIT_AFTER_RESIZE.store(true, Ordering::SeqCst);
+            return state;
+        }
     }
     // The style first: Windows keeps the outer size when it changes, so the
     // page size is set after it.
@@ -268,10 +328,42 @@ pub fn apply<R: Runtime>(
         screen.map_or(wanted, |screen| free_page(wanted, screen))
     };
     let changed = opening || page.is_none_or(|page| !page.matches(size));
+    if linux {
+        // Limits first, so the size below is never outside them.
+        report(
+            window.set_min_size(None::<LogicalSize<f64>>),
+            "free the smallest size",
+        );
+        report(
+            window.set_max_size(None::<LogicalSize<f64>>),
+            "free the largest size",
+        );
+    }
     if changed || was_resizable == locked {
         report(
             window.set_size(LogicalSize::new(size.width, size.height)),
             "resize the window",
+        );
+    }
+    if linux {
+        let (smallest, largest) = if locked {
+            (size, Some(size))
+        } else {
+            (
+                Extent {
+                    width: WINDOW_MIN_WIDTH_PX,
+                    height: WINDOW_MIN_HEIGHT_PX,
+                },
+                None,
+            )
+        };
+        report(
+            window.set_min_size(Some(LogicalSize::new(smallest.width, smallest.height))),
+            "set the smallest size",
+        );
+        report(
+            window.set_max_size(largest.map(|size| LogicalSize::new(size.width, size.height))),
+            "set the largest size",
         );
     }
     if changed {
@@ -321,6 +413,18 @@ pub fn fit_main_window<R: Runtime>(app: &AppHandle<R>, opening: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leaves_room_for_a_panel_when_wayland_reports_the_whole_monitor() {
+        let monitor = extent(1920.0, 1080.0);
+        let wayland = usable_area(monitor, monitor, true);
+        assert!((wayland.height - (1080.0 - WINDOW_WAYLAND_PANEL_PX)).abs() < f64::EPSILON);
+        // A work area that already leaves out a panel stays as it is.
+        let x11 = extent(1920.0, 1040.0);
+        assert_eq!(usable_area(x11, monitor, true), x11);
+        assert_eq!(usable_area(monitor, monitor, false), monitor);
+        assert!(title_bar_allowance(true) > title_bar_allowance(false));
+    }
 
     fn extent(width: f64, height: f64) -> Extent {
         Extent { width, height }
