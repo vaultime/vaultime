@@ -122,6 +122,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::open_game_asset_source,
         commands::import_game_asset,
         commands::crop_game_asset,
+        commands::delete_game_asset,
         commands::set_preferred_game_asset,
         commands::list_sessions,
         commands::get_active_sessions,

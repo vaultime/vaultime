@@ -94,6 +94,16 @@ pub fn delete_non_user_assets_for_game(db: &Database, game_id: &str) -> Result<V
     })
 }
 
+/// Removes one asset row. False when there was none.
+pub fn delete_asset(db: &Database, asset_id: &str) -> Result<bool> {
+    db.with_conn(|conn| {
+        let deleted = conn
+            .execute("DELETE FROM game_assets WHERE id = ?1", [asset_id])
+            .map_err(map_db)?;
+        Ok(deleted > 0)
+    })
+}
+
 /// Points an asset at a new cached image, as after the player cropped it.
 pub fn replace_asset_image(
     db: &Database,

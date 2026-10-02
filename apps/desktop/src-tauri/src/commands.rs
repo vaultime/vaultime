@@ -182,6 +182,16 @@ pub fn crop_game_asset(
     assets::crop_game_asset(&db, &asset_manager, &game_id, &asset_id, crop)
 }
 
+#[tauri::command(async)]
+pub fn delete_game_asset(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    game_id: String,
+    asset_id: String,
+) -> Result<Vec<GameAssetView>, VaultimeError> {
+    assets::delete_game_asset(&db, &asset_manager, &game_id, &asset_id)
+}
+
 #[tauri::command]
 pub fn set_preferred_game_asset(
     db: State<'_, Arc<Database>>,

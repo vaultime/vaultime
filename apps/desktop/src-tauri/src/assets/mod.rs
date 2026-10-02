@@ -159,10 +159,14 @@ pub fn scan_game_assets(
         .filter_map(|asset| asset.hash)
         .collect();
 
-    let candidates = find_candidates(&game)?;
+    // Images the player deleted stay deleted.
+    let dismissed = parse_game_metadata(&game).dismissed_artwork;
+    let candidates = find_candidates(&game)?
+        .into_iter()
+        .filter(|candidate| !dismissed.contains(candidate.path.to_string_lossy().as_ref()));
     let mut inserted_assets = Vec::new();
 
-    for candidate in candidates.into_iter().take(MAX_SCANNED_ASSETS) {
+    for candidate in candidates.take(MAX_SCANNED_ASSETS) {
         match cache_candidate(asset_manager, &game, &candidate, false) {
             Ok(cached) if picked_hashes.contains(&cached.hash) => {
                 let _ = fs::remove_file(&cached.cache_path);
@@ -297,6 +301,37 @@ pub fn import_game_asset(
     };
 
     use_cover(db, &game, &asset.id, Some(crop))?;
+    // A file the player deleted before may come back by hand.
+    let game = games::get_game(db, game_id)?;
+    let mut metadata = parse_game_metadata(&game);
+    if metadata.dismissed_artwork.remove(source_path) {
+        games::set_metadata(db, game_id, &metadata)?;
+    }
+    list_game_assets(db, game_id)
+}
+
+/// Deletes one of the game's images with its cached copy, never the file it
+/// came from. A scan does not bring it back. When it was the cover, the next
+/// image takes over, the player's own first.
+pub fn delete_game_asset(
+    db: &Database,
+    asset_manager: &AssetManager,
+    game_id: &str,
+    asset_id: &str,
+) -> Result<Vec<GameAssetView>> {
+    let (game, asset) = game_and_asset(db, game_id, asset_id)?;
+    game_assets::delete_asset(db, &asset.id)?;
+    cleanup_assets(asset_manager, std::slice::from_ref(&asset));
+
+    let mut metadata = parse_game_metadata(&game);
+    let was_cover = metadata.preferred_cover_asset_id.as_deref() == Some(asset.id.as_str());
+    metadata.cover_crops.remove(&asset.id);
+    metadata.dismissed_artwork.insert(asset.file_path.clone());
+    let game = games::set_metadata(db, game_id, &metadata)?;
+    if was_cover {
+        let remaining = game_assets::list_assets_for_game(db, game_id)?;
+        ensure_preferred_asset(db, &game, &remaining, None, None)?;
+    }
     list_game_assets(db, game_id)
 }
 
@@ -1109,6 +1144,152 @@ mod tests {
             )
             .is_err()
         );
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    /// A game whose folder holds `cover.png`, scanned once.
+    fn scanned_game(db: &Database, asset_manager: &AssetManager) -> (Game, PathBuf) {
+        let folder = asset_manager.cache_dir().join("Game Folder");
+        fs::create_dir_all(&folder).unwrap();
+        let cover = folder.join("cover.png");
+        write_logo(&cover);
+        let game = games::create_game(
+            db,
+            &CreateGame {
+                title: "Scanned Game".into(),
+                executable_path: None,
+                install_folder: Some(folder.to_string_lossy().to_string()),
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        scan_game_assets(db, asset_manager, &game.id).unwrap();
+        (game, cover)
+    }
+
+    #[test]
+    fn deleting_an_image_removes_its_row_and_cached_copy_only() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let (game, cover) = scanned_game(&db, &asset_manager);
+        let scanned = list_game_assets(&db, &game.id).unwrap().remove(0);
+        let cached = PathBuf::from(scanned.cache_path.clone().unwrap());
+        assert!(cached.exists());
+
+        let left = delete_game_asset(&db, &asset_manager, &game.id, &scanned.id).unwrap();
+        assert!(left.is_empty());
+        assert!(game_assets::get_asset(&db, &scanned.id).is_err());
+        assert!(!cached.exists());
+        assert!(cover.exists(), "the original file stays");
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn deleting_the_cover_in_use_hands_over_to_the_next_image() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let (game, _) = scanned_game(&db, &asset_manager);
+        let logo = asset_manager.cache_dir().join("logo.png");
+        image::RgbImage::from_pixel(300, 400, image::Rgb([40, 200, 90]))
+            .save_with_format(&logo, ImageFormat::Png)
+            .unwrap();
+        let assets =
+            import_game_asset(&db, &asset_manager, &game.id, &logo.to_string_lossy(), None)
+                .unwrap();
+        let picked = assets.iter().find(|asset| asset.is_preferred).unwrap();
+        assert_eq!(picked.source, "user_picked");
+
+        let left = delete_game_asset(&db, &asset_manager, &game.id, &picked.id).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].source, "scanned_local");
+        assert!(left[0].is_preferred);
+        assert_eq!(
+            preferred_asset_id(&games::get_game(&db, &game.id).unwrap()).as_deref(),
+            Some(left[0].id.as_str())
+        );
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn a_deleted_image_stays_out_of_scans_until_added_by_hand() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let (game, cover) = scanned_game(&db, &asset_manager);
+        let scanned = list_game_assets(&db, &game.id).unwrap().remove(0);
+        delete_game_asset(&db, &asset_manager, &game.id, &scanned.id).unwrap();
+
+        assert!(
+            scan_game_assets(&db, &asset_manager, &game.id)
+                .unwrap()
+                .is_empty()
+        );
+
+        let added = import_game_asset(
+            &db,
+            &asset_manager,
+            &game.id,
+            &cover.to_string_lossy(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0].source, "user_picked");
+        assert!(
+            parse_game_metadata(&games::get_game(&db, &game.id).unwrap())
+                .dismissed_artwork
+                .is_empty()
+        );
+        // The scan now finds the file again, but it is the player's image already.
+        assert_eq!(
+            scan_game_assets(&db, &asset_manager, &game.id)
+                .unwrap()
+                .len(),
+            1
+        );
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn deleting_never_touches_a_file_outside_the_cache() {
+        let db = Database::open_in_memory().unwrap();
+        let root = test_cache();
+        let asset_manager = AssetManager::new(root.cache_dir().join("cache"));
+        fs::create_dir_all(asset_manager.cache_dir()).unwrap();
+        let outside = root.cache_dir().join("outside.png");
+        fs::write(&outside, b"png").unwrap();
+        let game = create_game(&db);
+        let asset = game_assets::create_asset(
+            &db,
+            &game.id,
+            "cover",
+            "scanned_local",
+            "/games/cover.png",
+            Some(&outside.to_string_lossy()),
+            None,
+        )
+        .unwrap();
+
+        delete_game_asset(&db, &asset_manager, &game.id, &asset.id).unwrap();
+        assert!(game_assets::get_asset(&db, &asset.id).is_err());
+        assert!(outside.exists());
+
+        fs::remove_dir_all(root.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn deleting_needs_an_image_of_the_game() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let (game, _) = scanned_game(&db, &asset_manager);
+        let other = create_game(&db);
+        let scanned = list_game_assets(&db, &game.id).unwrap().remove(0);
+
+        assert!(delete_game_asset(&db, &asset_manager, &other.id, &scanned.id).is_err());
+        assert!(game_assets::get_asset(&db, &scanned.id).is_ok());
 
         fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
     }
