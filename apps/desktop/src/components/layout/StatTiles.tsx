@@ -34,7 +34,7 @@ export function StatTiles({ label, tiles }: { label: string; tiles: StatTile[] }
           >
             {tile.value}
           </div>
-          <div className="mt-1.5 truncate text-[13px] text-faint">{tile.note}</div>
+          <div className="mt-1.5 line-clamp-2 text-[13px] text-pretty text-faint">{tile.note}</div>
         </div>
       ))}
     </section>
