@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
@@ -103,12 +103,16 @@ export function JournalPage() {
   const weekEnd = addDays(weekStart, DAYS_PER_WEEK);
 
   const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
-  const sessionsByGame = new Map<string, Session[]>();
-  for (const session of sessions) {
-    const list = sessionsByGame.get(session.game_id);
-    if (list) list.push(session);
-    else sessionsByGame.set(session.game_id, [session]);
-  }
+  // Kept between polls, so session lines can reuse their sentences.
+  const sessionsByGame = useMemo(() => {
+    const byId = new Map<string, Session[]>();
+    for (const session of sessions) {
+      const list = byId.get(session.game_id);
+      if (list) list.push(session);
+      else byId.set(session.game_id, [session]);
+    }
+    return byId;
+  }, [sessions]);
 
   const days = groupWeek(sessions, statusChanges, weekStart, now);
 

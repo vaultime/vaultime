@@ -235,7 +235,7 @@ function standoutWordings(session: Session, context: SessionContext, words: Line
   const shape = shapeOf(session);
   const brief = shape === "quick" || shape === "short";
   const earlier = context.gameSessions.filter(
-    (other) => other.id !== session.id && countsAsPlay(other) && parseVaultimeDate(other.started_at_wall) < started,
+    (other) => other.id !== session.id && countsAsPlay(other) && other.started_at_wall < session.started_at_wall,
   );
   const previous = earlier.reduce<Session | null>(
     (latest, other) => (!latest || other.started_at_wall > latest.started_at_wall ? other : latest),

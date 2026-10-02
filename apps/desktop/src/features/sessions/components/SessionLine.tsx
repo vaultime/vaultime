@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { NotebookPen, Scissors } from "lucide-react";
 import { PhraseText } from "@/components/media/PhraseText";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
@@ -49,6 +49,11 @@ export function SessionLine({
   onCorrected?: () => void;
 }) {
   const trustNote = sessionTrustNote(session, events);
+  // The game's history can be long, and the page re-renders on every poll.
+  const line = useMemo(
+    () => describeSession(session, { gameTitle, gameSessions, earlierMs }),
+    [session, gameTitle, gameSessions, earlierMs],
+  );
   const live = !session.ended_at_wall;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -83,7 +88,7 @@ export function SessionLine({
       </span>
       <div className="min-w-0 flex-1">
         <div className={cn("font-prose text-[22px] leading-snug text-pretty", live && "text-violet")}>
-          <PhraseText phrase={describeSession(session, { gameTitle, gameSessions, earlierMs })} emColor={titleColor} />
+          <PhraseText phrase={line} emColor={titleColor} />
         </div>
         <div className="mt-1 text-[13px] text-faint">
           {sessionAmounts(session)}
