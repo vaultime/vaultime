@@ -4,14 +4,17 @@
 import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS } from "@/lib/constants";
 import { at, event, session } from "@/test/sessions";
+import type { Session } from "@/lib/types";
 import {
   busiestMonthSentence,
   describeSession,
   gamePlaytime,
   lastPlayedLine,
   libraryPlaytime,
+  phraseString,
   rhythmSentence,
   sessionAmounts,
+  type SessionContext,
   sessionTrustNote,
   shapesSentence,
   statusSentence,
@@ -20,29 +23,119 @@ import {
   yearSentence,
 } from "./sentences";
 
+/** Every way a session can be put, found by giving it other ids. */
+function wordings(base: Session, context: SessionContext = {}): Set<string> {
+  return new Set(
+    Array.from({ length: 40 }, (_, index) => phraseString(describeSession({ ...base, id: `variant-${index}` }, context))),
+  );
+}
+
 describe("describeSession", () => {
   it("reads length and time of day", () => {
-    expect(describeSession(session(at(2026, 9, 29, 9, 0), 10))).toBe("A quick look in the morning");
-    expect(describeSession(session(at(2026, 9, 29, 14, 0), 50))).toBe("A short afternoon session");
-    expect(describeSession(session(at(2026, 9, 29, 23, 30), 45))).toBe("A short session late at night");
-    expect(describeSession(session(at(2026, 9, 29, 15, 0), 90))).toBe("An afternoon session");
-    expect(describeSession(session(at(2026, 9, 29, 23, 16), 112))).toBe("A late night session");
-    expect(describeSession(session(at(2026, 9, 29, 20, 12), 165))).toBe("A long evening");
-    expect(describeSession(session(at(2026, 9, 29, 18, 0), 300))).toBe("A marathon evening");
+    expect(wordings(session(at(2026, 9, 29, 9, 0), 10))).toEqual(
+      new Set(["A quick look in the morning", "A few minutes in the morning", "A brief morning visit"]),
+    );
+    expect(wordings(session(at(2026, 9, 29, 14, 0), 50))).toEqual(
+      new Set(["A short afternoon session", "Fifty minutes in the afternoon", "An afternoon round"]),
+    );
+    expect(wordings(session(at(2026, 9, 29, 23, 30), 45))).toEqual(
+      new Set(["A short session late at night", "Forty-five minutes late at night", "A late night round"]),
+    );
+    expect(wordings(session(at(2026, 9, 29, 15, 0), 90))).toEqual(
+      new Set(["An afternoon session", "An hour and a half in the afternoon", "An afternoon of play"]),
+    );
+    expect(wordings(session(at(2026, 9, 29, 20, 12), 150))).toEqual(
+      new Set(["A long evening", "Most of the evening", "Two and a half hours in the evening"]),
+    );
+    expect(wordings(session(at(2026, 9, 29, 18, 0), 300))).toEqual(
+      new Set(["A marathon evening", "A whole evening of play", "Five hours in one go"]),
+    );
   });
 
-  it("names the game when asked", () => {
-    const evening = session(at(2026, 9, 29, 20, 12), 165);
-    expect(describeSession(evening, "Elden Ring")).toBe("A long evening in Elden Ring");
+  it("names the weekend and the small hours", () => {
+    expect(wordings(session(at(2026, 10, 3, 15, 0), 90))).toContain("A Saturday afternoon of play");
+    expect(wordings(session(at(2026, 10, 4, 2, 0), 90))).toEqual(
+      new Set(["A late night session", "An hour and a half in the small hours", "A Saturday night of play"]),
+    );
+  });
+
+  it("keeps the same words for the same session", () => {
+    const evening = session(at(2026, 9, 29, 20, 12), 150);
+    expect(describeSession(evening)).toEqual(describeSession({ ...evening }));
+  });
+
+  it("puts the game in italics", () => {
+    const evening = session(at(2026, 9, 29, 20, 12), 150);
+    expect(wordings(evening, { gameTitle: "Elden Ring" })).toEqual(
+      new Set(["A long evening in Elden Ring", "Most of the evening in Elden Ring", "Two and a half hours deep in Elden Ring"]),
+    );
+    expect(describeSession(evening, { gameTitle: "Elden Ring" }).em).toBe("Elden Ring");
     const live = { ...evening, ended_at_wall: null };
-    expect(describeSession(live)).toBe("Playing now");
-    expect(describeSession(live, "Elden Ring")).toBe("Playing Elden Ring now");
+    expect(describeSession(live)).toEqual({ before: "Playing now" });
+    expect(describeSession(live, { gameTitle: "Elden Ring" })).toEqual({ before: "Playing ", em: "Elden Ring", after: " now" });
   });
 
   it("says when all the time was taken out", () => {
     const discarded = session(at(2026, 9, 29, 20, 12), 165, { runtime_ms: 0, active_ms: 0, idle_ms: 0 });
-    expect(describeSession(discarded)).toBe("No play counted");
-    expect(describeSession(discarded, "Elden Ring")).toBe("No play counted for Elden Ring");
+    expect(describeSession(discarded)).toEqual({ before: "No play counted" });
+    expect(phraseString(describeSession(discarded, { gameTitle: "Elden Ring" }))).toBe("No play counted for Elden Ring");
+  });
+
+  describe("with the other sessions of the game", () => {
+    const gameTitle = "Hades II";
+    const earlier = session(at(2026, 9, 25, 20, 0), 60);
+
+    it("notes a first session, unless there was play before Vaultime", () => {
+      const first = session(at(2026, 9, 29, 20, 0), 15);
+      expect(wordings(first, { gameTitle, gameSessions: [first] })).toEqual(
+        new Set(["A first look at Hades II", "First steps in Hades II"]),
+      );
+      const long = session(at(2026, 9, 29, 20, 0), 150);
+      expect(wordings(long, { gameTitle, gameSessions: [long] })).toEqual(new Set(["A first evening in Hades II"]));
+      expect(wordings(first, { gameTitle, gameSessions: [first], earlierMs: 10 * HOUR_MS })).toContain(
+        "A quick look at Hades II in the evening",
+      );
+    });
+
+    it("notes a return after a break", () => {
+      const back = session(at(2026, 9, 29, 20, 0), 60);
+      const away = (start: string) => wordings(back, { gameTitle, gameSessions: [session(start, 60), back] });
+      expect(away(at(2026, 9, 10, 20, 0))).toEqual(
+        new Set(["Back to Hades II after two weeks", "A return to Hades II after two weeks"]),
+      );
+      expect(away(at(2026, 6, 15, 20, 0))).toContain("Back to Hades II after three months");
+      expect(away(at(2025, 8, 1, 20, 0))).toContain("Back to Hades II after over a year");
+    });
+
+    it("notes a game left running", () => {
+      const open = session(at(2026, 9, 29, 20, 0), 60, { active_ms: 10 * MINUTE_MS, idle_ms: 50 * MINUTE_MS });
+      expect(wordings(open, { gameTitle, gameSessions: [earlier, open] })).toEqual(
+        new Set(["Hades II stayed open through the evening", "Hades II ran mostly on its own"]),
+      );
+    });
+
+    it("notes the longest session yet", () => {
+      const before = [21, 22, 23, 24, 25].map((day) => session(at(2026, 9, day, 20, 0), 60));
+      const long = session(at(2026, 9, 29, 19, 0), 150);
+      expect(wordings(long, { gameTitle, gameSessions: [...before, long] })).toEqual(
+        new Set(["Your longest session of Hades II yet", "Two and a half hours of Hades II, your longest yet"]),
+      );
+      expect(wordings(long, { gameTitle, gameSessions: [...before.slice(1), long] })).toContain(
+        "A long evening in Hades II",
+      );
+    });
+
+    it("notes play past midnight and another round on the same day", () => {
+      const late = session(at(2026, 9, 29, 23, 0), 90);
+      expect(wordings(late, { gameTitle, gameSessions: [earlier, late] })).toEqual(
+        new Set(["Into the small hours with Hades II", "Past midnight in Hades II"]),
+      );
+      const afternoon = session(at(2026, 9, 29, 14, 0), 60);
+      const again = session(at(2026, 9, 29, 20, 0), 40);
+      expect(wordings(again, { gameTitle, gameSessions: [earlier, afternoon, again] })).toEqual(
+        new Set(["Another round of Hades II", "Back to Hades II for another go"]),
+      );
+    });
   });
 });
 
@@ -50,6 +143,14 @@ describe("sessionAmounts", () => {
   it("lists runtime, active and idle time", () => {
     const played = session(at(2026, 9, 29, 22, 10), 72, { active_ms: 65 * MINUTE_MS, idle_ms: 7 * MINUTE_MS });
     expect(sessionAmounts(played)).toBe("1 h 12 in all, 1 h 05 active, 7 min idle");
+  });
+
+  it("shortens a session that was all active or all idle", () => {
+    expect(sessionAmounts(session(at(2026, 9, 29, 22, 10), 72))).toBe("1 h 12, all of it active");
+    const idle = session(at(2026, 9, 29, 22, 10), 72, { active_ms: 0, idle_ms: 72 * MINUTE_MS });
+    expect(sessionAmounts(idle)).toBe("1 h 12, all of it idle");
+    const discarded = session(at(2026, 9, 29, 22, 10), 72, { runtime_ms: 0, active_ms: 0, idle_ms: 0 });
+    expect(sessionAmounts(discarded)).toBe("0 min in all, 0 min active, 0 min idle");
   });
 });
 
@@ -119,6 +220,36 @@ describe("weekSentence", () => {
     expect(
       weekSentence({ sessionsCount: 0, runtimeMs: 0, longestDay: null, daysPlayed: 0, current: false }).before,
     ).toBe("Nothing played that week.");
+  });
+
+  it("reads differently from week to week", () => {
+    const week = {
+      sessionsCount: 9,
+      runtimeMs: 10 * HOUR_MS,
+      longestDay: "Saturday",
+      daysPlayed: 4,
+      topTitle: "Balatro",
+      topMs: 7 * HOUR_MS,
+      gamesCount: 3,
+      current: false,
+    };
+    expect(phraseString(weekSentence({ ...week, weekNumber: 1 }))).toBe(
+      "Ten hours over nine sessions. Saturday was the longest day.",
+    );
+    expect(weekSentence({ ...week, weekNumber: 2 })).toEqual({
+      before: "Nine sessions, ten hours in all. Most of it went to ",
+      em: "Balatro",
+      after: ".",
+    });
+    expect(phraseString(weekSentence({ ...week, weekNumber: 2, topMs: 4 * HOUR_MS }))).toBe(
+      "Nine sessions, ten hours in all. Saturday was the longest day.",
+    );
+    expect(phraseString(weekSentence({ ...week, weekNumber: 3, gamesCount: 1 }))).toBe(
+      "Ten hours over nine sessions. All of it in Balatro.",
+    );
+    expect(phraseString(weekSentence({ ...week, sessionsCount: 1, daysPlayed: 1, weekNumber: 1 }))).toBe(
+      "Ten hours in one session. All of it on Saturday.",
+    );
   });
 });
 

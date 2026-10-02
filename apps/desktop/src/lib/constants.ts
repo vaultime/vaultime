@@ -155,6 +155,23 @@ export const SESSION_PLAIN_MAX_MS = 2 * HOUR_MS;
 /** Longest session that reads as long, longer ones are marathons. */
 export const SESSION_LONG_MAX_MS = 4 * HOUR_MS;
 
+/** Time away from a game after which a session reads as a return. */
+export const SESSION_RETURN_MIN_MS = 14 * DAY_MS;
+/** Earlier sessions a game needs before one can be its longest yet. */
+export const SESSION_RECORD_MIN_EARLIER = 5;
+/** Shortest session that can be called the longest yet. */
+export const SESSION_RECORD_MIN_MS = 2 * HOUR_MS;
+/** Share of idle time from which a session reads as left running. */
+export const SESSION_LEFT_RUNNING_MIN_SHARE = 0.6;
+/** Shortest session that can read as left running. */
+export const SESSION_LEFT_RUNNING_MIN_MS = 30 * MINUTE_MS;
+/** Play past midnight before a session reads as going into the small hours. */
+export const SESSION_PAST_MIDNIGHT_MIN_MS = 30 * MINUTE_MS;
+/** Durations under an hour round to this in sentences, longer ones to the half hour. */
+export const SESSION_WORDS_MINUTE_STEP_MS = 5 * MINUTE_MS;
+/** Share of a week's playtime one game needs to be named in the week sentence. */
+export const WEEK_TOP_GAME_MIN_SHARE = 0.6;
+
 /** Sessions in a part of the day before it can count as a habit. */
 export const HABIT_MIN_SESSIONS = 3;
 /** Share of runtime a part of the day needs to count as a habit. */

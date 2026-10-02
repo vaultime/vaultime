@@ -3,6 +3,7 @@
 
 import { useState, type FormEvent } from "react";
 import { NotebookPen, Scissors } from "lucide-react";
+import { PhraseText } from "@/components/media/PhraseText";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,8 @@ export function SessionLine({
   session,
   events,
   gameTitle,
+  gameSessions,
+  earlierMs,
   when,
   bordered = true,
   note,
@@ -29,6 +32,10 @@ export function SessionLine({
   events: SessionEvent[];
   /** Set when the list mixes games. */
   gameTitle?: string;
+  /** All sessions of the game, so the line can tell a first session, a return or a record. */
+  gameSessions?: Session[];
+  /** The game's playtime from before Vaultime. */
+  earlierMs?: number;
   /** Replaces the start day and time in the left column. */
   when?: string;
   bordered?: boolean;
@@ -73,7 +80,7 @@ export function SessionLine({
       </span>
       <div className="min-w-0 flex-1">
         <div className={cn("font-display text-[22px] leading-snug", live && "text-violet")}>
-          {describeSession(session, gameTitle)}
+          <PhraseText phrase={describeSession(session, { gameTitle, gameSessions, earlierMs })} />
         </div>
         <div className="mt-1 text-[13px] text-faint">
           {sessionAmounts(session)}

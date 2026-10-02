@@ -229,6 +229,8 @@ function GamePage({ gameId }: { gameId: string }) {
                   key={session.id}
                   session={session}
                   events={events}
+                  gameSessions={sessions}
+                  earlierMs={summary.earlier?.earlier_ms}
                   note={notes[session.id]}
                   onSaveNote={(note) => saveNote(session.id, note)}
                   onCorrected={() => void refresh()}

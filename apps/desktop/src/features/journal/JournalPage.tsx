@@ -102,8 +102,18 @@ export function JournalPage() {
   const weekEnd = addDays(weekStart, DAYS_PER_WEEK);
 
   const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
+  const sessionsByGame = new Map<string, Session[]>();
+  for (const session of sessions) {
+    const list = sessionsByGame.get(session.game_id);
+    if (list) list.push(session);
+    else sessionsByGame.set(session.game_id, [session]);
+  }
 
   const days = groupWeek(sessions, statusChanges, weekStart, now);
+
+  const weekGames = [
+    ...new Set([...days].reverse().flatMap((day) => day.sessions.filter(countsAsPlay).map((session) => session.game_id))),
+  ];
 
   /** A game's playtime up to a moment, with the playtime from before Vaultime. */
   const playedBefore = (gameId: string, moment: string) =>
@@ -134,12 +144,21 @@ export function JournalPage() {
   if (!loaded) return null;
 
   const longestDay = [...days].sort((a, b) => b.playedMs - a.playedMs)[0];
+  const weekRuntime = new Map<string, number>();
+  for (const session of days.flatMap((day) => day.sessions)) {
+    weekRuntime.set(session.game_id, (weekRuntime.get(session.game_id) ?? 0) + session.runtime_ms);
+  }
+  const [topGameId, topMs] = [...weekRuntime.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
   const title = offset === 0 ? "This week" : offset === -1 ? "Last week" : `Week of ${weekStart.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })}`;
   const sentence = weekSentence({
     sessionsCount: days.reduce((sum, day) => sum + day.sessions.filter(countsAsPlay).length, 0),
     runtimeMs: days.reduce((sum, day) => sum + day.playedMs, 0),
     longestDay: longestDay ? longestDay.start.toLocaleDateString(UI_LOCALE, { weekday: "long" }) : null,
     daysPlayed: days.filter((day) => day.sessions.some(countsAsPlay)).length,
+    topTitle: topGameId ? (byGame.get(topGameId)?.game.title ?? null) : null,
+    topMs,
+    gamesCount: weekGames.length,
+    weekNumber: isoWeekNumber(weekStart),
     current: offset === 0,
   });
   const weekYear = weekEnd.getFullYear() === now.getFullYear() ? "" : `, ${weekStart.getFullYear()}`;
@@ -169,6 +188,7 @@ export function JournalPage() {
             key={day.start.getTime()}
             day={day}
             byGame={byGame}
+            sessionsByGame={sessionsByGame}
             events={events}
             now={now}
             notes={notes}
@@ -216,6 +236,7 @@ function SharedStretch({
 function DaySection({
   day,
   byGame,
+  sessionsByGame,
   events,
   now,
   notes,
@@ -225,6 +246,7 @@ function DaySection({
 }: {
   day: JournalDay;
   byGame: Map<string, GameSummary>;
+  sessionsByGame: Map<string, Session[]>;
   events: SessionEvent[];
   now: Date;
   notes: Record<string, string>;
@@ -332,6 +354,8 @@ function DaySection({
                 session={session}
                 events={events}
                 gameTitle={byGame.get(session.game_id)?.game.title ?? "a removed game"}
+                gameSessions={sessionsByGame.get(session.game_id)}
+                earlierMs={byGame.get(session.game_id)?.earlier?.earlier_ms}
                 when={`${start} to ${end}`}
                 bordered={false}
                 note={notes[session.id]}

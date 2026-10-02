@@ -4,20 +4,28 @@
 // Play history written as plain sentences.
 
 import {
+  DAY_MS,
+  DAY_PART_HOURS,
+  DAYS_PER_WEEK,
   HABIT_MIN_SESSIONS,
   HABIT_MIN_SHARE,
   HOUR_MS,
   MINUTE_MS,
-  SESSION_LONG_MAX_MS,
-  SESSION_PLAIN_MAX_MS,
-  SESSION_QUICK_MAX_MS,
-  SESSION_SHORT_MAX_MS,
+  MONTHS_PER_YEAR,
+  SESSION_LEFT_RUNNING_MIN_MS,
+  SESSION_LEFT_RUNNING_MIN_SHARE,
+  SESSION_PAST_MIDNIGHT_MIN_MS,
+  SESSION_RECORD_MIN_EARLIER,
+  SESSION_RECORD_MIN_MS,
+  SESSION_RETURN_MIN_MS,
+  SESSION_WORDS_MINUTE_STEP_MS,
+  WEEK_TOP_GAME_MIN_SHARE,
   WEEKEND_DAYS_PER_WEEK,
   WORKING_DAYS_PER_WEEK,
 } from "@/lib/constants";
 import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/session-stats";
-import type { SessionShape, Streak } from "@/lib/stats";
+import { shapeOf, type SessionShape, type Streak } from "@/lib/stats";
 import {
   dayPartOf,
   formatDayRange,
@@ -28,6 +36,7 @@ import {
   type DayPart,
 } from "@/lib/time";
 import type { GameStatus, Session, SessionEvent } from "@/lib/types";
+import { stableHash } from "@/lib/utils";
 import { capitalize, numberWords } from "@/lib/words";
 
 /** A sentence with an optional part set in italics. */
@@ -108,28 +117,207 @@ function habitOf(sessions: Session[]): DayPart | null {
   return total > 0 && runtime / total >= HABIT_MIN_SHARE ? part : null;
 }
 
-/**
- * "A long evening", "A quick look in the morning", "Playing now". With a
- * title: "A long evening in Elden Ring", "Playing Elden Ring now".
- */
-export function describeSession(session: Session, gameTitle?: string): string {
-  if (!session.ended_at_wall) return gameTitle ? `Playing ${gameTitle} now` : "Playing now";
-  if (!countsAsPlay(session)) return gameTitle ? `No play counted for ${gameTitle}` : "No play counted";
-  const line = sessionShape(session);
-  return gameTitle ? `${line} in ${gameTitle}` : line;
+/** What a session line knows beyond the session itself. */
+export interface SessionContext {
+  /** Names the game, for lists that mix games. */
+  gameTitle?: string;
+  /**
+   * Sessions of the same game in any order, this one may be among them. They
+   * tell a first session, a return or a record from a plain one.
+   */
+  gameSessions?: Session[];
+  /** Playtime from before Vaultime, so the first tracked session is no first look. */
+  earlierMs?: number;
 }
 
-function sessionShape(session: Session): string {
-  const part = dayPartOf(parseVaultimeDate(session.started_at_wall));
-  const words = PART_WORDS[part];
-  const ms = session.runtime_ms;
-  if (ms < SESSION_QUICK_MAX_MS) return `A quick look ${words.adverb}`;
-  if (ms < SESSION_SHORT_MAX_MS) {
-    return part === "night" ? "A short session late at night" : `A short ${words.adjective} session`;
+/** The words a session line is built from. */
+interface LineWords {
+  /** "evening", "late night". */
+  adjective: string;
+  /** "in the evening", "in the small hours". */
+  adverb: string;
+  /** "evening", "night". */
+  noun: string;
+  /** "Sunday afternoon" at the weekend, the plain noun on other days. */
+  occasion: string;
+  /** Rounded length, "forty-five minutes", "an hour and a half". */
+  length: string;
+  night: boolean;
+}
+
+/** One way to put a session: the words around the title, and the line without a title. */
+type Wording = [titled: [before: string, after: string], alone: string];
+
+const LINES: Record<SessionShape, ((words: LineWords) => Wording)[]> = {
+  quick: [
+    (w) => [["A quick look at ", ` ${w.adverb}`], `A quick look ${w.adverb}`],
+    (w) => [["A few minutes of ", ` ${w.adverb}`], `A few minutes ${w.adverb}`],
+    (w) => [[`A brief ${w.adjective} visit to `, ""], `A brief ${w.adjective} visit`],
+  ],
+  short: [
+    (w) => {
+      const line = w.night ? `A short session ${w.adverb}` : `A short ${w.adjective} session`;
+      return [[`${line} in `, ""], line];
+    },
+    (w) => [[`${capitalize(w.length)} of `, ` ${w.adverb}`], `${capitalize(w.length)} ${w.adverb}`],
+    (w) => [[`${withArticle(w.adjective)} round of `, ""], `${withArticle(w.adjective)} round`],
+  ],
+  plain: [
+    (w) => [[`${withArticle(w.adjective)} session in `, ""], `${withArticle(w.adjective)} session`],
+    (w) => [[`${capitalize(w.length)} of `, ` ${w.adverb}`], `${capitalize(w.length)} ${w.adverb}`],
+    (w) => [[`${withArticle(w.occasion)} in `, ""], `${withArticle(w.occasion)} of play`],
+  ],
+  long: [
+    (w) => [[`A long ${w.noun} in `, ""], `A long ${w.noun}`],
+    (w) => [[`Most of the ${w.noun} in `, ""], `Most of the ${w.noun}`],
+    (w) => [[`${capitalize(w.length)} deep in `, ""], `${capitalize(w.length)} ${w.adverb}`],
+  ],
+  marathon: [
+    (w) => [[`A marathon ${w.noun} in `, ""], `A marathon ${w.noun}`],
+    (w) => [[`The whole ${w.noun} went to `, ""], `A whole ${w.noun} of play`],
+    (w) => [[`${capitalize(w.length)} of `, " in one go"], `${capitalize(w.length)} in one go`],
+  ],
+};
+
+/** "forty-five minutes", "an hour and a half", "three hours", rounded for prose. */
+function roundedLength(ms: number): string {
+  const step = SESSION_WORDS_MINUTE_STEP_MS;
+  if (ms < HOUR_MS - step / 2) {
+    const minutes = (Math.max(1, Math.round(ms / step)) * step) / MINUTE_MS;
+    return `${numberWords(minutes)} minutes`;
   }
-  if (ms < SESSION_PLAIN_MAX_MS) return `${withArticle(words.adjective)} session`;
-  if (ms < SESSION_LONG_MAX_MS) return `A long ${words.noun}`;
-  return `A marathon ${words.noun}`;
+  const halves = Math.round(ms / (HOUR_MS / 2));
+  const hours = Math.floor(halves / 2);
+  const half = halves % 2 === 1;
+  if (hours === 1) return half ? "an hour and a half" : "an hour";
+  return `${numberWords(hours)}${half ? " and a half" : ""} hours`;
+}
+
+/** "two weeks", "three months", "over a year". */
+function awayWords(from: Date, to: Date): string {
+  const months =
+    (to.getFullYear() - from.getFullYear()) * MONTHS_PER_YEAR +
+    to.getMonth() -
+    from.getMonth() -
+    (to.getDate() < from.getDate() ? 1 : 0);
+  if (months >= MONTHS_PER_YEAR) {
+    const years = Math.floor(months / MONTHS_PER_YEAR);
+    return years === 1 ? "over a year" : `over ${numberWords(years)} years`;
+  }
+  if (months >= 2) return `${numberWords(months)} months`;
+  const weeks = Math.floor((to.getTime() - from.getTime()) / (DAYS_PER_WEEK * DAY_MS));
+  return `${numberWords(weeks)} weeks`;
+}
+
+function lineWords(session: Session): LineWords {
+  const started = parseVaultimeDate(session.started_at_wall);
+  const part = dayPartOf(started);
+  const smallHours = part === "night" && started.getHours() < DAY_PART_HOURS.morning;
+  const words = PART_WORDS[part];
+  // Play after midnight still belongs to the night before.
+  const day = smallHours ? new Date(started.getFullYear(), started.getMonth(), started.getDate() - 1) : started;
+  // Sunday and Saturday.
+  const weekend = day.getDay() === 0 || day.getDay() === 6;
+  return {
+    adjective: words.adjective,
+    adverb: smallHours ? "in the small hours" : words.adverb,
+    noun: words.noun,
+    occasion: weekend ? `${day.toLocaleDateString(UI_LOCALE, { weekday: "long" })} ${words.noun}` : words.noun,
+    length: roundedLength(session.runtime_ms),
+    night: part === "night",
+  };
+}
+
+/** Ways to put a session that stands out: a first one, a return, a record, a late night. Null for others. */
+function standoutWordings(session: Session, context: SessionContext, words: LineWords): Wording[] | null {
+  if (!context.gameSessions) return null;
+  const started = parseVaultimeDate(session.started_at_wall);
+  const shape = shapeOf(session);
+  const brief = shape === "quick" || shape === "short";
+  const earlier = context.gameSessions.filter(
+    (other) => other.id !== session.id && countsAsPlay(other) && parseVaultimeDate(other.started_at_wall) < started,
+  );
+  const previous = earlier.reduce<Session | null>(
+    (latest, other) => (!latest || other.started_at_wall > latest.started_at_wall ? other : latest),
+    null,
+  );
+
+  if (!previous && (context.earlierMs ?? 0) < MINUTE_MS) {
+    return brief
+      ? [
+          [["A first look at ", ""], "A first look"],
+          [["First steps in ", ""], "First steps"],
+        ]
+      : [[[`A first ${words.noun} in `, ""], `The first ${words.noun}`]];
+  }
+
+  const previousEnd = previous?.ended_at_wall ? parseVaultimeDate(previous.ended_at_wall) : null;
+  if (previousEnd && started.getTime() - previousEnd.getTime() >= SESSION_RETURN_MIN_MS) {
+    const away = awayWords(previousEnd, started);
+    return [
+      [["Back to ", ` after ${away}`], `Back after ${away}`],
+      [["A return to ", ` after ${away}`], `A return after ${away}`],
+    ];
+  }
+
+  const idleShare = session.runtime_ms > 0 ? session.idle_ms / session.runtime_ms : 0;
+  if (session.runtime_ms >= SESSION_LEFT_RUNNING_MIN_MS && idleShare >= SESSION_LEFT_RUNNING_MIN_SHARE) {
+    return [
+      [["", ` stayed open through the ${words.noun}`], `Left open through the ${words.noun}`],
+      [["", " ran mostly on its own"], "Mostly left running"],
+    ];
+  }
+
+  const record =
+    earlier.length >= SESSION_RECORD_MIN_EARLIER &&
+    session.runtime_ms >= SESSION_RECORD_MIN_MS &&
+    earlier.every((other) => other.runtime_ms < session.runtime_ms);
+  if (record) {
+    return [
+      [["Your longest session of ", " yet"], "Your longest session yet"],
+      [[`${capitalize(words.length)} of `, ", your longest yet"], `${capitalize(words.length)}, your longest yet`],
+    ];
+  }
+
+  const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
+  const midnight = new Date(started.getFullYear(), started.getMonth(), started.getDate() + 1);
+  if (ended && ended.getTime() - midnight.getTime() >= SESSION_PAST_MIDNIGHT_MIN_MS) {
+    return [
+      [["Into the small hours with ", ""], "Into the small hours"],
+      [["Past midnight in ", ""], "Well past midnight"],
+    ];
+  }
+
+  const sameDay = previous && parseVaultimeDate(previous.started_at_wall).toDateString() === started.toDateString();
+  if (sameDay && shape !== "long" && shape !== "marathon") {
+    return [
+      [["Another round of ", ""], "Another round"],
+      [["Back to ", " for another go"], "Back for another go"],
+    ];
+  }
+  return null;
+}
+
+/**
+ * "A long evening", "Forty minutes in the morning", "Playing now". With a
+ * title, the title is the italic part: "A long evening in *Elden Ring*". With
+ * the other sessions of the game it also notes a first session, a return, a
+ * record or a late night. The wording varies between sessions and stays the
+ * same for each one.
+ */
+export function describeSession(session: Session, context: SessionContext = {}): Phrase {
+  const title = context.gameTitle;
+  if (!session.ended_at_wall) return title ? { before: "Playing ", em: title, after: " now" } : { before: "Playing now" };
+  if (!countsAsPlay(session)) return title ? { before: "No play counted for ", em: title } : { before: "No play counted" };
+  const words = lineWords(session);
+  const options = standoutWordings(session, context, words) ?? LINES[shapeOf(session)].map((line) => line(words));
+  const [[before, after], alone] = options[stableHash(session.id) % options.length];
+  return title ? { before, em: title, after } : { before: alone };
+}
+
+/** A phrase as plain text. */
+export function phraseString(phrase: Phrase): string {
+  return `${phrase.before}${phrase.em ?? ""}${phrase.after ?? ""}`;
 }
 
 /** "Elden Ring and Hades II ran side by side for 1 h 40." */
@@ -143,10 +331,15 @@ function endSentence(text: string): string {
   return /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
-/** "1 h 12 in all, 1 h 05 active, 7 min idle". */
+/** "1 h 12 in all, 1 h 05 active, 7 min idle", or "1 h 12, all of it active". */
 export function sessionAmounts(session: Session): string {
+  const all = formatHoursMinutes(session.runtime_ms);
+  if (session.runtime_ms >= MINUTE_MS) {
+    if (session.idle_ms < MINUTE_MS) return `${all}, all of it active`;
+    if (session.active_ms < MINUTE_MS) return `${all}, all of it idle`;
+  }
   return [
-    `${formatHoursMinutes(session.runtime_ms)} in all`,
+    `${all} in all`,
     `${formatHoursMinutes(session.active_ms)} active`,
     `${formatHoursMinutes(session.idle_ms)} idle`,
   ].join(", ");
@@ -206,26 +399,49 @@ function durationWords(ms: number): string {
   return minutes > 0 ? `${hourPart} and ${minutePart}` : hourPart;
 }
 
-/** "Nine sessions, eleven hours and twenty minutes in all. *Saturday* was the longest day." */
+/**
+ * "Nine sessions, eleven hours and twenty minutes in all. *Saturday* was the
+ * longest day." Other weeks read "Eleven hours and twenty minutes over nine
+ * sessions" or name the game that took most of the time.
+ */
 export function weekSentence({
   sessionsCount,
   runtimeMs,
   longestDay,
   daysPlayed,
+  topTitle = null,
+  topMs = 0,
+  gamesCount = 0,
+  weekNumber = 0,
   current,
 }: {
   sessionsCount: number;
   runtimeMs: number;
   longestDay: string | null;
   daysPlayed: number;
+  /** The game played most that week, with its playtime. */
+  topTitle?: string | null;
+  topMs?: number;
+  gamesCount?: number;
+  /** Picks the wording, so weeks read differently. */
+  weekNumber?: number;
   /** This week, which may still get more play. */
   current: boolean;
 }): Phrase {
   if (sessionsCount === 0 || !longestDay) {
     return { before: current ? "Nothing played yet this week." : "Nothing played that week." };
   }
-  const lead = `${capitalize(numberWords(sessionsCount))} session${sessionsCount === 1 ? "" : "s"}, ${durationWords(runtimeMs)} in all.`;
+  const sessions = `${numberWords(sessionsCount)} session${sessionsCount === 1 ? "" : "s"}`;
+  const lead =
+    weekNumber % 2 === 0
+      ? `${capitalize(sessions)}, ${durationWords(runtimeMs)} in all.`
+      : `${capitalize(durationWords(runtimeMs))} ${sessionsCount === 1 ? "in one session" : `over ${sessions}`}.`;
   if (daysPlayed === 1) return { before: `${lead} All of it on `, em: longestDay, after: "." };
+  if (topTitle && gamesCount === 1) return { before: `${lead} All of it in `, em: topTitle, after: "." };
+  const leading = topTitle && runtimeMs > 0 && topMs / runtimeMs >= WEEK_TOP_GAME_MIN_SHARE;
+  if (leading && Math.floor(weekNumber / 2) % 2 === 1) {
+    return { before: `${lead} Most of it went to `, em: topTitle, after: "." };
+  }
   return { before: `${lead} `, em: longestDay, after: " was the longest day." };
 }
 

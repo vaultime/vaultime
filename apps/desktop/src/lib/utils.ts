@@ -13,3 +13,12 @@ export function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.charAt(0).toUpperCase() + message.slice(1);
 }
+
+/** A number that stays the same for the same text, to pick colors or wording without randomness. */
+export function stableHash(text: string): number {
+  let hash = 0;
+  for (const char of text) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return hash;
+}
