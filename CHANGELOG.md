@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Backups
 
+- **Plain terms for the beta.** The terms of service now say clearly that cloud backup is a free private beta that comes without warranty and is used at your own risk.
 - **Clearer cloud forms.** The button that shows a password works every time, not only while you first type it. Each cloud form says under the field what is wrong, like a password that is too short or a passphrase that does not match, and a wrong password shows right above the button you pressed.
 
 ## [0.1.0] - 2026-09-30
