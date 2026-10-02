@@ -248,12 +248,17 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 /// Shows in the tray and the taskbar whether this PC is signed in to cloud
 /// backup, the way the logo in the app does, in the accent of the app.
 pub fn show_cloud_state<R: Runtime>(app: &AppHandle<R>, signed_in: bool) {
-    let accent = app
-        .try_state::<WindowLookState>()
-        .and_then(|state| state.set_signed_in(signed_in));
-    // The bundled icons until the page has told the core its accent.
+    if let Some(state) = app.try_state::<WindowLookState>() {
+        state.set_signed_in(signed_in);
+    }
+    crate::window_look::redraw(app);
+}
+
+/// Puts the logo in `accent` on the tray, the taskbar and the title bar, or
+/// the bundled logo until the page has told the core its accent.
+pub fn show_icon<R: Runtime>(app: &AppHandle<R>, accent: Option<&str>, signed_in: bool) {
     let icon = accent
-        .and_then(|accent| draw_icon(&accent, signed_in))
+        .and_then(|accent| draw_icon(accent, signed_in))
         .or_else(|| {
             if signed_in {
                 Image::from_bytes(SIGNED_IN_ICON)

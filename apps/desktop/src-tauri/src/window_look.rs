@@ -3,8 +3,9 @@
 
 //! The window around the page in the look the player picked. The icon of the
 //! tray, the taskbar and the title bar takes the accent, signed in to cloud
-//! backup or not. On Windows 11 the title bar takes the ground of the page
-//! and the window border the accent.
+//! backup or not. On Windows the title bar follows dark or light mode, and on
+//! Windows 11 it takes the ground of the page and the window border the accent.
+//! Linux leaves the title bar to the desktop.
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -26,7 +27,18 @@ const SIGNED_IN_ICON_SVG: &str = include_str!("../../../../assets/vaultime-icon-
 /// The violet of the logo files, which the accent replaces.
 const LOGO_VIOLET: &str = "#9D7CFF";
 
-/// Colors of the window around the page, each as `#rrggbb`.
+/// Dark or light mode of the title bar, or the system's.
+#[cfg_attr(not(windows), allow(dead_code, reason = "only Windows sets the mode"))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WindowTheme {
+    Dark,
+    Light,
+    #[default]
+    System,
+}
+
+/// Colors of the window around the page, each as `#rrggbb`, and its mode.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowLook {
@@ -39,6 +51,11 @@ pub struct WindowLook {
     pub title_text: String,
     /// The window border, in the accent of the page.
     pub border: String,
+    /// The mode of the title bar. Looks stored before it had one follow the
+    /// system.
+    #[serde(default)]
+    #[cfg_attr(not(windows), allow(dead_code, reason = "only Windows sets the mode"))]
+    pub theme: WindowTheme,
 }
 
 impl WindowLook {
@@ -52,14 +69,26 @@ impl WindowLook {
     }
 }
 
+/// What the window should show.
 #[derive(Default)]
-struct Shown {
+struct Wanted {
     look: Option<WindowLook>,
     signed_in: bool,
 }
 
+/// What the window shows. Held while it is redrawn, so redraws never overlap.
+#[derive(Default)]
+struct Drawn {
+    look: Option<WindowLook>,
+    /// The accent of the icon, none for the bundled one, and the cloud state.
+    icon: Option<(Option<String>, bool)>,
+}
+
 /// The look and whether this PC is signed in, the two things the icon shows.
-pub struct WindowLookState(Mutex<Shown>);
+pub struct WindowLookState {
+    wanted: Mutex<Wanted>,
+    drawn: Mutex<Drawn>,
+}
 
 impl WindowLookState {
     /// Starts with the look of the last run, so the window has it before the
@@ -70,21 +99,49 @@ impl WindowLookState {
             .flatten()
             .and_then(|stored| serde_json::from_str::<WindowLook>(&stored).ok())
             .filter(|look| look.colors().into_iter().all(|color| rgb(color).is_some()));
-        Self(Mutex::new(Shown {
-            look,
-            signed_in: false,
-        }))
+        Self {
+            wanted: Mutex::new(Wanted {
+                look,
+                signed_in: false,
+            }),
+            drawn: Mutex::new(Drawn::default()),
+        }
     }
 
-    fn shown(&self) -> std::sync::MutexGuard<'_, Shown> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    fn wanted(&self) -> std::sync::MutexGuard<'_, Wanted> {
+        self.wanted.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Notes the cloud state and returns the accent the icon takes, if any.
-    pub fn set_signed_in(&self, signed_in: bool) -> Option<String> {
-        let mut shown = self.shown();
-        shown.signed_in = signed_in;
-        shown.look.as_ref().map(|look| look.icon_accent.clone())
+    /// Notes whether this PC is signed in to cloud backup.
+    pub fn set_signed_in(&self, signed_in: bool) {
+        self.wanted().signed_in = signed_in;
+    }
+}
+
+/// Brings the icons and the title bar to what is wanted now. Only what
+/// changed is drawn, and two redraws never overlap, so the last one always
+/// leaves the latest look and cloud state behind. Never call it on the main
+/// thread while another thread may redraw: setting the tray icon waits for
+/// the main thread.
+pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
+    let Some(state) = app.try_state::<WindowLookState>() else {
+        return;
+    };
+    let mut drawn = state.drawn.lock().unwrap_or_else(PoisonError::into_inner);
+    let (look, signed_in) = {
+        let wanted = state.wanted();
+        (wanted.look.clone(), wanted.signed_in)
+    };
+    if let Some(look) = &look
+        && drawn.look.as_ref() != Some(look)
+    {
+        paint_title_bar(app, look);
+        drawn.look = Some(look.clone());
+    }
+    let icon = (look.map(|look| look.icon_accent), signed_in);
+    if drawn.icon.as_ref() != Some(&icon) {
+        crate::tray::show_icon(app, icon.0.as_deref(), signed_in);
+        drawn.icon = Some(icon);
     }
 }
 
@@ -145,18 +202,17 @@ pub fn set_taskbar_icon<R: Runtime>(window: &tauri::WebviewWindow<R>, icon: &Ima
     ) else {
         return;
     };
-    // Windows wants blue first, and a mask that is clear where the icon is.
+    // Windows wants blue first. The alpha of each pixel makes the icon see
+    // through, so the mask, one bit a pixel in rows of whole 16 bit words, is
+    // all clear.
     let mut bgra = icon.rgba().to_vec();
-    let (pixels, _) = bgra.as_chunks_mut::<4>();
-    let mask: Vec<u8> = pixels
-        .iter_mut()
-        .map(|pixel| {
-            pixel.swap(0, 2);
-            pixel[3].wrapping_sub(u8::MAX)
-        })
-        .collect();
-    // SAFETY: both buffers hold a value for each of the width times height
-    // pixels, and Windows copies them.
+    for pixel in bgra.as_chunks_mut::<4>().0 {
+        pixel.swap(0, 2);
+    }
+    let mask_row_bytes = icon.width().div_ceil(16) * 2;
+    let mask = vec![0_u8; usize::try_from(mask_row_bytes * icon.height()).unwrap_or_default()];
+    // SAFETY: the color buffer holds four bytes and the mask one bit for each
+    // of the width times height pixels, and Windows copies both.
     let handle = unsafe {
         CreateIcon(
             std::ptr::null_mut(),
@@ -181,8 +237,11 @@ pub fn set_taskbar_icon<R: Runtime>(window: &tauri::WebviewWindow<R>, icon: &Ima
     }
 }
 
-/// Paints the title bar and the border of the main window. Only Windows 11
-/// lets an app color them, elsewhere the system draws them.
+/// Paints the title bar and the border of the main window. Only Windows lets
+/// an app pick their mode, and only Windows 11 their colors. Linux is left
+/// alone: tao has no way back to the desktop's mode once one is set, it
+/// writes GTK's dark preference off, and System mode then shows light on a
+/// dark desktop.
 fn paint_title_bar<R: Runtime>(app: &AppHandle<R>, look: &WindowLook) {
     #[cfg(windows)]
     if let Some(window) = app.get_webview_window("main") {
@@ -197,9 +256,14 @@ fn paint_windows_title_bar<R: Runtime>(window: &tauri::WebviewWindow<R>, look: &
     use windows_sys::Win32::Graphics::Dwm::{
         DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DwmSetWindowAttribute,
     };
-    /// A COLORREF is four bytes.
-    const COLORREF_BYTES: u32 = 4;
-
+    let theme = match look.theme {
+        WindowTheme::Dark => Some(tauri::Theme::Dark),
+        WindowTheme::Light => Some(tauri::Theme::Light),
+        WindowTheme::System => None,
+    };
+    if let Err(error) = window.set_theme(theme) {
+        warn!("failed to set the title bar mode: {error}");
+    }
     let Ok(hwnd) = window.hwnd() else {
         return;
     };
@@ -220,7 +284,7 @@ fn paint_windows_title_bar<R: Runtime>(window: &tauri::WebviewWindow<R>, look: &
                 hwnd.0,
                 attribute.cast_unsigned(),
                 (&raw const colorref).cast(),
-                COLORREF_BYTES,
+                u32::try_from(size_of_val(&colorref)).unwrap_or_default(),
             );
         }
     }
@@ -229,23 +293,12 @@ fn paint_windows_title_bar<R: Runtime>(window: &tauri::WebviewWindow<R>, look: &
 /// Puts the look of the last run on the icons and the title bar, before the
 /// window shows.
 pub fn show_stored<R: Runtime>(app: &AppHandle<R>) {
-    let Some(state) = app.try_state::<WindowLookState>() else {
-        return;
-    };
-    let (look, signed_in) = {
-        let shown = state.shown();
-        (shown.look.clone(), shown.signed_in)
-    };
-    if let Some(look) = look {
-        crate::tray::show_cloud_state(app, signed_in);
-        paint_title_bar(app, &look);
-    }
+    redraw(app);
 }
 
-/// Takes the colors of the page for the icons and the title bar, and keeps
-/// them for the next start. The border and the title bar go first, as they
-/// are the quickest, the icons are drawn only when the accent changed. Runs
-/// off the main thread, so drawing the icons never holds up the window.
+/// Takes the colors and mode of the page for the icons and the title bar,
+/// and keeps them for the next start. Runs off the main thread, so drawing
+/// the icons never holds up the window.
 #[tauri::command(async)]
 pub fn set_window_look(
     app: AppHandle,
@@ -258,22 +311,14 @@ pub fn set_window_look(
             "window colors must be given as #rrggbb".into(),
         ));
     }
-    let (accent_changed, signed_in) = {
-        let mut shown = state.shown();
-        if shown.look.as_ref() == Some(&look) {
+    {
+        let mut wanted = state.wanted();
+        if wanted.look.as_ref() == Some(&look) {
             return Ok(false);
         }
-        let accent_changed = shown
-            .look
-            .as_ref()
-            .is_none_or(|shown| shown.icon_accent != look.icon_accent);
-        shown.look = Some(look.clone());
-        (accent_changed, shown.signed_in)
-    };
-    paint_title_bar(&app, &look);
-    if accent_changed {
-        crate::tray::show_cloud_state(&app, signed_in);
+        wanted.look = Some(look.clone());
     }
+    redraw(&app);
     let stored = serde_json::to_string(&look).map_err(|error| {
         VaultimeError::Invalid(format!("failed to store the window colors: {error}"))
     })?;
@@ -344,13 +389,14 @@ mod tests {
     #[test]
     fn keeps_the_look_of_the_last_run() {
         let db = Database::open_in_memory().unwrap();
-        assert!(WindowLookState::load(&db).shown().look.is_none());
+        assert!(WindowLookState::load(&db).wanted().look.is_none());
 
         let look = WindowLook {
             icon_accent: "#f08a2c".into(),
             title_bar: "#140f0b".into(),
             title_text: "#f3ece6".into(),
             border: "#f08a2c".into(),
+            theme: WindowTheme::Dark,
         };
         settings::set_setting(
             &db,
@@ -359,10 +405,32 @@ mod tests {
         )
         .unwrap();
         let state = WindowLookState::load(&db);
-        assert_eq!(state.shown().look.as_ref(), Some(&look));
-        assert_eq!(state.set_signed_in(true).as_deref(), Some("#f08a2c"));
+        assert_eq!(state.wanted().look.as_ref(), Some(&look));
+        state.set_signed_in(true);
+        assert!(state.wanted().signed_in);
 
         settings::set_setting(&db, WINDOW_LOOK_SETTING, r#"{"iconAccent":"red"}"#).unwrap();
-        assert!(WindowLookState::load(&db).shown().look.is_none());
+        assert!(WindowLookState::load(&db).wanted().look.is_none());
+    }
+
+    #[test]
+    fn reads_the_mode_and_looks_stored_without_one() {
+        let colors = r##""iconAccent":"#f08a2c","titleBar":"#140f0b","titleText":"#f3ece6","border":"#f08a2c""##;
+        let read = |json: String| serde_json::from_str::<WindowLook>(&json);
+        assert_eq!(
+            read(format!("{{{colors}}}")).unwrap().theme,
+            WindowTheme::System
+        );
+        for (name, theme) in [
+            ("dark", WindowTheme::Dark),
+            ("light", WindowTheme::Light),
+            ("system", WindowTheme::System),
+        ] {
+            let json = format!(r#"{{{colors},"theme":"{name}"}}"#);
+            assert_eq!(read(json).unwrap().theme, theme);
+        }
+        assert!(read(format!(r#"{{{colors},"theme":"blue"}}"#)).is_err());
+        let written = serde_json::to_value(read(format!("{{{colors}}}")).unwrap()).unwrap();
+        assert_eq!(written["theme"], "system");
     }
 }
