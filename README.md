@@ -28,7 +28,9 @@ Vaultime keeps track of how long you play your PC games, no matter which launche
 - **Sleep aware.** Time while your PC sleeps is never counted.
 - **Runs in the background.** Closing the window keeps Vaultime tracking in the tray, and it starts when you log in. Both can be turned off in Settings. The tray menu shows the game running and how long you played today.
 - **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest. Any other game can be added by hand.
-- **Your artwork.** Steam games get Steam's own covers, others the art from their game folders, and you choose the cover per game.
+- **Your artwork.** Steam games get Steam's own covers, others the art from their game folders. Choose the cover per game, frame it, add your own pictures in most image formats, and delete the ones you do not want.
+- **Your look.** Dark or light, six ground tones, any accent color and a background picture. The tray and taskbar icon take your accent.
+- **A window like a game client.** Fixed sizes from Compact to Extra large, or a free window you can resize.
 - **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
 - **Game pages in the game's colors.** The last two weeks at a glance, totals, and the cover you pick.
 - **Always in view.** A live bar shows the running game and its timer, and Ctrl+K jumps to any game or page.
@@ -88,6 +90,7 @@ To correct a session, point at it in the journal or on the game's page and pick 
 
 ## Backups
 
+- **What stays on each PC.** The look, the background picture and the window size belong to the PC they were set on. Backups leave them out, and a restore keeps the ones of the PC it runs on.
 - **Local backups** are folders you can keep anywhere. Vaultime makes one by itself once a day and when it quits, and keeps the newest seven. Pick their folder under Settings, Local backups, ideally on another drive or in a folder that syncs. Save a backup makes one by hand, and Restore from a backup shows what is inside before anything is replaced.
 - **Cloud backup** is optional, free and invite-only, a private beta that can end at any time. Vaultime works fully without it. Backups are encrypted on your PC with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe. Without it, a backup cannot be restored. When you have 30 backups, a new upload replaces the oldest one. When your 1 GiB of storage for backups and artwork is full, delete older backups to make room.
 

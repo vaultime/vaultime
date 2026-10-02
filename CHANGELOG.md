@@ -7,15 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Library
+### Appearance
 
-- **Journal colors from the real artwork.** A game's color in the journal is now the main color of its cover, so a red logo stays red instead of a mix of all its colors. Black, white and grey covers get a grey, not a made-up color, and their game pages stay grey too. Covers with two strong colors, like a gold and blue logo, show both: the time bars and the game's name blend from one into the other. When a game's first color is taken that week, it uses its second one, and a color only shifts when neither fits.
 - **Make it yours.** Settings has a new Appearance section. Pick dark, light or the system's mode, one of six ground tones, an accent color from six swatches or any color you like, and a background picture of your own or a game's art, with dim and blur so text stays readable. The look stays on this PC, and backups leave it out.
-- **The window wears your colors too.** The icon in the tray, the taskbar and the title bar takes your accent color, signed in to cloud backup or not. On Windows 11 the title bar takes the tone of the page and the window border your accent.
-- **Covers framed your way.** Adding an image opens a frame to drag and zoom it, and Adjust frames the cover in use again. Zoom out to show a wide logo whole. Photos get a soft, dimmed copy of themselves behind them, logos a plain backdrop in their own color, so a black logo stays visible.
-- **Tidy up your covers.** The cover section lists the images you added apart from the ones Vaultime found. Delete any of them, and the next one takes over if it was the cover. The file itself stays where it is, so Scan folder finds a deleted image from the game folder again. Scanning keeps the images it already knows and the cover you chose, where it used to replace them and could switch the cover.
-- **Any picture works.** Covers and the background picture also take GIF, TIFF, TGA, QOI, PNM and SVG files, besides PNG, JPEG, WebP, BMP and ICO.
+- **The window wears your colors too.** The icon in the tray, the taskbar and the title bar takes your accent color, signed in to cloud backup or not. On Windows 11 the title bar takes the tone of the page and the window border your accent. On Linux the tray icon follows, and the window icon on X11.
+
+### Window
+
 - **A window that keeps its size.** Like a game client, Vaultime opens at one fixed size: Compact, Standard, Large or Extra large, picked in Settings under Window. Standard is the default. Sizes too large for your screen are marked, and the window steps down to one that fits. Free lets you resize and maximize the window as before. The size stays with this PC when you restore a backup.
+- **Made for small windows too.** In narrow windows the year of days in Stats spans the full width, the notes under the numbers wrap instead of being cut off, and the game list fits more games in a low window.
+
+### Journal
+
+- **Journal colors from the real artwork.** A game's color in the journal is now the main color of its cover, a little more vivid, so a red logo stays red instead of a mix of all its colors. Black, white and grey covers get a grey, not a made-up color, and their game pages stay grey too. Covers with two strong colors, like a gold and blue logo, show both: the time bars and the game's name blend from one into the other. When a game's first color is taken that week, it uses its second one, and a color only shifts when neither fits.
+
+### Covers
+
+- **Covers framed your way.** Adding an image opens a frame to drag and zoom it, and Adjust frames the cover in use again. Zoom out to show a wide logo whole. Photos get a soft, dimmed copy of themselves behind them, logos a plain backdrop in their own color, so a black logo stays visible. An image you frame again counts as one of yours.
+- **Tidy up your covers.** The cover section lists the images you added apart from the ones Vaultime found. Delete any of them, and the next one takes over if it was the cover. The file itself stays where it is, so Scan folder finds a deleted image from the game folder again.
+- **Scans keep your cover.** Scan folder keeps the images it already knows and the cover you chose, where it used to replace them and could switch the cover. Images that changed on disk are read again.
+- **More picture formats.** Add image and the background picture also take GIF, TIFF, TGA, QOI, PNM and SVG files, besides PNG, JPEG, WebP, BMP and ICO. Animations show their first frame, and text and pictures inside an SVG file are left out.
 
 ## [0.2.0] - 2026-10-02
 

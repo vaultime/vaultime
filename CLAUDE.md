@@ -142,7 +142,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Shell like a music player: library rail on the left with search, a Ctrl+K
   command palette, and a live session bar at the bottom.
 - The window opens at a fixed preset size unless the player picks Free, so
-  pages are laid out for those sizes, down to 1024x640.
+  pages are laid out for those sizes, down to 1024x640, and still work in a
+  free window down to 900x600.
 - Write about play in plain sentences ("A long evening in Elden Ring"), not
   tables. Sessions read like a journal, with wording that varies from session
   to session but stays the same for each one.
@@ -152,9 +153,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   accent takes its second color, and a color shifts only when neither fits.
   Its title in the entries takes its mark, both colors for two-colored art.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
-  frame, with a violet pivot. The wordmark is Mona Sans 700 at full width
-  (`font-wordmark`), and `scripts/build-brand.py` outlines it for the logo
-  files.
+  frame, with a pivot in the accent, violet by default. The wordmark is Mona
+  Sans 700 at full width (`font-wordmark`) and leads the lockup, and
+  `scripts/build-brand.py` outlines it for the logo files. The app draws the
+  tray, taskbar and title bar icons from those files in the accent.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope

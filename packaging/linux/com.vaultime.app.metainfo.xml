@@ -15,7 +15,8 @@
     <ul>
       <li>Detects when games in your library run and records sessions</li>
       <li>Finds games from Steam, Xbox, Epic, GOG, EA and other launchers, and scans common game folders</li>
-      <li>Shows your library with artwork from your game folders</li>
+      <li>Shows your library with artwork from your game folders, framed the way you like</li>
+      <li>Dark and light looks with ground tones, accent colors and a background picture</li>
       <li>Local backups, plus optional encrypted backup to an invite-only server</li>
     </ul>
   </description>
