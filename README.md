@@ -115,6 +115,8 @@ Vaultime has no analytics and no telemetry. Details are in the [privacy policy](
 
 Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its install tools are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
 
+The interface components from shadcn/ui are under the [MIT license](LICENSES/MIT.txt), and the fonts Mona Sans, Geist and Geist Mono under the SIL Open Font License 1.1.
+
 The name Vaultime and the logo are not covered by these licenses. A modified version needs its own name and logo.
 
 Contributions come with a short agreement, see [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -25,6 +25,10 @@ FONT_FILES = {
     "mona-sans-italic.woff2": FONTS / "mona-sans/files/mona-sans-latin-standard-italic.woff2",
     "geist.woff2": FONTS / "geist/files/geist-latin-wght-normal.woff2",
     "geist-mono.woff2": FONTS / "geist-mono/files/geist-mono-latin-wght-normal.woff2",
+    # The Open Font License asks for its text next to every copy of the fonts.
+    "mona-sans-LICENSE.txt": FONTS / "mona-sans/LICENSE",
+    "geist-LICENSE.txt": FONTS / "geist/LICENSE",
+    "geist-mono-LICENSE.txt": FONTS / "geist-mono/LICENSE",
 }
 
 # Output page, title and Markdown source of every text page.
