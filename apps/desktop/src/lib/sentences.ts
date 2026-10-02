@@ -416,7 +416,7 @@ export function weekSentence({
   longestDay,
   daysPlayed,
   topTitle = null,
-  topMs = 0,
+  topShare = 0,
   gamesCount = 0,
   weekNumber = 0,
   current,
@@ -425,9 +425,9 @@ export function weekSentence({
   runtimeMs: number;
   longestDay: string | null;
   daysPlayed: number;
-  /** The game played most that week, with its playtime. */
+  /** The game played most that week, and its share of the time all games ran. */
   topTitle?: string | null;
-  topMs?: number;
+  topShare?: number;
   gamesCount?: number;
   /** Picks the wording, so weeks read differently. */
   weekNumber?: number;
@@ -444,7 +444,7 @@ export function weekSentence({
       : `${capitalize(durationWords(runtimeMs))} ${sessionsCount === 1 ? "in one session" : `over ${sessions}`}.`;
   if (daysPlayed === 1) return { before: `${lead} All of it on `, em: longestDay, after: "." };
   if (topTitle && gamesCount === 1) return { before: `${lead} All of it in `, em: topTitle, after: "." };
-  const leading = topTitle && runtimeMs > 0 && topMs / runtimeMs >= WEEK_TOP_GAME_MIN_SHARE;
+  const leading = topTitle && topShare >= WEEK_TOP_GAME_MIN_SHARE;
   if (leading && Math.floor(weekNumber / 2) % 2 === 1) {
     return { before: `${lead} Most of it went to `, em: topTitle, after: "." };
   }

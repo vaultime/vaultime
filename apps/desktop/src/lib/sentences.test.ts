@@ -239,7 +239,7 @@ describe("weekSentence", () => {
       longestDay: "Saturday",
       daysPlayed: 4,
       topTitle: "Balatro",
-      topMs: 7 * HOUR_MS,
+      topShare: 0.7,
       gamesCount: 3,
       current: false,
     };
@@ -251,7 +251,7 @@ describe("weekSentence", () => {
       em: "Balatro",
       after: ".",
     });
-    expect(phraseString(weekSentence({ ...week, weekNumber: 2, topMs: 4 * HOUR_MS }))).toBe(
+    expect(phraseString(weekSentence({ ...week, weekNumber: 2, topShare: 0.5 }))).toBe(
       "Nine sessions, ten hours in all. Saturday was the longest day.",
     );
     expect(phraseString(weekSentence({ ...week, weekNumber: 3, gamesCount: 1 }))).toBe(

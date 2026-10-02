@@ -159,10 +159,15 @@ export function JournalPage() {
   if (!loaded) return null;
 
   const longestDay = [...days].sort((a, b) => b.playedMs - a.playedMs)[0];
+  // Each game's own time, so games side by side both count. A live session counts up to now.
   const weekRuntime = new Map<string, number>();
-  for (const session of days.flatMap((day) => day.sessions)) {
-    weekRuntime.set(session.game_id, (weekRuntime.get(session.game_id) ?? 0) + session.runtime_ms);
+  for (const session of days.flatMap((day) => day.sessions).filter(countsAsPlay)) {
+    const ms = session.ended_at_wall
+      ? session.runtime_ms
+      : Math.max(session.runtime_ms, now.getTime() - parseVaultimeDate(session.started_at_wall).getTime());
+    weekRuntime.set(session.game_id, (weekRuntime.get(session.game_id) ?? 0) + ms);
   }
+  const gamesMs = [...weekRuntime.values()].reduce((sum, ms) => sum + ms, 0);
   const [topGameId, topMs] = [...weekRuntime.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
   const title = offset === 0 ? "This week" : offset === -1 ? "Last week" : `Week of ${weekStart.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })}`;
   const sentence = weekSentence({
@@ -171,7 +176,7 @@ export function JournalPage() {
     longestDay: longestDay ? longestDay.start.toLocaleDateString(UI_LOCALE, { weekday: "long" }) : null,
     daysPlayed: days.filter((day) => day.sessions.some(countsAsPlay)).length,
     topTitle: topGameId ? (byGame.get(topGameId)?.game.title ?? null) : null,
-    topMs,
+    topShare: gamesMs > 0 ? topMs / gamesMs : 0,
     gamesCount: weekGames.length,
     weekNumber: isoWeekNumber(weekStart),
     current: offset === 0,
