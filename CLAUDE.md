@@ -125,20 +125,27 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 
 - Premium and image-rich, not a background utility. Never ship stock
   component styling.
-- Editorial look: Fraunces (softened) for titles and sentences, Hanken
-  Grotesk for interface text, JetBrains Mono for stats, clocks, times and
-  paths. Small counts inside lists use Hanken Grotesk with tabular figures.
-  Hairline rules instead of boxes and shadows, small uppercase labels,
-  generous space. Colors come from the tokens in `index.css`, never loose hex
-  values in components.
+- Editorial look: Mona Sans at full width for titles (`font-display`) and at
+  normal width for sentences about play (`font-prose`), Geist for interface
+  text, Geist Mono for stats, clocks, times and paths. Small counts inside
+  lists use Geist with tabular figures. Hairline rules instead of boxes and
+  shadows, small uppercase labels, generous space. Colors come from the tokens
+  in `index.css`, never loose hex values in components. The website in
+  `docs/site` uses the same fonts and classes of the same names.
 - Dark ink ground with violet `#9D7CFF` as the brand color and the color of
   active time. Game pages take a dark tint and light ink from the cover art.
 - Shell like a music player: library rail on the left with search, a Ctrl+K
   command palette, and a live session bar at the bottom.
 - Write about play in plain sentences ("A long evening in Elden Ring"), not
-  tables. Sessions read like a journal.
+  tables. Sessions read like a journal, with wording that varies from session
+  to session but stays the same for each one.
+- In the journal, each game gets a strong mark color for the week, kept apart
+  from the other games and from violet. Its title in the entries takes that
+  color.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
-  frame, with a violet pivot. The wordmark is Fraunces 600.
+  frame, with a violet pivot. The wordmark is Mona Sans 700 at full width
+  (`font-wordmark`), and `scripts/build-brand.py` outlines it for the logo
+  files.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope
