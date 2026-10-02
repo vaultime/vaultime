@@ -36,7 +36,7 @@ Vaultime keeps track of how long you play your PC games, no matter which launche
 
 ## Download
 
-Get the latest version from [vaultime.codfishcloud.de](https://vaultime.codfishcloud.de/#download). Vaultime updates itself when a new version is out.
+Vaultime is free. Get the latest version from [vaultime.codfishcloud.de](https://vaultime.codfishcloud.de/#download) or from the [releases on GitHub](https://github.com/vaultime/vaultime/releases/latest), which have the same installers. When a new version is out, Vaultime shows it and installs it on one click.
 
 ### Windows
 
@@ -89,7 +89,7 @@ To correct a session, point at it in the journal or on the game's page and pick 
 ## Backups
 
 - **Local backups** are folders you can keep anywhere. Vaultime makes one by itself once a day and when it quits, and keeps the newest seven. Pick their folder under Settings, Local backups, ideally on another drive or in a folder that syncs. Save a backup makes one by hand, and Restore from a backup shows what is inside before anything is replaced.
-- **Cloud backup** is free and invite-only. Backups are encrypted on your PC with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe. Without it, a backup cannot be restored. When you have 30 backups, a new upload replaces the oldest one. When your 1 GiB of storage for backups and artwork is full, delete older backups to make room.
+- **Cloud backup** is optional, free and invite-only, a private beta that can end at any time. Vaultime works fully without it. Backups are encrypted on your PC with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe. Without it, a backup cannot be restored. When you have 30 backups, a new upload replaces the oldest one. When your 1 GiB of storage for backups and artwork is full, delete older backups to make room.
 
 ## Your data
 
