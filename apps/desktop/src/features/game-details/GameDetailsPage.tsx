@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Crop, Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { DayBars, DayBarsLegend } from "@/components/charts/DayBars";
 import { Notice } from "@/components/layout/Page";
 import {
@@ -20,9 +20,10 @@ import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
+import { CoverCropDialog, type CropTarget } from "@/features/game-details/CoverCropDialog";
 import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { ACTIVITY_CHART_DAYS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
+import { ACTIVITY_CHART_DAYS, ARTWORK_EXTENSIONS, EVENT_LOG_LIMIT, GAME_RECENT_SESSIONS, MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
 import { buildDailyActivity, countsAsPlay } from "@/lib/session-stats";
@@ -269,7 +270,7 @@ function GamePage({ gameId }: { gameId: string }) {
 
           {summary.earlier && <EarlierSection earlier={summary.earlier} />}
 
-          <CoverPicker gameId={gameId} assets={assets} onChanged={onAssetsChanged} />
+          <CoverPicker gameId={gameId} gameTitle={game.title} assets={assets} onChanged={onAssetsChanged} />
 
           <AsideSection title="Tracking">
             {game.executable_path ? (
@@ -371,16 +372,20 @@ function TotalRow({ label, value, accent = false }: { label: string; value: stri
 
 function CoverPicker({
   gameId,
+  gameTitle,
   assets,
   onChanged,
 }: {
   gameId: string;
+  gameTitle: string;
   assets: GameAssetView[];
   onChanged: (assets: GameAssetView[]) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const withPreview = assets.filter((asset) => asset.preview_data_url);
+  const inUse = withPreview.find((asset) => asset.is_preferred);
 
   async function run(task: () => Promise<GameAssetView[] | null>, failure: string) {
     try {
@@ -407,10 +412,23 @@ function CoverPicker({
         multiple: false,
         directory: false,
         title: "Choose a cover image",
-        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"] }],
+        filters: [{ name: "Images", extensions: ARTWORK_EXTENSIONS }],
       });
-      return selected ? api.importGameAsset(gameId, selected) : null;
-    }, "Could not add the image");
+      if (!selected) return null;
+      const source = await api.openArtworkFile(selected);
+      setCropTarget({ source, label: fileName(selected), save: (crop) => api.importGameAsset(gameId, selected, crop) });
+      return null;
+    }, "Could not open the image");
+  const adjust = (asset: GameAssetView) =>
+    run(async () => {
+      const source = await api.openGameAssetSource(gameId, asset.id);
+      setCropTarget({
+        source,
+        label: source.from_original ? fileName(asset.file_path) : "The cover as it is now",
+        save: (crop) => api.cropGameAsset(gameId, asset.id, crop),
+      });
+      return null;
+    }, "Could not open the cover");
 
   return (
     <AsideSection title="Cover">
@@ -439,7 +457,7 @@ function CoverPicker({
           ? "No artwork yet. Scan the game folder or add an image."
           : `${capitalize(numberWords(withPreview.length))} image${withPreview.length === 1 ? "" : "s"} to choose from.`}
       </p>
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={rescan} disabled={busy}>
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
           Scan folder
@@ -448,12 +466,24 @@ function CoverPicker({
           <ImagePlus className="size-3.5" />
           Add image
         </Button>
+        {inUse && (
+          <Button variant="outline" size="sm" onClick={() => adjust(inUse)} disabled={busy}>
+            <Crop className="size-3.5" />
+            Adjust
+          </Button>
+        )}
       </div>
       {error && (
         <p role="alert" className="mt-2.5 text-[13px] text-amber">
           {error}
         </p>
       )}
+      <CoverCropDialog
+        gameTitle={gameTitle}
+        target={cropTarget}
+        onClose={() => setCropTarget(null)}
+        onSaved={onChanged}
+      />
     </AsideSection>
   );
 }
@@ -490,4 +520,9 @@ function EventLog({ events }: { events: SessionEvent[] }) {
       </ul>
     </details>
   );
+}
+
+/** The last part of a path, on Windows or Linux. */
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
 }

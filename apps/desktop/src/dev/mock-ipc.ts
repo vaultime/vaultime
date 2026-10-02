@@ -11,16 +11,20 @@
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
 // password dialog on the cloud page. Signed out, ?signin=empty|wrong|ok and
 // ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
+// ?cover=add|adjust opens the cover crop dialog on a game page.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import type {
+  ArtworkSource,
   CloudAuthSession,
   CloudBackupRecord,
   CloudDevice,
+  CropRect,
   EarlierPlaytime,
   Game,
+  GameAssetView,
   GameStatusChange,
   Session,
   SessionEvent,
@@ -537,6 +541,146 @@ function mockWindowSize(): WindowSizeState {
   return { choice: mockWindowChoice, applied: chosen < 0 ? "free" : applied, presets };
 }
 
+// Cover crop on a game page. ?cover=add picks a wide sample logo, see-through
+// unless ?art=photo picks an opaque landscape, and ?cover=adjust frames the
+// cover in use (with ?mock=covers). ?save=1 then presses "Use as cover".
+// Saving draws the crop the way the core cuts it.
+interface MockArt {
+  image: CanvasImageSource;
+  width: number;
+  height: number;
+  source: ArtworkSource;
+}
+const pickedCovers = new Map<string, { asset: GameAssetView; art: MockArt; crop: CropRect }>();
+let pickedArt: MockArt | null = null;
+
+function canvas(width: number, height: number) {
+  const element = document.createElement("canvas");
+  element.width = width;
+  element.height = height;
+  return { element, context: element.getContext("2d")! };
+}
+
+function sampleArt(photo: boolean): MockArt {
+  const { element, context } = canvas(1600, photo ? 900 : 520);
+  if (photo) {
+    const sky = context.createLinearGradient(0, 0, 0, 900);
+    sky.addColorStop(0, "#2b3f6b");
+    sky.addColorStop(0.6, "#d9825b");
+    context.fillStyle = sky;
+    context.fillRect(0, 0, 1600, 900);
+    context.fillStyle = "#f4d58d";
+    context.beginPath();
+    context.arc(1050, 520, 90, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#1d2236";
+    context.beginPath();
+    context.moveTo(0, 900);
+    context.lineTo(0, 600);
+    context.lineTo(380, 380);
+    context.lineTo(720, 640);
+    context.lineTo(1100, 420);
+    context.lineTo(1600, 700);
+    context.lineTo(1600, 900);
+    context.fill();
+  } else {
+    context.fillStyle = "#e8d6a6";
+    context.font = "600 210px Georgia, serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("ELDEN RING", 800, 270);
+    context.fillRect(260, 420, 1080, 6);
+  }
+  return mockArt(element, element.width, element.height, photo);
+}
+
+function mockArt(image: CanvasImageSource, width: number, height: number, opaque: boolean, crop: CropRect | null = null): MockArt {
+  const preview = canvas(width, height);
+  preview.context.drawImage(image, 0, 0, width, height);
+  const backdrop = canvas(90, 120);
+  if (opaque) {
+    const scale = Math.max(90 / width, 120 / height);
+    backdrop.context.filter = "blur(3px) brightness(0.45)";
+    backdrop.context.drawImage(image, (90 - width * scale) / 2, (120 - height * scale) / 2, width * scale, height * scale);
+  } else {
+    backdrop.context.fillStyle = "#26200f";
+    backdrop.context.fillRect(0, 0, 90, 120);
+  }
+  return {
+    image,
+    width,
+    height,
+    source: {
+      preview_data_url: preview.element.toDataURL(opaque ? "image/jpeg" : "image/png"),
+      backdrop_data_url: backdrop.element.toDataURL("image/jpeg"),
+      width,
+      height,
+      from_original: true,
+      crop,
+    },
+  };
+}
+
+function drawCover(art: MockArt, crop: CropRect): string {
+  const { element, context } = canvas(360, 480);
+  const backdrop = new Image();
+  backdrop.src = art.source.backdrop_data_url;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(backdrop, 0, 0, 360, 480);
+  const scale = 360 / (crop.width * art.width);
+  context.drawImage(art.image, -crop.x * art.width * scale, -crop.y * art.height * scale, art.width * scale, art.height * scale);
+  return element.toDataURL("image/jpeg");
+}
+
+function saveCover(gameId: string, art: MockArt, crop: CropRect) {
+  pickedCovers.set(gameId, {
+    art,
+    crop,
+    asset: {
+      id: `picked-${gameId}`,
+      game_id: gameId,
+      asset_type: "cover",
+      source: "user_picked",
+      file_path: "C:/Users/you/Pictures/cover art.png",
+      cache_path: null,
+      hash: null,
+      created_at: iso(now),
+      preview_data_url: drawCover(art, crop),
+      is_preferred: true,
+    },
+  });
+  return gameAssets(gameId);
+}
+
+function gameAssets(gameId: string): GameAssetView[] {
+  const picked = pickedCovers.get(gameId)?.asset;
+  const covers = scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === gameId) : [];
+  return picked ? [picked, ...covers.map((asset) => ({ ...asset, is_preferred: false }))] : covers;
+}
+
+function preferredAssets(): GameAssetView[] {
+  return allGames.flatMap((game) => gameAssets(game.id).filter((asset) => asset.is_preferred));
+}
+
+async function openAsset(gameId: string, assetId: string): Promise<ArtworkSource> {
+  const picked = pickedCovers.get(gameId);
+  if (picked && picked.asset.id === assetId) return { ...picked.art.source, crop: picked.crop };
+  const asset = gameAssets(gameId).find((candidate) => candidate.id === assetId);
+  const image = new Image();
+  image.src = asset?.preview_data_url ?? "";
+  await image.decode();
+  pickedArt = mockArt(image, image.naturalWidth, image.naturalHeight, true);
+  return { ...pickedArt.source, from_original: false };
+}
+
+const coverStep = params.get("cover");
+if (coverStep) {
+  const press = (label: string) =>
+    [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === label)?.click();
+  setTimeout(() => press(coverStep === "adjust" ? "Adjust" : "Add image"), 700);
+  if (params.has("save")) setTimeout(() => press("Use as cover"), 1500);
+}
+
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   const appearanceAnswer = appearanceIpc(cmd, args);
@@ -688,9 +832,24 @@ mockIPC((cmd, payload) => {
         discovered("StardewModdingAPI", "C:/GOG Games/Stardew Valley/StardewModdingAPI.exe", "folder_scan"),
       ];
     case "list_game_assets":
-      return scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === args.gameId) : [];
+      return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":
-      return scenario === "covers" ? coverAssets() : [];
+      return preferredAssets();
+    case "plugin:dialog|open":
+      return "C:/Users/you/Pictures/cover art.png";
+    case "open_artwork_file":
+      pickedArt = sampleArt(params.get("art") === "photo");
+      return pickedArt.source;
+    case "open_game_asset_source":
+      return openAsset(String(args.gameId), String(args.assetId));
+    case "import_game_asset":
+      return pickedArt ? saveCover(String(args.gameId), pickedArt, args.crop as CropRect) : [];
+    case "crop_game_asset": {
+      const gameId = String(args.gameId);
+      const picked = pickedCovers.get(gameId);
+      const art = picked && picked.asset.id === args.assetId ? picked.art : pickedArt;
+      return art ? saveCover(gameId, art, args.crop as CropRect) : gameAssets(gameId);
+    }
     default:
       // Everything else answers with an empty result.
       return cmd.startsWith("list_") || cmd.startsWith("get_") ? [] : null;

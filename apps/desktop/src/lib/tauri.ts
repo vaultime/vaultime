@@ -13,6 +13,8 @@ import type {
   Setting,
   TrackingDiagnostics,
   GameAssetView,
+  ArtworkSource,
+  CropRect,
   DiscoveredGame,
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
@@ -105,14 +107,28 @@ export async function scanGameAssets(gameId: string): Promise<GameAssetView[]> {
   return invoke<GameAssetView[]>("scan_game_assets", { gameId });
 }
 
+export async function openArtworkFile(sourcePath: string): Promise<ArtworkSource> {
+  return invoke<ArtworkSource>("open_artwork_file", { sourcePath });
+}
+
+export async function openGameAssetSource(gameId: string, assetId: string): Promise<ArtworkSource> {
+  return invoke<ArtworkSource>("open_game_asset_source", { gameId, assetId });
+}
+
 export async function importGameAsset(
   gameId: string,
   sourcePath: string,
+  crop: CropRect,
 ): Promise<GameAssetView[]> {
   return invoke<GameAssetView[]>("import_game_asset", {
     gameId,
     sourcePath,
+    crop,
   });
+}
+
+export async function cropGameAsset(gameId: string, assetId: string, crop: CropRect): Promise<GameAssetView[]> {
+  return invoke<GameAssetView[]>("crop_game_asset", { gameId, assetId, crop });
 }
 
 export async function setPreferredGameAsset(

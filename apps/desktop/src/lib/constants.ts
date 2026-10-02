@@ -155,6 +155,63 @@ export const GAME_RECENT_SESSIONS = 8;
 /** Notable integrity events listed in a game's event log. */
 export const EVENT_LOG_LIMIT = 12;
 
+// Cover crop
+
+/**
+ * Width over height of a cover. Same as `COVER_WIDTH_PX / COVER_HEIGHT_PX` in
+ * `constants.rs`.
+ */
+export const COVER_ASPECT = 3 / 4;
+/** Width of a cover in pixels. Same as `COVER_WIDTH_PX` in `constants.rs`. */
+export const COVER_WIDTH_PX = 720;
+/** Above this many cover pixels per image pixel the crop dialog warns that the cover may look soft. */
+export const CROP_SOFT_SCALE = 2;
+
+/**
+ * How far the crop dialog zooms out, as a share of the zoom that fits the
+ * whole image, so a logo can keep a margin. `CROP_MAX_FRAME_OF_FIT` in
+ * `constants.rs` allows more.
+ */
+export const CROP_MIN_ZOOM_OF_FIT = 0.5;
+/** How far the crop dialog zooms in, as a multiple of the zoom that fills the cover. */
+export const CROP_MAX_ZOOM_OF_FILL = 4;
+
+/**
+ * Images at least this wide for their height open fitted whole, so a wide
+ * logo is not cut. Taller ones open filling the cover.
+ */
+export const CROP_FIT_MIN_ASPECT = 0.9;
+
+/** One arrow key moves the image by this share of the frame. */
+export const CROP_KEY_PAN_SHARE = 0.02;
+/** One plus or minus key, or one wheel notch, zooms by this factor. */
+export const CROP_ZOOM_STEP = 1.1;
+/** Wheel distance in pixels that counts as one notch. */
+export const CROP_WHEEL_NOTCH_PX = 100;
+/** Slider steps between the smallest and largest zoom. */
+export const CROP_SLIDER_STEPS = 200;
+
+/** File types the cover and background pickers offer. The core reads all of them. */
+export const ARTWORK_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "gif",
+  "bmp",
+  "ico",
+  "tif",
+  "tiff",
+  "tga",
+  "qoi",
+  "pbm",
+  "pgm",
+  "ppm",
+  "pnm",
+  "pam",
+  "svg",
+];
+
 // Journal
 
 /** Hours between the labels under a day's 24 hour strip. */

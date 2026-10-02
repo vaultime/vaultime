@@ -139,6 +139,29 @@ export interface DiscoveredGame {
   already_added: boolean;
 }
 
+/** Part of an image that becomes a cover, in shares of its width and height. */
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** An image opened in the crop dialog. */
+export interface ArtworkSource {
+  /** The image, scaled down for the dialog. */
+  preview_data_url: string;
+  /** What fills the cover where the image does not reach. */
+  backdrop_data_url: string;
+  /** Size of the full image in pixels. */
+  width: number;
+  height: number;
+  /** False when the original file is gone or changed and the cover in use stands in. */
+  from_original: boolean;
+  /** The crop in use, when it was cut from this same image. */
+  crop: CropRect | null;
+}
+
 /** Artwork entry plus an inline preview payload returned by the core. */
 export interface GameAssetView {
   id: string;
