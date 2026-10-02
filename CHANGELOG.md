@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Library
+
+- **A new look for the type.** Titles and the wordmark use a wide Mona Sans, sentences about play the same face at normal width, and the interface Geist, with Geist Mono for times and numbers. The website and the logo match.
+- **Simpler idle setting.** The idle time in Settings steps a minute at a time with minus and plus, can still be typed, and saves on its own like the switches next to it.
+- **Room for longer names.** The library rail is a little wider, so more of each game title fits, and it shows the copyright next to the version. Settings lists it under About too.
+- **Journal colors that stand apart.** Each game in a week of the journal gets its own clear color, and its name in the entries takes the color of its bar. Games keep the color of their cover where it does not clash with another game, and violet stays free for active time.
+- **Sessions told in more ways.** Session lines vary their wording and notice more: a first look at a game, a return after weeks away, your longest session yet, a game left open, play past midnight and another round on the same day. A session without idle time reads "all of it active". Each session keeps its sentence wherever it shows up, and weeks are summed up in more than one way.
+
 ### Backups
 
 - **Clearer cloud forms.** The button that shows a password works every time, not only while you first type it. Each cloud form says under the field what is wrong, like a password that is too short or a passphrase that does not match, and a wrong password shows right above the button you pressed.
