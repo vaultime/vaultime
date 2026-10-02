@@ -128,6 +128,11 @@ export async function importGameAsset(
   });
 }
 
+/** Deletes one of a game's images, never the file it came from. */
+export async function deleteGameAsset(gameId: string, assetId: string): Promise<GameAssetView[]> {
+  return invoke<GameAssetView[]>("delete_game_asset", { gameId, assetId });
+}
+
 export async function cropGameAsset(gameId: string, assetId: string, crop: CropRect): Promise<GameAssetView[]> {
   return invoke<GameAssetView[]>("crop_game_asset", { gameId, assetId, crop });
 }

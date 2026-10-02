@@ -16,6 +16,7 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
+import { fillView, toCrop } from "@/lib/crop";
 import type {
   ArtworkSource,
   CloudAuthSession,
@@ -654,10 +655,80 @@ function saveCover(gameId: string, art: MockArt, crop: CropRect) {
   return gameAssets(gameId);
 }
 
+// Cover groups on a game page. ?covers=both gives each game images the player
+// added and images Vaultime found, ?covers=added and ?covers=found only one
+// kind. ?delete=<n> presses the delete button of the n-th image, ?confirm=1
+// then confirms, and ?focus=delete puts the keyboard focus on the first one.
+const coverMix = params.get("covers");
+const deletedAssets = new Set<string>();
+const mixedCovers = new Map<string, GameAssetView[]>();
+
+/** A plain poster with a word on it, for sample covers. */
+function posterArt(ground: string, ink: string, word: string): MockArt {
+  const { element, context } = canvas(600, 900);
+  context.fillStyle = ground;
+  context.fillRect(0, 0, 600, 900);
+  context.fillStyle = ink;
+  context.font = "700 96px system-ui, sans-serif";
+  context.textAlign = "center";
+  context.fillText(word, 300, 760);
+  return mockArt(element, 600, 900, true);
+}
+
+function sampleCovers(gameId: string): GameAssetView[] {
+  if (!coverMix) return [];
+  let covers = mixedCovers.get(gameId);
+  if (!covers) {
+    const asset = (id: string, source: string, filePath: string, art: MockArt): GameAssetView => ({
+      id: `${id}-${gameId}`,
+      game_id: gameId,
+      asset_type: "cover",
+      source,
+      file_path: filePath,
+      cache_path: null,
+      hash: null,
+      created_at: iso(now),
+      preview_data_url: drawCover(art, toCrop(fillView(art), art)),
+      is_preferred: false,
+    });
+    const added = [
+      asset("added-logo", "user_picked", "C:/Users/you/Pictures/logo.png", posterArt("#1d1530", "#e8d6a6", "LOGO")),
+      asset("added-photo", "user_picked", "C:/Users/you/Pictures/key art.jpg", sampleArt(true)),
+    ];
+    const found = [
+      asset("found-steam", "steam_cache", "C:/Steam/appcache/librarycache/library_600x900.jpg", posterArt("#0f3b4a", "#9fe3f0", "STEAM")),
+      asset("found-folder", "scanned_local", "C:/Games/Game/art/background.jpg", posterArt("#3a1f12", "#f0b45a", "ART")),
+    ];
+    covers = coverMix === "added" ? added : coverMix === "found" ? found : [...added, ...found];
+    mixedCovers.set(gameId, covers);
+  }
+  return covers;
+}
+
 function gameAssets(gameId: string): GameAssetView[] {
   const picked = pickedCovers.get(gameId)?.asset;
   const covers = scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === gameId) : [];
-  return picked ? [picked, ...covers.map((asset) => ({ ...asset, is_preferred: false }))] : covers;
+  const listed = picked ? [picked, ...covers.map((asset) => ({ ...asset, is_preferred: false }))] : covers;
+  const all = [...listed, ...sampleCovers(gameId)].filter((asset) => !deletedAssets.has(asset.id));
+  // As in the core, one image is always the cover.
+  if (all.length > 0 && !all.some((asset) => asset.is_preferred)) all[0] = { ...all[0], is_preferred: true };
+  return all;
+}
+
+const deleteStep = params.get("delete");
+if (deleteStep || params.get("focus") === "delete") {
+  setTimeout(() => {
+    const section = [...document.querySelectorAll("section")].find((candidate) => candidate.querySelector("h2")?.textContent === "Cover");
+    const buttons = [...(section?.querySelectorAll<HTMLButtonElement>('button[aria-label^="Delete "]') ?? [])];
+    if (deleteStep) buttons[Number(deleteStep) - 1]?.click();
+    else buttons[0]?.focus();
+  }, 900);
+  // ?confirm=1 then answers the question with Delete.
+  if (params.has("confirm")) {
+    setTimeout(() => {
+      [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Delete")?.click();
+    }, 1500);
+  }
 }
 
 function preferredAssets(): GameAssetView[] {
@@ -846,6 +917,12 @@ mockIPC((cmd, payload) => {
       return openAsset(String(args.gameId), String(args.assetId));
     case "import_game_asset":
       return pickedArt ? saveCover(String(args.gameId), pickedArt, args.crop as CropRect) : [];
+    case "delete_game_asset": {
+      const gameId = String(args.gameId);
+      deletedAssets.add(String(args.assetId));
+      if (pickedCovers.get(gameId)?.asset.id === args.assetId) pickedCovers.delete(gameId);
+      return gameAssets(gameId);
+    }
     case "crop_game_asset": {
       const gameId = String(args.gameId);
       const picked = pickedCovers.get(gameId);
