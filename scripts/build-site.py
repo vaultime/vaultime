@@ -21,10 +21,10 @@ OUT = ROOT / "dist-site"
 FONTS = ROOT / "apps/desktop/node_modules/@fontsource-variable"
 
 FONT_FILES = {
-    "fraunces-normal.woff2": FONTS / "fraunces/files/fraunces-latin-full-normal.woff2",
-    "fraunces-italic.woff2": FONTS / "fraunces/files/fraunces-latin-full-italic.woff2",
-    "hanken-grotesk.woff2": FONTS / "hanken-grotesk/files/hanken-grotesk-latin-wght-normal.woff2",
-    "jetbrains-mono.woff2": FONTS / "jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2",
+    "mona-sans-normal.woff2": FONTS / "mona-sans/files/mona-sans-latin-standard-normal.woff2",
+    "mona-sans-italic.woff2": FONTS / "mona-sans/files/mona-sans-latin-standard-italic.woff2",
+    "geist.woff2": FONTS / "geist/files/geist-latin-wght-normal.woff2",
+    "geist-mono.woff2": FONTS / "geist-mono/files/geist-mono-latin-wght-normal.woff2",
 }
 
 # Output page, title and Markdown source of every text page.
