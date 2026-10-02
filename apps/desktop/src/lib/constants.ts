@@ -193,7 +193,10 @@ export const CROP_SAME_TOLERANCE = 1e-6;
 /** Slider steps between the smallest and largest zoom. */
 export const CROP_SLIDER_STEPS = 200;
 
-/** Source of artwork the player added, as the core names it. Everything else Vaultime found. */
+/**
+ * Source of artwork the player added, as the core names it. Everything else
+ * Vaultime found. Same as `PLAYER_ARTWORK_SOURCE` in constants.rs.
+ */
 export const PLAYER_ARTWORK_SOURCE = "user_picked";
 
 /** File types the cover and background pickers offer. The core reads all of them. */
