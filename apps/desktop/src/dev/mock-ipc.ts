@@ -760,7 +760,7 @@ mockIPC((cmd, payload) => {
   if (appearanceAnswer !== undefined) return appearanceAnswer;
   switch (cmd) {
     case "get_app_version":
-      return "0.2.0";
+      return "0.3.0";
     case "get_device_id":
       return "preview";
     case "list_games":
