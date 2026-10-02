@@ -1,6 +1,6 @@
 [package]
 name = "vaultime"
-version = "0.1.0"
+version = "0.2.0"
 description = "Game library and playtime tracker"
 authors = ["schwimmbeck"]
 license = "GPL-3.0-or-later"
