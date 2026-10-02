@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary } from "@/features/library/library-context";
 import { formatOklch, oklchToHex } from "@/lib/color";
-import { ACCENT_LEVELS, BACKGROUND_BLUR_PX, BACKGROUND_DIM_PERCENT } from "@/lib/constants";
+import { ACCENT_LEVELS, ARTWORK_EXTENSIONS, BACKGROUND_BLUR_PX, BACKGROUND_DIM_PERCENT } from "@/lib/constants";
 import {
   ACCENT_SWATCH_IDS,
   GROUND_IDS,
@@ -93,7 +93,7 @@ export function AppearanceSection() {
         multiple: false,
         directory: false,
         title: "Choose a background picture",
-        filters: [{ name: "Pictures", extensions: ["png", "jpg", "jpeg", "webp", "bmp", "ico"] }],
+        filters: [{ name: "Pictures", extensions: ARTWORK_EXTENSIONS }],
       });
       if (typeof selected === "string") await chooseBackground(selected);
     });

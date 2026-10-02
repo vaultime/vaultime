@@ -5,17 +5,17 @@
 //! folder, outside the artwork cache, so backups leave it out.
 
 use std::fs;
-use std::io::{BufWriter, Cursor};
+use std::io::BufWriter;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use base64::Engine;
-use image::ImageReader;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use tauri::State;
 
 use crate::assets::AssetManager;
+use crate::assets::crop::decode_artwork;
 use crate::constants::{
     BACKGROUND_FILE, BACKGROUND_JPEG_QUALITY, BACKGROUND_MAX_SIDE_PX, BACKGROUND_SOURCE_MAX_BYTES,
 };
@@ -62,13 +62,9 @@ impl BackgroundStore {
             )));
         }
         let bytes = fs::read(source).map_err(|error| failed("read the picture", error))?;
-        let image = ImageReader::new(Cursor::new(&bytes))
-            .with_guessed_format()
-            .map_err(|error| failed("read the picture", error))?
-            .decode()
-            .map_err(|_| {
-                VaultimeError::Invalid("This file is not a picture Vaultime can read.".into())
-            })?;
+        let image = decode_artwork(&bytes, source).map_err(|_| {
+            VaultimeError::Invalid("This file is not a picture Vaultime can read.".into())
+        })?;
         let image =
             if image.width() > BACKGROUND_MAX_SIDE_PX || image.height() > BACKGROUND_MAX_SIDE_PX {
                 image.resize(
