@@ -93,6 +93,12 @@
     @apply font-sans;
     color-scheme: dark;
   }
+  /* Set for a frame while the look changes, so no color lags behind. */
+  .appearance-switch *,
+  .appearance-switch *::before,
+  .appearance-switch *::after {
+    transition: none !important;
+  }
   body {
     @apply bg-background text-foreground;
     margin: 0;
@@ -144,7 +150,12 @@
   --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-/* Vaultime is dark only. */
+/*
+ * The default look, violet on dark violet ink. lib/theme.ts derives every
+ * token below for the mode, ground and accent the player picks and sets them
+ * on the root element, so these only hold until the page starts. The
+ * --violet tokens are the accent, violet unless the player picks another.
+ */
 :root {
   --ink: #0e0b14;
   --surface: #16121e;
@@ -173,6 +184,8 @@
   --border: var(--hairline);
   --ring: var(--violet);
   --radius: 0.625rem;
+  /* Tinted headers let a background picture show through a little. */
+  --header-alpha: 100%;
 }
 
 *::-webkit-scrollbar {

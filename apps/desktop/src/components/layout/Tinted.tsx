@@ -21,12 +21,13 @@ export function TintedHeader({
   className?: string;
   children: ReactNode;
 }) {
+  const seeThrough = (color: string) => `color-mix(in oklab, ${color} var(--header-alpha), transparent)`;
   return (
     <section
       className={cn("relative isolate overflow-hidden border-b px-8 pt-12 pb-10 xl:px-14", className)}
       style={{
         borderColor: tint.fill,
-        background: `radial-gradient(120% 150% at 90% 0%, ${tint.fill} 0%, ${tint.wash} 60%)`,
+        background: `radial-gradient(120% 150% at 90% 0%, ${seeThrough(tint.fill)} 0%, ${seeThrough(tint.wash)} 60%)`,
       }}
     >
       {backdrop && (

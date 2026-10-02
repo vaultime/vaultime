@@ -4,6 +4,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
+import { AppearanceProvider } from "@/features/appearance/AppearanceProvider";
 import { CloudSessionProvider } from "@/features/cloud/CloudSessionProvider";
 import { LibraryProvider } from "@/features/library/LibraryProvider";
 import { App } from "@/App";
@@ -16,11 +17,13 @@ if (import.meta.env.VITE_MOCK_IPC === "1") {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <CloudSessionProvider>
-        <LibraryProvider>
-          <App />
-        </LibraryProvider>
-      </CloudSessionProvider>
+      <AppearanceProvider>
+        <CloudSessionProvider>
+          <LibraryProvider>
+            <App />
+          </LibraryProvider>
+        </CloudSessionProvider>
+      </AppearanceProvider>
     </BrowserRouter>
   </StrictMode>,
 );

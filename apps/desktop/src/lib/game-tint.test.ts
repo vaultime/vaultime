@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
+import { maxSrgbChroma } from "./color";
 import { MARK_LEVELS, MARK_MIN_HUE_GAP_DEG } from "./constants";
-import { distinctHues, markColors, maxSrgbChroma, tintForTitle, tintFromPixels } from "./game-tint";
+import { distinctHues, markColors, tintForTitle, tintFromPixels } from "./game-tint";
+import { themeTokens, type ThemeMode } from "./theme";
 
 const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
@@ -16,9 +18,11 @@ function pixels(...runs: [count: number, red: number, green: number, blue: numbe
   return new Uint8ClampedArray(data);
 }
 
-/** Parses `oklch(l c h)`. */
-function oklch(color: string) {
-  const [lightness, chroma, hue] = color.slice("oklch(".length, -1).split(" ").map(Number);
+/** Parses `oklch(l c h)`, with the tokens of a mode put in. */
+function oklch(color: string, mode: ThemeMode = "dark") {
+  const tokens = themeTokens(mode, "vault", "violet");
+  const resolved = color.replace(/var\((--[a-z0-9-]+)\)/g, (_, name: string) => tokens[name]);
+  const [lightness, chroma, hue] = resolved.slice("oklch(".length, -1).split(" ").map(Number);
   return { lightness, chroma, hue };
 }
 
@@ -93,7 +97,7 @@ describe("distinctHues", () => {
 
 describe("markColors", () => {
   it("gives grey art grey marks, silver first", () => {
-    const [first, second] = markColors([null, null]).map(oklch);
+    const [first, second] = markColors([null, null]).map((color) => oklch(color));
     expect(first.chroma).toBe(0);
     expect(second.chroma).toBe(0);
     expect(first.lightness).not.toBe(second.lightness);
@@ -103,34 +107,43 @@ describe("markColors", () => {
     const [red, green] = markColors([
       { hue: 27, chroma: 0.12 },
       { hue: 145, chroma: 0.09 },
-    ]).map(oklch);
-    expect(red).toEqual({ lightness: MARK_LEVELS.lightness, chroma: 0.12, hue: 27 });
-    expect(green).toEqual({ lightness: MARK_LEVELS.lightness, chroma: 0.09, hue: 145 });
+    ]).map((color) => oklch(color));
+    expect(red).toEqual({ lightness: MARK_LEVELS.lightness.dark, chroma: 0.12, hue: 27 });
+    expect(green).toEqual({ lightness: MARK_LEVELS.lightness.dark, chroma: 0.09, hue: 145 });
   });
 
   it("nudges a game that would look like an earlier one", () => {
     const [first, second] = markColors([
       { hue: 27, chroma: 0.12 },
       { hue: 35, chroma: 0.12 },
-    ]).map(oklch);
+    ]).map((color) => oklch(color));
     expect(first.hue).toBe(27);
     expect(distance(first.hue, second.hue)).toBeGreaterThanOrEqual(MARK_MIN_HUE_GAP_DEG);
   });
 
-  it("keeps marks inside sRGB", () => {
-    for (const mark of markColors([{ hue: 264, chroma: 0.3 }]).map(oklch)) {
-      expect(mark.chroma).toBeLessThanOrEqual(maxSrgbChroma(MARK_LEVELS.lightness, mark.hue));
+  it("keeps marks inside sRGB in both modes", () => {
+    const hues = [{ hue: 264, chroma: 0.3 }, { hue: 100, chroma: 0.3 }, { hue: 200, chroma: 0.3 }];
+    for (const mode of ["dark", "light"] as const) {
+      for (const mark of markColors(hues).map((color) => oklch(color, mode))) {
+        expect(mark.lightness).toBe(MARK_LEVELS.lightness[mode]);
+        expect(mark.chroma).toBeLessThanOrEqual(maxSrgbChroma(mark.lightness, mark.hue));
+      }
     }
   });
 
+  it("gives greys a lightness that reads in light mode too", () => {
+    const [dark, light] = (["dark", "light"] as const).map((mode) => oklch(markColors([null])[0], mode));
+    expect(dark.lightness).toBeGreaterThan(light.lightness);
+  });
+
   it("tints greys once the grey steps run out", () => {
-    const marks = markColors([null, null, null, null]).map(oklch);
+    const marks = markColors([null, null, null, null]).map((color) => oklch(color));
     expect(marks.slice(0, 3).every((mark) => mark.chroma === 0)).toBe(true);
     expect(marks[3].chroma).toBeGreaterThan(0);
   });
 
   it("keeps taken hues free", () => {
-    const [mark] = markColors([{ hue: 290, chroma: 0.12 }], [293]).map(oklch);
+    const [mark] = markColors([{ hue: 290, chroma: 0.12 }], [293]).map((color) => oklch(color));
     expect(distance(mark.hue, 293)).toBeGreaterThanOrEqual(MARK_MIN_HUE_GAP_DEG);
   });
 });

@@ -453,8 +453,70 @@ if (new URLSearchParams(window.location.search).get("palette") === "1") {
   setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })), 500);
 }
 
+// Appearance: ?theme=dark|light|system, ?ground=vault|graphite|midnight|moss|umber,
+// ?accent= a swatch name or a hex color without the #, ?bg=1 for a sample
+// background picture or ?bg=cover for dist-mock/covers/1.jpg, and ?dim= and
+// ?blur= for its sliders. Changes on the settings page last until a reload.
+const appearanceValues = new Map<string, string>();
+for (const [param, key] of [
+  ["theme", "appearance_mode"],
+  ["ground", "appearance_ground"],
+  ["dim", "background_dim"],
+  ["blur", "background_blur"],
+]) {
+  const value = params.get(param);
+  if (value) appearanceValues.set(key, value);
+}
+const accentParam = params.get("accent");
+if (accentParam) appearanceValues.set("appearance_accent", /^[0-9a-f]{6}$/i.test(accentParam) ? `#${accentParam}` : accentParam);
+
+/** A dusk landscape, standing in for a picture of the player's. */
+function samplePicture(): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1000' preserveAspectRatio='xMidYMid slice'>
+    <defs><linearGradient id='sky' x1='0' y1='0' x2='0' y2='1'>
+      <stop offset='0' stop-color='#1d2b64'/><stop offset='0.55' stop-color='#c2557a'/><stop offset='0.8' stop-color='#f8b26a'/>
+    </linearGradient></defs>
+    <rect width='1600' height='1000' fill='url(#sky)'/>
+    <circle cx='1150' cy='560' r='120' fill='#ffd89b'/>
+    <path d='M0 700 L260 480 L480 640 L760 380 L1040 620 L1300 460 L1600 640 L1600 1000 L0 1000Z' fill='#3b2a4f'/>
+    <path d='M0 820 L340 640 L620 780 L900 600 L1220 800 L1600 700 L1600 1000 L0 1000Z' fill='#1b1430'/>
+  </svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+let backgroundPicture: string | null =
+  params.get("bg") === "1" ? samplePicture() : params.get("bg") === "cover" ? "/covers/1.jpg" : null;
+
+/** Answers the appearance commands, undefined for every other command. */
+function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
+  switch (cmd) {
+    case "set_setting":
+      if (String(args.key).startsWith("appearance_") || String(args.key).startsWith("background_")) {
+        appearanceValues.set(String(args.key), String(args.value));
+      }
+      return true;
+    case "get_background_image":
+      return backgroundPicture;
+    case "set_background_image":
+      backgroundPicture = samplePicture();
+      return backgroundPicture;
+    case "set_background_from_game": {
+      const index = allGames.findIndex((game) => game.id === args.gameId);
+      backgroundPicture = scenario === "covers" && index >= 0 ? `/covers/${index + 1}.jpg` : samplePicture();
+      return backgroundPicture;
+    }
+    case "clear_background_image":
+      backgroundPicture = null;
+      return true;
+    default:
+      return undefined;
+  }
+}
+
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
+  const appearanceAnswer = appearanceIpc(cmd, args);
+  if (appearanceAnswer !== undefined) return appearanceAnswer;
   switch (cmd) {
     case "get_app_version":
       return "0.2.0";
@@ -547,7 +609,10 @@ mockIPC((cmd, payload) => {
     case "get_active_sessions":
       return running;
     case "list_settings":
-      return [{ key: "idle_threshold_seconds", value: "300", updated_at: iso(now) }];
+      return [
+        { key: "idle_threshold_seconds", value: "300", updated_at: iso(now) },
+        ...[...appearanceValues].map(([key, value]) => ({ key, value, updated_at: iso(now) })),
+      ];
     case "get_tracking_diagnostics":
       return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", controller_detection: "xinput", controllers_connected: 1, poll_interval_seconds: 5 };
     case "load_cloud_session_secure":

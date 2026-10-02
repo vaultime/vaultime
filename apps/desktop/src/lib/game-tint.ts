@@ -3,8 +3,6 @@
 
 import {
   BRAND_HUE_DEG,
-  GAMUT_SEARCH_MAX_CHROMA,
-  GAMUT_SEARCH_STEPS,
   MARK_LEVELS,
   MARK_MAX_CHROMA,
   MARK_MIN_CHROMA,
@@ -22,6 +20,7 @@ import {
   TINT_SAMPLE_PX,
   TINT_TYPICAL_CHROMA,
 } from "@/lib/constants";
+import { maxSrgbChroma, srgbToOklab } from "@/lib/color";
 import { stableHash } from "@/lib/utils";
 
 /** A color by OKLCH hue in degrees and chroma. */
@@ -30,38 +29,44 @@ export interface ArtColor {
   chroma: number;
 }
 
+// Tints and marks are CSS colors whose lightness is a token, so they follow
+// dark and light mode without being worked out again. The theme in
+// lib/theme.ts sets the tokens.
+
 export interface GameTint {
   /** The main color of the artwork, or of the title. Null for black, white and grey art. */
   color: ArtColor | null;
-  /** Dark field for covers and tiles. */
+  /** Field for covers and tiles, dark in dark mode and pale in light mode. */
   fill: string;
   /** Border of that field. */
   edge: string;
-  /** Light text on the field. */
+  /** Text on the field. */
   ink: string;
-  /** Body text on a wash, a little dimmer than ink. */
+  /** Body text on a wash, a little softer than ink. */
   soft: string;
   /** Small labels on a wash. */
   muted: string;
-  /** Very dark wash for page headers. */
+  /** The deepest or palest wash, for page headers. */
   wash: string;
 }
 
 /**
  * The same lightness steps for every game, only hue and colorfulness change.
- * `strength` scales colorfulness, 1 is the default and 0 is grey.
+ * `strength` scales colorfulness, 1 is the default and 0 is grey. The hue may
+ * be a CSS value such as a token.
  */
-function tintFromHue(hue: number, strength: number, color: ArtColor | null): GameTint {
-  const tone = ({ lightness, chroma }: { lightness: number; chroma: number }) =>
-    `oklch(${lightness} ${(chroma * strength).toFixed(3)} ${Math.round(hue)})`;
+function tintFromHue(hue: number | string, strength: number, color: ArtColor | null): GameTint {
+  const angle = typeof hue === "number" ? String(Math.round(hue)) : hue;
+  const tone = (role: keyof typeof TINT_LEVELS) =>
+    `oklch(var(--tint-${role}) ${(TINT_LEVELS[role].chroma * strength).toFixed(3)} ${angle})`;
   return {
     color,
-    fill: tone(TINT_LEVELS.fill),
-    edge: tone(TINT_LEVELS.edge),
-    ink: tone(TINT_LEVELS.ink),
-    soft: tone(TINT_LEVELS.soft),
-    muted: tone(TINT_LEVELS.muted),
-    wash: tone(TINT_LEVELS.wash),
+    fill: tone("fill"),
+    edge: tone("edge"),
+    ink: tone("ink"),
+    soft: tone("soft"),
+    muted: tone("muted"),
+    wash: tone("wash"),
   };
 }
 
@@ -70,8 +75,8 @@ function tintForHue(hue: number): GameTint {
   return tintFromHue(hue, 1, { hue, chroma: MARK_LEVELS.chroma });
 }
 
-/** Vaultime violet, for pages that are not about one game. */
-export const BRAND_TINT = tintForHue(BRAND_HUE_DEG);
+/** The accent color, for pages that are not about one game. Violet unless the player picks another. */
+export const BRAND_TINT = tintFromHue("var(--accent-hue)", 1, { hue: BRAND_HUE_DEG, chroma: MARK_LEVELS.chroma });
 
 /** A stable tint per title, for games without artwork. */
 export function tintForTitle(title: string): GameTint {
@@ -112,85 +117,42 @@ export function distinctHues(hues: number[], taken: number[] = []): number[] {
   return placed.slice(taken.length);
 }
 
-/** Whether an OKLCH color fits inside sRGB, see https://bottosson.github.io/posts/oklab/ */
-function insideSrgb(lightness: number, chroma: number, hue: number): boolean {
-  const radians = (hue * Math.PI) / 180;
-  const a = chroma * Math.cos(radians);
-  const b = chroma * Math.sin(radians);
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const rgb = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-  return rgb.every((channel) => channel >= 0 && channel <= 1);
-}
-
-/** The most chroma a lightness and hue can have inside sRGB. */
-export function maxSrgbChroma(lightness: number, hue: number): number {
-  let inside = 0;
-  let outside = GAMUT_SEARCH_MAX_CHROMA;
-  for (let step = 0; step < GAMUT_SEARCH_STEPS; step += 1) {
-    const middle = (inside + outside) / 2;
-    if (insideSrgb(lightness, middle, hue)) inside = middle;
-    else outside = middle;
-  }
-  return inside;
-}
-
 /**
  * Marks that tell the games shown together apart, in the main color of their
- * artwork at a lightness that reads on the dark ground. Black, white and grey
- * art gets a grey, the first one silver. A color only moves when it would look
- * like an earlier game or like a `taken` hue, and greys run out into tinted
- * greys. One color per entry of `colors`, in the same order.
+ * artwork at a lightness that reads on the ground of either mode. Black,
+ * white and grey art gets a grey, the first one silver. A color only moves
+ * when it would look like an earlier game or like a `taken` hue, and greys
+ * run out into tinted greys. One color per entry of `colors`, in the same
+ * order.
  */
 export function markColors(colors: (ArtColor | null)[], taken: number[] = []): string[] {
   const greys = new Map<number, number>();
   const hued: { index: number; hue: number; chroma: number }[] = [];
+  const greySteps = MARK_NEUTRAL_LIGHTNESS.dark.length;
   for (const [index, color] of colors.entries()) {
     if (color) hued.push({ index, hue: color.hue, chroma: color.chroma });
-    else if (greys.size < MARK_NEUTRAL_LIGHTNESS.length) greys.set(index, MARK_NEUTRAL_LIGHTNESS[greys.size]);
+    else if (greys.size < greySteps) greys.set(index, greys.size + 1);
     else hued.push({ index, hue: 0, chroma: MARK_MIN_CHROMA });
   }
 
   const marks: string[] = [];
-  for (const [index, lightness] of greys) marks[index] = `oklch(${lightness} 0 0)`;
+  for (const [index, step] of greys) marks[index] = `oklch(var(--mark-grey-${step}) 0 0)`;
   const hues = distinctHues(
     hued.map((entry) => entry.hue),
     taken,
   );
+  const { dark, light } = MARK_LEVELS.lightness;
   for (const [order, entry] of hued.entries()) {
     const hue = hues[order];
     const chroma = Math.min(
       Math.max(entry.chroma, MARK_MIN_CHROMA),
       MARK_MAX_CHROMA,
-      maxSrgbChroma(MARK_LEVELS.lightness, hue),
+      maxSrgbChroma(dark, hue),
+      maxSrgbChroma(light, hue),
     );
-    marks[entry.index] = `oklch(${MARK_LEVELS.lightness} ${chroma.toFixed(3)} ${Math.round(hue)})`;
+    marks[entry.index] = `oklch(var(--mark-lightness) ${chroma.toFixed(3)} ${Math.round(hue)})`;
   }
   return marks;
-}
-
-/** sRGB bytes to OKLab, see https://bottosson.github.io/posts/oklab/ */
-function toOklab(red: number, green: number, blue: number) {
-  const linear = (value: number) => {
-    const c = value / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  const r = linear(red);
-  const g = linear(green);
-  const b = linear(blue);
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return {
-    lightness: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  };
 }
 
 /**
@@ -208,7 +170,7 @@ export function tintFromPixels(data: Uint8ClampedArray): GameTint {
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] < TINT_MIN_ALPHA) continue;
     opaque += 1;
-    const { lightness, a, b } = toOklab(data[i], data[i + 1], data[i + 2]);
+    const { lightness, a, b } = srgbToOklab(data[i], data[i + 1], data[i + 2]);
     if (lightness < TINT_MIN_LIGHTNESS || lightness > TINT_MAX_LIGHTNESS) continue;
     const chroma = Math.hypot(a, b);
     sumChroma += chroma;

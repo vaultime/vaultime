@@ -6,15 +6,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
+import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import {
-  BRAND_HUE_DEG,
-  DAYS_PER_WEEK,
-  HOURS_PER_DAY,
-  JOURNAL_MIN_SPAN_PERCENT,
-  JOURNAL_TICK_HOURS,
-} from "@/lib/constants";
+import { DAYS_PER_WEEK, HOURS_PER_DAY, JOURNAL_MIN_SPAN_PERCENT, JOURNAL_TICK_HOURS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
 import { countsAsPlay, playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
@@ -94,6 +89,7 @@ function hatch(colors: string[]): string {
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
   const { sessions, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
+  const { accentHues } = useAppearance();
   // 0 is this week, -1 the week before and so on.
   const [offset, setOffset] = useState(0);
   const [events, setEvents] = useState<SessionEvent[]>([]);
@@ -117,8 +113,8 @@ export function JournalPage() {
   const days = groupWeek(sessions, statusChanges, weekStart, now);
 
   // A game keeps one color through the week, the main color of its artwork,
-  // nudged only when it would look like a game that showed up earlier. Violet
-  // stays free for active time.
+  // nudged only when it would look like a game that showed up earlier. The
+  // accent stays free for active time.
   const weekGames = [
     ...new Set([...days].reverse().flatMap((day) => day.sessions.filter(countsAsPlay).map((session) => session.game_id))),
   ];
@@ -126,7 +122,7 @@ export function JournalPage() {
     const summary = byGame.get(gameId);
     return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).color;
   };
-  const weekMarks = markColors(weekGames.map(colorOf), [BRAND_HUE_DEG]);
+  const weekMarks = markColors(weekGames.map(colorOf), accentHues);
   const marks = new Map(weekGames.map((gameId, index) => [gameId, weekMarks[index]]));
   const markOf = (gameId: string) => marks.get(gameId) ?? markColors([colorOf(gameId)])[0];
 

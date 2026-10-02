@@ -16,6 +16,7 @@ import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Pa
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
+import { AppearanceSection } from "@/features/settings/AppearanceSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
@@ -362,6 +363,8 @@ export function SettingsPage() {
             <Switch id="autostart" checked={autostart} onCheckedChange={(checked) => void changeAutostart(checked)} />
           </PageRow>
         </PageSection>
+
+        <AppearanceSection />
 
         {hidden.length > 0 && (
           <PageSection

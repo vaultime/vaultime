@@ -304,3 +304,22 @@ export async function importDiscoveredGames(
 ): Promise<Game[]> {
   return invoke<Game[]>("import_discovered_games", { discoveries });
 }
+
+/** The background picture as a data URL, null without one. */
+export async function getBackgroundImage(): Promise<string | null> {
+  return invoke<string | null>("get_background_image");
+}
+
+/** Stores a scaled down copy of a picture as the background and returns it. */
+export async function setBackgroundImage(sourcePath: string): Promise<string> {
+  return invoke<string>("set_background_image", { sourcePath });
+}
+
+/** Uses a game's artwork as the background and returns it. */
+export async function setBackgroundFromGame(gameId: string): Promise<string> {
+  return invoke<string>("set_background_from_game", { gameId });
+}
+
+export async function clearBackgroundImage(): Promise<boolean> {
+  return invoke<boolean>("clear_background_image");
+}

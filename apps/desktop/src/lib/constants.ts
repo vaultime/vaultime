@@ -50,6 +50,16 @@ export const SETTING_KEYS = {
   cloudAutoBackup: "cloud_auto_backup_enabled",
   /** How the rail sorts the games. Same as RAIL_SORT_SETTING in constants.rs. */
   railSort: "rail_sort",
+  /** Dark, light or the system's mode. Same as APPEARANCE_MODE_SETTING in constants.rs. */
+  appearanceMode: "appearance_mode",
+  /** The ground tone. Same as APPEARANCE_GROUND_SETTING in constants.rs. */
+  appearanceGround: "appearance_ground",
+  /** The accent color. Same as APPEARANCE_ACCENT_SETTING in constants.rs. */
+  appearanceAccent: "appearance_accent",
+  /** How far the background picture is dimmed. Same as BACKGROUND_DIM_SETTING in constants.rs. */
+  backgroundDim: "background_dim",
+  /** How far the background picture is blurred. Same as BACKGROUND_BLUR_SETTING in constants.rs. */
+  backgroundBlur: "background_blur",
 } as const;
 
 /** Automatic local backups kept. Same as AUTO_BACKUP_KEEP in constants.rs. */
@@ -229,21 +239,25 @@ export const NUMBER_WORDS_MAX = 999;
 /** Hue of Vaultime violet in OKLCH, in degrees. The hue of --violet in index.css. */
 export const BRAND_HUE_DEG = 293;
 
-/** Lightness and chroma of each tint role, the hue comes from the game. */
+/**
+ * Chroma of each tint role and its lightness in dark and light mode, the hue
+ * comes from the game. Light mode turns the dark field into a pale one with
+ * dark ink.
+ */
 export const TINT_LEVELS = {
-  fill: { lightness: 0.3, chroma: 0.06 },
-  edge: { lightness: 0.38, chroma: 0.07 },
-  ink: { lightness: 0.93, chroma: 0.045 },
-  soft: { lightness: 0.85, chroma: 0.05 },
-  muted: { lightness: 0.77, chroma: 0.06 },
-  wash: { lightness: 0.19, chroma: 0.035 },
+  fill: { chroma: 0.06, dark: 0.3, light: 0.9 },
+  edge: { chroma: 0.07, dark: 0.38, light: 0.82 },
+  ink: { chroma: 0.045, dark: 0.93, light: 0.24 },
+  soft: { chroma: 0.05, dark: 0.85, light: 0.34 },
+  muted: { chroma: 0.06, dark: 0.77, light: 0.45 },
+  wash: { chroma: 0.035, dark: 0.19, light: 0.965 },
 };
 
 /**
- * Lightness of the marks that tell games apart, as in the journal, and the
- * chroma of marks for games without artwork. Stays inside sRGB at every hue.
+ * Lightness of the marks that tell games apart, as in the journal, in dark
+ * and light mode, and the chroma of marks for games without artwork.
  */
-export const MARK_LEVELS = { lightness: 0.74, chroma: 0.125 };
+export const MARK_LEVELS = { lightness: { dark: 0.74, light: 0.55 }, chroma: 0.125 };
 
 /** Marks take at least this chroma, so a muted cover still reads as a color. */
 export const MARK_MIN_CHROMA = 0.07;
@@ -251,10 +265,10 @@ export const MARK_MIN_CHROMA = 0.07;
 export const MARK_MAX_CHROMA = 0.17;
 
 /**
- * OKLCH lightness of the grey marks for black, white and grey artwork, the
- * first game of the week takes the first.
+ * OKLCH lightness of the grey marks for black, white and grey artwork in dark
+ * and light mode, the first game of the week takes the first.
  */
-export const MARK_NEUTRAL_LIGHTNESS = [0.84, 0.64, 0.95];
+export const MARK_NEUTRAL_LIGHTNESS = { dark: [0.84, 0.64, 0.95], light: [0.42, 0.64, 0.24] };
 
 /** Games shown side by side keep their hues at least this far apart, in degrees. */
 export const MARK_MIN_HUE_GAP_DEG = 30;
@@ -289,3 +303,92 @@ export const TINT_TYPICAL_CHROMA = 0.09;
 export const TINT_MIN_STRENGTH = 0.2;
 /** How far a tint may go past the default colorfulness. */
 export const TINT_MAX_STRENGTH = 1.2;
+
+// Appearance
+
+/**
+ * Ground tones: the hue of the ground and how colorful it is, where 1 is the
+ * violet ink Vaultime started with.
+ */
+export const GROUNDS = {
+  vault: { hue: 300, chroma: 1 },
+  graphite: { hue: 260, chroma: 0.15 },
+  midnight: { hue: 252, chroma: 1.25 },
+  moss: { hue: 160, chroma: 0.85 },
+  umber: { hue: 55, chroma: 0.9 },
+} as const;
+
+/**
+ * Lightness and chroma of each ground token in dark and light mode, at a
+ * ground chroma of 1. Dark mode with the vault ground is the palette of
+ * Vaultime 0.2.
+ */
+export const GROUND_LEVELS = {
+  ink: { dark: { lightness: 0.158, chroma: 0.019 }, light: { lightness: 0.975, chroma: 0.006 } },
+  bar: { dark: { lightness: 0.175, chroma: 0.023 }, light: { lightness: 0.955, chroma: 0.009 } },
+  surface: { dark: { lightness: 0.193, chroma: 0.025 }, light: { lightness: 0.993, chroma: 0.003 } },
+  raised: { dark: { lightness: 0.209, chroma: 0.03 }, light: { lightness: 0.935, chroma: 0.013 } },
+  rule: { dark: { lightness: 0.245, chroma: 0.04 }, light: { lightness: 0.905, chroma: 0.015 } },
+  hairline: { dark: { lightness: 0.272, chroma: 0.041 }, light: { lightness: 0.875, chroma: 0.018 } },
+  "hairline-strong": { dark: { lightness: 0.335, chroma: 0.056 }, light: { lightness: 0.8, chroma: 0.025 } },
+  idle: { dark: { lightness: 0.395, chroma: 0.054 }, light: { lightness: 0.77, chroma: 0.035 } },
+  faint: { dark: { lightness: 0.72, chroma: 0.043 }, light: { lightness: 0.5, chroma: 0.035 } },
+  soft: { dark: { lightness: 0.873, chroma: 0.03 }, light: { lightness: 0.34, chroma: 0.03 } },
+  text: { dark: { lightness: 0.94, chroma: 0.02 }, light: { lightness: 0.21, chroma: 0.025 } },
+};
+
+/**
+ * Accent colors to pick from, violet first. Each keeps its hue, and its
+ * chroma is cut to what fits sRGB at the accent lightness of the mode.
+ */
+export const ACCENT_SWATCHES = {
+  violet: { hue: BRAND_HUE_DEG, chroma: 0.187 },
+  blue: { hue: 255, chroma: 0.16 },
+  teal: { hue: 195, chroma: 0.13 },
+  green: { hue: 150, chroma: 0.16 },
+  orange: { hue: 50, chroma: 0.17 },
+  rose: { hue: 5, chroma: 0.18 },
+} as const;
+
+/**
+ * Lightness of the accent, of the accent under the pointer and of text on
+ * the accent, per mode. Every accent takes these, so any color reads on the
+ * ground. Grey accents take their own lightness.
+ */
+export const ACCENT_LEVELS = {
+  dark: { lightness: 0.678, hover: 0.748, ink: 0.183, inkChroma: 0.04, grey: 0.86, greyHover: 0.93 },
+  light: { lightness: 0.5, hover: 0.43, ink: 0.985, inkChroma: 0.01, grey: 0.3, greyHover: 0.22 },
+};
+
+/** Chroma of the accent under the pointer, relative to the accent. */
+export const ACCENT_HOVER_CHROMA_SCALE = 0.77;
+/** A picked color with less chroma than this is a grey accent. */
+export const ACCENT_GREY_MAX_CHROMA = 0.03;
+/** Colorful accents take at least this chroma, so they still read as a color. */
+export const ACCENT_MIN_CHROMA = 0.08;
+
+/** Warning, recovered and error colors per mode. */
+export const SIGNAL_LEVELS = {
+  amber: { dark: { lightness: 0.808, chroma: 0.127, hue: 75 }, light: { lightness: 0.53, chroma: 0.12, hue: 62 } },
+  sky: { dark: { lightness: 0.755, chroma: 0.126, hue: 260 }, light: { lightness: 0.51, chroma: 0.15, hue: 258 } },
+  destructive: {
+    dark: { lightness: 0.737, chroma: 0.162, hue: 17 },
+    light: { lightness: 0.55, chroma: 0.19, hue: 22 },
+  },
+};
+
+/** Lightness of shadows under covers and panels, per mode. */
+export const SCRIM_LIGHTNESS = { dark: 0, light: 0.32 };
+/** Lightness of the faint washes on hover and around covers, per mode. */
+export const GLINT_LIGHTNESS = { dark: 1, light: 0.18 };
+
+/** Share of the ground laid over the background picture, in percent. */
+export const BACKGROUND_DIM_PERCENT = { min: 40, max: 95, default: 78 };
+/** Blur of the background picture, in pixels. */
+export const BACKGROUND_BLUR_PX = { min: 0, max: 48, default: 16 };
+/** Opacity of tinted headers in front of a background picture, in percent. */
+export const BACKGROUND_HEADER_OPACITY_PERCENT = 86;
+/** Wait after the last slider move before the value is saved. */
+export const BACKGROUND_SAVE_DELAY_MS = 400;
+/** Key of the copy of the look in local storage, read before the first paint. */
+export const APPEARANCE_CACHE_KEY = "vaultime.appearance";
