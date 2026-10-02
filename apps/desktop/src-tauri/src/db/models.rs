@@ -3,7 +3,7 @@
 
 //! Row types shared by the repositories and the IPC layer.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -60,10 +60,6 @@ pub struct GameMetadata {
     /// How the player cut each cover from its original file, by asset id.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cover_crops: BTreeMap<String, CropRect>,
-    /// Source files of images the player deleted, so a scan does not bring
-    /// them back. Adding the file by hand takes it off the list.
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub dismissed_artwork: BTreeSet<String>,
 }
 
 /// The part of an image that becomes a cover, in fractions of the image width

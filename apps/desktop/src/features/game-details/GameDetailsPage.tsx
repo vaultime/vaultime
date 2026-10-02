@@ -615,7 +615,7 @@ function DeleteCoverConfirm({
       <p className="text-[13px] leading-relaxed text-soft">
         Delete this image from Vaultime? The file it came from stays where it is.
         {asset.is_preferred && " The next image becomes the cover."}
-        {found && " A scan will not bring it back."}
+        {found && " Scan folder finds it again."}
       </p>
       <div className="mt-2.5 flex gap-2">
         <Button variant="destructive" size="sm" onClick={onDelete} disabled={busy}>
