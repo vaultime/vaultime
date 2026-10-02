@@ -262,13 +262,16 @@ function standoutWordings(session: Session, context: SessionContext, words: Line
 
   const idleShare = session.runtime_ms > 0 ? session.idle_ms / session.runtime_ms : 0;
   if (session.runtime_ms >= SESSION_LEFT_RUNNING_MIN_MS && idleShare >= SESSION_LEFT_RUNNING_MIN_SHARE) {
-    return [
-      [["", ` stayed open through the ${words.noun}`], `Left open through the ${words.noun}`],
-      [["", " ran mostly on its own"], "Mostly left running"],
-    ];
+    const mostly: Wording = [["", " ran mostly on its own"], "Mostly left running"];
+    // Only a long session can have stayed open through a whole part of the day.
+    return brief || shape === "plain"
+      ? [mostly]
+      : [[["", ` stayed open through the ${words.noun}`], `Left open through the ${words.noun}`], mostly];
   }
 
+  // Play from before Vaultime may hold a longer session, so only tracked history can set a record.
   const record =
+    (context.earlierMs ?? 0) < MINUTE_MS &&
     earlier.length >= SESSION_RECORD_MIN_EARLIER &&
     session.runtime_ms >= SESSION_RECORD_MIN_MS &&
     earlier.every((other) => other.runtime_ms < session.runtime_ms);
@@ -279,9 +282,12 @@ function standoutWordings(session: Session, context: SessionContext, words: Line
     ];
   }
 
-  const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
+  // The wall clock end counts sleep, the runtime does not, so a session slept through is no late night.
+  const ended = session.ended_at_wall
+    ? Math.min(parseVaultimeDate(session.ended_at_wall).getTime(), started.getTime() + session.runtime_ms)
+    : null;
   const midnight = new Date(started.getFullYear(), started.getMonth(), started.getDate() + 1);
-  if (ended && ended.getTime() - midnight.getTime() >= SESSION_PAST_MIDNIGHT_MIN_MS) {
+  if (ended !== null && ended - midnight.getTime() >= SESSION_PAST_MIDNIGHT_MIN_MS) {
     return [
       [["Into the small hours with ", ""], "Into the small hours"],
       [["Past midnight in ", ""], "Well past midnight"],

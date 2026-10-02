@@ -107,10 +107,14 @@ describe("describeSession", () => {
       expect(away(at(2025, 8, 1, 20, 0))).toContain("Back to Hades II after over a year");
     });
 
-    it("notes a game left running", () => {
-      const open = session(at(2026, 9, 29, 20, 0), 60, { active_ms: 10 * MINUTE_MS, idle_ms: 50 * MINUTE_MS });
+    it("notes a game left running, through the evening only when it was long", () => {
+      const open = session(at(2026, 9, 29, 19, 0), 150, { active_ms: 20 * MINUTE_MS, idle_ms: 130 * MINUTE_MS });
       expect(wordings(open, { gameTitle, gameSessions: [earlier, open] })).toEqual(
         new Set(["Hades II stayed open through the evening", "Hades II ran mostly on its own"]),
+      );
+      const short = session(at(2026, 9, 29, 23, 0), 30, { active_ms: 10 * MINUTE_MS, idle_ms: 20 * MINUTE_MS });
+      expect(wordings(short, { gameTitle, gameSessions: [earlier, short] })).toEqual(
+        new Set(["Hades II ran mostly on its own"]),
       );
     });
 
@@ -123,6 +127,9 @@ describe("describeSession", () => {
       expect(wordings(long, { gameTitle, gameSessions: [...before.slice(1), long] })).toContain(
         "A long evening in Hades II",
       );
+      expect(wordings(long, { gameTitle, gameSessions: [...before, long], earlierMs: 300 * HOUR_MS })).toContain(
+        "A long evening in Hades II",
+      );
     });
 
     it("notes play past midnight and another round on the same day", () => {
@@ -130,6 +137,9 @@ describe("describeSession", () => {
       expect(wordings(late, { gameTitle, gameSessions: [earlier, late] })).toEqual(
         new Set(["Into the small hours with Hades II", "Past midnight in Hades II"]),
       );
+      // Slept through: started late, the clock says morning, but only 35 minutes counted.
+      const slept = session(at(2026, 9, 29, 23, 50), 35, { ended_at_wall: at(2026, 9, 30, 9, 30) });
+      expect(wordings(slept, { gameTitle, gameSessions: [earlier, slept] })).not.toContain("Past midnight in Hades II");
       const afternoon = session(at(2026, 9, 29, 14, 0), 60);
       const again = session(at(2026, 9, 29, 20, 0), 40);
       expect(wordings(again, { gameTitle, gameSessions: [earlier, afternoon, again] })).toEqual(
