@@ -138,9 +138,9 @@ export function distinctHues(hues: number[], taken: number[] = []): number[] {
 
 /** How a game shows in the journal. */
 export interface Mark {
-  /** Its one color, for its name and for stretches it shares with other games. */
+  /** Its main color, for stretches it shares with other games. */
   color: string;
-  /** What its time bars are filled with, the color blending into its second one for art with two. */
+  /** What its time bars and its name are painted with, the main color blending into the second for art with two. */
   fill: string;
 }
 

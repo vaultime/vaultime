@@ -377,6 +377,7 @@ function DaySection({
                 events={events}
                 gameTitle={byGame.get(session.game_id)?.game.title ?? "a removed game"}
                 titleColor={markOf(session.game_id)}
+                titleFill={fillOf(session.game_id) === markOf(session.game_id) ? undefined : fillOf(session.game_id)}
                 gameSessions={sessionsByGame.get(session.game_id)}
                 earlierMs={byGame.get(session.game_id)?.earlier?.earlier_ms}
                 when={`${start} to ${end}`}
