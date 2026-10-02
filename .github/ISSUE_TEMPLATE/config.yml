@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem
+    url: https://github.com/vaultime/vaultime/security/advisories/new
+    about: Report it privately, not as a public issue.
+  - name: Cloud beta access or deleting your cloud account
+    url: https://vaultime.codfishcloud.de/#beta
+    about: Apply for an invite on the website. To delete an account, email vaultime@outlook.de.

@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Bug report
+description: Something does not work, or playtime is counted wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check first that you run the latest version, shown at the bottom of the library rail.
+        Security problems go to the [private report form](https://github.com/vaultime/vaultime/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps that lead to it, if you know them.
+      placeholder: |
+        1. Start Hades II through Steam
+        2. Leave the PC for ten minutes
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Vaultime version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux on X11
+        - Linux on Wayland with GNOME
+        - Linux on Wayland with another desktop
+    validations:
+      required: true
+  - type: input
+    id: details
+    attributes:
+      label: Distribution, desktop and how you installed it
+      description: For Linux, for example "Fedora 42, KDE, .rpm" or "Ubuntu 24.04, GNOME, AppImage".
+  - type: input
+    id: game
+    attributes:
+      label: Game and launcher
+      description: When it is about one game, for example "Elden Ring through Steam" or "a standalone game added by hand".
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The part of the newest log around the problem. Logs are in `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and `~/.local/share/com.vaultime.app/logs` on Linux.
+        They show game paths and names, so remove anything you do not want to share publicly.
+      render: text
