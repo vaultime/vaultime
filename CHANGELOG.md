@@ -5,6 +5,12 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Library
+
+- **Journal colors from the real artwork.** A game's color in the journal is now the main color of its cover, so a red logo stays red instead of a mix of all its colors. Black, white and grey covers get a grey, not a made-up color, and their game pages stay grey too. A color only shifts when it would look like another game of the same week.
+
 ## [0.2.0] - 2026-10-02
 
 ### Library

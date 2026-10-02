@@ -240,13 +240,29 @@ export const TINT_LEVELS = {
 };
 
 /**
- * Lightness and chroma of the marks that tell games apart, as in the journal.
- * Stays inside sRGB at every hue, so no hue gets clipped.
+ * Lightness of the marks that tell games apart, as in the journal, and the
+ * chroma of marks for games without artwork. Stays inside sRGB at every hue.
  */
 export const MARK_LEVELS = { lightness: 0.74, chroma: 0.125 };
 
+/** Marks take at least this chroma, so a muted cover still reads as a color. */
+export const MARK_MIN_CHROMA = 0.07;
+/** Marks take at most this chroma, so a vivid cover does not glare. */
+export const MARK_MAX_CHROMA = 0.17;
+
+/**
+ * OKLCH lightness of the grey marks for black, white and grey artwork, the
+ * first game of the week takes the first.
+ */
+export const MARK_NEUTRAL_LIGHTNESS = [0.84, 0.64, 0.95];
+
 /** Games shown side by side keep their hues at least this far apart, in degrees. */
-export const MARK_MIN_HUE_GAP_DEG = 50;
+export const MARK_MIN_HUE_GAP_DEG = 30;
+
+/** No sRGB color has more OKLCH chroma than this. */
+export const GAMUT_SEARCH_MAX_CHROMA = 0.4;
+/** Halvings when searching the most chroma inside sRGB, enough for three decimals. */
+export const GAMUT_SEARCH_STEPS = 12;
 
 /** Covers are scaled down to this many pixels square before reading colors. */
 export const TINT_SAMPLE_PX = 32;
@@ -259,10 +275,17 @@ export const TINT_MIN_LIGHTNESS = 0.12;
 /** Pixels lighter than this OKLab lightness are skipped as white. */
 export const TINT_MAX_LIGHTNESS = 0.96;
 
+/** Pixels with less OKLab chroma than this count as grey. */
+export const TINT_COLORFUL_MIN_CHROMA = 0.04;
+/** Art with a smaller share of colorful pixels is black, white or grey. */
+export const TINT_COLORFUL_MIN_SHARE = 0.05;
+/** Bands the color wheel is cut into when looking for the main color of art. */
+export const TINT_HUE_BINS = 24;
+
 /** Mean OKLab chroma of a typical colorful cover, it maps to full tint strength. */
 export const TINT_TYPICAL_CHROMA = 0.09;
 
-/** How far a tint may fade towards grey. */
+/** How far the tint of colorful art may fade towards grey. Black, white and grey art goes all the way. */
 export const TINT_MIN_STRENGTH = 0.2;
 /** How far a tint may go past the default colorfulness. */
 export const TINT_MAX_STRENGTH = 1.2;

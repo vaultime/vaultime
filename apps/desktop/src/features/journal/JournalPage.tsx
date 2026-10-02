@@ -15,7 +15,7 @@ import {
   JOURNAL_MIN_SPAN_PERCENT,
   JOURNAL_TICK_HOURS,
 } from "@/lib/constants";
-import { distinctHues, markColor, tintForTitle } from "@/lib/game-tint";
+import { markColors, tintForTitle } from "@/lib/game-tint";
 import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
 import { countsAsPlay, playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
@@ -116,19 +116,19 @@ export function JournalPage() {
 
   const days = groupWeek(sessions, statusChanges, weekStart, now);
 
-  // A game keeps one color through the week, far enough from the others to tell
-  // them apart. Games keep their cover's hue in the order they first show up.
-  // Violet stays free for active time.
+  // A game keeps one color through the week, the main color of its artwork,
+  // nudged only when it would look like a game that showed up earlier. Violet
+  // stays free for active time.
   const weekGames = [
     ...new Set([...days].reverse().flatMap((day) => day.sessions.filter(countsAsPlay).map((session) => session.game_id))),
   ];
-  const hueOf = (gameId: string) => {
+  const colorOf = (gameId: string) => {
     const summary = byGame.get(gameId);
-    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).hue;
+    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).color;
   };
-  const weekHues = distinctHues(weekGames.map(hueOf), [BRAND_HUE_DEG]);
-  const marks = new Map(weekGames.map((gameId, index) => [gameId, markColor(weekHues[index])]));
-  const markOf = (gameId: string) => marks.get(gameId) ?? markColor(hueOf(gameId));
+  const weekMarks = markColors(weekGames.map(colorOf), [BRAND_HUE_DEG]);
+  const marks = new Map(weekGames.map((gameId, index) => [gameId, weekMarks[index]]));
+  const markOf = (gameId: string) => marks.get(gameId) ?? markColors([colorOf(gameId)])[0];
 
   /** A game's playtime up to a moment, with the playtime from before Vaultime. */
   const playedBefore = (gameId: string, moment: string) =>

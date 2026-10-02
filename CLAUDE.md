@@ -139,9 +139,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Write about play in plain sentences ("A long evening in Elden Ring"), not
   tables. Sessions read like a journal, with wording that varies from session
   to session but stays the same for each one.
-- In the journal, each game gets a strong mark color for the week, kept apart
-  from the other games and from violet. Its title in the entries takes that
-  color.
+- In the journal, each game gets a mark in the main color of its artwork,
+  grey for black, white or grey art. It shifts only when it would look like
+  another game of the week or like violet. Its title in the entries takes
+  that color.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
   frame, with a violet pivot. The wordmark is Mona Sans 700 at full width
   (`font-wordmark`), and `scripts/build-brand.py` outlines it for the logo
