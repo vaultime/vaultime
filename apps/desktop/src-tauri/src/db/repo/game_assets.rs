@@ -93,3 +93,26 @@ pub fn delete_non_user_assets_for_game(db: &Database, game_id: &str) -> Result<V
         Ok(removable)
     })
 }
+
+/// Points an asset at a new cached image, as after the player cropped it.
+pub fn replace_asset_image(
+    db: &Database,
+    asset_id: &str,
+    asset_type: &str,
+    source: &str,
+    cache_path: &str,
+) -> Result<GameAsset> {
+    db.with_conn(|conn| {
+        conn.execute(
+            "UPDATE game_assets SET asset_type = ?2, source = ?3, cache_path = ?4 WHERE id = ?1",
+            params![asset_id, asset_type, source, cache_path],
+        )
+        .map_err(map_db)?;
+        conn.query_row(
+            "SELECT * FROM game_assets WHERE id = ?1",
+            [asset_id],
+            row_to_asset,
+        )
+        .map_err(map_db)
+    })
+}

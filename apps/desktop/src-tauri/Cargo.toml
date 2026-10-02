@@ -30,9 +30,10 @@ dirs = "7"
 getrandom = "0.4"
 hmac = "0.13"
 hostname = "0.4"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "gif", "tiff", "tga", "qoi", "pnm"] }
 keyring = "4.2"
 log = "0.4"
+resvg = { version = "0.48", default-features = false }
 reqwest = { version = "0.13", features = ["blocking", "json"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

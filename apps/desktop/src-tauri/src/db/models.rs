@@ -3,6 +3,8 @@
 
 //! Row types shared by the repositories and the IPC layer.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +57,19 @@ pub struct EarlierPlaytime {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GameMetadata {
     pub preferred_cover_asset_id: Option<String>,
+    /// How the player cut each cover from its original file, by asset id.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub cover_crops: BTreeMap<String, CropRect>,
+}
+
+/// The part of an image that becomes a cover, in fractions of the image width
+/// and height. It reaches past the edges when the image was zoomed out to fit.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CropRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Deserialize)]

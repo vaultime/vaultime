@@ -3,14 +3,15 @@
 
 //! Artwork scanning, thumbnail caching and cover selection.
 
+pub mod crop;
+
 use std::collections::HashSet;
 use std::fs;
-use std::io::{Cursor, ErrorKind};
+use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
 use base64::Engine;
 use image::ImageFormat;
-use image::ImageReader;
 use image::imageops::FilterType;
 use log::warn;
 use serde::Serialize;
@@ -20,16 +21,17 @@ use walkdir::WalkDir;
 use crate::constants::{
     ARTWORK_BACKFILL_SETTING, ARTWORK_BACKFILL_VERSION, ARTWORK_PENALTY_SCREENSHOT_PATH,
     ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO, ARTWORK_SCORE_POSTER,
-    ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER, ARTWORK_SCORE_USER_PICKED,
-    ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX, BANNER_WIDTH_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX,
-    COVER_WIDTH_PX, ICON_MAX_SIZE_PX, MAX_ARTWORK_SOURCE_BYTES, MAX_LIBRARY_PREVIEWS,
-    MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
+    ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER, ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX,
+    BANNER_WIDTH_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX, ICON_MAX_SIZE_PX,
+    MAX_ARTWORK_SOURCE_BYTES, MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS, SCREENSHOT_MAX_HEIGHT_PX,
+    SCREENSHOT_MAX_WIDTH_PX,
 };
 use crate::db::connection::Database;
-use crate::db::models::{Game, GameAsset, GameMetadata};
+use crate::db::models::{CropRect, Game, GameAsset, GameMetadata};
 use crate::db::repo::{game_assets, games, settings};
 use crate::discovery::steam;
 use crate::error::{Result, VaultimeError};
+use crop::{ArtworkSource, decode_artwork, fill_crop, render_cover};
 
 const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "ico"];
 
@@ -151,12 +153,20 @@ pub fn scan_game_assets(
 
     let removed_assets = game_assets::delete_non_user_assets_for_game(db, game_id)?;
     cleanup_assets(asset_manager, &removed_assets);
+    // A file the player already cropped into a cover is not offered again.
+    let picked_hashes: HashSet<String> = game_assets::list_assets_for_game(db, game_id)?
+        .into_iter()
+        .filter_map(|asset| asset.hash)
+        .collect();
 
     let candidates = find_candidates(&game)?;
     let mut inserted_assets = Vec::new();
 
     for candidate in candidates.into_iter().take(MAX_SCANNED_ASSETS) {
         match cache_candidate(asset_manager, &game, &candidate, false) {
+            Ok(cached) if picked_hashes.contains(&cached.hash) => {
+                let _ = fs::remove_file(&cached.cache_path);
+            }
             Ok(cached) => {
                 let inserted = game_assets::create_asset(
                     db,
@@ -225,33 +235,165 @@ pub fn backfill_steam_covers(db: &Database, asset_manager: &AssetManager) -> Res
     Ok(scanned)
 }
 
+/// Opens an image file for the crop dialog.
+pub fn open_artwork_file(source_path: &str) -> Result<ArtworkSource> {
+    let path = Path::new(source_path);
+    let image = decode_artwork(&read_artwork(path)?, path)?;
+    ArtworkSource::new(&image, true, None)
+}
+
+/// Opens the image behind a cover for the crop dialog: the original file
+/// while it still holds the same image, otherwise the cached cover.
+pub fn open_game_asset_source(
+    db: &Database,
+    game_id: &str,
+    asset_id: &str,
+) -> Result<ArtworkSource> {
+    let (game, asset) = game_and_asset(db, game_id, asset_id)?;
+    let (image, from_original) = asset_source(&asset)?;
+    let crop = from_original
+        .then(|| {
+            parse_game_metadata(&game)
+                .cover_crops
+                .get(&asset.id)
+                .copied()
+        })
+        .flatten();
+    ArtworkSource::new(&image, from_original, crop)
+}
+
+/// Adds an image file as the game's cover, cut by `crop` or from the middle.
+/// A file that is already one of the game's images is cut again instead of
+/// added twice.
 pub fn import_game_asset(
     db: &Database,
     asset_manager: &AssetManager,
     game_id: &str,
     source_path: &str,
+    crop: Option<CropRect>,
 ) -> Result<Vec<GameAssetView>> {
     let game = games::get_game(db, game_id)?;
-    let candidate = AssetCandidate {
-        path: PathBuf::from(source_path),
-        asset_type: classify_asset_type(Path::new(source_path)),
-        source: "user_picked".into(),
-        score: ARTWORK_SCORE_USER_PICKED,
+    let path = Path::new(source_path);
+    let bytes = read_artwork(path)?;
+    let hash = crate::hex::encode(&Sha256::digest(&bytes));
+    let image = decode_artwork(&bytes, path)?;
+    let crop = crop.unwrap_or_else(|| fill_crop(image.width(), image.height()));
+    let cache_path = cache_cover(asset_manager, &game, &image, crop)?;
+
+    let existing = game_assets::list_assets_for_game(db, game_id)?
+        .into_iter()
+        .find(|asset| asset.hash.as_deref() == Some(hash.as_str()));
+    let asset = match existing {
+        Some(asset) => replace_cover(db, asset_manager, &asset, &cache_path)?,
+        None => game_assets::create_asset(
+            db,
+            game_id,
+            "cover",
+            "user_picked",
+            source_path,
+            Some(&cache_path),
+            Some(&hash),
+        )?,
     };
 
-    let cached = cache_candidate(asset_manager, &game, &candidate, true)?;
-    let inserted = game_assets::create_asset(
-        db,
-        game_id,
-        &cached.asset_type,
-        &cached.source,
-        &cached.file_path,
-        Some(&cached.cache_path),
-        Some(&cached.hash),
-    )?;
-
-    set_preferred_game_asset(db, game_id, &inserted.id)?;
+    use_cover(db, &game, &asset.id, Some(crop))?;
     list_game_assets(db, game_id)
+}
+
+/// Cuts one of the game's images again and makes it the cover. It stays one
+/// asset, now marked as picked by the player so a folder scan keeps it.
+pub fn crop_game_asset(
+    db: &Database,
+    asset_manager: &AssetManager,
+    game_id: &str,
+    asset_id: &str,
+    crop: CropRect,
+) -> Result<Vec<GameAssetView>> {
+    let (game, asset) = game_and_asset(db, game_id, asset_id)?;
+    let (image, from_original) = asset_source(&asset)?;
+    let cache_path = cache_cover(asset_manager, &game, &image, crop)?;
+    let asset = replace_cover(db, asset_manager, &asset, &cache_path)?;
+    // A crop of the cached cover says nothing about the original file.
+    use_cover(db, &game, &asset.id, from_original.then_some(crop))?;
+    list_game_assets(db, game_id)
+}
+
+fn game_and_asset(db: &Database, game_id: &str, asset_id: &str) -> Result<(Game, GameAsset)> {
+    let game = games::get_game(db, game_id)?;
+    let asset = game_assets::get_asset(db, asset_id)?;
+    if asset.game_id != game.id {
+        return Err(VaultimeError::Asset(
+            "asset does not belong to the requested game".into(),
+        ));
+    }
+    Ok((game, asset))
+}
+
+/// The original file when it still matches the hash taken when it was added,
+/// so a moved or changed file, or a path from another PC, is never used.
+/// Otherwise the cached copy.
+fn asset_source(asset: &GameAsset) -> Result<(image::DynamicImage, bool)> {
+    let original = Path::new(&asset.file_path);
+    if let Some(expected) = asset.hash.as_deref()
+        && let Ok(bytes) = read_artwork(original)
+        && crate::hex::encode(&Sha256::digest(&bytes)) == expected
+        && let Ok(image) = decode_artwork(&bytes, original)
+    {
+        return Ok((image, true));
+    }
+
+    let cached = Path::new(
+        asset
+            .cache_path
+            .as_deref()
+            .ok_or_else(|| VaultimeError::Asset("artwork has no cached copy".into()))?,
+    );
+    Ok((decode_artwork(&read_artwork(cached)?, cached)?, false))
+}
+
+/// Writes a cropped cover into the game's cache folder and returns its path.
+fn cache_cover(
+    asset_manager: &AssetManager,
+    game: &Game,
+    image: &image::DynamicImage,
+    crop: CropRect,
+) -> Result<String> {
+    let cover = image::DynamicImage::ImageRgba8(render_cover(image, crop)?);
+    let cache_path = write_cached_image(asset_manager, game, &cover, true)?;
+    Ok(cache_path.to_string_lossy().to_string())
+}
+
+/// Points an asset at a new cover and removes its old cached file.
+fn replace_cover(
+    db: &Database,
+    asset_manager: &AssetManager,
+    asset: &GameAsset,
+    cache_path: &str,
+) -> Result<GameAsset> {
+    let replaced =
+        game_assets::replace_asset_image(db, &asset.id, "cover", "user_picked", cache_path)?;
+    if asset.cache_path.as_deref() != Some(cache_path) {
+        cleanup_assets(asset_manager, std::slice::from_ref(asset));
+    }
+    Ok(replaced)
+}
+
+/// Makes an asset the cover and remembers its crop. Crops of assets that are
+/// gone are dropped on the way.
+fn use_cover(db: &Database, game: &Game, asset_id: &str, crop: Option<CropRect>) -> Result<()> {
+    let assets: HashSet<String> = game_assets::list_assets_for_game(db, &game.id)?
+        .into_iter()
+        .map(|asset| asset.id)
+        .collect();
+    let mut metadata = parse_game_metadata(game);
+    metadata.preferred_cover_asset_id = Some(asset_id.to_string());
+    metadata.cover_crops.retain(|id, _| assets.contains(id));
+    match crop {
+        Some(crop) => metadata.cover_crops.insert(asset_id.to_string(), crop),
+        None => metadata.cover_crops.remove(asset_id),
+    };
+    games::set_metadata(db, &game.id, &metadata)?;
+    Ok(())
 }
 
 pub fn set_preferred_game_asset(db: &Database, game_id: &str, asset_id: &str) -> Result<bool> {
@@ -499,22 +641,8 @@ fn cache_candidate(
     prefer_cover: bool,
 ) -> Result<CachedAsset> {
     let source_bytes = read_artwork(&candidate.path)?;
-
     let source_hash = crate::hex::encode(&Sha256::digest(&source_bytes));
-    let reader = ImageReader::new(Cursor::new(&source_bytes))
-        .with_guessed_format()
-        .map_err(|error| {
-            VaultimeError::Asset(format!(
-                "failed to detect image format {}: {error}",
-                candidate.path.display()
-            ))
-        })?;
-    let image = reader.decode().map_err(|error| {
-        VaultimeError::Asset(format!(
-            "failed to decode image {}: {error}",
-            candidate.path.display()
-        ))
-    })?;
+    let image = decode_artwork(&source_bytes, &candidate.path)?;
 
     let asset_type = if prefer_cover {
         "cover"
@@ -522,7 +650,25 @@ fn cache_candidate(
         &candidate.asset_type
     };
     let processed = process_image(image, asset_type);
+    // Artwork is opaque and much smaller as JPEG, icons keep their transparency.
+    let cache_path = write_cached_image(asset_manager, game, &processed, asset_type != "icon")?;
 
+    Ok(CachedAsset {
+        file_path: candidate.path.to_string_lossy().to_string(),
+        cache_path: cache_path.to_string_lossy().to_string(),
+        asset_type: asset_type.into(),
+        source: candidate.source.clone(),
+        hash: source_hash,
+    })
+}
+
+/// Writes an image under a new name in the game's cache folder.
+fn write_cached_image(
+    asset_manager: &AssetManager,
+    game: &Game,
+    image: &image::DynamicImage,
+    as_jpeg: bool,
+) -> Result<PathBuf> {
     let game_cache_dir = asset_manager.cache_dir().join(&game.id);
     fs::create_dir_all(&game_cache_dir).map_err(|error| {
         VaultimeError::Asset(format!(
@@ -531,9 +677,7 @@ fn cache_candidate(
         ))
     })?;
 
-    // Artwork is opaque and much smaller as JPEG, icons keep their transparency.
     let asset_id = uuid::Uuid::new_v4().to_string();
-    let as_jpeg = asset_type != "icon";
     let cache_path = game_cache_dir.join(format!(
         "{asset_id}.{}",
         if as_jpeg { "jpg" } else { "png" }
@@ -546,10 +690,10 @@ fn cache_candidate(
                     std::io::BufWriter::new(file),
                     CACHED_JPEG_QUALITY,
                 );
-                encoder.encode_image(&processed.to_rgb8())
+                encoder.encode_image(&image.to_rgb8())
             })
     } else {
-        processed.save_with_format(&cache_path, ImageFormat::Png)
+        image.save_with_format(&cache_path, ImageFormat::Png)
     };
     written.map_err(|error| {
         VaultimeError::Asset(format!(
@@ -557,14 +701,7 @@ fn cache_candidate(
             cache_path.display()
         ))
     })?;
-
-    Ok(CachedAsset {
-        file_path: candidate.path.to_string_lossy().to_string(),
-        cache_path: cache_path.to_string_lossy().to_string(),
-        asset_type: asset_type.into(),
-        source: candidate.source.clone(),
-        hash: source_hash,
-    })
+    Ok(cache_path)
 }
 
 fn process_image(image: image::DynamicImage, asset_type: &str) -> image::DynamicImage {
@@ -809,6 +946,169 @@ mod tests {
         assert_eq!(covers.len(), 1);
         assert_eq!(covers[0].id, fallback.id);
         assert!(covers[0].preview_data_url.is_some());
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    /// Writes a wide PNG, red on the left and blue on the right.
+    fn write_logo(path: &Path) {
+        image::RgbImage::from_fn(400, 200, |x, _| {
+            if x < 200 {
+                image::Rgb([220, 30, 30])
+            } else {
+                image::Rgb([30, 60, 230])
+            }
+        })
+        .save_with_format(path, ImageFormat::Png)
+        .unwrap();
+    }
+
+    fn crop_of(db: &Database, game_id: &str, asset_id: &str) -> Option<CropRect> {
+        parse_game_metadata(&games::get_game(db, game_id).unwrap())
+            .cover_crops
+            .get(asset_id)
+            .copied()
+    }
+
+    #[test]
+    fn importing_the_same_file_again_recuts_it() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let game = create_game(&db);
+        let logo = asset_manager.cache_dir().join("logo.png");
+        write_logo(&logo);
+        let fit = CropRect {
+            x: 0.0,
+            y: -0.83,
+            width: 1.0,
+            height: 2.67,
+        };
+
+        let first = import_game_asset(&db, &asset_manager, &game.id, &logo.to_string_lossy(), None)
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        let first_cache = first[0].cache_path.clone().unwrap();
+        let second = import_game_asset(
+            &db,
+            &asset_manager,
+            &game.id,
+            &logo.to_string_lossy(),
+            Some(fit),
+        )
+        .unwrap();
+
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].id, first[0].id);
+        assert!(second[0].is_preferred);
+        assert!(!Path::new(&first_cache).exists());
+        assert_eq!(crop_of(&db, &game.id, &second[0].id), Some(fit));
+        let source = open_game_asset_source(&db, &game.id, &second[0].id).unwrap();
+        assert!(source.from_original);
+        assert_eq!(source.crop, Some(fit));
+        assert_eq!((source.width, source.height), (400, 200));
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn recropping_uses_the_cached_cover_once_the_original_changed() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let game = create_game(&db);
+        let logo = asset_manager.cache_dir().join("logo.png");
+        write_logo(&logo);
+        let asset_id =
+            import_game_asset(&db, &asset_manager, &game.id, &logo.to_string_lossy(), None)
+                .unwrap()[0]
+                .id
+                .clone();
+
+        fs::write(&logo, b"something else").unwrap();
+        let source = open_game_asset_source(&db, &game.id, &asset_id).unwrap();
+        assert!(!source.from_original);
+        assert_eq!(source.crop, None);
+        assert_eq!(
+            (source.width, source.height),
+            (COVER_WIDTH_PX, COVER_HEIGHT_PX)
+        );
+
+        let whole = CropRect {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        let assets = crop_game_asset(&db, &asset_manager, &game.id, &asset_id, whole).unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(crop_of(&db, &game.id, &asset_id), None);
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn recropping_a_scanned_image_keeps_it_through_the_next_scan() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let folder = asset_manager.cache_dir().join("Game Folder");
+        fs::create_dir_all(&folder).unwrap();
+        write_logo(&folder.join("cover.png"));
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Scanned Game".into(),
+                executable_path: None,
+                install_folder: Some(folder.to_string_lossy().to_string()),
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+
+        let scanned = scan_game_assets(&db, &asset_manager, &game.id).unwrap();
+        assert_eq!(scanned.len(), 1);
+        let crop = fill_crop(400, 200);
+        let cropped = crop_game_asset(&db, &asset_manager, &game.id, &scanned[0].id, crop).unwrap();
+        assert_eq!(cropped[0].id, scanned[0].id);
+        assert_eq!(cropped[0].source, "user_picked");
+
+        let rescanned = scan_game_assets(&db, &asset_manager, &game.id).unwrap();
+        assert_eq!(rescanned.len(), 1);
+        assert_eq!(rescanned[0].id, scanned[0].id);
+        assert!(rescanned[0].is_preferred);
+        assert_eq!(crop_of(&db, &game.id, &scanned[0].id), Some(crop));
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn crops_only_apply_to_images_of_the_game() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let game = create_game(&db);
+        let other = create_game(&db);
+        let logo = asset_manager.cache_dir().join("logo.png");
+        write_logo(&logo);
+        let asset_id = import_game_asset(
+            &db,
+            &asset_manager,
+            &other.id,
+            &logo.to_string_lossy(),
+            None,
+        )
+        .unwrap()[0]
+            .id
+            .clone();
+
+        assert!(open_game_asset_source(&db, &game.id, &asset_id).is_err());
+        assert!(
+            crop_game_asset(
+                &db,
+                &asset_manager,
+                &game.id,
+                &asset_id,
+                fill_crop(400, 200)
+            )
+            .is_err()
+        );
 
         fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
     }

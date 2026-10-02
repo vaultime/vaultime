@@ -135,8 +135,6 @@ pub const MAX_LIBRARY_PREVIEWS: usize = 20;
 /// Largest image file read as artwork, in bytes. Covers are far smaller, so
 /// a huge file in a game folder cannot fill the memory.
 pub const MAX_ARTWORK_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
-/// Score of artwork the user picked, above anything a scan can reach.
-pub const ARTWORK_SCORE_USER_PICKED: i32 = 10_000;
 /// Score of the cover from Steam's own library cache, above anything a
 /// folder scan finds.
 pub const ARTWORK_SCORE_STEAM_COVER: i32 = 1_000;
@@ -172,10 +170,47 @@ pub const LIBRARY_CHANGED_EVENT: &str = "library-changed";
 /// JPEG quality of cached covers, banners and screenshots. Icons stay PNG
 /// for their transparency.
 pub const CACHED_JPEG_QUALITY: u8 = 85;
-/// Width of a cached cover. Covers are cropped to fill.
+/// Width of a cached cover. Covers are cropped to fill. Same as
+/// `COVER_WIDTH_PX` in `lib/constants.ts`, whose `COVER_ASPECT` is this width
+/// over `COVER_HEIGHT_PX`.
 pub const COVER_WIDTH_PX: u32 = 720;
 /// Height of a cached cover.
 pub const COVER_HEIGHT_PX: u32 = 960;
+
+// Artwork crop
+
+/// Longest edge of the image the crop dialog shows.
+pub const CROP_PREVIEW_MAX_PX: u32 = 1200;
+/// Longest edge an SVG is drawn at before it is cropped.
+pub const SVG_RENDER_MAX_PX: u32 = 2048;
+/// A crop frame may be this many times the frame that holds the whole image.
+/// The dialog stops at `CROP_MIN_ZOOM_OF_FIT` in `lib/constants.ts`, well
+/// before it, so rounding never refuses a crop the dialog made.
+pub const CROP_MAX_FRAME_OF_FIT: f64 = 4.0;
+/// Width of the backdrop behind a cropped cover before it is scaled up. The
+/// height follows the cover.
+pub const CROP_BACKDROP_WIDTH_PX: u32 = 90;
+/// Blur of the backdrop, in its own small pixels.
+pub const CROP_BACKDROP_BLUR_SIGMA: f32 = 3.0;
+/// Share of its brightness the blurred image keeps in the backdrop, so the
+/// cover in front of it stands out.
+pub const CROP_BACKDROP_BRIGHTNESS: f32 = 0.45;
+/// Images are scaled down to this many pixels square to tell whether they
+/// are see-through and to find the color of the plain behind them.
+pub const CROP_BACKDROP_SAMPLE_PX: u32 = 32;
+/// Art that covers less than this share of its area is see-through, like a
+/// logo, and gets a plain backdrop instead of a blurred copy of itself.
+pub const CROP_BACKDROP_OPAQUE_COVERAGE: f64 = 0.99;
+/// Art at least this light, as sRGB luma from 0 to 1, gets a dark plain
+/// behind it, darker art a light one.
+pub const CROP_BACKDROP_LIGHT_ART_LUMA: f64 = 0.5;
+/// Luma of the dark plain behind light art.
+pub const CROP_BACKDROP_DARK_PLAIN_LUMA: f64 = 0.12;
+/// Luma of the light plain behind dark art.
+pub const CROP_BACKDROP_LIGHT_PLAIN_LUMA: f64 = 0.82;
+/// Plain behind art without a single opaque pixel. Same as `--surface` in
+/// `index.css`.
+pub const CROP_BACKDROP_FALLBACK_RGB: [u8; 3] = [22, 18, 30];
 
 // Backups
 

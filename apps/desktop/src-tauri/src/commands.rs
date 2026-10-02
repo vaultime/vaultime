@@ -14,6 +14,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::AppContext;
+use crate::assets::crop::ArtworkSource;
 use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
@@ -23,8 +24,8 @@ use crate::constants::{
 };
 use crate::db::connection::Database;
 use crate::db::models::{
-    BackupSnapshot, CreateGame, EarlierPlaytime, Game, GameStatusChange, Session, SessionEvent,
-    SessionNote, Setting, UpdateGame,
+    BackupSnapshot, CreateGame, CropRect, EarlierPlaytime, Game, GameStatusChange, Session,
+    SessionEvent, SessionNote, Setting, UpdateGame,
 };
 use crate::db::repo::{
     annotations, backup_snapshots, corrections, earlier_playtime, games, session_events, sessions,
@@ -146,13 +147,39 @@ pub fn scan_game_assets(
 }
 
 #[tauri::command(async)]
+pub fn open_artwork_file(source_path: String) -> Result<ArtworkSource, VaultimeError> {
+    assets::open_artwork_file(&source_path)
+}
+
+#[tauri::command(async)]
+pub fn open_game_asset_source(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+    asset_id: String,
+) -> Result<ArtworkSource, VaultimeError> {
+    assets::open_game_asset_source(&db, &game_id, &asset_id)
+}
+
+#[tauri::command(async)]
 pub fn import_game_asset(
     db: State<'_, Arc<Database>>,
     asset_manager: State<'_, AssetManager>,
     game_id: String,
     source_path: String,
+    crop: Option<CropRect>,
 ) -> Result<Vec<GameAssetView>, VaultimeError> {
-    assets::import_game_asset(&db, &asset_manager, &game_id, &source_path)
+    assets::import_game_asset(&db, &asset_manager, &game_id, &source_path, crop)
+}
+
+#[tauri::command(async)]
+pub fn crop_game_asset(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    game_id: String,
+    asset_id: String,
+    crop: CropRect,
+) -> Result<Vec<GameAssetView>, VaultimeError> {
+    assets::crop_game_asset(&db, &asset_manager, &game_id, &asset_id, crop)
 }
 
 #[tauri::command]
