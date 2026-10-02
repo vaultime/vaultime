@@ -27,7 +27,10 @@ export function AppLayout() {
     <div className="relative isolate grid h-screen grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[288px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-ink text-text">
       <Backdrop />
       <Rail onSearch={() => setPaletteOpen(true)} />
-      <main className="min-h-0 overflow-y-auto">
+      {/* Relative, so hidden inputs and other positioned content stay inside the
+          scroller. Outside it they stretch the shell, and focusing one scrolls
+          the whole app up. */}
+      <main className="relative min-h-0 overflow-y-auto">
         <UpdateBanner />
         <Outlet />
       </main>

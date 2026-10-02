@@ -82,7 +82,7 @@ export function WindowSection() {
               <label
                 key={choice}
                 className={cn(
-                  "flex items-center gap-4 border-b border-rule py-3.5 first:pt-0 last:border-b-0",
+                  "relative flex items-center gap-4 border-b border-rule py-3.5 first:pt-0 last:border-b-0",
                   fits && !busy ? "cursor-pointer" : "cursor-not-allowed",
                 )}
               >
