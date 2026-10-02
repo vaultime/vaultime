@@ -130,10 +130,15 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   text, Geist Mono for stats, clocks, times and paths. Small counts inside
   lists use Geist with tabular figures. Hairline rules instead of boxes and
   shadows, small uppercase labels, generous space. Colors come from the tokens
-  in `index.css`, never loose hex values in components. The website in
-  `docs/site` uses the same fonts and classes of the same names.
-- Dark ink ground with violet `#9D7CFF` as the brand color and the color of
-  active time. Game pages take a dark tint and light ink from the cover art.
+  in `index.css`, which `lib/theme.ts` derives for the chosen look, never
+  loose hex values in components. The website in `docs/site` uses the same
+  fonts and classes of the same names.
+- The default look is a dark violet ink ground with violet `#9D7CFF` as the
+  brand color and the color of active time. Players can pick light mode,
+  another ground tone, another accent and a background picture. Every color
+  derives from these choices in `lib/theme.ts`, so components use tokens
+  only, and the `--violet` tokens mean the accent. Game pages take a tint
+  from the cover art.
 - Shell like a music player: library rail on the left with search, a Ctrl+K
   command palette, and a live session bar at the bottom.
 - Write about play in plain sentences ("A long evening in Elden Ring"), not
@@ -141,7 +146,7 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   to session but stays the same for each one.
 - In the journal, each game gets a mark in the main color of its artwork,
   grey for black, white or grey art. It shifts only when it would look like
-  another game of the week or like violet. Its title in the entries takes
+  another game of the week or like the accent. Its title in the entries takes
   that color.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
   frame, with a violet pivot. The wordmark is Mona Sans 700 at full width

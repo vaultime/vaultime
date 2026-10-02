@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Library
 
 - **Journal colors from the real artwork.** A game's color in the journal is now the main color of its cover, so a red logo stays red instead of a mix of all its colors. Black, white and grey covers get a grey, not a made-up color, and their game pages stay grey too. A color only shifts when it would look like another game of the same week.
+- **Make it yours.** Settings has a new Appearance section. Pick dark, light or the system's mode, one of five ground tones, an accent color from six swatches or any color you like, and a background picture of your own or a game's art, with dim and blur so text stays readable. The look stays on this PC, and backups leave it out.
 
 ## [0.2.0] - 2026-10-02
 
