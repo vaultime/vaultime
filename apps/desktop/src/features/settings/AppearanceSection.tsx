@@ -36,6 +36,7 @@ const GROUND_NAMES: Record<GroundId, string> = {
   midnight: "Midnight",
   moss: "Moss",
   umber: "Umber",
+  garnet: "Garnet",
 };
 
 const ACCENT_NAMES: Record<AccentSwatch, string> = {
@@ -124,7 +125,11 @@ export function AppearanceSection() {
       </StackedRow>
 
       <StackedRow label="Ground" hint="The tone of the pages behind the text.">
-        <div role="radiogroup" aria-label="Ground" className="flex flex-wrap gap-4">
+        <div
+          role="radiogroup"
+          aria-label="Ground"
+          className="grid max-w-[600px] grid-cols-3 gap-x-3 gap-y-4 @min-[800px]:grid-cols-6"
+        >
           {GROUND_IDS.map((ground) => {
             const tone = (role: Parameters<typeof groundColor>[2]) => formatOklch(groundColor(mode, ground, role));
             const selected = appearance.ground === ground;
@@ -135,11 +140,11 @@ export function AppearanceSection() {
                 role="radio"
                 aria-checked={selected}
                 onClick={() => change({ ground })}
-                className="group flex flex-col items-start gap-2 rounded-md focus-visible:outline-none"
+                className="group flex min-w-0 flex-col items-start gap-2 rounded-md focus-visible:outline-none"
               >
                 <span
                   className={cn(
-                    "flex h-14 w-[88px] flex-col justify-end gap-1.5 rounded-md border p-2.5 transition-shadow group-focus-visible:ring-2 group-focus-visible:ring-violet/70",
+                    "flex h-14 w-full flex-col justify-end gap-1.5 rounded-md border p-2.5 transition-shadow group-focus-visible:ring-2 group-focus-visible:ring-violet/70",
                     selected && "ring-2 ring-violet ring-offset-2 ring-offset-ink",
                   )}
                   style={{ background: tone("ink"), borderColor: tone("hairline") }}

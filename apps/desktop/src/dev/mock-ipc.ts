@@ -460,7 +460,7 @@ if (new URLSearchParams(window.location.search).get("palette") === "1") {
   setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })), 500);
 }
 
-// Appearance: ?theme=dark|light|system, ?ground=vault|graphite|midnight|moss|umber,
+// Appearance: ?theme=dark|light|system, ?ground=vault|graphite|midnight|moss|umber|garnet,
 // ?accent= a swatch name or a hex color without the #, ?bg=1 for a sample
 // background picture or ?bg=cover for dist-mock/covers/1.jpg, and ?dim= and
 // ?blur= for its sliders. Changes on the settings page last until a reload.

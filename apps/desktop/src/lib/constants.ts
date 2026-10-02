@@ -382,6 +382,7 @@ export const GROUNDS = {
   midnight: { hue: 252, chroma: 1.25 },
   moss: { hue: 160, chroma: 0.85 },
   umber: { hue: 55, chroma: 0.9 },
+  garnet: { hue: 10, chroma: 1 },
 } as const;
 
 /**
