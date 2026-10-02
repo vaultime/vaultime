@@ -114,17 +114,20 @@ def wordmark_outline(text="Vaultime", tracking=-0.03):
     return path_pen.getCommands(), bounds_pen.bounds
 
 
-def lockup_svg(ink, pivot, frame_width=4, hand_width=6):
+def lockup_svg(ink, pivot, frame_width=4, hand_width=6, mark_ratio=0.8):
     path, (x0, y0, x1, y1) = wordmark_outline()
     height = y1 - y0
-    # The frame is as tall as the wordmark, then a gap.
-    gap = height * 0.34
-    scale, offset = framed(height, 0, frame_width)
-    text_x = height + gap - x0
-    width = height + gap + (x1 - x0)
+    # The mark is a little smaller than the wordmark and sits on its middle,
+    # so the name leads. Then a gap.
+    size = height * mark_ratio
+    gap = height * 0.3
+    scale, offset = framed(size, 0, frame_width)
+    mark_y = offset + (height - size) / 2
+    text_x = size + gap - x0
+    width = size + gap + (x1 - x0)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width / 8:.0f}" height="{height / 8:.0f}">'
-        f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(ink, pivot, frame_width, hand_width)}</g>'
+        f'<g transform="translate({offset:.1f} {mark_y:.1f}) scale({scale:.4f})">{mark(ink, pivot, frame_width, hand_width)}</g>'
         f'<path transform="translate({text_x:.1f} {-y0:.1f})" fill="{ink}" d="{path}"/>'
         "</svg>\n"
     )
