@@ -40,6 +40,7 @@ use constants::{
 use db::connection::Database;
 use db::repo::devices;
 use tracking::engine::TrackingEngine;
+use tracking::live::LiveSessions;
 
 #[derive(Debug, Clone)]
 pub struct AppContext {
@@ -196,7 +197,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .expect("failed to register device");
     info!("device registered: {device_id} ({platform} v{version})");
 
-    let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone());
+    let live = Arc::new(LiveSessions::default());
+    let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone(), Arc::clone(&live));
 
     app.manage(AppContext {
         app_dir,
@@ -233,6 +235,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(AssetManager::new(asset_cache_dir));
     app.manage(BackgroundStore::new(appearance_dir));
     app.manage(engine);
+    app.manage(live);
 
     // New installs start with the system, so the first game of the day counts.
     // Development builds leave the login items alone.

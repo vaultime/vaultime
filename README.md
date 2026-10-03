@@ -78,7 +78,7 @@ Every session carries a label that tells how much its record can be trusted:
 
 - **Local.** Recorded normally and unchanged since.
 - **Suspicious.** The system clock jumped or the record was changed outside Vaultime. A suspicious session stays Suspicious when you correct it.
-- **Recovered.** Vaultime was closed while the game ran, for example after a crash, and the session was closed on the next start.
+- **Recovered.** Vaultime was closed while the game ran, for example after a crash, and the session was closed on the next start. It keeps the time up to Vaultime's last note, at most 30 seconds before the crash.
 - **Edited.** Tracked, then corrected by you. The old times and your reason stay in the session's log.
 - **Manual.** Added by you for play Vaultime did not see, like a session on another PC. It counts as active time.
 

@@ -14,13 +14,14 @@ use log::{debug, error, info, warn};
 use sysinfo::System;
 
 use crate::constants::{
-    BACKGROUND_ACTIVE_SETTING, CLOCK_BACKWARDS_TOLERANCE_MS, CLOCK_STEP_TOLERANCE_MS,
-    CLOCK_TOTAL_DRIFT_TOLERANCE_MS, DEFAULT_IDLE_THRESHOLD_SECS, FOREGROUND_GRACE,
-    IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS,
-    POLL_INTERVAL, PROCESS_ACTIVITY_CPU_PERCENT, SUSPEND_DETECT_MS,
+    BACKGROUND_ACTIVE_SETTING, CHECKPOINT_INTERVAL, CLOCK_BACKWARDS_TOLERANCE_MS,
+    CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS, DEFAULT_IDLE_THRESHOLD_SECS,
+    FOREGROUND_GRACE, IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS,
+    MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_PERCENT, SUSPEND_DETECT_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
+use crate::db::repo::sessions::Checkpoint;
 use crate::db::repo::{games, sessions, settings};
 use crate::discovery::metadata::is_likely_game_executable;
 use crate::integrity;
@@ -29,6 +30,7 @@ use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{
     InstallFolder, RunningProcess, cpu_usage, matches_executable, refresh_running_processes,
 };
+use crate::tracking::live::{LiveCounters, LiveSessions};
 
 /// Tracks a currently running game session.
 struct ActiveSession {
@@ -47,6 +49,13 @@ struct ActiveSession {
     /// How long the PC had slept since boot, at the last tick.
     last_asleep_ms: Option<i64>,
     integrity_status: String,
+    /// Whether the last counted tick was active. None before the first one.
+    last_tick_active: Option<bool>,
+    /// The checkpoint fields as of the last counted tick.
+    last_checkpoint_fields: Checkpoint,
+    /// What the database holds, as of the last checkpoint.
+    stored: Checkpoint,
+    stored_at: Instant,
 }
 
 impl ActiveSession {
@@ -71,7 +80,24 @@ impl ActiveSession {
             skipped_wall_ms: 0,
             last_asleep_ms: platform::clock::asleep_ms(),
             integrity_status,
+            last_tick_active: None,
+            last_checkpoint_fields: Checkpoint::default(),
+            stored: Checkpoint::default(),
+            stored_at: now,
         }
+    }
+
+    fn counters(&self) -> LiveCounters {
+        LiveCounters {
+            runtime_ms: self.runtime_ms,
+            active_ms: self.active_ms,
+            idle_ms: self.idle_ms,
+        }
+    }
+
+    /// True when ticks were counted since the last checkpoint.
+    fn has_unsaved_time(&self) -> bool {
+        self.stored.runtime_ms != self.runtime_ms
     }
 }
 
@@ -119,8 +145,9 @@ pub struct TrackingEngine {
 }
 
 impl TrackingEngine {
-    /// Spawns the tracker on a background thread.
-    pub fn start(db: Arc<Database>, device_id: String) -> Self {
+    /// Spawns the tracker on a background thread. It keeps `live` up to date
+    /// with the counters of the running sessions.
+    pub fn start(db: Arc<Database>, device_id: String, live: Arc<LiveSessions>) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         let paused = Arc::new(AtomicBool::new(false));
         let tick_lock = Arc::new(Mutex::new(()));
@@ -131,7 +158,7 @@ impl TrackingEngine {
             let tick_lock = Arc::clone(&tick_lock);
             std::thread::Builder::new()
                 .name("vaultime-tracker".into())
-                .spawn(move || poll_loop(&db, &device_id, &running, &paused, &tick_lock))
+                .spawn(move || poll_loop(&db, &device_id, &live, &running, &paused, &tick_lock))
                 .expect("failed to spawn tracking thread")
         };
 
@@ -204,6 +231,7 @@ fn wait_for_next_tick(running: &AtomicBool) {
 fn poll_loop(
     db: &Database,
     device_id: &str,
+    live: &LiveSessions,
     running: &AtomicBool,
     paused: &AtomicBool,
     tick_lock: &Mutex<()>,
@@ -219,7 +247,8 @@ fn poll_loop(
             let _tick = tick_lock.lock().unwrap_or_else(PoisonError::into_inner);
             // Checked again because `pause` may have won the race for the lock.
             if !paused.load(Ordering::SeqCst)
-                && let Err(error) = poll_tick(db, device_id, &mut system, &mut folders, &mut active)
+                && let Err(error) =
+                    poll_tick(db, device_id, live, &mut system, &mut folders, &mut active)
             {
                 error!("tracking poll error: {error}");
             }
@@ -242,6 +271,7 @@ fn poll_loop(
                 session.session_id
             );
         }
+        live.remove(&session.session_id);
     }
 
     info!("tracking engine stopped");
@@ -250,6 +280,7 @@ fn poll_loop(
 fn poll_tick(
     db: &Database,
     device_id: &str,
+    live: &LiveSessions,
     system: &mut System,
     folders: &mut FolderCache,
     active: &mut HashMap<String, ActiveSession>,
@@ -284,6 +315,7 @@ fn poll_tick(
                     if observation.has_foreground_window {
                         active_session.last_foreground_at = Some(started);
                     }
+                    live.update(&active_session.session_id, active_session.counters());
                     active.insert(game_id.clone(), active_session);
                 }
                 Err(error) => {
@@ -307,17 +339,41 @@ fn poll_tick(
                 continue;
             }
 
-            apply_observation(
+            let applied = apply_observation(
                 db,
                 session,
                 *observation,
                 &tracking_settings,
                 &activity_snapshot,
                 &clocks,
-            )?;
+            );
+            live.update(&session.session_id, session.counters());
+            applied?;
         }
     }
 
+    end_finished_sessions(db, live, active, &observed_games);
+
+    debug!(
+        "poll tick: {} tracked, {} running, {} active sessions",
+        tracked_games.len(),
+        observed_games
+            .values()
+            .filter(|state| state.is_running)
+            .count(),
+        active.len(),
+    );
+
+    Ok(())
+}
+
+/// Ends the sessions of games that stopped running.
+fn end_finished_sessions(
+    db: &Database,
+    live: &LiveSessions,
+    active: &mut HashMap<String, ActiveSession>,
+    observed_games: &HashMap<String, GameObservation>,
+) {
     let finished: Vec<String> = active
         .keys()
         .filter(|game_id| {
@@ -330,14 +386,16 @@ fn poll_tick(
 
     for game_id in finished {
         if let Some(session) = active.remove(&game_id) {
-            match sessions::end_session(
+            let ended = sessions::end_session(
                 db,
                 &session.session_id,
                 session.runtime_ms,
                 session.active_ms,
                 session.idle_ms,
                 &session.integrity_status,
-            ) {
+            );
+            live.remove(&session.session_id);
+            match ended {
                 Ok(ended) => {
                     info!(
                         "session ended for game {}: {} (runtime={}ms active={}ms idle={}ms)",
@@ -353,18 +411,6 @@ fn poll_tick(
             }
         }
     }
-
-    debug!(
-        "poll tick: {} tracked, {} running, {} active sessions",
-        tracked_games.len(),
-        observed_games
-            .values()
-            .filter(|state| state.is_running)
-            .count(),
-        active.len(),
-    );
-
-    Ok(())
 }
 
 /// What each tracked game with an executable is doing right now.
@@ -543,37 +589,56 @@ fn apply_observation(
         return Ok(());
     }
 
-    session.last_tick_at = now;
+    // The previous tick, where a checkpoint that closes a stretch belongs.
+    let previous_wall = session.last_wall_at;
     let wall_delta_ms = current_wall
-        .signed_duration_since(session.last_wall_at)
+        .signed_duration_since(previous_wall)
         .num_milliseconds();
-    session.last_wall_at = current_wall;
     let slept_ms = clocks
         .asleep_ms
         .zip(session.last_asleep_ms)
         .map_or(0, |(now_asleep, before_asleep)| now_asleep - before_asleep);
-    session.last_asleep_ms = clocks.asleep_ms;
+    // The clocks move on only once the writes before them went through, so
+    // a tick whose write fails is taken again in full by the next one.
+    let move_clocks = |session: &mut ActiveSession| {
+        session.last_tick_at = now;
+        session.last_wall_at = current_wall;
+        session.last_asleep_ms = clocks.asleep_ms;
+    };
 
     if delta_ms.max(wall_delta_ms) > MAX_TICK_GAP_MS || slept_ms > SUSPEND_DETECT_MS {
-        session.skipped_wall_ms += wall_delta_ms.max(0);
-        return sessions::record_tracking_gap(
+        save_checkpoint(db, session, previous_wall, now)?;
+        sessions::record_tracking_gap(
             db,
             &session.session_id,
             session.runtime_ms,
             wall_delta_ms,
             delta_ms,
-        );
+        )?;
+        move_clocks(session);
+        session.skipped_wall_ms += wall_delta_ms.max(0);
+        return Ok(());
     }
 
-    session.runtime_ms += delta_ms;
-
-    if should_count_as_active(
+    let active = should_count_as_active(
         session,
         observation,
         tracking_settings,
         activity_snapshot,
         now,
-    ) {
+    );
+    // The time between two checkpoints stays all active or all idle.
+    if session
+        .last_tick_active
+        .is_some_and(|was_active| was_active != active)
+    {
+        save_checkpoint(db, session, previous_wall, now)?;
+    }
+    move_clocks(session);
+    session.last_tick_active = Some(active);
+
+    session.runtime_ms += delta_ms;
+    if active {
         session.active_ms += delta_ms;
     } else {
         session.idle_ms += delta_ms;
@@ -584,7 +649,15 @@ fn apply_observation(
         .num_milliseconds()
         .max(0);
     let drift_ms = wall_elapsed_ms - session.skipped_wall_ms - session.runtime_ms;
+    session.last_checkpoint_fields = Checkpoint {
+        runtime_ms: session.runtime_ms,
+        active_ms: session.active_ms,
+        idle_ms: session.idle_ms,
+        wall_elapsed_ms,
+        drift_ms,
+    };
 
+    let mut flagged = false;
     if let Some(reason) = detect_integrity_reason(wall_delta_ms, delta_ms, drift_ms)
         && session.integrity_status != integrity::STATUS_SUSPICIOUS
     {
@@ -597,18 +670,37 @@ fn apply_observation(
             &reason,
         )?;
         session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+        flagged = true;
     }
 
-    sessions::update_session_timing(
+    if flagged || now.saturating_duration_since(session.stored_at) >= CHECKPOINT_INTERVAL {
+        save_checkpoint(db, session, current_wall, now)?;
+    }
+    Ok(())
+}
+
+/// Stores the counters as of the last counted tick, which happened at
+/// `wall`, unless the database has them already.
+fn save_checkpoint(
+    db: &Database,
+    session: &mut ActiveSession,
+    wall: DateTime<Utc>,
+    now: Instant,
+) -> crate::error::Result<()> {
+    if !session.has_unsaved_time() {
+        return Ok(());
+    }
+    let checkpoint = session.last_checkpoint_fields;
+    sessions::record_checkpoint(
         db,
         &session.session_id,
-        session.runtime_ms,
-        session.active_ms,
-        session.idle_ms,
-        wall_elapsed_ms,
-        drift_ms,
+        &checkpoint,
         &session.integrity_status,
-    )
+        wall,
+    )?;
+    session.stored = checkpoint;
+    session.stored_at = now;
+    Ok(())
 }
 
 fn should_count_as_active(
@@ -731,7 +823,7 @@ mod tests {
             },
         )
         .unwrap();
-        let engine = TrackingEngine::start(Arc::clone(&db), "device".into());
+        let engine = TrackingEngine::start(Arc::clone(&db), "device".into(), Arc::default());
 
         let mut child = std::process::Command::new(&exe)
             .current_dir(std::path::Path::new(&exe).parent().unwrap())
@@ -793,7 +885,7 @@ mod tests {
         )
         .unwrap();
 
-        let engine = TrackingEngine::start(Arc::clone(&db), "device".into());
+        let engine = TrackingEngine::start(Arc::clone(&db), "device".into(), Arc::default());
         let deadline = Instant::now() + POLL_INTERVAL;
         while sessions::get_active_sessions(&db).unwrap().is_empty() {
             assert!(Instant::now() < deadline, "no session started");
@@ -988,5 +1080,220 @@ mod tests {
         tick(&f, &mut session);
 
         assert_eq!(session.integrity_status, integrity::STATUS_SUSPICIOUS);
+    }
+
+    /// A session started at fixed clocks, ticked on clocks that move exactly
+    /// one `POLL_INTERVAL` at a time.
+    struct Driven {
+        f: Fixture,
+        session: ActiveSession,
+        now: Instant,
+        wall: DateTime<Utc>,
+    }
+
+    fn driven() -> Driven {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Checkpoint Game".into(),
+                executable_path: Some("game.exe".into()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        let wall = parse_wall_timestamp("2026-10-02T18:00:00.000Z");
+        let row = sessions::create_session_at(&db, &game.id, "device", wall).unwrap();
+        let now = Instant::now();
+        let session = ActiveSession::new(
+            row.id.clone(),
+            game.id.clone(),
+            now,
+            wall,
+            integrity::STATUS_LOCAL.into(),
+        );
+        Driven {
+            f: Fixture {
+                db,
+                game_id: game.id,
+                session_id: row.id,
+            },
+            session,
+            now,
+            wall,
+        }
+    }
+
+    impl Driven {
+        /// One tick, `active` or idle, after the clocks moved by `wall_step`.
+        fn tick(&mut self, active: bool, wall_step: chrono::Duration) {
+            self.try_tick(active, wall_step).unwrap();
+        }
+
+        fn try_tick(
+            &mut self,
+            active: bool,
+            wall_step: chrono::Duration,
+        ) -> crate::error::Result<()> {
+            self.now += POLL_INTERVAL;
+            self.wall += wall_step;
+            let snapshot = ActivitySnapshot {
+                foreground_pid: None,
+                foreground_supported: true,
+                foreground_known: true,
+                idle_for: Some(if active {
+                    Duration::ZERO
+                } else {
+                    Duration::from_secs(600)
+                }),
+                idle_supported: true,
+            };
+            let settings = TrackingSettings {
+                idle_threshold: Duration::from_secs(300),
+                treat_background_as_active: false,
+            };
+            let observation = GameObservation {
+                is_running: true,
+                has_foreground_window: true,
+                has_process_activity: true,
+            };
+            apply_observation(
+                &self.f.db,
+                &mut self.session,
+                observation,
+                &settings,
+                &snapshot,
+                &Clocks {
+                    now: self.now,
+                    wall: self.wall,
+                    asleep_ms: None,
+                },
+            )
+        }
+
+        fn ticks(&mut self, count: usize, active: bool) {
+            let step = chrono::Duration::from_std(POLL_INTERVAL).unwrap();
+            for _ in 0..count {
+                self.tick(active, step);
+            }
+        }
+
+        /// The events of one type, oldest first.
+        fn events(&self, event_type: &str) -> Vec<crate::db::models::SessionEvent> {
+            let mut events: Vec<_> =
+                session_events::list_events_for_game(&self.f.db, &self.f.game_id)
+                    .unwrap()
+                    .into_iter()
+                    .filter(|event| event.event_type == event_type)
+                    .collect();
+            events.sort_by_key(|event| event.sequence);
+            events
+        }
+
+        fn stored(&self) -> crate::db::models::Session {
+            self.f
+                .db
+                .with_conn(|conn| {
+                    conn.query_row(
+                        "SELECT * FROM sessions WHERE id = ?1",
+                        [&self.f.session_id],
+                        sessions::row_to_session,
+                    )
+                    .map_err(crate::db::repo::map_db)
+                })
+                .unwrap()
+        }
+    }
+
+    fn counters(event: &crate::db::models::SessionEvent) -> (i64, i64, i64) {
+        let payload: serde_json::Value = serde_json::from_str(&event.payload_json).unwrap();
+        let field = |key: &str| payload[key].as_i64().unwrap();
+        (field("runtime_ms"), field("active_ms"), field("idle_ms"))
+    }
+
+    #[test]
+    fn steady_play_writes_a_checkpoint_every_interval() {
+        let mut d = driven();
+        let interval_ms = i64::try_from(CHECKPOINT_INTERVAL.as_millis()).unwrap();
+        for _ in 0..60 {
+            d.ticks(1, true);
+            // The database never falls further behind than one interval.
+            assert!(d.session.runtime_ms - d.stored().runtime_ms < interval_ms);
+        }
+
+        let checkpoints = d.events("heartbeat");
+        assert_eq!(checkpoints.len(), 10);
+        assert_eq!(counters(checkpoints.last().unwrap()), (300_000, 300_000, 0));
+        // The open session still passes every integrity check.
+        let open = sessions::get_active_sessions(&d.f.db).unwrap();
+        assert_eq!(open[0].integrity_status, integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn a_switch_to_idle_closes_the_stretch_at_the_tick_before() {
+        let mut d = driven();
+        d.ticks(4, true);
+        d.ticks(7, false);
+
+        let checkpoints = d.events("heartbeat");
+        assert_eq!(checkpoints.len(), 2);
+        // Written when the first idle tick came, as of the last active one.
+        assert_eq!(counters(&checkpoints[0]), (20_000, 20_000, 0));
+        assert_eq!(checkpoints[0].event_time_wall, "2026-10-02T18:00:20.000Z");
+        // The next stretch is idle only.
+        assert_eq!(counters(&checkpoints[1]), (55_000, 20_000, 35_000));
+    }
+
+    #[test]
+    fn a_failed_write_leaves_the_tick_for_the_next_one() {
+        let mut d = driven();
+        d.ticks(2, true);
+        let before = (
+            d.session.last_wall_at,
+            d.session.last_tick_at,
+            d.session.runtime_ms,
+        );
+        // A closed row takes no checkpoint, so storing the active stretch fails.
+        d.f.db
+            .with_conn(|conn| {
+                conn.execute(
+                    "UPDATE sessions SET ended_at_wall = '2026-10-02T19:00:00.000Z' WHERE id = ?1",
+                    [&d.f.session_id],
+                )
+                .map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+
+        let step = chrono::Duration::from_std(POLL_INTERVAL).unwrap();
+        assert!(d.try_tick(false, step).is_err());
+        assert_eq!(
+            (
+                d.session.last_wall_at,
+                d.session.last_tick_at,
+                d.session.runtime_ms
+            ),
+            before
+        );
+        // The same holds for a sleep, which must not lose its gap.
+        assert!(d.try_tick(true, chrono::Duration::hours(2)).is_err());
+        assert_eq!(d.session.skipped_wall_ms, 0);
+        assert_eq!(d.session.last_wall_at, before.0);
+    }
+
+    #[test]
+    fn a_gap_stores_the_time_before_it_first() {
+        let mut d = driven();
+        d.ticks(3, true);
+        assert!(d.events("heartbeat").is_empty());
+        d.tick(true, chrono::Duration::hours(2));
+
+        let checkpoints = d.events("heartbeat");
+        assert_eq!(checkpoints.len(), 1);
+        assert_eq!(counters(&checkpoints[0]), (15_000, 15_000, 0));
+        let gap = &d.events("tracking_gap")[0];
+        assert!(gap.sequence > checkpoints[0].sequence);
+        assert_eq!(d.stored().runtime_ms, 15_000);
     }
 }

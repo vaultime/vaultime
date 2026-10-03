@@ -18,6 +18,7 @@ use crate::db::repo::sessions::{self, SessionSpan};
 use crate::db::repo::settings;
 use crate::error::Result;
 use crate::integrity;
+use crate::tracking::live::LiveSessions;
 use crate::window_look::{WindowLookState, draw_icon};
 
 /// Passed by the login item, so Vaultime starts in the tray.
@@ -97,12 +98,13 @@ const NOTHING_TODAY: &str = "Nothing played today";
 /// a minute, so the menu is only touched when their text does.
 fn start_status_updates<R: Runtime>(app: AppHandle<R>, playing: MenuItem<R>, today: MenuItem<R>) {
     let db = Arc::clone(&app.state::<Arc<Database>>());
+    let live = Arc::clone(&app.state::<Arc<LiveSessions>>());
     let spawned = std::thread::Builder::new()
         .name("vaultime-tray".into())
         .spawn(move || {
             let mut shown = (NOTHING_RUNNING.to_string(), NOTHING_TODAY.to_string());
             loop {
-                match status_lines(&db, Utc::now()) {
+                match status_lines(&db, &live, Utc::now()) {
                     Ok(lines) if lines != shown => {
                         let _ = playing.set_text(&lines.0);
                         let _ = today.set_text(&lines.1);
@@ -119,10 +121,19 @@ fn start_status_updates<R: Runtime>(app: AppHandle<R>, playing: MenuItem<R>, tod
     }
 }
 
-fn status_lines(db: &Database, now: DateTime<Utc>) -> Result<(String, String)> {
+fn status_lines(
+    db: &Database,
+    live: &LiveSessions,
+    now: DateTime<Utc>,
+) -> Result<(String, String)> {
     let day_start = local_day_start(now);
     let since = integrity::format_timestamp(day_start);
-    let spans = sessions::spans_since(db, &since)?;
+    let mut spans = sessions::spans_since(db, &since)?;
+    for span in spans.iter_mut().filter(|span| span.ended_at_wall.is_none()) {
+        if let Some(counters) = live.get(&span.session_id) {
+            span.runtime_ms = counters.runtime_ms;
+        }
+    }
     Ok(describe_status(&spans, now, day_start))
 }
 
@@ -348,6 +359,7 @@ mod tests {
         minutes: i64,
     ) -> SessionSpan {
         SessionSpan {
+            session_id: format!("{title}-{start}"),
             game_title: title.into(),
             started_at_wall: integrity::format_timestamp(start),
             ended_at_wall: end.map(integrity::format_timestamp),

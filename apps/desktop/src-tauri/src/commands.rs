@@ -38,6 +38,7 @@ use crate::platform::activity::{foreground_detection_strategy, idle_detection_st
 use crate::platform::controller;
 use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
+use crate::tracking::live::LiveSessions;
 use crate::window_size::{self, WindowSizeState};
 
 #[tauri::command]
@@ -201,14 +202,30 @@ pub fn set_preferred_game_asset(
     assets::set_preferred_game_asset(&db, &game_id, &asset_id)
 }
 
+/// Every session, running ones as of the tracker's latest tick.
 #[tauri::command(async)]
-pub fn list_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
-    sessions::list_all_sessions(&db)
+pub fn list_sessions(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+) -> Result<Vec<Session>, VaultimeError> {
+    let mut all = sessions::list_all_sessions(&db)?;
+    for session in &mut all {
+        live.apply(session);
+    }
+    Ok(all)
 }
 
+/// The running sessions as of the tracker's latest tick.
 #[tauri::command(async)]
-pub fn get_active_sessions(db: State<'_, Arc<Database>>) -> Result<Vec<Session>, VaultimeError> {
-    sessions::get_active_sessions(&db)
+pub fn get_active_sessions(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+) -> Result<Vec<Session>, VaultimeError> {
+    let mut active = sessions::get_active_sessions(&db)?;
+    for session in &mut active {
+        live.apply(session);
+    }
+    Ok(active)
 }
 
 #[tauri::command(async)]

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tracking
+
+- **A lighter, sharper session record.** Vaultime still checks your games every five seconds, but it now notes a session's time whenever it switches between active and idle, and at least every 30 seconds, instead of every five seconds. The record grows about six times slower, so backups stay small for years, and each note now marks a real change. After a crash, a session keeps its time up to the last note, at most 30 seconds before the crash.
+
 ### Library
 
 - **Find a game.** A search field above your games filters them as you type, ignoring accents and the order of words. Ctrl+F jumps into it, and opens the search on other pages. The command palette finds games the same way.

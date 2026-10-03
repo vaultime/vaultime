@@ -160,19 +160,36 @@ pub fn end_session(
     })
 }
 
-/// Persists the latest timing counters for an open session.
-#[expect(clippy::too_many_arguments)]
-pub fn update_session_timing(
+/// The counters of an open session at one moment, as a checkpoint stores them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Checkpoint {
+    pub runtime_ms: i64,
+    pub active_ms: i64,
+    pub idle_ms: i64,
+    /// Wall time since the session started.
+    pub wall_elapsed_ms: i64,
+    /// Wall time minus tracking gaps minus runtime.
+    pub drift_ms: i64,
+}
+
+/// Stores the counters of an open session as they were at `at`, with a
+/// `heartbeat` event. The tracker writes one whenever the time switches
+/// between active and idle and at least every `CHECKPOINT_INTERVAL`.
+pub fn record_checkpoint(
     db: &Database,
     session_id: &str,
-    runtime_ms: i64,
-    active_ms: i64,
-    idle_ms: i64,
-    wall_elapsed_ms: i64,
-    drift_ms: i64,
+    checkpoint: &Checkpoint,
     integrity_status: &str,
+    at: chrono::DateTime<chrono::Utc>,
 ) -> Result<()> {
-    let event_time_wall = integrity::now_timestamp();
+    let event_time_wall = integrity::format_timestamp(at);
+    let Checkpoint {
+        runtime_ms,
+        active_ms,
+        idle_ms,
+        wall_elapsed_ms,
+        drift_ms,
+    } = *checkpoint;
 
     db.with_transaction(|conn| {
         let updated = conn
@@ -383,6 +400,7 @@ pub fn get_active_sessions(db: &Database) -> Result<Vec<Session>> {
 /// When a session ran and for how long, with its game's title.
 #[derive(Debug, Clone)]
 pub struct SessionSpan {
+    pub session_id: String,
     pub game_title: String,
     pub started_at_wall: String,
     pub ended_at_wall: Option<String>,
@@ -395,8 +413,8 @@ pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
-                "SELECT games.title, sessions.started_at_wall, sessions.ended_at_wall,
-                        sessions.runtime_ms
+                "SELECT sessions.id, games.title, sessions.started_at_wall,
+                        sessions.ended_at_wall, sessions.runtime_ms
                  FROM sessions JOIN games ON games.id = sessions.game_id
                  WHERE sessions.started_at_wall >= ?1 OR sessions.ended_at_wall IS NULL
                  ORDER BY sessions.started_at_wall",
@@ -405,10 +423,11 @@ pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
         let rows = stmt
             .query_map([since], |row| {
                 Ok(SessionSpan {
-                    game_title: row.get(0)?,
-                    started_at_wall: row.get(1)?,
-                    ended_at_wall: row.get(2)?,
-                    runtime_ms: row.get(3)?,
+                    session_id: row.get(0)?,
+                    game_title: row.get(1)?,
+                    started_at_wall: row.get(2)?,
+                    ended_at_wall: row.get(3)?,
+                    runtime_ms: row.get(4)?,
                 })
             })
             .map_err(map_db)?;
@@ -601,22 +620,20 @@ mod tests {
     }
 
     #[test]
-    fn update_session_timing_persists_progress() {
+    fn record_checkpoint_persists_progress() {
         let db = test_db();
         let game_id = seed_game(&db);
         let session = create_session(&db, &game_id, DEV_ID).unwrap();
 
-        update_session_timing(
-            &db,
-            &session.id,
-            90_000,
-            60_000,
-            30_000,
-            91_000,
-            1_000,
-            integrity::STATUS_LOCAL,
-        )
-        .unwrap();
+        let checkpoint = Checkpoint {
+            runtime_ms: 90_000,
+            active_ms: 60_000,
+            idle_ms: 30_000,
+            wall_elapsed_ms: 91_000,
+            drift_ms: 1_000,
+        };
+        let at = chrono::Utc::now();
+        record_checkpoint(&db, &session.id, &checkpoint, integrity::STATUS_LOCAL, at).unwrap();
 
         let updated = get_session(&db, &session.id).unwrap();
         assert_eq!(updated.runtime_ms, 90_000);
@@ -829,15 +846,19 @@ mod tests {
         let db = test_db();
         let game_id = seed_game(&db);
         let session = create_session(&db, &game_id, DEV_ID).unwrap();
-        update_session_timing(
+        let checkpoint = Checkpoint {
+            runtime_ms: 5_000,
+            active_ms: 5_000,
+            idle_ms: 0,
+            wall_elapsed_ms: 5_000,
+            drift_ms: 0,
+        };
+        record_checkpoint(
             &db,
             &session.id,
-            5_000,
-            5_000,
-            0,
-            5_000,
-            0,
+            &checkpoint,
             integrity::STATUS_LOCAL,
+            chrono::Utc::now(),
         )
         .unwrap();
         let last_heartbeat: String = db
@@ -879,7 +900,14 @@ mod tests {
         })
         .unwrap();
         // A heartbeat that claims the flag away, written through the chain.
-        update_session_timing(&db, &flagged.id, 0, 0, 0, 0, 0, integrity::STATUS_LOCAL).unwrap();
+        record_checkpoint(
+            &db,
+            &flagged.id,
+            &Checkpoint::default(),
+            integrity::STATUS_LOCAL,
+            chrono::Utc::now(),
+        )
+        .unwrap();
         assert_eq!(
             get_session(&db, &flagged.id).unwrap().integrity_status,
             integrity::STATUS_SUSPICIOUS

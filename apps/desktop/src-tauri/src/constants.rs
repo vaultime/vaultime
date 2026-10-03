@@ -10,6 +10,11 @@ use std::time::Duration;
 /// How often the tracker polls running processes. The frontend polls at the
 /// same rate, see `ACTIVE_POLL_MS` in `lib/constants.ts`.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
+/// Longest stretch between two checkpoints of a running session. A
+/// checkpoint is also written whenever its time switches between active and
+/// idle, before a tracking gap and when it is flagged, so the time between
+/// two checkpoints is all of one kind. A crash loses at most this much.
+pub const CHECKPOINT_INTERVAL: Duration = Duration::from_secs(30);
 /// Longest note on a session, in characters. Same as `SESSION_NOTE_MAX_CHARS`
 /// in `lib/constants.ts`.
 pub const SESSION_NOTE_MAX_CHARS: usize = 280;
