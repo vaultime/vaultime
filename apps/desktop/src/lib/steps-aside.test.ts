@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
 import { at, session } from "@/test/sessions";
 import type { Game } from "@/lib/types";
-import { besideOthers, countedSession, stepAside, stepsAside } from "./steps-aside";
+import { besideOthers, countedSession, playedToday, stepAside, stepsAside } from "./steps-aside";
 
 function game(metadata: string): Game {
   return {
@@ -63,6 +63,19 @@ describe("stepAside", () => {
     expect(drawn.filter((part) => part.game_id === "match")).toEqual([match]);
   });
 
+  it("stays quick on a long history", () => {
+    const many = Array.from({ length: 8000 }, (_, index) =>
+      session(new Date(2016, 0, 1 + Math.floor(index / 2), 18 + (index % 2) * 2).toISOString(), 90, {
+        game_id: index % 3 === 0 ? "client" : "match",
+        id: `s-${index}`,
+      }),
+    );
+    const started = performance.now();
+    stepAside(many, new Set(["client"]));
+    // A quadratic walk took seconds here, a binary search takes milliseconds.
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it("leaves everything alone without games that step aside", () => {
     expect(stepAside([client, match], new Set())).toEqual([client, match]);
   });
@@ -75,5 +88,22 @@ describe("besideOthers", () => {
     const { besideMs, share } = besideOthers("client", [client, match], new Set());
     expect(besideMs).toBe(90 * MINUTE_MS);
     expect(share).toBe(0.75);
+  });
+});
+
+describe("playedToday", () => {
+  it("spreads a session from yesterday the way the whole history would", () => {
+    // Counted already, so its 180 minutes are the time it ran alone.
+    const client = session(at(2026, 10, 1, 22, 0), 240, {
+      game_id: "client",
+      id: "client-session",
+      runtime_ms: 180 * MINUTE_MS,
+      active_ms: 180 * MINUTE_MS,
+    });
+    const match = session(at(2026, 10, 1, 22, 0), 60, { game_id: "match", id: "match-session" });
+    const old = session(at(2026, 9, 1, 20, 0), 60, { game_id: "match", id: "old-session" });
+    const now = new Date(2026, 9, 2, 12, 0);
+    const today = playedToday([old, client, match], new Set(["client"]), now);
+    expect(today).toBe(120 * MINUTE_MS);
   });
 });

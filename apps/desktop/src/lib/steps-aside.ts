@@ -42,21 +42,37 @@ export function stepAside(sessions: Session[], stepping: Set<string>, now = new 
     const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
     return { start, end };
   };
+  // Where games that do not step aside ran, joined and sorted once, so each
+  // session that steps aside finds its overlaps by a binary search.
+  const covered: [number, number][] = [];
   const others = sessions
     .filter((session) => !stepping.has(session.game_id) && countsAsPlay(session))
-    .map((session) => ({ gameId: session.game_id, ...spanOf(session) }));
+    .map(spanOf)
+    .filter(({ start, end }) => end > start)
+    .sort((a, b) => a.start - b.start);
+  for (const { start, end } of others) {
+    const last = covered.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else covered.push([start, end]);
+  }
+  const firstEndingAfter = (moment: number) => {
+    let [low, high] = [0, covered.length];
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (covered[middle][1] <= moment) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  };
   return sessions.flatMap((session) => {
     if (!stepping.has(session.game_id)) return [session];
     const { start, end } = spanOf(session);
     if (end <= start) return [session];
     // The parts of the span no other game covered.
-    const covered = others
-      .filter((other) => other.gameId !== session.game_id && other.start < end && other.end > start)
-      .map((other) => [Math.max(other.start, start), Math.min(other.end, end)] as const)
-      .sort((a, b) => a[0] - b[0]);
     const parts: [number, number][] = [];
     let cursor = start;
-    for (const [from, to] of covered) {
+    for (let index = firstEndingAfter(start); index < covered.length && covered[index][0] < end; index += 1) {
+      const [from, to] = covered[index];
       if (from > cursor) parts.push([cursor, from]);
       cursor = Math.max(cursor, to);
     }
@@ -118,7 +134,16 @@ export function besideOthers(
 export function playedToday(sessions: Session[], stepping: Set<string>, now = new Date()): number {
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const today = stepAside(sessions, stepping, now).flatMap(
+  // Only sessions that can change today's part, so a long history stays out
+  // of the slower steps. A session that began yesterday keeps the games that
+  // ran beside it then, since they decide how its time spreads.
+  const touching = sessions.filter((session) => clipToWindow(session, midnight, tomorrow, now) !== null);
+  const earliest = touching.reduce(
+    (first, session) => Math.min(first, parseVaultimeDate(session.started_at_wall).getTime()),
+    midnight.getTime(),
+  );
+  const nearby = sessions.filter((session) => clipToWindow(session, new Date(earliest), tomorrow, now) !== null);
+  const today = stepAside(nearby, stepping, now).flatMap(
     (session) => clipToWindow(session, midnight, tomorrow, now) ?? [],
   );
   return playedMs(today, now);
