@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/vaultime-lockup-light.svg">
-    <img src="assets/vaultime-lockup-dark.svg" alt="Vaultime" width="380">
+    <img src="assets/vaultime-lockup-dark.svg" alt="Vaultime" width="420">
   </picture>
 </p>
 

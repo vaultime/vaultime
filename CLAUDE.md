@@ -165,9 +165,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   Its title in the entries takes its mark, both colors for two-colored art.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
   frame, with a pivot in the accent, violet by default. The wordmark is Mona
-  Sans 700 at full width (`font-wordmark`) and leads the lockup, and
-  `scripts/build-brand.py` outlines it for the logo files. The app draws the
-  tray, taskbar and title bar icons from those files in the accent.
+  Sans 700 at full width (`font-wordmark`), and `scripts/build-brand.py`
+  outlines it for the logo files. The lockups keep the proportions of the
+  logo in the app, the mark a little taller than the letters. The app draws
+  the tray, taskbar and title bar icons from those files in the accent.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope

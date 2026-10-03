@@ -52,15 +52,23 @@ HANDS = "M25.5 21.3L32 32.5L41 17"
 TICK = "M32 44.5v3.5"
 PIVOT = (32, 32.5, 3.4)
 
+# The lockup follows the logo in the app, components/brand/Logo.tsx.
+LOGO_MARK_PX = 28
+LOGO_TYPE_PX = 25
+LOGO_GAP_PX = 10
+LOGO_FRAME_WIDTH = 4.5
+LOGO_HAND_WIDTH = 6.5
+LOGO_PIVOT_RADIUS = 3.8
 
-def mark(ink, pivot, frame_width=FRAME_WIDTH, hand_width=5.5):
+
+def mark(ink, pivot, frame_width=FRAME_WIDTH, hand_width=5.5, pivot_radius=PIVOT[2]):
     x, y, w, h, r = FRAME
-    cx, cy, pr = PIVOT
+    cx, cy, _ = PIVOT
     return (
         f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" fill="none" stroke="{ink}" stroke-width="{frame_width}"/>'
         f'<path d="{HANDS}" fill="none" stroke="{ink}" stroke-width="{hand_width}" stroke-linecap="round" stroke-linejoin="round"/>'
         f'<path d="{TICK}" fill="none" stroke="{ink}" stroke-width="{frame_width}" stroke-linecap="round"/>'
-        f'<circle cx="{cx}" cy="{cy}" r="{pr}" fill="{pivot}"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="{pivot_radius}" fill="{pivot}"/>'
     )
 
 
@@ -111,24 +119,29 @@ def wordmark_outline(text="Vaultime", tracking=-0.03):
         glyph.draw(TransformPen(path_pen, transform))
         glyph.draw(TransformPen(bounds_pen, transform))
         x += pos.x_advance + tracking * upm
-    return path_pen.getCommands(), bounds_pen.bounds
+    return path_pen.getCommands(), bounds_pen.bounds, upm
 
 
-def lockup_svg(ink, pivot, frame_width=4, hand_width=6, mark_ratio=0.8):
-    path, (x0, y0, x1, y1) = wordmark_outline()
-    height = y1 - y0
-    # The mark is a little smaller than the wordmark and sits on its middle,
-    # so the name leads. Then a gap.
-    size = height * mark_ratio
-    gap = height * 0.3
-    scale, offset = framed(size, 0, frame_width)
+def lockup_svg(ink, pivot):
+    """The mark and the wordmark as the logo in the app draws them: a 28 px
+    mark beside 25 px type, 10 px apart, with the strokes of Logo.tsx, both
+    centered on the middle of the letters."""
+    path, (x0, y0, x1, y1), upm = wordmark_outline()
+    em = upm / LOGO_TYPE_PX
+    text_height = y1 - y0
+    size = LOGO_MARK_PX * em
+    gap = LOGO_GAP_PX * em
+    height = max(size, text_height)
+    scale, offset = framed(size, 0, LOGO_FRAME_WIDTH)
     mark_y = offset + (height - size) / 2
     text_x = size + gap - x0
+    text_y = (height - text_height) / 2 - y0
     width = size + gap + (x1 - x0)
+    drawn = mark(ink, pivot, LOGO_FRAME_WIDTH, LOGO_HAND_WIDTH, LOGO_PIVOT_RADIUS)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" width="{width / 8:.0f}" height="{height / 8:.0f}">'
-        f'<g transform="translate({offset:.1f} {mark_y:.1f}) scale({scale:.4f})">{mark(ink, pivot, frame_width, hand_width)}</g>'
-        f'<path transform="translate({text_x:.1f} {-y0:.1f})" fill="{ink}" d="{path}"/>'
+        f'<g transform="translate({offset:.1f} {mark_y:.1f}) scale({scale:.4f})">{drawn}</g>'
+        f'<path transform="translate({text_x:.1f} {text_y:.1f})" fill="{ink}" d="{path}"/>'
         "</svg>\n"
     )
 
