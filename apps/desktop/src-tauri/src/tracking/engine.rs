@@ -29,8 +29,7 @@ use crate::integrity;
 use crate::platform;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{
-    InstallFolder, RunningProcess, cpu_usage, matches_executable, path_key,
-    refresh_running_processes,
+    InstallFolder, RunningProcess, cpu_usage, matches_executable, refresh_running_processes,
 };
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
@@ -289,16 +288,12 @@ fn poll_tick(
 ) -> crate::error::Result<()> {
     let tracking_settings = TrackingSettings::load(db);
     let tracked_games = games::list_all_games(db)?;
-    // Programs the player said are no game never count, whatever matches them.
-    let ignored = ignored::keys(db).unwrap_or_default();
+    // Programs the player said are no game never count, whatever matches
+    // them. They are recognized the way games are, through links and Wine.
+    let ignored = ignored::paths(db).unwrap_or_default();
     let processes: Vec<RunningProcess> = refresh_running_processes(system)
         .into_iter()
-        .filter(|process| {
-            process
-                .exe_path
-                .as_deref()
-                .is_none_or(|path| !ignored.contains(&path_key(path)))
-        })
+        .filter(|process| !ignored.iter().any(|path| matches_executable(process, path)))
         .collect();
     let activity_snapshot = capture_activity_snapshot();
 

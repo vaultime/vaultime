@@ -53,6 +53,17 @@ pub fn keys(db: &Database) -> Result<HashSet<String>> {
     })
 }
 
+/// The paths of all ignored programs, for the tracker to match like games.
+pub fn paths(db: &Database) -> Result<Vec<String>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare_cached("SELECT path FROM ignored_programs")
+            .map_err(map_db)?;
+        let rows = stmt.query_map([], |row| row.get(0)).map_err(map_db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+    })
+}
+
 /// Ignores a program from now on. Ignoring it again keeps the first entry.
 pub fn ignore(db: &Database, path: &str, title: &str) -> Result<()> {
     let path = path.trim();
