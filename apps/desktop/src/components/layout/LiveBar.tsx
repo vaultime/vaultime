@@ -16,7 +16,10 @@ import { usePageVisible } from "@/lib/use-page-visible";
 export function LiveBar() {
   const { active, activePolledAt, games, covers, sessions, idleThresholdSeconds } = useLibrary();
   const [now, setNow] = useState(() => Date.now());
-  const current = active[0];
+  const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
+  // The game being played rather than a launcher that steps aside for it,
+  // whose clock stands still while the game runs.
+  const current = active.find((session) => !stepping.has(session.game_id)) ?? active[0];
   const visible = usePageVisible();
 
   // Tick every second while something runs and the window is seen, so the
@@ -30,13 +33,12 @@ export function LiveBar() {
   // Running sessions as of the last poll, so today keeps up while they run.
   const todayMs = useMemo(() => {
     const running = new Map(active.map((session) => [session.id, session]));
-    const stepping = new Set(games.filter(stepsAside).map((game) => game.id));
     return playedToday(
       sessions.map((session) => running.get(session.id) ?? session),
       stepping,
       new Date(activePolledAt),
     );
-  }, [sessions, active, games, activePolledAt]);
+  }, [sessions, active, stepping, activePolledAt]);
 
   if (!current) {
     const watched = games.filter((game) => game.executable_path).length;

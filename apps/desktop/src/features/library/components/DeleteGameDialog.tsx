@@ -41,13 +41,17 @@ export function DeleteGameDialog({
     if (!game) return;
     setDeleting(true);
     setError(null);
+    // Ignored first, which can be done again, so a failure names the step
+    // that failed and trying again finishes the job.
+    let step = "ignore its program";
     try {
-      await api.deleteGame(game.id);
       if (ignoreProgram && game.executable_path) await api.ignoreProgram(game.executable_path, game.title);
+      step = "delete the game";
+      await api.deleteGame(game.id);
       onDeleted();
       close();
     } catch (e) {
-      setError(`Could not delete the game: ${describeError(e)}`);
+      setError(`Could not ${step}: ${describeError(e)}`);
     } finally {
       setDeleting(false);
     }
