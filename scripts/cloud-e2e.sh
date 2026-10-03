@@ -161,6 +161,7 @@ MSYS_NO_PATHCONV=1 docker run -d --name "$small_api" --network "$network" \
   -e VAULTIME_REFRESH_TOKEN_PEPPER="$(secret)" \
   -e VAULTIME_MAX_ACCOUNT_BYTES="$small_account_bytes" \
   -e VAULTIME_MAX_BACKUP_BYTES="$small_backup_bytes" \
+  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=3 \
   -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
   -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
   vaultime-linux-check /app/vaultime-api >/dev/null
@@ -242,6 +243,13 @@ kept = stored()
 assert first not in kept and second in kept and third in kept, f"the oldest backup did not make room: {kept}"
 status, storage = call("GET", "/v1/storage")
 assert storage["backup_bytes"] + storage["artwork_bytes"] <= account_bytes, storage
+
+# At the count limit, so a backup turned away must not cost one by count
+# either.
+fourth, status = upload(MIB // 4)
+assert status == 200, f"a small backup was turned away: {status}"
+kept = stored()
+assert len(kept) == 3, kept
 
 # A backup that does not fit even alone goes, and the older ones stay.
 _, status = upload(3 * MIB + MIB // 2)
