@@ -9,6 +9,7 @@ use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game, GameMetadata, UpdateGame};
 use crate::db::repo::map_db;
 use crate::error::{Result, VaultimeError};
+use crate::integrity;
 
 fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
     Ok(Game {
@@ -108,9 +109,20 @@ pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> 
     })
 }
 
-/// Returns `false` when there was no such game.
+/// Returns `false` when there was no such game. The ledger notes each of
+/// its sessions as removed by the player.
 pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
-    db.with_conn(|conn| {
+    db.with_transaction(|conn| {
+        let sessions: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM sessions WHERE game_id = ?1 ORDER BY started_at_wall")
+                .map_err(map_db)?;
+            let rows = stmt.query_map([id], |row| row.get(0)).map_err(map_db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+        };
+        for session_id in &sessions {
+            integrity::ledger::record_removed(conn, session_id, "game_deleted")?;
+        }
         let count = conn
             .execute("DELETE FROM games WHERE id = ?1", [id])
             .map_err(map_db)?;

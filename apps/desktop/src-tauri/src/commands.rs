@@ -29,12 +29,13 @@ use crate::db::models::{
 };
 use crate::db::repo::ignored::{self, IgnoredProgram};
 use crate::db::repo::{
-    annotations, backup_snapshots, corrections, earlier_playtime, games, session_events, sessions,
-    settings,
+    annotations, backup_snapshots, corrections, devices, earlier_playtime, games, session_events,
+    sessions, settings,
 };
 use crate::discovery::{self, DiscoveredGame};
 use crate::earlier;
 use crate::error::VaultimeError;
+use crate::integrity::ledger::{self, LedgerReport};
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::platform::controller;
 use crate::playtime;
@@ -52,6 +53,41 @@ pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, Vau
 #[tauri::command]
 pub fn get_device_id(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
     Ok(app_context.device_id.clone())
+}
+
+/// This PC: its name and what the ledgers say about the history.
+#[derive(Debug, Serialize)]
+pub struct ThisPc {
+    pub device_id: String,
+    pub name: String,
+    pub ledger: LedgerReport,
+}
+
+fn this_pc(db: &Database, device_id: &str) -> Result<ThisPc, VaultimeError> {
+    let device = devices::get_device(db, device_id)?;
+    Ok(ThisPc {
+        name: device.name.unwrap_or_else(|| device.id.clone()),
+        device_id: device.id,
+        ledger: db.with_conn(ledger::report)?,
+    })
+}
+
+#[tauri::command(async)]
+pub fn get_this_pc(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+) -> Result<ThisPc, VaultimeError> {
+    this_pc(&db, &app_context.device_id)
+}
+
+#[tauri::command(async)]
+pub fn rename_this_pc(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    name: String,
+) -> Result<ThisPc, VaultimeError> {
+    devices::rename_device(&db, &app_context.device_id, &name)?;
+    this_pc(&db, &app_context.device_id)
 }
 
 #[tauri::command]

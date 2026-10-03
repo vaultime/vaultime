@@ -112,6 +112,11 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   are a cache: rebuild them when counting rules change, never edit history to
   match a rule. Time counts on the day it happened, and time a launcher set
   aside for another game stays in the record but counts nowhere.
+- Each PC keeps a ledger, a hash chain signed with a key in `device-key`
+  next to the database, which backups leave out. It pins a session's chain at
+  every event but checkpoints and notes removed sessions and restores. A
+  session needs a pin from its start or from when the ledger began. Write
+  session events only through `append_session_event`, which pins them.
 - Every schema change is a new migration. Never edit a shipped migration.
 - The API migrations 0001 to 0004 carry no SPDX lines and never change,
   because the live database recorded their checksums. New migrations carry

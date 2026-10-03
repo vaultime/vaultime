@@ -155,8 +155,11 @@ pub struct Device {
     pub id: String,
     pub platform: String,
     pub app_version: String,
+    /// The public key the PC signs its ledger with, in hex.
     pub key_id: Option<String>,
     pub registered_at: String,
+    /// What the player calls the PC. It starts as the PC's own name.
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

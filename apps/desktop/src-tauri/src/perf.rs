@@ -82,16 +82,15 @@ fn write_session(db: &Database, game_id: &str, start: DateTime<Utc>, minutes: i6
     .unwrap();
 }
 
-#[test]
-#[ignore = "builds a large history and prints timings"]
-fn large_history() {
-    let path = std::env::temp_dir().join(format!("vaultime-perf-{}.db", uuid::Uuid::new_v4()));
-    let db = Database::open(&path).unwrap();
-    devices::ensure_device(&db, "device", "test", "0.0.0").unwrap();
+/// Ten years, two sessions of 90 minutes a day over 20 games. The oldest
+/// two years have a heartbeat every 5 s, the rest a checkpoint every 30 s.
+/// Returns the game ids.
+fn build_history(db: &Database) -> Vec<String> {
+    devices::ensure_device(db, "device", "test", "0.0.0").unwrap();
     let game_ids: Vec<String> = (0..20)
         .map(|index| {
             games::create_game(
-                &db,
+                db,
                 &CreateGame {
                     title: format!("Game {index}"),
                     executable_path: Some(format!("game{index}.exe")),
@@ -103,20 +102,26 @@ fn large_history() {
             .id
         })
         .collect();
-
-    // Ten years, two sessions of 90 minutes a day. The oldest two years have
-    // a heartbeat every 5 s, the rest a checkpoint every 30 s.
     let years = 10;
     let first = Utc::now() - TimeDelta::days(365 * years);
-    let started = Instant::now();
     for day in 0..365 * years {
         for play in 0..2 {
             let start = first + TimeDelta::days(day) + TimeDelta::hours(18 + 2 * play);
             let step = if day < 365 * 2 { 5 } else { 30 };
             let game = &game_ids[usize::try_from((day * 7 + play * 3) % 20).unwrap()];
-            write_session(&db, game, start, 90, step);
+            write_session(db, game, start, 90, step);
         }
     }
+    game_ids
+}
+
+#[test]
+#[ignore = "builds a large history and prints timings"]
+fn large_history() {
+    let path = std::env::temp_dir().join(format!("vaultime-perf-{}.db", uuid::Uuid::new_v4()));
+    let db = Database::open(&path).unwrap();
+    let started = Instant::now();
+    let game_ids = build_history(&db);
     let events: i64 = db
         .with_conn(|conn| {
             conn.query_row("SELECT COUNT(*) FROM session_events", [], |row| row.get(0))
@@ -132,6 +137,21 @@ fn large_history() {
     };
     timed("rebuild all slices", &mut || {
         format!("{} sessions", slices::rebuild_all(&db).unwrap())
+    });
+    timed("begin the ledger over the whole history", &mut || {
+        db.with_conn(|conn| {
+            conn.execute("DELETE FROM ledger_entries", [])
+                .map_err(map_db)
+        })
+        .unwrap();
+        let carried = db
+            .with_transaction(|conn| integrity::ledger::begin_if_empty(conn, "first_start"))
+            .unwrap();
+        format!("{carried:?} sessions")
+    });
+    timed("ledger report", &mut || {
+        let report = db.with_conn(integrity::ledger::report).unwrap();
+        format!("{} sessions covered", report.covered_sessions)
     });
     let mut listed = Vec::new();
     timed("list sessions, cold", &mut || {

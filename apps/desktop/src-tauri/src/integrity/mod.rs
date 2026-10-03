@@ -3,6 +3,8 @@
 
 //! Session event hashing, chain validation and trust scoring.
 
+pub mod ledger;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -96,7 +98,7 @@ pub fn append_session_event(
         VaultimeError::Integrity(format!("failed to append session event: {error}"))
     })?;
 
-    Ok(())
+    ledger::pin(conn, session_id, next_sequence, &hash_self, event_type)
 }
 
 /// Validates the stored event chain and terminal payloads for a session.
@@ -178,7 +180,7 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
         return Ok(Some("session_status_mismatch".into()));
     }
 
-    Ok(None)
+    Ok(ledger::session_problem(conn, session, &events, &TIMING_EVENTS)?.map(str::to_owned))
 }
 
 /// A correction only ever takes time out. It starts from the counters the
@@ -357,6 +359,7 @@ pub fn forget_checks() {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .clear();
+    ledger::forget();
 }
 
 /// Clears the cache when another program wrote to the database, such as a
@@ -401,7 +404,7 @@ fn next_sequence_and_previous_hash(
     })
 }
 
-fn compute_event_hash(
+pub(crate) fn compute_event_hash(
     session_id: &str,
     sequence: i64,
     event_type: &str,

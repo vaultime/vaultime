@@ -116,6 +116,8 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
     tauri::generate_handler![
         commands::get_app_version,
         commands::get_device_id,
+        commands::get_this_pc,
+        commands::rename_this_pc,
         commands::load_cloud_session_secure,
         commands::has_cloud_backup_key_secure,
         commands::store_cloud_session_secure,
@@ -206,6 +208,23 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     devices::ensure_device(&database, &device_id, &platform, &version)
         .expect("failed to register device");
     info!("device registered: {device_id} ({platform} v{version})");
+    integrity::ledger::load_key(&app_dir).expect("failed to load the ledger key");
+    let pc_name = hostname::get().map_or_else(
+        |_| platform.clone(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    devices::describe_this_device(
+        &database,
+        &device_id,
+        &integrity::ledger::key_id().expect("ledger key loaded"),
+        &pc_name,
+    )
+    .expect("failed to describe this PC");
+    match database.with_transaction(|conn| integrity::ledger::begin_if_empty(conn, "first_start")) {
+        Ok(Some(count)) => info!("the ledger of this PC began with {count} sessions"),
+        Ok(None) => {}
+        Err(error) => log::warn!("the ledger of this PC did not begin: {error}"),
+    }
 
     // Before the tracker starts, so no session ends halfway through.
     match playtime::slices::ensure_current(&database) {

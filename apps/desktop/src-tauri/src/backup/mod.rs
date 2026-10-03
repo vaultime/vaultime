@@ -204,6 +204,7 @@ pub fn import_local_backup(
         db,
         asset_manager,
         app_context,
+        &manifest.backup_id,
         &backup_dir,
         &staging_dir,
         &artwork,
@@ -240,6 +241,7 @@ fn restore_from_staging(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
+    backup_id: &str,
     backup_dir: &Path,
     staging_dir: &Path,
     artwork: &[String],
@@ -267,8 +269,15 @@ fn restore_from_staging(
     // Everything that can still fail runs on the staged copy, so swapping the
     // artwork and the database is the last step.
     let cache_dir = asset_manager.cache_dir();
+    let ledger_before = db.with_conn(integrity::ledger::this_tail)?;
     {
         let staged = Database::open(&staged_db)?;
+        // A backup from before ledgers gets one that begins now. Either way
+        // this PC's ledger notes the restore and where it stood before.
+        staged.with_transaction(|conn| {
+            integrity::ledger::begin_if_empty(conn, "restored_backup_without_ledger")?;
+            integrity::ledger::record_restored(conn, backup_id, ledger_before)
+        })?;
         rewrite_asset_cache_paths(&staged, cache_dir)?;
         // A backup made during play holds sessions that were still running.
         // Nothing tracks them here, so they are closed like after a crash.
@@ -375,6 +384,7 @@ const RESTORE_TABLES: &[&str] = &[
     "settings",
     "backup_snapshots",
     "ignored_programs",
+    "ledger_entries",
 ];
 
 fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()> {
@@ -1395,6 +1405,47 @@ mod tests {
         fixture.restore().unwrap();
         let restored = sessions::list_all_sessions(&fixture.db).unwrap();
         assert_eq!(restored[0].integrity_status, integrity::STATUS_SUSPICIOUS);
+        fixture.finish();
+    }
+
+    #[test]
+    fn a_restore_notes_itself_in_the_ledger_of_this_pc() {
+        let fixture = Fixture::new();
+        let device = fixture.context.device_id.clone();
+        let session = sessions::create_session(&fixture.db, &fixture.game_id, &device).unwrap();
+        sessions::end_session(
+            &fixture.db,
+            &session.id,
+            60_000,
+            60_000,
+            0,
+            integrity::STATUS_LOCAL,
+        )
+        .unwrap();
+        let fixture = fixture.back_up();
+        let before = fixture
+            .db
+            .with_conn(integrity::ledger::this_tail)
+            .unwrap()
+            .unwrap();
+
+        fixture.restore().unwrap();
+        let (entry_type, payload): (String, String) = fixture
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT entry_type, payload_json FROM ledger_entries
+                     ORDER BY sequence DESC LIMIT 1",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+        assert_eq!(entry_type, "restored");
+        assert!(payload.contains(&format!("\"sequence\":{}", before.0)));
+        let restored = sessions::list_all_sessions(&fixture.db).unwrap();
+        assert_eq!(restored[0].integrity_status, integrity::STATUS_LOCAL);
         fixture.finish();
     }
 

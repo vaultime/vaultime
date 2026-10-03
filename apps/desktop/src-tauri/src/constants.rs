@@ -99,6 +99,12 @@ pub const ASSET_CACHE_DIR: &str = "asset-cache";
 
 /// File next to the database that holds this PC's device id.
 pub const DEVICE_ID_FILE: &str = "device-id";
+/// File next to the database that holds the key this PC signs its ledger
+/// with. Backups leave it out.
+pub const DEVICE_KEY_FILE: &str = "device-key";
+/// Longest name a PC can have. Same as `DEVICE_NAME_MAX_CHARS` in
+/// `lib/constants.ts`.
+pub const DEVICE_NAME_MAX_CHARS: usize = 40;
 
 // Window
 
