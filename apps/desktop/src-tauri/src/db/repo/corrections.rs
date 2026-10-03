@@ -10,14 +10,14 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 use crate::constants::{MANUAL_SESSION_MAX, SESSION_NOTE_MAX_CHARS, STEAM_SOURCE};
 use crate::db::connection::Database;
 use crate::db::models::Session;
-use crate::db::repo::map_db;
 use crate::db::repo::sessions::{attach_validated_status, row_to_session};
+use crate::db::repo::{games, map_db};
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, STATUS_EDITED, STATUS_MANUAL, STATUS_SUSPICIOUS};
 use crate::playtime::slices;
@@ -216,6 +216,12 @@ fn apply_correction(
     timing: &Timing,
     reason: &str,
 ) -> Result<Session> {
+    // Only the PC that recorded a merged session may extend its history.
+    if let Some(pc) = crate::db::repo::devices::merged_pc_name(conn, &session.device_id)? {
+        return Err(VaultimeError::Invalid(format!(
+            "This session was recorded on {pc}. Correct it there, then merge again."
+        )));
+    }
     // A correction only ever takes time out, whatever asked for it.
     let ends_later = match session.ended_at_wall.as_deref() {
         Some(old_end) => parse_time(&timing.ended_at_wall)? > parse_time(old_end)?,
@@ -282,9 +288,61 @@ fn apply_correction(
     slices::rebuild_session(conn, &session.id)?;
     // The span from before the cut, which games that step aside may share.
     if let Some(old_end) = session.ended_at_wall.as_deref() {
-        slices::rebuild_aside_around(conn, &session.started_at_wall, old_end)?;
+        slices::rebuild_aside_around(conn, &session.started_at_wall, old_end, &session.device_id)?;
     }
     load(conn, &session.id)
+}
+
+/// Refuses play added by hand to a game of another PC, and play that
+/// overlaps a session of the same game. Play of one game cannot happen twice
+/// at once, also not on two PCs whose games are linked. Sessions whose time
+/// was all taken out do not count, their slot is free again.
+fn check_free_for_play(
+    conn: &rusqlite::Connection,
+    game_id: &str,
+    device_id: &str,
+    started_at_wall: &str,
+    ended_at_wall: &str,
+) -> Result<()> {
+    let origin: Option<String> = conn
+        .query_row(
+            "SELECT origin_device_id FROM games WHERE id = ?1",
+            [game_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(map_db)?
+        .flatten();
+    if origin.is_some_and(|origin| origin != device_id) {
+        return Err(VaultimeError::Invalid(
+            "play of another PC's game is added on that PC or to the game here it is linked to"
+                .into(),
+        ));
+    }
+    let same_game = serde_json::to_string(&games::with_linked(conn, game_id)?)
+        .map_err(|error| VaultimeError::Invalid(error.to_string()))?;
+    let overlaps: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM sessions
+                 WHERE game_id IN (SELECT value FROM json_each(?1)) AND runtime_ms > 0
+                   AND started_at_wall < ?3
+                   AND COALESCE(ended_at_wall, ?4) > ?2)",
+            params![
+                same_game,
+                started_at_wall,
+                ended_at_wall,
+                integrity::now_timestamp()
+            ],
+            |row| row.get(0),
+        )
+        .map_err(map_db)?;
+    if overlaps {
+        return Err(VaultimeError::Invalid(
+            "another session of this game already covers part of that time".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Adds play Vaultime did not see, like a session on another PC. It counts
@@ -327,29 +385,7 @@ pub fn add_manual_session(
     let id = uuid::Uuid::new_v4().to_string();
 
     db.with_transaction(|conn| {
-        // Play of one game cannot happen twice at once. Sessions whose time
-        // was all taken out do not count, their slot is free again.
-        let overlaps: bool = conn
-            .query_row(
-                "SELECT EXISTS(
-                     SELECT 1 FROM sessions
-                     WHERE game_id = ?1 AND runtime_ms > 0
-                       AND started_at_wall < ?3
-                       AND COALESCE(ended_at_wall, ?4) > ?2)",
-                params![
-                    game_id,
-                    started_at_wall,
-                    ended_at_wall,
-                    integrity::now_timestamp()
-                ],
-                |row| row.get(0),
-            )
-            .map_err(map_db)?;
-        if overlaps {
-            return Err(VaultimeError::Invalid(
-                "another session of this game already covers part of that time".into(),
-            ));
-        }
+        check_free_for_play(conn, game_id, device_id, &started_at_wall, &ended_at_wall)?;
 
         conn.execute(
             "INSERT INTO sessions

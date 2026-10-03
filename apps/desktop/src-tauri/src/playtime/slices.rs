@@ -15,11 +15,13 @@ use std::collections::BTreeMap;
 use chrono::DateTime;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::constants::{PLAY_SLICE_MS, PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING};
+use crate::constants::{
+    MERGE_SLICE_BATCH, PLAY_SLICE_MS, PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING,
+};
 use crate::db::connection::Database;
 use crate::db::models::{Session, SessionEvent};
-use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
+use crate::db::repo::{map_db, settings};
 use crate::error::Result;
 use crate::integrity;
 use crate::tracking::live::LiveCounters;
@@ -367,10 +369,14 @@ pub fn slices_of(
         .collect()
 }
 
-/// Games whose switch makes them step aside, read from their metadata. A
-/// game whose metadata is no JSON does not step aside.
-pub(crate) const STEPS_ASIDE: &str = "COALESCE(CASE WHEN json_valid(games.metadata_json)
-     THEN json_extract(games.metadata_json, '$.steps_aside') END, 0) = 1";
+/// Games whose switch makes them step aside, read from their metadata, or
+/// from the game of this PC a game of another PC is linked to. A game whose
+/// metadata is no JSON does not step aside.
+pub(crate) const STEPS_ASIDE: &str = "COALESCE((SELECT CASE WHEN json_valid(shown.metadata_json)
+         THEN json_extract(shown.metadata_json, '$.steps_aside') END
+     FROM games shown WHERE shown.id = COALESCE(
+         (SELECT linked_game_id FROM game_links WHERE game_links.game_id = games.id),
+         games.id)), 0) = 1";
 
 /// Whether a game counts only while no other game runs.
 pub fn steps_aside(conn: &Connection, game_id: &str) -> Result<bool> {
@@ -385,8 +391,9 @@ pub fn steps_aside(conn: &Connection, game_id: &str) -> Result<bool> {
 }
 
 /// The stretches of `session`'s time in which a game that does not step
-/// aside ran beside it, sorted and joined, up to `now_ms` for running ones.
-/// Empty unless the session's game steps aside.
+/// aside ran beside it on the same PC, sorted and joined, up to `now_ms` for
+/// running ones. A launcher on one PC never steps aside for a game on
+/// another. Empty unless the session's game steps aside.
 pub fn aside_stretches(
     conn: &Connection,
     session: &Session,
@@ -408,6 +415,7 @@ pub fn aside_stretches(
             "SELECT sessions.started_at_wall, sessions.ended_at_wall
              FROM sessions JOIN games ON games.id = sessions.game_id
              WHERE sessions.game_id != ?1 AND NOT ({STEPS_ASIDE})
+               AND sessions.device_id = ?4
                AND (sessions.ended_at_wall IS NULL OR sessions.runtime_ms > 0)
                AND sessions.started_at_wall < ?3
                AND (sessions.ended_at_wall IS NULL OR sessions.ended_at_wall > ?2)
@@ -420,7 +428,12 @@ pub fn aside_stretches(
     };
     let rows = stmt
         .query_map(
-            params![session.game_id, format(start), format(end)],
+            params![
+                session.game_id,
+                format(start),
+                format(end),
+                session.device_id
+            ],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
         )
         .map_err(map_db)?;
@@ -443,29 +456,49 @@ pub fn aside_stretches(
     Ok(stretches)
 }
 
-/// Closed sessions of games that step aside and ran at some point between
-/// `from` and `to`.
-fn aside_sessions_around(conn: &Connection, from: &str, to: &str) -> Result<Vec<String>> {
+/// Closed sessions of games that step aside and ran on `device` at some
+/// point between `from` and `to`. Only those on the same PC step aside.
+fn aside_sessions_around(
+    conn: &Connection,
+    from: &str,
+    to: &str,
+    device: &str,
+) -> Result<Vec<String>> {
     let mut stmt = conn
         .prepare_cached(&format!(
             "SELECT sessions.id FROM sessions JOIN games ON games.id = sessions.game_id
-             WHERE {STEPS_ASIDE} AND sessions.ended_at_wall IS NOT NULL
+             WHERE sessions.device_id = ?3 AND {STEPS_ASIDE}
+               AND sessions.ended_at_wall IS NOT NULL
                AND sessions.started_at_wall < ?2 AND sessions.ended_at_wall > ?1"
         ))
         .map_err(map_db)?;
     let rows = stmt
-        .query_map([from, to], |row| row.get(0))
+        .query_map([from, to, device], |row| row.get(0))
         .map_err(map_db)?;
     rows.collect::<rusqlite::Result<_>>().map_err(map_db)
 }
 
-/// Builds again the slices of sessions of games that step aside and ran
-/// at some point between `from` and `to`, after a session there changed.
-pub fn rebuild_aside_around(conn: &Connection, from: &str, to: &str) -> Result<()> {
-    for id in &aside_sessions_around(conn, from, to)? {
+/// Builds again the slices of sessions of games that step aside and ran on
+/// `device` at some point between `from` and `to`, after a session there
+/// changed.
+pub fn rebuild_aside_around(conn: &Connection, from: &str, to: &str, device: &str) -> Result<()> {
+    for id in &aside_sessions_around(conn, from, to, device)? {
         rebuild_session(conn, id)?;
     }
     Ok(())
+}
+
+/// A session's start, end, game and PC.
+type Span = (String, Option<String>, String, String);
+
+fn span_of(conn: &Connection, session_id: &str) -> Result<Option<Span>> {
+    conn.query_row(
+        "SELECT started_at_wall, ended_at_wall, game_id, device_id FROM sessions WHERE id = ?1",
+        [session_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )
+    .optional()
+    .map_err(map_db)
 }
 
 /// Works out the slices of a session again, and of the sessions that step
@@ -474,53 +507,99 @@ pub fn rebuild_aside_around(conn: &Connection, from: &str, to: &str) -> Result<(
 /// so a session of one leaves the others as they are.
 pub fn rebuild_session_and_around(conn: &Connection, session_id: &str) -> Result<()> {
     rebuild_session(conn, session_id)?;
-    let span: Option<(String, Option<String>, String)> = conn
-        .query_row(
-            "SELECT started_at_wall, ended_at_wall, game_id FROM sessions WHERE id = ?1",
-            [session_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()
-        .map_err(map_db)?;
-    if let Some((start, Some(end), game_id)) = span
+    if let Some((start, Some(end), game_id, device)) = span_of(conn, session_id)?
         && !steps_aside(conn, &game_id)?
     {
-        rebuild_aside_around(conn, &start, &end)?;
+        rebuild_aside_around(conn, &start, &end, &device)?;
     }
     Ok(())
 }
 
-/// The clock spans of a game's sessions, open ones up to now, so the
-/// sessions that stepped aside for it can be built again once it is gone.
-/// Empty for a game that steps aside, since those never set time aside for
-/// each other.
-pub fn spans_beside(db: &Database, game_id: &str) -> Result<Vec<(String, String)>> {
+/// Marks the slices as stale inside the caller's transaction, so the next
+/// start builds every slice again unless `rebuild_merged` finishes first.
+pub(crate) fn mark_stale(conn: &Connection) -> Result<()> {
+    settings::put_setting(conn, PLAY_SLICES_VERSION_SETTING, "0")
+}
+
+/// Works out the slices of merged sessions, and of the sessions that step
+/// aside around them on the same PC, a batch at a time, so the tracker gets
+/// the database in between. The merge marked the slices stale when it took
+/// the sessions in, and this marks them current once it is done.
+pub fn rebuild_merged(db: &Database, ids: &[String]) -> Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let merged: std::collections::HashSet<&String> = ids.iter().collect();
+    let mut around = std::collections::BTreeSet::new();
+    for batch in ids.chunks(MERGE_SLICE_BATCH) {
+        db.with_transaction(|conn| {
+            for id in batch {
+                rebuild_session(conn, id)?;
+                if let Some((start, Some(end), game_id, device)) = span_of(conn, id)?
+                    && !steps_aside(conn, &game_id)?
+                {
+                    around.extend(aside_sessions_around(conn, &start, &end, &device)?);
+                }
+            }
+            Ok(())
+        })?;
+    }
+    let around: Vec<String> = around
+        .into_iter()
+        .filter(|id| !merged.contains(id))
+        .collect();
+    for batch in around.chunks(MERGE_SLICE_BATCH) {
+        db.with_transaction(|conn| {
+            for id in batch {
+                rebuild_session(conn, id)?;
+            }
+            Ok(())
+        })?;
+    }
+    settings::set_setting(
+        db,
+        PLAY_SLICES_VERSION_SETTING,
+        &PLAY_SLICES_VERSION.to_string(),
+    )
+}
+
+/// The clock spans and PCs of the sessions of a game and of the games of
+/// other PCs linked to it, open ones up to now, so the sessions that stepped
+/// aside for them can be built again once they are gone. Games that step
+/// aside are left out, since those never set time aside for each other.
+pub fn spans_beside(db: &Database, game_id: &str) -> Result<Vec<(String, String, String)>> {
     db.with_conn(|conn| {
-        if steps_aside(conn, game_id)? {
-            return Ok(Vec::new());
+        let mut spans = Vec::new();
+        for id in crate::db::repo::games::with_linked(conn, game_id)? {
+            if steps_aside(conn, &id)? {
+                continue;
+            }
+            let mut stmt = conn
+                .prepare_cached(
+                    "SELECT started_at_wall, COALESCE(ended_at_wall, ?2), device_id FROM sessions
+                     WHERE game_id = ?1",
+                )
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map(params![id, integrity::now_timestamp()], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })
+                .map_err(map_db)?;
+            for row in rows {
+                spans.push(row.map_err(map_db)?);
+            }
         }
-        let mut stmt = conn
-            .prepare(
-                "SELECT started_at_wall, COALESCE(ended_at_wall, ?2) FROM sessions
-                 WHERE game_id = ?1",
-            )
-            .map_err(map_db)?;
-        let rows = stmt
-            .query_map(params![game_id, integrity::now_timestamp()], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .map_err(map_db)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+        Ok(spans)
     })
 }
 
 /// Builds again, once each, the slices of the sessions that step aside
-/// around any of `spans`.
-pub fn rebuild_aside_around_spans(db: &Database, spans: &[(String, String)]) -> Result<()> {
+/// around any of `spans`, each a start, an end and a PC.
+pub fn rebuild_aside_around_spans(db: &Database, spans: &[(String, String, String)]) -> Result<()> {
     db.with_transaction(|conn| {
         let mut ids = std::collections::BTreeSet::new();
-        for (from, to) in spans {
-            ids.extend(aside_sessions_around(conn, from, to)?);
+        for (from, to, device) in spans {
+            ids.extend(aside_sessions_around(conn, from, to, device)?);
         }
         for id in &ids {
             rebuild_session(conn, id)?;
@@ -571,24 +650,30 @@ pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
 }
 
 /// Builds again the slices that depend on whether `game_id` steps aside:
-/// its own sessions, and those of games that step aside around them.
+/// its own sessions and those of games of other PCs linked to it, and those
+/// of games that step aside around them.
 pub fn rebuild_for_game(db: &Database, game_id: &str) -> Result<()> {
     db.with_transaction(|conn| {
-        let spans: Vec<(String, String, String)> = {
+        let mut spans: Vec<(String, String, String, String)> = Vec::new();
+        for id in crate::db::repo::games::with_linked(conn, game_id)? {
             let mut stmt = conn
-                .prepare(
-                    "SELECT id, started_at_wall, ended_at_wall FROM sessions
+                .prepare_cached(
+                    "SELECT id, started_at_wall, ended_at_wall, device_id FROM sessions
                      WHERE game_id = ?1 AND ended_at_wall IS NOT NULL",
                 )
                 .map_err(map_db)?;
             let rows = stmt
-                .query_map([game_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .query_map([&id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
                 .map_err(map_db)?;
-            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
-        };
-        for (id, start, end) in &spans {
+            for row in rows {
+                spans.push(row.map_err(map_db)?);
+            }
+        }
+        for (id, start, end, device) in &spans {
             rebuild_session(conn, id)?;
-            rebuild_aside_around(conn, start, end)?;
+            rebuild_aside_around(conn, start, end, device)?;
         }
         Ok(())
     })

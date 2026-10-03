@@ -102,6 +102,15 @@ pub const DEVICE_ID_FILE: &str = "device-id";
 /// File next to the database that holds the key this PC signs its ledger
 /// with. Backups leave it out.
 pub const DEVICE_KEY_FILE: &str = "device-key";
+/// File next to the key that lists every public key this PC has signed
+/// with, so its older entries still count as its own after a new key.
+pub const DEVICE_KEYS_FILE: &str = "device-keys";
+/// Databases whose ledger check is remembered at once: the app's own and a
+/// backup being merged or restored.
+pub const LEDGER_CHECKS_REMEMBERED: usize = 4;
+/// Merged sessions whose quarter hours are worked out per transaction, so a
+/// large merge never holds up the tracker for long.
+pub const MERGE_SLICE_BATCH: usize = 200;
 /// Longest name a PC can have. Same as `DEVICE_NAME_MAX_CHARS` in
 /// `lib/constants.ts`.
 pub const DEVICE_NAME_MAX_CHARS: usize = 40;

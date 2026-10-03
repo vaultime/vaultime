@@ -3,6 +3,8 @@
 
 //! Queries for the `games` table.
 
+use std::collections::HashMap;
+
 use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
@@ -22,6 +24,128 @@ fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
         is_hidden: row.get("is_hidden")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
+        origin_device_id: row.get("origin_device_id")?,
+    })
+}
+
+/// The games of this PC, the ones the tracker watches and discovery knows.
+/// Games that came with sessions of another PC are left out.
+pub fn list_local_games(db: &Database) -> Result<Vec<Game>> {
+    let this = integrity::ledger::this_device().ok();
+    Ok(list_all_games(db)?
+        .into_iter()
+        .filter(|game| game.origin_device_id.is_none() || game.origin_device_id == this)
+        .collect())
+}
+
+/// The games the library shows: this PC's own and those of other PCs that
+/// are not linked to one of them. A linked game counts as the game of this
+/// PC it is linked to.
+pub fn list_shown_games(db: &Database) -> Result<Vec<Game>> {
+    let linked = links(db)?;
+    Ok(list_all_games(db)?
+        .into_iter()
+        .filter(|game| !linked.contains_key(&game.id))
+        .collect())
+}
+
+/// Games of other PCs and the game of this PC each counts as.
+pub fn links(db: &Database) -> Result<HashMap<String, String>> {
+    db.with_conn(links_in)
+}
+
+pub(crate) fn links_in(conn: &rusqlite::Connection) -> Result<HashMap<String, String>> {
+    let mut stmt = conn
+        .prepare_cached("SELECT game_id, linked_game_id FROM game_links")
+        .map_err(map_db)?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(map_db)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+}
+
+/// A game and the games of other PCs linked to it.
+pub(crate) fn with_linked(conn: &rusqlite::Connection, game_id: &str) -> Result<Vec<String>> {
+    let mut ids = vec![game_id.to_owned()];
+    let mut stmt = conn
+        .prepare_cached("SELECT game_id FROM game_links WHERE linked_game_id = ?1")
+        .map_err(map_db)?;
+    let rows = stmt
+        .query_map([game_id], |row| row.get::<_, String>(0))
+        .map_err(map_db)?;
+    for row in rows {
+        ids.push(row.map_err(map_db)?);
+    }
+    Ok(ids)
+}
+
+/// A game of another PC linked to a game of this PC.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GameLink {
+    pub game_id: String,
+    pub title: String,
+    pub origin_device_id: Option<String>,
+    pub linked_game_id: String,
+}
+
+/// Every link, with the title the game has on its PC.
+pub fn list_game_links(db: &Database) -> Result<Vec<GameLink>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT g.id, g.title, g.origin_device_id, l.linked_game_id
+                 FROM game_links l JOIN games g ON g.id = l.game_id
+                 ORDER BY g.title COLLATE NOCASE",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(GameLink {
+                    game_id: row.get(0)?,
+                    title: row.get(1)?,
+                    origin_device_id: row.get(2)?,
+                    linked_game_id: row.get(3)?,
+                })
+            })
+            .map_err(map_db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+    })
+}
+
+/// Makes a game of another PC count as a game of this PC, or as itself again
+/// with `None`.
+pub fn link_game(db: &Database, game_id: &str, linked_game_id: Option<&str>) -> Result<()> {
+    db.with_transaction(|conn| {
+        let origin = |id: &str| -> Result<Option<Option<String>>> {
+            use rusqlite::OptionalExtension;
+            conn.query_row(
+                "SELECT origin_device_id FROM games WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(map_db)
+        };
+        if !matches!(origin(game_id)?, Some(Some(_))) {
+            return Err(VaultimeError::Invalid(
+                "Only a game from another PC can be linked.".into(),
+            ));
+        }
+        conn.execute("DELETE FROM game_links WHERE game_id = ?1", [game_id])
+            .map_err(map_db)?;
+        if let Some(linked) = linked_game_id {
+            if !matches!(origin(linked)?, Some(None)) {
+                return Err(VaultimeError::Invalid(
+                    "A game can only be linked to a game of this PC.".into(),
+                ));
+            }
+            conn.execute(
+                "INSERT INTO game_links (game_id, linked_game_id) VALUES (?1, ?2)",
+                params![game_id, linked],
+            )
+            .map_err(map_db)?;
+        }
+        Ok(())
     })
 }
 
@@ -109,24 +233,32 @@ pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> 
     })
 }
 
-/// Returns `false` when there was no such game. The ledger notes each of
-/// its sessions as removed by the player.
+/// Returns `false` when there was no such game. Games of other PCs linked
+/// to it go too, as the library showed their sessions as its own. The ledger
+/// notes each session as removed by the player.
 pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
     db.with_transaction(|conn| {
-        let sessions: Vec<String> = {
-            let mut stmt = conn
-                .prepare("SELECT id FROM sessions WHERE game_id = ?1 ORDER BY started_at_wall")
-                .map_err(map_db)?;
-            let rows = stmt.query_map([id], |row| row.get(0)).map_err(map_db)?;
-            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
-        };
-        for session_id in &sessions {
-            integrity::ledger::record_removed(conn, session_id, "game_deleted")?;
+        let ids = with_linked(conn, id)?;
+        let mut deleted = false;
+        for game_id in &ids {
+            let sessions: Vec<String> = {
+                let mut stmt = conn
+                    .prepare("SELECT id FROM sessions WHERE game_id = ?1 ORDER BY started_at_wall")
+                    .map_err(map_db)?;
+                let rows = stmt
+                    .query_map([game_id], |row| row.get(0))
+                    .map_err(map_db)?;
+                rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+            };
+            for session_id in &sessions {
+                integrity::ledger::record_removed(conn, session_id, "game_deleted")?;
+            }
+            deleted |= conn
+                .execute("DELETE FROM games WHERE id = ?1", [game_id])
+                .map_err(map_db)?
+                > 0;
         }
-        let count = conn
-            .execute("DELETE FROM games WHERE id = ?1", [id])
-            .map_err(map_db)?;
-        Ok(count > 0)
+        Ok(deleted)
     })
 }
 

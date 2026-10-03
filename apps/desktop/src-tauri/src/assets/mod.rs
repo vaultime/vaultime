@@ -94,11 +94,15 @@ pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
     Ok(views)
 }
 
-/// Deletes a game and then its cached artwork.
+/// Deletes a game with the games of other PCs linked to it, and their
+/// cached artwork.
 pub fn delete_game(db: &Database, asset_manager: &AssetManager, game_id: &str) -> Result<bool> {
+    let ids = db.with_conn(|conn| games::with_linked(conn, game_id))?;
     let deleted = games::delete_game(db, game_id)?;
     if deleted {
-        remove_game_cache(asset_manager, game_id);
+        for id in &ids {
+            remove_game_cache(asset_manager, id);
+        }
     }
     Ok(deleted)
 }
@@ -267,7 +271,7 @@ pub fn backfill_steam_covers(db: &Database, asset_manager: &AssetManager) -> Res
     }
 
     let mut scanned = 0;
-    for game in games::list_all_games(db)? {
+    for game in games::list_local_games(db)? {
         if game.launcher_source.as_deref() != Some("steam") {
             continue;
         }

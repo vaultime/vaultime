@@ -287,7 +287,7 @@ fn poll_tick(
     active: &mut HashMap<String, ActiveSession>,
 ) -> crate::error::Result<()> {
     let tracking_settings = TrackingSettings::load(db);
-    let tracked_games = games::list_all_games(db)?;
+    let tracked_games = games::list_local_games(db)?;
     // Programs the player said are no game never count, whatever matches
     // them. They are recognized the way games are, through links and Wine.
     let ignored = ignored::paths(db).unwrap_or_default();

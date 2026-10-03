@@ -37,8 +37,7 @@ impl Database {
         Ok(db)
     }
 
-    /// An in-memory database for tests.
-    #[cfg(test)]
+    /// An in-memory database, for tests and as the schema a backup has to match.
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory().map_err(|error| {
             VaultimeError::Database(format!("failed to open in-memory db: {error}"))

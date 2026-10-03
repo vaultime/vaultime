@@ -113,10 +113,29 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   match a rule. Time counts on the day it happened, and time a launcher set
   aside for another game stays in the record but counts nowhere.
 - Each PC keeps a ledger, a hash chain signed with a key in `device-key`
-  next to the database, which backups leave out. It pins a session's chain at
-  every event but checkpoints and notes removed sessions and restores. A
-  session needs a pin from its start or from when the ledger began. Write
-  session events only through `append_session_event`, which pins them.
+  next to the database, which backups leave out. `device-keys` lists every
+  public key the PC has signed with. It pins a session's chain at every
+  event but checkpoints and notes removed sessions and restores. On a PC
+  only its own keys count, so every session there needs a pin of one of
+  them: from its start, from when the ledger began, or from being taken in.
+  Write session events only through `append_session_event`, which pins them.
+- Sessions of another PC come in by merge, byte for byte, never hashed,
+  pointed or signed again, as their game and PC are hashed in the start
+  event. A session is taken in, with an `adopted` entry, only after it passes
+  its check with the keys that count for the PC that recorded it
+  (`ledger::Trust`): this PC's own for its sessions and for a backup that
+  claims to be this PC, the keys trusted for a PC seen before (plus those of
+  the backup's PC if that one was trusted before), and the backup's keys for
+  PCs never seen. Keys of a PC never seen are trusted on its first merge and
+  recorded with `trusted` entries. Any other new key counts only when the
+  player confirms it, which also vouches for its sessions that came in
+  unvouched. A backup must pass SQLite's integrity check and match the
+  schema a fresh database gets, and a merge checks the rows and hashes it
+  copied against the plan. A restore adopts only sessions that pass this
+  way or that this PC's earlier pins confirm up to their newest timing
+  event. After a session's first closing event only corrections follow.
+  Never extend a chain recorded by a merged PC, and keep foreign games out
+  of the tracker. Linked games are shown as the local game by the core.
 - Every schema change is a new migration. Never edit a shipped migration.
 - The API migrations 0001 to 0004 carry no SPDX lines and never change,
   because the live database recorded their checksums. New migrations carry

@@ -18,6 +18,9 @@ pub struct Game {
     pub is_hidden: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// The PC this game came from with merged sessions. None for the games
+    /// of this PC, the only ones the tracker watches.
+    pub origin_device_id: Option<String>,
 }
 
 /// A game's status from a moment on: `backlog`, `playing`, `finished`,
@@ -160,6 +163,8 @@ pub struct Device {
     pub registered_at: String,
     /// What the player calls the PC. It starts as the PC's own name.
     pub name: Option<String>,
+    /// When sessions of this PC were last merged here.
+    pub merged_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

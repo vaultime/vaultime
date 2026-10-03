@@ -29,6 +29,8 @@ pub const STATUS_MANUAL: &str = "manual";
 /// Events that close a session. A correction or a session added by hand
 /// carries its end in the payload, the others at their own time.
 const TERMINAL_EVENTS: [&str; 4] = ["ended", "recovered", "corrected", "added_manually"];
+/// Events that close a session for the first time. Only corrections follow.
+const CLOSING_EVENTS: [&str; 3] = ["ended", "recovered", "added_manually"];
 const TIMING_EVENTS: [&str; 6] = [
     "started",
     "heartbeat",
@@ -106,6 +108,106 @@ pub fn append_session_event(
 /// Returns `Ok(None)` when the local audit trail looks internally consistent,
 /// or `Ok(Some(reason))` when the session should be treated as suspicious.
 pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<Option<String>> {
+    validate_session_history_from(conn, session, ledger::Viewpoint::ThisPc)
+}
+
+/// Takes in the sessions of a restored backup that this PC's own keys do
+/// not cover yet: those that pass with the keys `trust` counts for the PC
+/// that recorded them, and those this PC vouched for before, at a state its
+/// pins in `vouched_before` confirm. A session that fails stays as it is
+/// and shows Suspicious. Returns how many it took in.
+pub(crate) fn adopt_sound_sessions(
+    conn: &Connection,
+    trust: &ledger::Trust,
+    vouched_before: &HashMap<String, Vec<(i64, String)>>,
+    via: &str,
+    backup_id: &str,
+) -> Result<usize> {
+    let sessions: Vec<Session> = {
+        let mut stmt = conn
+            .prepare("SELECT * FROM sessions ORDER BY started_at_wall")
+            .map_err(|error| {
+                VaultimeError::Integrity(format!("failed to read sessions: {error}"))
+            })?;
+        let rows = stmt
+            .query_map([], crate::db::repo::sessions::row_to_session)
+            .map_err(|error| {
+                VaultimeError::Integrity(format!("failed to read sessions: {error}"))
+            })?;
+        rows.collect::<rusqlite::Result<_>>().map_err(|error| {
+            VaultimeError::Integrity(format!("failed to read sessions: {error}"))
+        })?
+    };
+    // Checked first and taken in after, so the ledger check is done once.
+    let no_keys = std::collections::HashSet::new();
+    let mut sound = Vec::new();
+    for session in &sessions {
+        if validate_session_history(conn, session)?.is_none() {
+            continue;
+        }
+        let keys = trust.keys_for(&session.device_id);
+        let passes =
+            validate_session_history_from(conn, session, ledger::Viewpoint::Keys(&keys))?.is_none();
+        let events = load_session_events(conn, &session.id)?;
+        // Sound apart from the ledger, and at a state this PC pinned before.
+        let known_here = !passes
+            && validate_session_history_from(conn, session, ledger::Viewpoint::Keys(&no_keys))?
+                .as_deref()
+                == Some("not_in_ledger")
+            && vouched_before
+                .get(&session.id)
+                .is_some_and(|pins| pins_confirm(pins, &events, session.ended_at_wall.is_some()));
+        if (passes || known_here)
+            && let Some(newest) = events.last()
+            && let Some(hash) = newest.hash_self.clone()
+        {
+            sound.push((
+                session.id.clone(),
+                session.device_id.clone(),
+                newest.sequence,
+                hash,
+            ));
+        }
+    }
+    for (session_id, device, sequence, hash) in &sound {
+        ledger::adopt(conn, session_id, *sequence, hash, device, via, backup_id)?;
+    }
+    Ok(sound.len())
+}
+
+/// Whether pins confirm a chain: one of them lies within it, each that does
+/// matches it, and a closed session's time lies in a pinned part of it, as
+/// `ledger::session_problem` asks. Pins past its end belong to a later state.
+fn pins_confirm(pins: &[(i64, String)], events: &[SessionEvent], closed: bool) -> bool {
+    let within: Vec<&(i64, String)> = pins
+        .iter()
+        .filter(|(sequence, _)| {
+            usize::try_from(*sequence).is_ok_and(|n| n >= 1 && n <= events.len())
+        })
+        .collect();
+    let Some(newest_pinned) = within.iter().map(|(sequence, _)| *sequence).max() else {
+        return false;
+    };
+    let matches = within.iter().all(|(sequence, hash)| {
+        usize::try_from(*sequence - 1)
+            .ok()
+            .and_then(|index| events.get(index))
+            .is_some_and(|event| event.hash_self.as_deref() == Some(hash.as_str()))
+    });
+    let newest_timing = events
+        .iter()
+        .rev()
+        .find(|event| TIMING_EVENTS.contains(&event.event_type.as_str()));
+    matches && !(closed && newest_timing.is_some_and(|event| event.sequence > newest_pinned))
+}
+
+/// `validate_session_history` with the pins of `viewpoint`'s keys counting,
+/// as another PC would check the session. Used on a backup of that PC.
+pub fn validate_session_history_from(
+    conn: &Connection,
+    session: &Session,
+    viewpoint: ledger::Viewpoint,
+) -> Result<Option<String>> {
     let events = load_session_events(conn, &session.id)?;
     if events.is_empty() {
         return Ok(Some("missing_event_chain".into()));
@@ -115,6 +217,9 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
         return Ok(Some(reason));
     }
 
+    if let Some(reason) = check_after_close(&events) {
+        return Ok(Some(reason));
+    }
     let first_event = events.first().expect("events checked non-empty");
     if let Some(reason) = check_status_history(&events, first_event.event_type == "added_manually")
     {
@@ -180,7 +285,22 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
         return Ok(Some("session_status_mismatch".into()));
     }
 
-    Ok(ledger::session_problem(conn, session, &events, &TIMING_EVENTS)?.map(str::to_owned))
+    Ok(
+        ledger::session_problem(conn, session, &events, &TIMING_EVENTS, viewpoint)?
+            .map(str::to_owned),
+    )
+}
+
+/// Once a session closed, only corrections follow, so nothing can add time
+/// to it after its end.
+fn check_after_close(events: &[SessionEvent]) -> Option<String> {
+    let closed = events
+        .iter()
+        .position(|event| CLOSING_EVENTS.contains(&event.event_type.as_str()))?;
+    events[closed + 1..]
+        .iter()
+        .any(|event| event.event_type != "corrected")
+        .then(|| "event_after_close".into())
 }
 
 /// A correction only ever takes time out. It starts from the counters the

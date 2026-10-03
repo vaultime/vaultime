@@ -444,7 +444,8 @@ pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
 /// Runtime per game id that `launcher` counted as well. A tracked session
 /// counts at the length the tracker recorded, before any correction, since
 /// the launcher saw the game run that long. A session added by hand counts
-/// only when it was played through that launcher.
+/// only when it was played through that launcher. A game of another PC
+/// counts for the game of this PC it is linked to.
 pub fn launcher_runtime_by_game(
     db: &Database,
     launcher: &str,
@@ -470,12 +471,19 @@ pub fn launcher_runtime_by_game(
                  GROUP BY sessions.game_id",
             )
             .map_err(map_db)?;
+        let links = crate::db::repo::games::links_in(conn)?;
         let rows = stmt
             .query_map([launcher], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })
             .map_err(map_db)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+        let mut runtime = std::collections::HashMap::new();
+        for row in rows {
+            let (game_id, ms) = row.map_err(map_db)?;
+            let game_id = links.get(&game_id).cloned().unwrap_or(game_id);
+            *runtime.entry(game_id).or_insert(0) += ms;
+        }
+        Ok(runtime)
     })
 }
 

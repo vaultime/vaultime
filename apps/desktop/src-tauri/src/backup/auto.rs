@@ -44,6 +44,11 @@ pub fn enabled(db: &Database) -> bool {
         .is_none_or(|value| value != "false")
 }
 
+/// Held while an automatic backup is written. The daily check, the backup on
+/// quit and the one before a merge may overlap, and each prunes the folder,
+/// which would take a backup the others are still writing.
+static RUNNING: Mutex<()> = Mutex::new(());
+
 /// Makes an automatic backup when the newest one is at least `min_age` old,
 /// then deletes all but the newest few. Returns the new backup, if any.
 pub fn back_up_if_due(
@@ -52,8 +57,6 @@ pub fn back_up_if_due(
     app_context: &AppContext,
     min_age: Duration,
 ) -> Result<Option<LocalBackupSummary>> {
-    // The daily check and the backup on quit may overlap.
-    static RUNNING: Mutex<()> = Mutex::new(());
     let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
 
     if !enabled(db) {
@@ -69,8 +72,34 @@ pub fn back_up_if_due(
     if newest_age(&folder).is_some_and(|age| age < min_age) {
         return Ok(None);
     }
+    write_backup(db, asset_manager, app_context, &folder).map(Some)
+}
 
-    let previous = automatic_backups(&folder)
+/// Saves an automatic backup now, also when daily backups are off, as before
+/// a merge, so a restore can undo it.
+pub fn back_up_now(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+) -> Result<LocalBackupSummary> {
+    let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
+    let folder = folder(db, &app_context.app_dir);
+    fs::create_dir_all(&folder).map_err(|error| {
+        VaultimeError::Backup(format!(
+            "could not create the backup folder {}: {error}",
+            folder.display()
+        ))
+    })?;
+    write_backup(db, asset_manager, app_context, &folder)
+}
+
+fn write_backup(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    folder: &Path,
+) -> Result<LocalBackupSummary> {
+    let previous = automatic_backups(folder)
         .into_iter()
         .rev()
         .find(|backup| backup.join(BACKUP_MANIFEST_FILE).is_file());
@@ -78,7 +107,7 @@ pub fn back_up_if_due(
         db,
         asset_manager,
         app_context,
-        &folder,
+        folder,
         AUTO_BACKUP_PREFIX,
         previous.as_deref(),
     )?;
@@ -91,9 +120,9 @@ pub fn back_up_if_due(
     ) {
         warn!("failed to record the automatic backup: {error}");
     }
-    prune(&folder, AUTO_BACKUP_KEEP);
+    prune(folder, AUTO_BACKUP_KEEP);
     info!("automatic backup written to {}", summary.backup_path);
-    Ok(Some(summary))
+    Ok(summary)
 }
 
 /// Age of the newest complete automatic backup. The manifest is written last,

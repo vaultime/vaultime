@@ -83,7 +83,8 @@ fn running_slices(
         let mut stmt = conn
             .prepare(
                 "SELECT * FROM sessions
-                 WHERE ended_at_wall IS NULL AND (?1 IS NULL OR game_id = ?1)",
+                 WHERE ended_at_wall IS NULL AND (?1 IS NULL OR game_id = ?1
+                     OR game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1))",
             )
             .map_err(map_db)?;
         let open = stmt
@@ -226,7 +227,8 @@ pub fn play_totals<Tz: TimeZone>(
                         play_slices.active_ms, play_slices.idle_ms
                  FROM play_slices JOIN sessions ON sessions.id = play_slices.session_id
                  WHERE play_slices.slice_start >= ?1 AND play_slices.slice_start < ?2
-                   AND (?3 IS NULL OR sessions.game_id = ?3)",
+                   AND (?3 IS NULL OR sessions.game_id = ?3 OR sessions.game_id IN
+                        (SELECT game_id FROM game_links WHERE linked_game_id = ?3))",
             )
             .map_err(map_db)?;
         let rows = stmt
@@ -253,7 +255,10 @@ pub fn play_totals<Tz: TimeZone>(
     })?;
 
     let mut totals: BTreeMap<(String, String), [i64; 3]> = BTreeMap::new();
+    // A game of another PC counts as the game of this PC it is linked to.
+    let links = crate::db::repo::games::links(db)?;
     for (game, slice) in slices {
+        let game = links.get(&game).cloned().unwrap_or(game);
         let Some(key) = bucket_of(tz, slice.start_ms, bucket) else {
             continue;
         };

@@ -93,7 +93,7 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
 /// install folder. Returns how many games got one.
 pub fn remember_launcher_ids(db: &Database, found: &[DiscoveredGame]) -> Result<usize> {
     let mut missing: HashMap<(String, String), Game> = HashMap::new();
-    for game in games::list_all_games(db)? {
+    for game in games::list_local_games(db)? {
         let Some(source) = game.launcher_source.clone() else {
             continue;
         };
@@ -139,7 +139,7 @@ pub fn backfill_launcher_ids(db: &Database) -> Result<usize> {
         return Ok(0);
     }
     let mut stored = 0;
-    for game in games::list_all_games(db)? {
+    for game in games::list_local_games(db)? {
         if game.launcher_source.as_deref() != Some(STEAM_SOURCE)
             || games::launcher_id(&game).is_some()
         {
@@ -165,7 +165,7 @@ pub fn backfill_launcher_ids(db: &Database) -> Result<usize> {
 
 /// Path keys of every executable already in the library.
 fn library_executables(db: &Database) -> Result<HashSet<String>> {
-    Ok(games::list_all_games(db)?
+    Ok(games::list_local_games(db)?
         .into_iter()
         .filter_map(|game| game.executable_path)
         .map(|path| path_key(&path))

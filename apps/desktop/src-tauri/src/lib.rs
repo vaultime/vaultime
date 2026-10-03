@@ -118,6 +118,11 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::get_device_id,
         commands::get_this_pc,
         commands::rename_this_pc,
+        commands::list_devices,
+        commands::list_game_links,
+        commands::link_game,
+        commands::preview_merge,
+        commands::merge_backup,
         commands::load_cloud_session_secure,
         commands::has_cloud_backup_key_secure,
         commands::store_cloud_session_secure,
@@ -208,7 +213,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     devices::ensure_device(&database, &device_id, &platform, &version)
         .expect("failed to register device");
     info!("device registered: {device_id} ({platform} v{version})");
-    integrity::ledger::load_key(&app_dir).expect("failed to load the ledger key");
+    integrity::ledger::load_key(&app_dir, &device_id).expect("failed to load the ledger key");
     let pc_name = hostname::get().map_or_else(
         |_| platform.clone(),
         |name| name.to_string_lossy().into_owned(),

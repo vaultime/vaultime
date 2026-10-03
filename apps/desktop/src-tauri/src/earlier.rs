@@ -81,7 +81,7 @@ fn candidates(
 ) -> Result<SteamPlaytimePreview> {
     let tracked = sessions::launcher_runtime_by_game(db, STEAM_SOURCE)?;
     let mut games = Vec::new();
-    for game in games::list_all_games(db)? {
+    for game in games::list_local_games(db)? {
         let Some(app) = game
             .install_folder
             .as_deref()

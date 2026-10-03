@@ -16,6 +16,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::AppContext;
 use crate::assets::crop::ArtworkSource;
 use crate::assets::{self, AssetManager, GameAssetView};
+use crate::backup::merge::{GameChoice, MergePreview, MergeSummary};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{
@@ -24,9 +25,10 @@ use crate::constants::{
 };
 use crate::db::connection::Database;
 use crate::db::models::{
-    BackupSnapshot, CreateGame, CropRect, EarlierPlaytime, Game, GameStatusChange, Session,
+    BackupSnapshot, CreateGame, CropRect, Device, EarlierPlaytime, Game, GameStatusChange, Session,
     SessionEvent, SessionNote, Setting, UpdateGame,
 };
+use crate::db::repo::games::GameLink;
 use crate::db::repo::ignored::{self, IgnoredProgram};
 use crate::db::repo::{
     annotations, backup_snapshots, corrections, devices, earlier_playtime, games, session_events,
@@ -53,6 +55,66 @@ pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, Vau
 #[tauri::command]
 pub fn get_device_id(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
     Ok(app_context.device_id.clone())
+}
+
+/// Every PC this database knows, this one included.
+#[tauri::command(async)]
+pub fn list_devices(db: State<'_, Arc<Database>>) -> Result<Vec<Device>, VaultimeError> {
+    devices::list_devices(&db)
+}
+
+/// Games of other PCs and the games of this PC they count as.
+#[tauri::command(async)]
+pub fn list_game_links(db: State<'_, Arc<Database>>) -> Result<Vec<GameLink>, VaultimeError> {
+    games::list_game_links(&db)
+}
+
+/// Makes a game of another PC count as a game of this PC, or as itself again,
+/// and works out where its time fell once more.
+#[tauri::command(async)]
+pub fn link_game(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+    linked_game_id: Option<String>,
+) -> Result<(), VaultimeError> {
+    games::link_game(&db, &game_id, linked_game_id.as_deref())?;
+    playtime::slices::rebuild_for_game(&db, &game_id)
+}
+
+/// What merging another PC's backup would bring in.
+#[tauri::command(async)]
+pub fn preview_merge(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    path: String,
+    trust_new_keys: bool,
+) -> Result<MergePreview, VaultimeError> {
+    backup::merge::preview(
+        &db,
+        &app_context,
+        std::path::Path::new(&path),
+        trust_new_keys,
+    )
+}
+
+/// Merges another PC's backup, with the player's choice for each game.
+#[tauri::command(async)]
+pub fn merge_backup(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    app_context: State<'_, AppContext>,
+    path: String,
+    choices: Vec<GameChoice>,
+    trust_new_keys: bool,
+) -> Result<MergeSummary, VaultimeError> {
+    backup::merge::apply(
+        &db,
+        &asset_manager,
+        &app_context,
+        std::path::Path::new(&path),
+        &choices,
+        trust_new_keys,
+    )
 }
 
 /// This PC: its name and what the ledgers say about the history.
@@ -132,11 +194,13 @@ pub fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, Vaultim
     Ok(true)
 }
 
-/// Every game, hidden ones too. Hidden games are still tracked and their
-/// sessions count, only the library views leave them out.
+/// Every game the library shows, hidden ones too. Hidden games are still
+/// tracked and their sessions count, only the library views leave them out.
+/// Games of other PCs that are linked to a game of this PC count as that
+/// game and are left out.
 #[tauri::command]
 pub fn list_games(db: State<'_, Arc<Database>>) -> Result<Vec<Game>, VaultimeError> {
-    games::list_all_games(&db)
+    games::list_shown_games(&db)
 }
 
 #[tauri::command]
@@ -275,6 +339,7 @@ pub fn list_sessions(
         live.apply(session);
     }
     playtime::totals::fill_set_aside(&db, &live, &mut all, chrono::Utc::now().timestamp_millis())?;
+    show_linked_games(&db, &mut all)?;
     Ok(all)
 }
 
@@ -321,7 +386,24 @@ pub fn get_active_sessions(
         &mut active,
         chrono::Utc::now().timestamp_millis(),
     )?;
+    show_linked_games(&db, &mut active)?;
     Ok(active)
+}
+
+/// Shows a session of a game of another PC as one of the game of this PC
+/// it is linked to. Only the shown game changes, the session's history keeps
+/// the game it was recorded with.
+fn show_linked_games(db: &Database, sessions: &mut [Session]) -> Result<(), VaultimeError> {
+    let links = games::links(db)?;
+    if links.is_empty() {
+        return Ok(());
+    }
+    for session in sessions {
+        if let Some(linked) = links.get(&session.game_id) {
+            session.game_id.clone_from(linked);
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]

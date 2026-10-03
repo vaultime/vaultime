@@ -35,15 +35,23 @@ fn row_to_note(row: &Row) -> rusqlite::Result<SessionNote> {
     })
 }
 
-/// Every status change, oldest first.
+/// Every status change, oldest first. One of a game of another PC counts
+/// for the game of this PC it is linked to.
 pub fn list_status_changes(db: &Database) -> Result<Vec<GameStatusChange>> {
-    db.with_conn(|conn| {
+    let links = crate::db::repo::games::links(db)?;
+    let mut changes = db.with_conn(|conn| {
         let mut stmt = conn
             .prepare("SELECT * FROM game_status_changes ORDER BY changed_at, rowid")
             .map_err(map_db)?;
         let rows = stmt.query_map([], row_to_change).map_err(map_db)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
-    })
+    })?;
+    for change in &mut changes {
+        if let Some(linked) = links.get(&change.game_id) {
+            change.game_id.clone_from(linked);
+        }
+    }
+    Ok(changes)
 }
 
 /// Records a new status for a game. Setting the status it already has records

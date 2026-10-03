@@ -3,7 +3,7 @@
 
 //! Key value store for app settings.
 
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::Setting;
@@ -41,14 +41,17 @@ pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>> {
 }
 
 pub fn set_setting(db: &Database, key: &str, value: &str) -> Result<()> {
-    db.with_conn(|conn| {
-        conn.execute(
-            "INSERT INTO settings (key, value, updated_at)
-             VALUES (?1, ?2, datetime('now'))
-             ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = datetime('now')",
-            params![key, value],
-        )
-        .map_err(map_db)?;
-        Ok(())
-    })
+    db.with_conn(|conn| put_setting(conn, key, value))
+}
+
+/// `set_setting` on an open connection, inside the caller's transaction.
+pub(crate) fn put_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (key, value, updated_at)
+         VALUES (?1, ?2, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = datetime('now')",
+        params![key, value],
+    )
+    .map_err(map_db)?;
+    Ok(())
 }

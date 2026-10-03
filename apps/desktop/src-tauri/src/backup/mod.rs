@@ -5,8 +5,10 @@
 
 pub mod auto;
 pub(crate) mod crypto;
+pub mod merge;
 pub mod remote;
 
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read};
@@ -204,7 +206,7 @@ pub fn import_local_backup(
         db,
         asset_manager,
         app_context,
-        &manifest.backup_id,
+        &manifest,
         &backup_dir,
         &staging_dir,
         &artwork,
@@ -241,7 +243,7 @@ fn restore_from_staging(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
-    backup_id: &str,
+    manifest: &LocalBackupManifest,
     backup_dir: &Path,
     staging_dir: &Path,
     artwork: &[String],
@@ -263,21 +265,17 @@ fn restore_from_staging(
     fs::copy(backup_dir.join(DATABASE_FILE), &staged_db).map_err(|error| {
         VaultimeError::Backup(format!("failed to stage backup database: {error}"))
     })?;
-    drop(Database::open(&staged_db)?);
+    check_plain_schema(&staged_db)?;
+    check_integrity(&staged_db)?;
+    check_same_schema(&Database::open(&staged_db)?)?;
     check_restored_ids(&staged_db)?;
 
     // Everything that can still fail runs on the staged copy, so swapping the
     // artwork and the database is the last step.
     let cache_dir = asset_manager.cache_dir();
-    let ledger_before = db.with_conn(integrity::ledger::this_tail)?;
     {
         let staged = Database::open(&staged_db)?;
-        // A backup from before ledgers gets one that begins now. Either way
-        // this PC's ledger notes the restore and where it stood before.
-        staged.with_transaction(|conn| {
-            integrity::ledger::begin_if_empty(conn, "restored_backup_without_ledger")?;
-            integrity::ledger::record_restored(conn, backup_id, ledger_before)
-        })?;
+        take_in_restored(db, &staged, manifest)?;
         rewrite_asset_cache_paths(&staged, cache_dir)?;
         // A backup made during play holds sessions that were still running.
         // Nothing tracks them here, so they are closed like after a crash.
@@ -335,6 +333,165 @@ fn create_dir(path: &Path) -> Result<()> {
     })
 }
 
+/// Notes the restore in this PC's ledger inside the staged copy and takes
+/// in the sessions that pass, see `integrity::adopt_sound_sessions`.
+fn take_in_restored(
+    db: &Database,
+    staged: &Database,
+    manifest: &LocalBackupManifest,
+) -> Result<()> {
+    let ledger_before = db.with_conn(integrity::ledger::this_tail)?;
+    // What this PC vouched for before, so the restore can tell a backup of
+    // this history from one changed elsewhere. A ledger that fails its check
+    // vouches for nothing.
+    let own_broken =
+        db.with_conn(|conn| integrity::ledger::any_broken(conn, &integrity::ledger::own_keys()?))?;
+    let vouched_before = if own_broken {
+        HashMap::new()
+    } else {
+        db.with_conn(integrity::ledger::own_pins)?
+    };
+    // A ledger that never vouched for a session is a fresh start, the only
+    // time a backup from before ledgers is taken in as it is.
+    let fresh = !own_broken && vouched_before.is_empty();
+    let this = integrity::ledger::this_device()?;
+    let (trust, _) = staged.with_conn(|staged_conn| {
+        db.with_conn(|local| {
+            integrity::ledger::Trust::new(local, staged_conn, &manifest.source_device_id, false)
+        })
+    })?;
+    let seen = db.with_conn(integrity::ledger::seen_pcs)?;
+    // This PC's ledger notes the restore and where it stood before. It
+    // takes in each session it does not cover yet that passes with the
+    // keys that count for the PC that recorded it, or that it vouched for
+    // before at this state. Others stay as they are and show Suspicious.
+    staged.with_transaction(|conn| {
+        let began = if fresh {
+            integrity::ledger::begin_if_empty(conn, "restored_backup_without_ledger")?
+        } else {
+            None
+        };
+        integrity::ledger::record_restored(conn, &manifest.backup_id, ledger_before)?;
+        if began.is_none() {
+            integrity::adopt_sound_sessions(
+                conn,
+                &trust,
+                &vouched_before,
+                "restore",
+                &manifest.backup_id,
+            )?;
+        }
+        // Trust this PC had stays, the restored ledger may not hold it. So do
+        // the PCs it has seen, so none of them counts as new again.
+        trust.record(conn, true)?;
+        integrity::ledger::keep_seen(conn, &seen)?;
+        // This PC's own games and sessions stay its own, also in a backup
+        // of a PC that merged them.
+        conn.execute(
+            "UPDATE games SET origin_device_id = NULL WHERE origin_device_id = ?1",
+            [&this],
+        )
+        .map_err(crate::db::repo::map_db)?;
+        conn.execute(
+            "DELETE FROM game_links WHERE game_id IN
+                 (SELECT id FROM games WHERE origin_device_id IS NULL)",
+            [],
+        )
+        .map_err(crate::db::repo::map_db)?;
+        conn.execute("UPDATE devices SET merged_at = NULL WHERE id = ?1", [&this])
+            .map_err(crate::db::repo::map_db)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Why a backup with database parts of its own is refused.
+const FOREIGN_SCHEMA: &str =
+    "this backup holds database parts Vaultime never writes, so it was not used";
+
+/// Refuses a backup database that holds views, triggers or virtual tables,
+/// before any of them could run. Any of them could show one thing to a
+/// check and another to the copy that follows it.
+pub(crate) fn check_plain_schema(database_path: &Path) -> Result<()> {
+    let refused = |error: rusqlite::Error| {
+        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
+    };
+    let conn = Connection::open(database_path).map_err(refused)?;
+    // Virtual tables keep no pages of their own, whatever their statement says.
+    let odd: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type IN ('view', 'trigger') OR (type = 'table' AND rootpage = 0)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(refused)?;
+    if odd > 0 {
+        return Err(VaultimeError::Backup(FOREIGN_SCHEMA.into()));
+    }
+    Ok(())
+}
+
+/// Refuses a backup database that fails SQLite's own check. One whose
+/// indexes disagree with its tables could show a check other rows than the
+/// copy that follows it.
+pub(crate) fn check_integrity(database_path: &Path) -> Result<()> {
+    let refused = |error: rusqlite::Error| {
+        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
+    };
+    let conn = Connection::open(database_path).map_err(refused)?;
+    let verdict: String = conn
+        .query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))
+        .map_err(refused)?;
+    if verdict != "ok" {
+        return Err(VaultimeError::Backup(
+            "this backup database is damaged, so it was not used".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Refuses a migrated backup database whose tables, indexes and other parts
+/// differ from the ones this version creates. A column compared another way
+/// or a key left out could let a copy take rows its check never saw.
+pub(crate) fn check_same_schema(staged: &Database) -> Result<()> {
+    let expected = Database::open_in_memory()?.with_conn(schema_of)?;
+    if staged.with_conn(schema_of)? != expected {
+        return Err(VaultimeError::Backup(FOREIGN_SCHEMA.into()));
+    }
+    Ok(())
+}
+
+/// A part of a database: its type, name, table and statement.
+type SchemaPart = (String, String, String, Option<String>);
+
+/// Every part of a database, with runs of whitespace in each statement as
+/// one space. Statistics SQLite may keep are left out.
+fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
+    let refused = |error: rusqlite::Error| {
+        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
+    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master
+             WHERE NOT (type = 'table' AND name IN ('sqlite_stat1', 'sqlite_stat4'))
+             ORDER BY type, name",
+        )
+        .map_err(refused)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get::<_, Option<String>>(3)?
+                    .map(|sql| sql.split_whitespace().collect::<Vec<_>>().join(" ")),
+            ))
+        })
+        .map_err(refused)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(refused)
+}
+
 /// Game ids become folder names in the artwork cache, so a backup with an id
 /// that is not a plain name is refused before anything changes.
 fn check_restored_ids(database_path: &Path) -> Result<()> {
@@ -375,6 +532,7 @@ fn ensure_schema_supported(backup_migrations: &[String]) -> Result<()> {
 const RESTORE_TABLES: &[&str] = &[
     "devices",
     "games",
+    "game_links",
     "earlier_playtime",
     "game_assets",
     "game_status_changes",

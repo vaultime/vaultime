@@ -19,7 +19,36 @@ fn row_to_device(row: &Row) -> rusqlite::Result<Device> {
         key_id: row.get("key_id")?,
         registered_at: row.get("registered_at")?,
         name: row.get("name")?,
+        merged_at: row.get("merged_at")?,
     })
+}
+
+/// Every PC this database knows, this one included.
+pub fn list_devices(db: &Database) -> Result<Vec<Device>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare("SELECT * FROM devices ORDER BY registered_at")
+            .map_err(map_db)?;
+        let rows = stmt.query_map([], row_to_device).map_err(map_db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+    })
+}
+
+/// The name of the PC when its sessions came here by merge, so only that PC
+/// may change them. None for this PC and PCs never merged.
+pub fn merged_pc_name(conn: &rusqlite::Connection, device_id: &str) -> Result<Option<String>> {
+    use rusqlite::OptionalExtension;
+    // This PC is never merged into itself.
+    if crate::integrity::ledger::this_device().is_ok_and(|this| this == device_id) {
+        return Ok(None);
+    }
+    conn.query_row(
+        "SELECT COALESCE(name, id) FROM devices WHERE id = ?1 AND merged_at IS NOT NULL",
+        [device_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(map_db)
 }
 
 /// Registers this PC on its first start and keeps its app version current.
