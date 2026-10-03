@@ -189,25 +189,29 @@ function MergeDialog({
           </label>
         )}
         {preview.games.length > 0 && (
-          <div className="flex max-h-72 flex-col overflow-y-auto border-t border-rule">
-            <p className="label-caps pt-3 pb-1">Games that come along</p>
-            {preview.games.map((game) => (
-              <div key={game.game_id} className="flex items-center justify-between gap-4 border-b border-rule py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] text-text">{game.title}</p>
-                  <p className="text-[12px] text-faint tabular-nums">
-                    {plural(game.sessions, "session")}, {formatHoursMinutes(game.runtime_ms)}
-                  </p>
+          <div className="border-t border-rule">
+            {/* Room at the sides, so the scrolling list does not cut off the
+                pickers' focus ring. */}
+            <div className="-mx-1 flex max-h-72 flex-col overflow-y-auto px-1">
+              <p className="label-caps pt-3 pb-1">Games that come along</p>
+              {preview.games.map((game) => (
+                <div key={game.game_id} className="flex items-center justify-between gap-4 border-b border-rule py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] text-text">{game.title}</p>
+                    <p className="text-[12px] text-faint tabular-nums">
+                      {plural(game.sessions, "session")}, {formatHoursMinutes(game.runtime_ms)}
+                    </p>
+                  </div>
+                  <GameLinkPicker
+                    games={ours}
+                    value={choices[game.game_id] ?? null}
+                    suggested={game.suggested_game_id}
+                    suggestedBecause={game.suggested_because}
+                    onChange={(linked) => setChoices((current) => ({ ...current, [game.game_id]: linked }))}
+                  />
                 </div>
-                <GameLinkPicker
-                  games={ours}
-                  value={choices[game.game_id] ?? null}
-                  suggested={game.suggested_game_id}
-                  suggestedBecause={game.suggested_because}
-                  onChange={(linked) => setChoices((current) => ({ ...current, [game.game_id]: linked }))}
-                />
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
         {!nothing && (
