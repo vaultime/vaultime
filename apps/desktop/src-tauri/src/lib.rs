@@ -16,6 +16,7 @@ pub mod export;
 pub mod hex;
 pub mod integrity;
 pub mod platform;
+pub mod playtime;
 pub mod secure_storage;
 pub mod tracking;
 pub mod tray;
@@ -133,6 +134,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::set_preferred_game_asset,
         commands::list_sessions,
         commands::get_active_sessions,
+        commands::get_play_totals,
         commands::get_session_events_for_game,
         commands::list_backup_snapshots,
         commands::get_auto_backup_folder,
@@ -196,6 +198,13 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     devices::ensure_device(&database, &device_id, &platform, &version)
         .expect("failed to register device");
     info!("device registered: {device_id} ({platform} v{version})");
+
+    // Before the tracker starts, so no session ends halfway through.
+    match playtime::slices::ensure_current(&database) {
+        Ok(0) => {}
+        Ok(count) => info!("worked out the play slices of {count} sessions"),
+        Err(error) => log::warn!("play slices not built: {error}"),
+    }
 
     let live = Arc::new(LiveSessions::default());
     let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone(), Arc::clone(&live));

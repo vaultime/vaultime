@@ -38,6 +38,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0006_game_status_and_notes",
         include_str!("../../migrations/0006_game_status_and_notes.sql"),
     ),
+    (
+        "0007_play_slices",
+        include_str!("../../migrations/0007_play_slices.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.

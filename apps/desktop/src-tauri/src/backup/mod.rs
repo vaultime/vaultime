@@ -23,7 +23,8 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
-    DATABASE_FILE, HASH_BUFFER_BYTES, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
+    DATABASE_FILE, HASH_BUFFER_BYTES, PLAY_SLICES_VERSION_SETTING, WINDOW_LOOK_SETTING,
+    WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -306,6 +307,11 @@ fn restore_from_staging(
         put_back();
         return Err(error);
     }
+    // The restored history gets its slices now, so the stats are right before
+    // the restart. Should that fail, the next start builds them.
+    if let Err(error) = crate::playtime::slices::rebuild_all(db) {
+        warn!("play slices not rebuilt after the restore: {error}");
+    }
     Ok(())
 }
 
@@ -433,6 +439,12 @@ fn restore_statements(conn: &Connection) -> Result<String> {
         .map(|key| format!("'{}'", sqlite_string_literal(key)))
         .collect::<Vec<_>>()
         .join(", ");
+    // Slices belong to the history they were built from. The next start
+    // builds them for the restored one, since the version setting goes too.
+    statements.push_str(
+        "DELETE FROM play_slices;
+",
+    );
     for table in RESTORE_TABLES.iter().rev() {
         let keep = if *table == "settings" {
             format!(" WHERE key NOT IN ({kept_settings})")
@@ -452,7 +464,7 @@ fn restore_statements(conn: &Connection) -> Result<String> {
         }
         let columns = columns.join(", ");
         let skip = if *table == "settings" {
-            format!(" WHERE key NOT IN ({kept_settings})")
+            format!(" WHERE key NOT IN ({kept_settings}, '{PLAY_SLICES_VERSION_SETTING}')")
         } else {
             String::new()
         };
@@ -1344,6 +1356,49 @@ mod tests {
         );
         let restored = sessions::list_all_sessions(&fixture.db).unwrap();
         assert_eq!(restored[0].integrity_status, integrity::STATUS_RECOVERED);
+        fixture.finish();
+    }
+
+    #[test]
+    fn a_restore_builds_the_slices_of_the_restored_history() {
+        let fixture = Fixture::new();
+        let device = fixture.context.device_id.clone();
+        let kept = sessions::create_session(&fixture.db, &fixture.game_id, &device).unwrap();
+        sessions::end_session(
+            &fixture.db,
+            &kept.id,
+            60_000,
+            60_000,
+            0,
+            integrity::STATUS_LOCAL,
+        )
+        .unwrap();
+        let fixture = fixture.back_up();
+        // Played after the backup, so the restore drops it and its slices.
+        let dropped = sessions::create_session(&fixture.db, &fixture.game_id, &device).unwrap();
+        sessions::end_session(
+            &fixture.db,
+            &dropped.id,
+            30_000,
+            30_000,
+            0,
+            integrity::STATUS_LOCAL,
+        )
+        .unwrap();
+
+        fixture.restore().unwrap();
+        let runtime: i64 = fixture
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COALESCE(SUM(runtime_ms), 0) FROM play_slices",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+        assert_eq!(runtime, 60_000);
         fixture.finish();
     }
 

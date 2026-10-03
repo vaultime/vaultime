@@ -20,6 +20,7 @@ use crate::db::repo::map_db;
 use crate::db::repo::sessions::{attach_validated_status, row_to_session};
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, STATUS_EDITED, STATUS_MANUAL, STATUS_SUSPICIOUS};
+use crate::playtime::slices;
 
 struct Timing {
     ended_at_wall: String,
@@ -209,6 +210,7 @@ fn apply_correction(
         })
         .to_string(),
     )?;
+    slices::rebuild_session(conn, &session.id)?;
     load(conn, &session.id)
 }
 
@@ -314,6 +316,7 @@ pub fn add_manual_session(
             })
             .to_string(),
         )?;
+        slices::rebuild_session(conn, &id)?;
         load(conn, &id)
     })
 }

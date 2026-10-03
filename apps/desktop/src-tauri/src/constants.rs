@@ -57,6 +57,18 @@ pub const CONTROLLER_AXIS_MOVE_DIVISOR: u32 = 8;
 /// Input events read from a controller in one go on Linux.
 pub const CONTROLLER_EVENTS_PER_READ: usize = 64;
 
+// Play slices
+
+/// Length of a play slice, in milliseconds. Every UTC offset is a whole
+/// number of them, so a slice never spans a local midnight.
+pub const PLAY_SLICE_MS: i64 = 15 * 60 * 1_000;
+/// How slices are worked out. Bump it when that changes, and every PC
+/// rebuilds them on its next start.
+pub const PLAY_SLICES_VERSION: i64 = 1;
+/// Setting with the `PLAY_SLICES_VERSION` the slices were built with. A
+/// restore drops it, so the slices are built again for the restored history.
+pub const PLAY_SLICES_VERSION_SETTING: &str = "play_slices_version";
+
 // Data folder
 
 /// The database in Vaultime's data folder, under the same name in backups.

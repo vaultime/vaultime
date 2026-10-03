@@ -438,7 +438,11 @@ fn wall_in_payload(event: &SessionEvent, key: &str) -> Option<String> {
         .and_then(|payload| payload_str(&payload, key).map(str::to_owned))
 }
 
-fn load_session_events(conn: &Connection, session_id: &str) -> Result<Vec<SessionEvent>> {
+/// The events of a session, oldest first.
+pub(crate) fn load_session_events(
+    conn: &Connection,
+    session_id: &str,
+) -> Result<Vec<SessionEvent>> {
     let mut stmt = conn
         .prepare(
             "SELECT *

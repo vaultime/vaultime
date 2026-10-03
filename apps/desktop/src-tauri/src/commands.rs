@@ -36,6 +36,8 @@ use crate::earlier;
 use crate::error::VaultimeError;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::platform::controller;
+use crate::playtime;
+use crate::playtime::totals::{Bucket, PlayTotal};
 use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
 use crate::tracking::live::LiveSessions;
@@ -213,6 +215,33 @@ pub fn list_sessions(
         live.apply(session);
     }
     Ok(all)
+}
+
+/// Each game's play time per day, week, month, year or hour of the week,
+/// from the local day `from` up to but not including `to`, both "2026-10-02".
+#[tauri::command(async)]
+pub fn get_play_totals(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+    from: String,
+    to: String,
+    bucket: Bucket,
+    game_id: Option<String>,
+) -> Result<Vec<PlayTotal>, VaultimeError> {
+    let parse = |text: &str| {
+        chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+            .map_err(|_| VaultimeError::Invalid(format!("not a date: {text}")))
+    };
+    playtime::totals::play_totals(
+        &db,
+        &live,
+        &chrono::Local,
+        parse(&from)?,
+        parse(&to)?,
+        bucket,
+        game_id.as_deref(),
+        chrono::Utc::now().timestamp_millis(),
+    )
 }
 
 /// The running sessions as of the tracker's latest tick.

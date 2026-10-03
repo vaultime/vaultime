@@ -12,6 +12,7 @@ use crate::db::models::Session;
 use crate::db::repo::map_db;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
+use crate::playtime::slices;
 
 pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
     Ok(Session {
@@ -150,6 +151,7 @@ pub fn end_session(
             })
             .to_string(),
         )?;
+        slices::rebuild_session(conn, session_id)?;
 
         conn.query_row(
             "SELECT * FROM sessions WHERE id = ?1",
@@ -367,6 +369,7 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
             })
             .to_string(),
         )?;
+        slices::rebuild_session(conn, session_id)?;
 
         conn.query_row(
             "SELECT * FROM sessions WHERE id = ?1",

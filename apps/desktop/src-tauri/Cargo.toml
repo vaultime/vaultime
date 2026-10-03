@@ -83,3 +83,6 @@ cast_possible_wrap = "allow"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+chrono-tz = "0.10.4"
