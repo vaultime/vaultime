@@ -99,11 +99,13 @@ fn gap_ms_between(
     Ok(total)
 }
 
-/// What a session keeps when it counts only up to `new_end`. Its counters at
-/// that moment come from its checkpoints, so exactly the active and idle time
-/// after it comes out, and sleep, which never counted, stays out. A session
-/// without checkpoints inside, like one added by hand, loses idle time
-/// first, then active time, and sleep in the cut part is not taken out again.
+/// What a session keeps when it counts only up to `new_end`. Its checkpoints
+/// tell how much active and idle time it recorded between `new_end` and its
+/// current end, and exactly that comes out, so sleep, which never counted,
+/// stays out, and a session an earlier correction lowered loses only the
+/// cut part. A session without checkpoints inside, like one added by hand,
+/// loses idle time first, then active time, and sleep in the cut part is not
+/// taken out again.
 fn trim_timing(
     conn: &rusqlite::Connection,
     session: &Session,
@@ -122,10 +124,12 @@ fn trim_timing(
     }
     let ended_at_wall = integrity::format_timestamp(new_end);
     let events = integrity::load_session_events(conn, &session.id)?;
-    if let Some([_, active, idle]) = slices::counters_at(&events, new_end.timestamp_millis()) {
-        // Never more than the session holds now, which an earlier cut may have lowered.
-        let active_ms = active.clamp(0, session.active_ms);
-        let idle_ms = idle.clamp(0, session.idle_ms);
+    if let (Some([_, active_then, idle_then]), Some([_, active_now, idle_now])) = (
+        slices::counters_at(&events, new_end.timestamp_millis()),
+        slices::counters_at(&events, old_end.timestamp_millis()),
+    ) {
+        let active_ms = (session.active_ms - (active_now - active_then).max(0)).max(0);
+        let idle_ms = (session.idle_ms - (idle_now - idle_then).max(0)).max(0);
         return Ok(Timing {
             ended_at_wall,
             runtime_ms: active_ms + idle_ms,
@@ -546,6 +550,81 @@ mod tests {
         assert_eq!(
             (trimmed.runtime_ms, trimmed.active_ms, trimmed.idle_ms),
             (20 * MINUTE, 20 * MINUTE, 0)
+        );
+        assert_eq!(validated(&db, &session.id).integrity_status, STATUS_EDITED);
+
+        // A second cut takes out only its own ten minutes.
+        let earlier = integrity::format_timestamp(start + chrono::Duration::minutes(10));
+        let again = trim_session(&db, &session.id, &earlier, "Earlier still").unwrap();
+        assert_eq!(
+            (again.runtime_ms, again.active_ms, again.idle_ms),
+            (10 * MINUTE, 10 * MINUTE, 0)
+        );
+    }
+
+    #[test]
+    fn a_cut_after_an_older_correction_takes_out_only_its_part() {
+        let (db, game) = setup();
+        let session = sessions::create_session(&db, &game, DEVICE).unwrap();
+        let start = parse_time(&session.started_at_wall).unwrap();
+        // Idle for an hour, then active for half an hour.
+        let checkpoint = sessions::Checkpoint {
+            runtime_ms: 60 * MINUTE,
+            active_ms: 0,
+            idle_ms: 60 * MINUTE,
+            wall_elapsed_ms: 60 * MINUTE,
+            drift_ms: 0,
+        };
+        sessions::record_checkpoint(
+            &db,
+            &session.id,
+            &checkpoint,
+            "local",
+            start + chrono::Duration::minutes(60),
+        )
+        .unwrap();
+        db.with_transaction(|conn| {
+            let end = integrity::format_timestamp(start + chrono::Duration::minutes(90));
+            conn.execute(
+                "UPDATE sessions SET ended_at_wall = ?1, runtime_ms = ?2, elapsed_monotonic_ms = ?2,
+                     active_ms = ?3, idle_ms = ?4, closed_cleanly = 1
+                 WHERE id = ?5",
+                params![end, 90 * MINUTE, 30 * MINUTE, 60 * MINUTE, session.id],
+            )
+            .map_err(map_db)?;
+            integrity::append_session_event(
+                conn,
+                &session.id,
+                "ended",
+                &end,
+                Some(90 * MINUTE),
+                &json!({
+                    "runtime_ms": 90 * MINUTE,
+                    "active_ms": 30 * MINUTE,
+                    "idle_ms": 60 * MINUTE,
+                    "integrity_status": "local",
+                    "closed_cleanly": true,
+                })
+                .to_string(),
+            )?;
+            // Cut to an hour the way 0.3.0 did, idle time first.
+            let ended = load(conn, &session.id)?;
+            let older = Timing {
+                ended_at_wall: integrity::format_timestamp(start + chrono::Duration::minutes(60)),
+                runtime_ms: 60 * MINUTE,
+                active_ms: 30 * MINUTE,
+                idle_ms: 30 * MINUTE,
+            };
+            apply_correction(conn, &ended, &older, "Older cut")
+        })
+        .unwrap();
+
+        // Ten more minutes off, which were idle when they were recorded.
+        let new_end = integrity::format_timestamp(start + chrono::Duration::minutes(50));
+        let trimmed = trim_session(&db, &session.id, &new_end, "Fell asleep").unwrap();
+        assert_eq!(
+            (trimmed.runtime_ms, trimmed.active_ms, trimmed.idle_ms),
+            (50 * MINUTE, 30 * MINUTE, 20 * MINUTE)
         );
         assert_eq!(validated(&db, &session.id).integrity_status, STATUS_EDITED);
     }
