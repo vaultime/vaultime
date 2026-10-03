@@ -3,9 +3,9 @@
 
 //! Tauri IPC command handlers.
 //!
-//! Commands that touch the disk, the network or many rows use
-//! `#[tauri::command(async)]` so they run off the main thread and never freeze
-//! the window.
+//! Commands that touch the disk or many rows use `#[tauri::command(async)]` so
+//! they run off the main thread and never freeze the window. Cloud transfers
+//! run on the blocking pool, see `on_blocking_pool`.
 
 use std::sync::Arc;
 
@@ -382,73 +382,86 @@ fn cloud_api_base_url(requested: &str) -> &str {
     }
 }
 
-#[tauri::command(async)]
-#[expect(clippy::too_many_arguments)]
-pub fn upload_remote_backup(
-    db: State<'_, Arc<Database>>,
-    asset_manager: State<'_, AssetManager>,
-    app_context: State<'_, AppContext>,
+/// Runs cloud work on the blocking pool. reqwest's blocking client must not
+/// run on the async runtime, where debug builds panic and release builds hold
+/// up a worker for the whole transfer.
+async fn on_blocking_pool<T: Send + 'static>(
+    app: AppHandle,
+    work: impl FnOnce(&AppHandle) -> Result<T, VaultimeError> + Send + 'static,
+) -> Result<T, VaultimeError> {
+    tauri::async_runtime::spawn_blocking(move || work(&app))
+        .await
+        .map_err(|error| VaultimeError::Cloud(format!("the cloud task stopped: {error}")))?
+}
+
+#[tauri::command]
+pub async fn upload_remote_backup(
+    app: AppHandle,
     api_base_url: String,
     access_token: String,
     account_id: String,
     client_device_id: Option<String>,
     label: Option<String>,
 ) -> Result<RemoteBackupUploadResult, VaultimeError> {
-    let result = backup::remote::upload_remote_backup(
-        &db,
-        &asset_manager,
-        &app_context,
-        cloud_api_base_url(&api_base_url),
-        &access_token,
-        &account_id,
-        client_device_id.as_deref(),
-        label.as_deref(),
-    )?;
+    on_blocking_pool(app, move |app| {
+        let db = app.state::<Arc<Database>>();
+        let result = backup::remote::upload_remote_backup(
+            &db,
+            &app.state::<AssetManager>(),
+            &app.state::<AppContext>(),
+            cloud_api_base_url(&api_base_url),
+            &access_token,
+            &account_id,
+            client_device_id.as_deref(),
+            label.as_deref(),
+        )?;
 
-    record_snapshot(
-        &db,
-        &result.payload_summary.source_device_id,
-        &result.payload_summary.overall_checksum,
-        &result.backup.storage_key,
-        "Cloud backup",
-    );
+        record_snapshot(
+            &db,
+            &result.payload_summary.source_device_id,
+            &result.payload_summary.overall_checksum,
+            &result.backup.storage_key,
+            "Cloud backup",
+        );
 
-    Ok(result)
+        Ok(result)
+    })
+    .await
 }
 
-#[tauri::command(async)]
-#[expect(clippy::too_many_arguments)]
-pub fn restore_remote_backup(
-    db: State<'_, Arc<Database>>,
-    asset_manager: State<'_, AssetManager>,
-    app_context: State<'_, AppContext>,
-    engine: State<'_, TrackingEngine>,
+#[tauri::command]
+pub async fn restore_remote_backup(
+    app: AppHandle,
     api_base_url: String,
     access_token: String,
     account_id: String,
     backup_id: String,
 ) -> Result<RemoteBackupRestoreResult, VaultimeError> {
-    let result = with_tracking_paused(&db, &engine, || {
-        backup::remote::restore_remote_backup(
+    on_blocking_pool(app, move |app| {
+        let db = app.state::<Arc<Database>>();
+        let result = with_tracking_paused(&db, &app.state::<TrackingEngine>(), || {
+            backup::remote::restore_remote_backup(
+                &db,
+                &app.state::<AssetManager>(),
+                &app.state::<AppContext>(),
+                cloud_api_base_url(&api_base_url),
+                &access_token,
+                &account_id,
+                &backup_id,
+            )
+        })?;
+
+        record_snapshot(
             &db,
-            &asset_manager,
-            &app_context,
-            cloud_api_base_url(&api_base_url),
-            &access_token,
-            &account_id,
-            &backup_id,
-        )
-    })?;
+            &result.restored_summary.source_device_id,
+            &result.restored_summary.overall_checksum,
+            &result.backup.storage_key,
+            "Cloud restore",
+        );
 
-    record_snapshot(
-        &db,
-        &result.restored_summary.source_device_id,
-        &result.restored_summary.overall_checksum,
-        &result.backup.storage_key,
-        "Cloud restore",
-    );
-
-    Ok(result)
+        Ok(result)
+    })
+    .await
 }
 
 /// Runs a restore with tracking paused. Refuses while a game is being tracked,
