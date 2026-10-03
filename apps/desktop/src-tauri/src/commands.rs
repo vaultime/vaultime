@@ -19,8 +19,8 @@ use crate::assets::{self, AssetManager, GameAssetView};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{
-    BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, POLL_INTERVAL, STEAM_SOURCE,
-    WINDOW_SIZE_SETTING,
+    BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, PLAY_SLICES_VERSION_SETTING,
+    POLL_INTERVAL, STEAM_SOURCE, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::models::{
@@ -123,9 +123,16 @@ pub fn delete_game(
     asset_manager: State<'_, AssetManager>,
     id: String,
 ) -> Result<bool, VaultimeError> {
-    let deleted = assets::delete_game(&db, &asset_manager, &id)?;
     // Games that stepped aside for it count that time again.
-    playtime::slices::rebuild_aside_all(&db)?;
+    let spans = playtime::slices::spans_beside(&db, &id)?;
+    let deleted = assets::delete_game(&db, &asset_manager, &id)?;
+    if let Err(error) = playtime::slices::rebuild_aside_around_spans(&db, &spans) {
+        // The game is gone either way, so the next start builds every slice.
+        warn!("slices beside a deleted game not rebuilt: {error}");
+        if let Err(error) = settings::set_setting(&db, PLAY_SLICES_VERSION_SETTING, "0") {
+            warn!("slices not marked for a rebuild: {error}");
+        }
+    }
     Ok(deleted)
 }
 

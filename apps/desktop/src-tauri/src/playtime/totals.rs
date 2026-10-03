@@ -93,31 +93,42 @@ fn running_slices(
             .map_err(map_db)?;
         let mut placed = Vec::new();
         for session in open {
-            let events = integrity::load_session_events(conn, &session.id)?;
-            let latest = live
-                .get(&session.id)
-                .map(|counters| (now_ms, counters))
-                .or_else(|| {
-                    let last = events.last()?;
-                    let at = DateTime::parse_from_rfc3339(&last.event_time_wall).ok()?;
-                    Some((
-                        at.timestamp_millis(),
-                        LiveCounters {
-                            runtime_ms: session.runtime_ms,
-                            active_ms: session.active_ms,
-                            idle_ms: session.idle_ms,
-                        },
-                    ))
-                });
-            let aside = aside_stretches(conn, &session, now_ms)?;
             placed.extend(
-                slices_of(&session, &events, latest, &aside)
+                open_session_slices(conn, live, &session, now_ms)?
                     .into_iter()
                     .map(|slice| (session.game_id.clone(), slice)),
             );
         }
         Ok(placed)
     }
+}
+
+/// The slices of an open session, placed up to the tracker's latest tick,
+/// or up to its last event when the tracker does not run it.
+fn open_session_slices(
+    conn: &rusqlite::Connection,
+    live: &LiveSessions,
+    session: &Session,
+    now_ms: i64,
+) -> Result<Vec<Slice>> {
+    let events = integrity::load_session_events(conn, &session.id)?;
+    let latest = live
+        .get(&session.id)
+        .map(|counters| (now_ms, counters))
+        .or_else(|| {
+            let last = events.last()?;
+            let at = DateTime::parse_from_rfc3339(&last.event_time_wall).ok()?;
+            Some((
+                at.timestamp_millis(),
+                LiveCounters {
+                    runtime_ms: session.runtime_ms,
+                    active_ms: session.active_ms,
+                    idle_ms: session.idle_ms,
+                },
+            ))
+        });
+    let aside = aside_stretches(conn, session, now_ms)?;
+    Ok(slices_of(session, &events, latest, &aside))
 }
 
 /// Fills in the time set aside of sessions whose game steps aside for
@@ -140,7 +151,12 @@ pub fn fill_set_aside(
         if stepping.is_empty() {
             return Ok(());
         }
-        let counted: HashMap<String, [i64; 3]> = {
+        // Closed sessions read what their slices count, which the running
+        // sessions the live bar asks for every few seconds do not need.
+        let any_closed = sessions
+            .iter()
+            .any(|session| session.ended_at_wall.is_some() && stepping.contains(&session.game_id));
+        let counted: HashMap<String, [i64; 3]> = if any_closed {
             let mut stmt = conn
                 .prepare_cached(&format!(
                     "SELECT play_slices.session_id, SUM(play_slices.runtime_ms),
@@ -158,6 +174,8 @@ pub fn fill_set_aside(
                 })
                 .map_err(map_db)?;
             rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+        } else {
+            HashMap::new()
         };
         for session in sessions
             .iter_mut()
@@ -166,10 +184,7 @@ pub fn fill_set_aside(
             let kept = if session.ended_at_wall.is_some() {
                 counted.get(&session.id).copied().unwrap_or_default()
             } else {
-                let events = integrity::load_session_events(conn, &session.id)?;
-                let latest = live.get(&session.id).map(|counters| (now_ms, counters));
-                let aside = aside_stretches(conn, session, now_ms)?;
-                slices_of(session, &events, latest, &aside)
+                open_session_slices(conn, live, session, now_ms)?
                     .iter()
                     .fold([0; 3], |sum, slice| {
                         [
@@ -545,6 +560,28 @@ mod tests {
         games::set_steps_aside(&db, &client, false).unwrap();
         crate::playtime::slices::rebuild_all(&db).unwrap();
         assert_eq!(day_minutes(&db, &client), 180);
+    }
+
+    #[test]
+    fn deleting_a_game_gives_back_the_time_set_aside_for_it() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        played_game(&db, &client, "2026-10-02T18:00:00Z", 180);
+        played_game(&db, &match_game, "2026-10-02T19:00:00Z", 60);
+        assert_eq!(day_minutes(&db, &client), 120);
+
+        let spans = crate::playtime::slices::spans_beside(&db, &match_game).unwrap();
+        games::delete_game(&db, &match_game).unwrap();
+        crate::playtime::slices::rebuild_aside_around_spans(&db, &spans).unwrap();
+        assert_eq!(day_minutes(&db, &client), 180);
+        // A game that steps aside sets no time aside for others.
+        assert!(
+            crate::playtime::slices::spans_beside(&db, &client)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
