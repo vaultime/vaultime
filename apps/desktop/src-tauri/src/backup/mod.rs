@@ -307,6 +307,8 @@ fn restore_from_staging(
         put_back();
         return Err(error);
     }
+    // Checks remembered from the old history must not vouch for the new one.
+    integrity::forget_checks();
     // The restored history gets its slices now, so the stats are right before
     // the restart. Should that fail, the next start builds them.
     if let Err(error) = crate::playtime::slices::rebuild_all(db) {
@@ -1357,6 +1359,42 @@ mod tests {
         );
         let restored = sessions::list_all_sessions(&fixture.db).unwrap();
         assert_eq!(restored[0].integrity_status, integrity::STATUS_RECOVERED);
+        fixture.finish();
+    }
+
+    #[test]
+    fn checks_the_restored_chains_again_before_the_restart() {
+        let fixture = Fixture::new();
+        let session =
+            sessions::create_session(&fixture.db, &fixture.game_id, &fixture.context.device_id)
+                .unwrap();
+        sessions::end_session(
+            &fixture.db,
+            &session.id,
+            60_000,
+            60_000,
+            0,
+            integrity::STATUS_LOCAL,
+        )
+        .unwrap();
+        let fixture = fixture.back_up();
+        // Checked and found sound before the restore.
+        let listed = sessions::list_all_sessions(&fixture.db).unwrap();
+        assert_eq!(listed[0].integrity_status, integrity::STATUS_LOCAL);
+        // The backup changes an earlier event but keeps the newest one and
+        // the totals, so only checking the whole chain again finds it.
+        fixture.tamper(|_, conn| {
+            conn.execute(
+                "UPDATE session_events SET payload_json = '{}'
+                 WHERE session_id = ?1 AND sequence = 1",
+                [&session.id],
+            )
+            .unwrap();
+        });
+
+        fixture.restore().unwrap();
+        let restored = sessions::list_all_sessions(&fixture.db).unwrap();
+        assert_eq!(restored[0].integrity_status, integrity::STATUS_SUSPICIOUS);
         fixture.finish();
     }
 

@@ -350,6 +350,15 @@ pub fn validate_session_history_cached(
     Ok((reason, true))
 }
 
+/// Forgets every remembered check, for when the app itself replaced the
+/// history, as a restore does, so each chain is checked again.
+pub fn forget_checks() {
+    check_cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+}
+
 /// Clears the cache when another program wrote to the database, such as a
 /// database tool, so its changes are checked again right away.
 fn forget_checks_after_outside_writes(conn: &Connection) -> Result<()> {
@@ -361,10 +370,7 @@ fn forget_checks_after_outside_writes(conn: &Connection) -> Result<()> {
         })?;
     let mut seen = SEEN_VERSION.lock().unwrap_or_else(PoisonError::into_inner);
     if seen.is_some_and(|seen| seen != version) {
-        check_cache()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clear();
+        forget_checks();
     }
     *seen = Some(version);
     Ok(())

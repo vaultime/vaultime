@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Only ever less.** A correction can only take time out. Vaultime refuses one that would add time, move the end later or change nothing, and a recorded correction that added time marks the session Suspicious.
 - **Your reason in quotes.** A corrected session reads "Cut short by you from 2 h 08 (“Fell asleep”)", so a short reason never runs into a time.
 
+### Backups
+
+- **A restored history is checked right away.** After a restore, Vaultime checks the record of every restored session again before it shows it, instead of relying on the checks it made of the replaced history until the next start.
+
 ### Stats
 
 - **See what you played on any day.** Point at a day in the year calendar or at a month to see each game you played and for how long, in its own color, with idle time below. Click a day, or move there with the arrow keys and press Enter, to read that week in the journal.
