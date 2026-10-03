@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
@@ -13,7 +13,15 @@ import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { DAY_MS, DAYS_PER_WEEK, HOURS_PER_DAY, JOURNAL_MIN_SPAN_PERCENT, JOURNAL_TICK_HOURS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { carriedOverPhrase, sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
-import { clipToWindow, countsAsPlay, playedMs, playRuns, sideBySideGroups, type PlayRun } from "@/lib/session-stats";
+import {
+  clipToWindow,
+  countsAsPlay,
+  playedMs,
+  playRuns,
+  sideBySideGroups,
+  toDayKey,
+  type PlayRun,
+} from "@/lib/session-stats";
 import { stepAside, stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import {
@@ -172,6 +180,7 @@ export function JournalPage() {
   const [params] = useSearchParams();
   const [offset, setOffset] = useState(() => weeksBack(params.get("week")));
   const [events, setEvents] = useState<SessionEvent[]>([]);
+  const dateInput = useRef<HTMLInputElement>(null);
 
   const now = new Date();
   const weekStart = addDays(startOfWeek(now), offset * DAYS_PER_WEEK);
@@ -265,6 +274,31 @@ export function JournalPage() {
         title={title}
         aside={
           <>
+            <StepButton
+              label="Go to a day"
+              disabled={!earliest}
+              onClick={() => {
+                try {
+                  dateInput.current?.showPicker();
+                } catch {
+                  dateInput.current?.focus();
+                }
+              }}
+            >
+              <CalendarDays className="size-[17px]" strokeWidth={1.8} />
+            </StepButton>
+            <input
+              ref={dateInput}
+              type="date"
+              aria-label="Go to the week of a day"
+              tabIndex={-1}
+              className="sr-only"
+              min={earliest ? toDayKey(earliest) : undefined}
+              max={toDayKey(now)}
+              onChange={(event) => {
+                if (event.target.value) setOffset(weeksBack(event.target.value));
+              }}
+            />
             <StepButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
               <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
             </StepButton>
