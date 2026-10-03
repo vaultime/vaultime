@@ -22,7 +22,7 @@ import {
   toDayKey,
   type PlayRun,
 } from "@/lib/session-stats";
-import { stepAside, stepsAside } from "@/lib/steps-aside";
+import { stepAsideWithin, stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import {
   clockPercent,
@@ -107,7 +107,7 @@ function groupWeek(
     if (started >= start) dayOf(started).sessions.push(session);
   }
   // A game that steps aside shows only where no other game ran.
-  const drawn = stepAside(inWeek, stepping, now);
+  const drawn = stepAsideWithin(sessions, stepping, start, end, now);
   for (let day = start; day < end; day = addDays(day, 1)) {
     const next = addDays(day, 1);
     const spans = drawn.flatMap((session) => clipToWindow(session, day, next, now) ?? []);

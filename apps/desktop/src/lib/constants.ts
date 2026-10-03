@@ -180,7 +180,9 @@ export const FOLDER_MATCH_LAUNCHERS = [
 ];
 
 /** Share of a game's time other games must run beside it before its page suggests stepping aside. */
-export const STEPS_ASIDE_HINT_MIN_SHARE = 0.5;
+export const STEPS_ASIDE_HINT_MIN_SHARE = 0.25;
+/** Share of that time that must come from games started while it was open, as games start inside a launcher. */
+export const STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE = 0.5;
 /** Time other games must run beside a game before its page suggests stepping aside. */
 export const STEPS_ASIDE_HINT_MIN_MS = HOUR_MS;
 

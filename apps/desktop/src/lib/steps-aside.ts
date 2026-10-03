@@ -94,15 +94,17 @@ export function stepAside(sessions: Session[], stepping: Set<string>, now = new 
 }
 
 /**
- * How long other games ran beside a game, and which share of its time on the
- * clock that was. A launcher left open through matches shows up this way.
+ * How long other games ran beside a game, which share of its time on the
+ * clock that was, and which share of that came from games started while it
+ * was already open. A launcher left open through matches shows up with both
+ * high, while a game played inside its client starts after the client.
  */
 export function besideOthers(
   gameId: string,
   sessions: Session[],
   stepping: Set<string>,
   now = new Date(),
-): { besideMs: number; share: number } {
+): { besideMs: number; share: number; openedFirstShare: number } {
   const own = sessions.filter((session) => session.game_id === gameId && countsAsPlay(session));
   const ownMs = own.reduce((sum, session) => {
     const start = parseVaultimeDate(session.started_at_wall).getTime();
@@ -123,7 +125,60 @@ export function besideOthers(
       0,
     );
   const besideMs = Math.max(0, ownMs - alone);
-  return { besideMs, share: ownMs > 0 ? besideMs / ownMs : 0 };
+
+  // Time beside games that started during one of its sessions, each session
+  // looking only at those, found by a binary search over their starts.
+  const spanOf = (session: Session) => ({
+    start: parseVaultimeDate(session.started_at_wall).getTime(),
+    end: session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime(),
+  });
+  const later = sessions
+    .filter((session) => session.game_id !== gameId && !stepping.has(session.game_id) && countsAsPlay(session))
+    .map(spanOf)
+    .sort((a, b) => a.start - b.start);
+  let openedFirstMs = 0;
+  for (const { start, end } of own.map(spanOf)) {
+    let [low, high] = [0, later.length];
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (later[middle].start < start) low = middle + 1;
+      else high = middle;
+    }
+    let cursor = start;
+    for (let index = low; index < later.length && later[index].start < end; index += 1) {
+      const to = Math.min(later[index].end, end);
+      openedFirstMs += Math.max(0, to - Math.max(cursor, later[index].start));
+      cursor = Math.max(cursor, to);
+    }
+  }
+  return {
+    besideMs,
+    share: ownMs > 0 ? besideMs / ownMs : 0,
+    openedFirstShare: besideMs > 0 ? Math.min(1, openedFirstMs / besideMs) : 0,
+  };
+}
+
+/**
+ * `stepAside` for the sessions with time between `from` and `to`, leaving a
+ * long history out of the work. A session that began earlier keeps the games
+ * that ran beside it then, since they decide how its time spreads, so the
+ * parts come out as they would from the whole history. Parts outside the
+ * window may come along.
+ */
+export function stepAsideWithin(
+  sessions: Session[],
+  stepping: Set<string>,
+  from: Date,
+  to: Date,
+  now = new Date(),
+): Session[] {
+  const touching = sessions.filter((session) => clipToWindow(session, from, to, now) !== null);
+  const earliest = touching.reduce(
+    (first, session) => Math.min(first, parseVaultimeDate(session.started_at_wall).getTime()),
+    from.getTime(),
+  );
+  const nearby = sessions.filter((session) => clipToWindow(session, new Date(earliest), to, now) !== null);
+  return stepAside(nearby, stepping, now);
 }
 
 /**
@@ -134,16 +189,7 @@ export function besideOthers(
 export function playedToday(sessions: Session[], stepping: Set<string>, now = new Date()): number {
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  // Only sessions that can change today's part, so a long history stays out
-  // of the slower steps. A session that began yesterday keeps the games that
-  // ran beside it then, since they decide how its time spreads.
-  const touching = sessions.filter((session) => clipToWindow(session, midnight, tomorrow, now) !== null);
-  const earliest = touching.reduce(
-    (first, session) => Math.min(first, parseVaultimeDate(session.started_at_wall).getTime()),
-    midnight.getTime(),
-  );
-  const nearby = sessions.filter((session) => clipToWindow(session, new Date(earliest), tomorrow, now) !== null);
-  const today = stepAside(nearby, stepping, now).flatMap(
+  const today = stepAsideWithin(sessions, stepping, midnight, tomorrow, now).flatMap(
     (session) => clipToWindow(session, midnight, tomorrow, now) ?? [],
   );
   return playedMs(today, now);

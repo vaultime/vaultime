@@ -85,9 +85,20 @@ describe("besideOthers", () => {
   it("measures how long other games ran beside a game", () => {
     const client = session(at(2026, 10, 2, 18, 0), 120, { game_id: "client" });
     const match = session(at(2026, 10, 2, 18, 30), 90, { game_id: "match" });
-    const { besideMs, share } = besideOthers("client", [client, match], new Set());
+    const { besideMs, share, openedFirstShare } = besideOthers("client", [client, match], new Set());
     expect(besideMs).toBe(90 * MINUTE_MS);
     expect(share).toBe(0.75);
+    expect(openedFirstShare).toBe(1);
+  });
+
+  it("tells a launcher from the game played inside it", () => {
+    const client = session(at(2026, 10, 2, 18, 0), 180, { game_id: "client" });
+    const match = session(at(2026, 10, 2, 19, 0), 60, { game_id: "match" });
+    // The match ran beside the client all its time, but the client was there first.
+    const inside = besideOthers("match", [client, match], new Set());
+    expect(inside.share).toBe(1);
+    expect(inside.openedFirstShare).toBe(0);
+    expect(besideOthers("client", [client, match], new Set()).openedFirstShare).toBe(1);
   });
 });
 

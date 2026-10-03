@@ -33,6 +33,7 @@ import {
   PLAYER_ARTWORK_SOURCE,
   STEAM_LAUNCHER,
   STEPS_ASIDE_HINT_MIN_MS,
+  STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE,
   STEPS_ASIDE_HINT_MIN_SHARE,
 } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
@@ -375,8 +376,12 @@ function StepsAsideRow({
   onChange: (next: boolean) => void;
 }) {
   const on = stepping.has(game.id);
-  const { besideMs, share } = besideOthers(game.id, sessions, stepping);
-  const suggest = !on && share >= STEPS_ASIDE_HINT_MIN_SHARE && besideMs >= STEPS_ASIDE_HINT_MIN_MS;
+  const { besideMs, share, openedFirstShare } = besideOthers(game.id, sessions, stepping);
+  const suggest =
+    !on &&
+    share >= STEPS_ASIDE_HINT_MIN_SHARE &&
+    besideMs >= STEPS_ASIDE_HINT_MIN_MS &&
+    openedFirstShare >= STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE;
   return (
     <div className="mt-4 border-t border-rule pt-4">
       <div className="flex items-start justify-between gap-4">
@@ -391,8 +396,8 @@ function StepsAsideRow({
       </div>
       {suggest && (
         <p className="mt-2 text-[12px] leading-relaxed text-soft">
-          Other games ran beside it for {formatHoursMinutes(besideMs)}, {Math.round(share * 100)} % of its time. If it
-          is a launcher, this stops that time from counting for it.
+          Games started while it was open and ran beside it for {formatHoursMinutes(besideMs)},{" "}
+          {Math.round(share * 100)} % of its time. If it is a launcher, this stops that time from counting for it.
         </p>
       )}
       {error && <p className="mt-2 text-[12px] text-amber">{error}</p>}
