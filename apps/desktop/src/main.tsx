@@ -7,6 +7,7 @@ import { BrowserRouter } from "react-router";
 import { AppearanceProvider } from "@/features/appearance/AppearanceProvider";
 import { CloudSessionProvider } from "@/features/cloud/CloudSessionProvider";
 import { LibraryProvider } from "@/features/library/LibraryProvider";
+import { UpdateProvider } from "@/features/updates/UpdateProvider";
 import { App } from "@/App";
 import "./index.css";
 
@@ -20,7 +21,9 @@ createRoot(document.getElementById("root")!).render(
       <AppearanceProvider>
         <CloudSessionProvider>
           <LibraryProvider>
-            <App />
+            <UpdateProvider>
+              <App />
+            </UpdateProvider>
           </LibraryProvider>
         </CloudSessionProvider>
       </AppearanceProvider>

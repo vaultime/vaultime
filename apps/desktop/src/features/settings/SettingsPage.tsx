@@ -20,6 +20,7 @@ import { AppearanceSection } from "@/features/settings/AppearanceSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
+import { UpdatesRow } from "@/features/settings/UpdatesRow";
 import { WindowSection } from "@/features/settings/WindowSection";
 import {
   AUTO_BACKUP_KEEP,
@@ -519,6 +520,7 @@ export function SettingsPage() {
           <PageRow label="Version">
             <span className="font-mono">{appVersion ?? "unknown"}</span>
           </PageRow>
+          <UpdatesRow />
           <PageRow label="Copyright">{COPYRIGHT_NOTICE}</PageRow>
           <PageRow label="License">GPL 3.0 or later</PageRow>
           <div className="mt-5 flex flex-wrap gap-2">

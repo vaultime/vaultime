@@ -13,6 +13,7 @@
 // ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
 // fills the three days before today with games that ran side by side.
+// ?update=1 offers a new version.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -956,6 +957,10 @@ mockIPC((cmd, payload) => {
       return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":
       return preferredAssets();
+    case "plugin:updater|check":
+      return params.get("update") === "1"
+        ? { rid: 1, currentVersion: "0.3.0", version: "0.3.1", date: iso(now), body: "", rawJson: {} }
+        : null;
     case "plugin:dialog|open":
       return "C:/Users/you/Pictures/cover art.png";
     case "open_artwork_file":

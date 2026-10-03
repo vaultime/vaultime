@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Updates
+
+- **Check for updates yourself.** Settings, About shows whether Vaultime is up to date and has a button to check now. A running Vaultime also looks for a new version every six hours, not only when it starts.
+
 ### Journal
 
 - **Games side by side, drawn cleanly.** Sessions that overlap on the day strip now form one rounded block. The stripes run on without breaks from one stretch to the next, and every change between games leans along them. A client left open through several matches, like Teamfight Tactics in the League client, reads as one block with the matches striped inside it.

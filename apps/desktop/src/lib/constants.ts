@@ -68,6 +68,11 @@ export const AUTO_BACKUP_KEEP = 7;
 /** Event the core sends when games or covers changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
 export const LIBRARY_CHANGED_EVENT = "library-changed";
 
+// Updates
+
+/** How often a running app looks for a new version. The first look is right at start. */
+export const UPDATE_CHECK_INTERVAL_MS = 6 * HOUR_MS;
+
 // Tracking
 
 /** How often the UI asks for running sessions. Same as POLL_INTERVAL in constants.rs. */
