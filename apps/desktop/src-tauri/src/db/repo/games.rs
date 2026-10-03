@@ -112,6 +112,28 @@ pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
     })
 }
 
+/// Makes a game count only while no other game runs, or always again. The
+/// rest of its metadata stays as it is.
+pub fn set_steps_aside(db: &Database, id: &str, steps_aside: bool) -> Result<Game> {
+    db.with_transaction(|conn| {
+        let game = conn
+            .query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
+            .map_err(map_db)?;
+        let mut metadata: GameMetadata =
+            serde_json::from_str(&game.metadata_json).unwrap_or_default();
+        metadata.steps_aside = steps_aside;
+        let metadata_json = serde_json::to_string(&metadata)
+            .map_err(|error| VaultimeError::Database(format!("invalid metadata json: {error}")))?;
+        conn.execute(
+            "UPDATE games SET metadata_json = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![metadata_json, id],
+        )
+        .map_err(map_db)?;
+        conn.query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
+            .map_err(map_db)
+    })
+}
+
 pub fn set_metadata(db: &Database, id: &str, metadata: &GameMetadata) -> Result<Game> {
     let metadata_json = serde_json::to_string(metadata)
         .map_err(|error| VaultimeError::Database(format!("invalid metadata json: {error}")))?;

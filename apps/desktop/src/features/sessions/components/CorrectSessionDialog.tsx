@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
+import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import {
   formatClockTime,
@@ -75,9 +75,13 @@ export function CorrectSessionDialog({
       cancelled = true;
     };
   }, [open, endIso, session.id]);
+  // A correction works on the session as recorded, with time it set aside
+  // for other games, which pages leave out.
+  const aside = session.set_aside_ms ?? 0;
+  const recorded = session.runtime_ms + aside;
   const kept = mode === "discard" ? { runtime_ms: 0, active_ms: 0 } : preview?.end === endIso ? preview : null;
-  const counts = kept?.runtime_ms ?? session.runtime_ms;
-  const activeAfter = kept?.active_ms ?? session.active_ms;
+  const counts = kept?.runtime_ms ?? recorded;
+  const activeAfter = kept?.active_ms ?? session.active_ms + (session.set_aside_active_ms ?? 0);
   const day = (date: Date) => date.toLocaleDateString(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" });
   const sameDay = day(start) === day(end);
 
@@ -130,6 +134,7 @@ export function CorrectSessionDialog({
             <dt className="text-faint">Counted</dt>
             <dd className="font-mono tabular-nums">
               {formatHoursMinutes(session.runtime_ms)}, {formatHoursMinutes(session.active_ms)} active
+              {aside >= MINUTE_MS && `, ${formatHoursMinutes(aside)} set aside`}
             </dd>
           </dl>
 
@@ -195,9 +200,11 @@ export function CorrectSessionDialog({
           </Field>
 
           <p className="text-sm text-soft">
-            {counts === session.runtime_ms
+            {counts === recorded
               ? "Nothing changes yet."
-              : `Counts ${formatHoursMinutes(counts)} instead of ${formatHoursMinutes(session.runtime_ms)}, ${formatHoursMinutes(activeAfter)} of it active.`}
+              : aside >= MINUTE_MS
+                ? `Keeps ${formatHoursMinutes(counts)} of its ${formatHoursMinutes(recorded)} on record. Time beside other games stays set aside.`
+                : `Counts ${formatHoursMinutes(counts)} instead of ${formatHoursMinutes(recorded)}, ${formatHoursMinutes(activeAfter)} of it active.`}
           </p>
 
           {error && <Notice tone="warning">{error}</Notice>}
@@ -208,7 +215,7 @@ export function CorrectSessionDialog({
             </Button>
             <Button
               type="submit"
-              disabled={saving || !reason.trim() || !endValid || counts === session.runtime_ms}
+              disabled={saving || !reason.trim() || !endValid || counts === recorded}
             >
               {saving ? "Saving" : "Correct"}
             </Button>

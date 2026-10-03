@@ -276,6 +276,10 @@ fn apply_correction(
         .to_string(),
     )?;
     slices::rebuild_session(conn, &session.id)?;
+    // The span from before the cut, which games that step aside may share.
+    if let Some(old_end) = session.ended_at_wall.as_deref() {
+        slices::rebuild_aside_around(conn, &session.started_at_wall, old_end)?;
+    }
     load(conn, &session.id)
 }
 
@@ -381,7 +385,7 @@ pub fn add_manual_session(
             })
             .to_string(),
         )?;
-        slices::rebuild_session(conn, &id)?;
+        slices::rebuild_session_and_around(conn, &id)?;
         load(conn, &id)
     })
 }

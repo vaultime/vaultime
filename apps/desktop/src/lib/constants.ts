@@ -162,6 +162,11 @@ export const HERO_TITLE_MIN_FONT_PX = 32;
 
 // Game page
 
+/** Share of a game's time other games must run beside it before its page suggests stepping aside. */
+export const STEPS_ASIDE_HINT_MIN_SHARE = 0.5;
+/** Time other games must run beside a game before its page suggests stepping aside. */
+export const STEPS_ASIDE_HINT_MIN_MS = HOUR_MS;
+
 /** Sessions listed before "Show all". */
 export const GAME_RECENT_SESSIONS = 8;
 

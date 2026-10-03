@@ -73,6 +73,9 @@ mod tests {
             runtime_ms: 30_000,
             integrity_status: "local".into(),
             closed_cleanly: false,
+            set_aside_ms: 0,
+            set_aside_active_ms: 0,
+            set_aside_idle_ms: 0,
         }
     }
 

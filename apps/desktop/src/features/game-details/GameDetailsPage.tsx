@@ -15,6 +15,7 @@ import {
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary } from "@/features/library/library-context";
@@ -30,13 +31,16 @@ import {
   MINUTE_MS,
   PLAYER_ARTWORK_SOURCE,
   STEAM_LAUNCHER,
+  STEPS_ASIDE_HINT_MIN_MS,
+  STEPS_ASIDE_HINT_MIN_SHARE,
 } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
 import { countsAsPlay } from "@/lib/session-stats";
+import { besideOthers, stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
-import type { EarlierPlaytime, Game, GameAssetView, SessionEvent } from "@/lib/types";
+import type { EarlierPlaytime, Game, GameAssetView, Session, SessionEvent } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -73,6 +77,7 @@ function GamePage({ gameId }: { gameId: string }) {
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
   const [hideError, setHideError] = useState<string | null>(null);
+  const [steppingError, setSteppingError] = useState<string | null>(null);
 
   const summary = summaries.find((entry) => entry.game.id === gameId);
   const sessions = useMemo(
@@ -126,6 +131,7 @@ function GamePage({ gameId }: { gameId: string }) {
   }
 
   const { game, cover, tint } = summary;
+  const stepping = new Set(summaries.filter((entry) => stepsAside(entry.game)).map((entry) => entry.game.id));
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
   const firstPlayed = sessions.filter(countsAsPlay).at(-1)?.started_at_wall;
   const longest = sessions.reduce((best, session) => Math.max(best, session.runtime_ms), 0);
@@ -135,6 +141,16 @@ function GamePage({ gameId }: { gameId: string }) {
     setAssets(next);
     // Covers and tints live in the library state.
     refresh().catch(() => {});
+  }
+
+  async function setStepping(next: boolean) {
+    try {
+      setSteppingError(null);
+      await api.setGameStepsAside(game.id, next);
+      await refresh();
+    } catch (error) {
+      setSteppingError(describeError(error));
+    }
   }
 
   async function setHidden(hidden: boolean) {
@@ -282,6 +298,13 @@ function GamePage({ gameId }: { gameId: string }) {
                 No program set, so this game is not tracked yet. Edit it to pick one.
               </p>
             )}
+            <StepsAsideRow
+              game={game}
+              sessions={allSessions}
+              stepping={stepping}
+              error={steppingError}
+              onChange={(next) => void setStepping(next)}
+            />
             <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => setEditing(game)}>
                 <Pencil className="size-3.5" />
@@ -325,6 +348,50 @@ function GamePage({ gameId }: { gameId: string }) {
           refresh().catch(() => {});
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * The switch that makes a game count only while no other game runs, with a
+ * hint when other games often ran beside it, like a launcher left open.
+ */
+function StepsAsideRow({
+  game,
+  sessions,
+  stepping,
+  error,
+  onChange,
+}: {
+  game: Game;
+  sessions: Session[];
+  /** Games that count only while no other game runs. */
+  stepping: Set<string>;
+  error: string | null;
+  onChange: (next: boolean) => void;
+}) {
+  const on = stepping.has(game.id);
+  const { besideMs, share } = besideOthers(game.id, sessions, stepping);
+  const suggest = !on && share >= STEPS_ASIDE_HINT_MIN_SHARE && besideMs >= STEPS_ASIDE_HINT_MIN_MS;
+  return (
+    <div className="mt-4 border-t border-rule pt-4">
+      <div className="flex items-start justify-between gap-4">
+        <label htmlFor="steps-aside" className="min-w-0">
+          <span className="block text-[13px] text-text">Count only when no other game runs</span>
+          <span className="mt-1 block text-[12px] leading-relaxed text-faint">
+            For launchers and game clients. Its time beside another game is set aside, and switching this off brings
+            that time back.
+          </span>
+        </label>
+        <Switch id="steps-aside" checked={on} onCheckedChange={onChange} />
+      </div>
+      {suggest && (
+        <p className="mt-2 text-[12px] leading-relaxed text-soft">
+          Other games ran beside it for {formatHoursMinutes(besideMs)}, {Math.round(share * 100)} % of its time. If it
+          is a launcher, this stops that time from counting for it.
+        </p>
+      )}
+      {error && <p className="mt-2 text-[12px] text-amber">{error}</p>}
     </div>
   );
 }

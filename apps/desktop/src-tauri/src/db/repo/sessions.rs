@@ -27,6 +27,9 @@ pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         runtime_ms: row.get("runtime_ms")?,
         integrity_status: row.get("integrity_status")?,
         closed_cleanly: row.get("closed_cleanly")?,
+        set_aside_ms: 0,
+        set_aside_active_ms: 0,
+        set_aside_idle_ms: 0,
     })
 }
 
@@ -151,7 +154,7 @@ pub fn end_session(
             })
             .to_string(),
         )?;
-        slices::rebuild_session(conn, session_id)?;
+        slices::rebuild_session_and_around(conn, session_id)?;
 
         conn.query_row(
             "SELECT * FROM sessions WHERE id = ?1",
@@ -369,7 +372,7 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
             })
             .to_string(),
         )?;
-        slices::rebuild_session(conn, session_id)?;
+        slices::rebuild_session_and_around(conn, session_id)?;
 
         conn.query_row(
             "SELECT * FROM sessions WHERE id = ?1",

@@ -14,6 +14,7 @@ import { DAY_MS, DAYS_PER_WEEK, HOURS_PER_DAY, JOURNAL_MIN_SPAN_PERCENT, JOURNAL
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { carriedOverPhrase, sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
 import { clipToWindow, countsAsPlay, playedMs, playRuns, sideBySideGroups, type PlayRun } from "@/lib/session-stats";
+import { stepAside, stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import {
   clockPercent,
@@ -70,7 +71,13 @@ function weeksBack(day: string | null): number {
 }
 
 /** The sessions and status changes of the week from `start`, by day, newest day first. */
-function groupWeek(sessions: Session[], changes: GameStatusChange[], start: Date, now: Date): JournalDay[] {
+function groupWeek(
+  sessions: Session[],
+  changes: GameStatusChange[],
+  start: Date,
+  now: Date,
+  stepping: Set<string>,
+): JournalDay[] {
   const end = addDays(start, DAYS_PER_WEEK);
   const grouped = new Map<number, JournalDay>();
   const dayOf = (moment: Date) => {
@@ -91,9 +98,11 @@ function groupWeek(sessions: Session[], changes: GameStatusChange[], start: Date
     const started = parseVaultimeDate(session.started_at_wall);
     if (started >= start) dayOf(started).sessions.push(session);
   }
+  // A game that steps aside shows only where no other game ran.
+  const drawn = stepAside(inWeek, stepping, now);
   for (let day = start; day < end; day = addDays(day, 1)) {
     const next = addDays(day, 1);
-    const spans = inWeek.flatMap((session) => clipToWindow(session, day, next, now) ?? []);
+    const spans = drawn.flatMap((session) => clipToWindow(session, day, next, now) ?? []);
     if (spans.some(countsAsPlay) || grouped.has(day.getTime())) dayOf(day).spans.push(...spans);
   }
   for (const change of changes) {
@@ -180,7 +189,8 @@ export function JournalPage() {
     return byId;
   }, [sessions]);
 
-  const days = groupWeek(sessions, statusChanges, weekStart, now);
+  const stepping = new Set(summaries.filter((summary) => stepsAside(summary.game)).map((summary) => summary.game.id));
+  const days = groupWeek(sessions, statusChanges, weekStart, now, stepping);
 
   // A game keeps one color through the week, the main color of its artwork,
   // nudged only when it would look like a game that showed up earlier. The

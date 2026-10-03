@@ -73,6 +73,8 @@ You count as away after 5 minutes without keyboard, mouse or controller input. O
 
 A game in the background turns idle 15 seconds after it leaves the front, so a quick look at another window does not cost you active time. In Settings you can choose to count background time as active instead.
 
+Launchers and game clients, like the League of Legends client, can be told to step aside: switch on Count only when no other game runs on the game's page. Time it ran beside another game is then set aside. It stays in the session's record but counts nowhere, and switching it off brings it back.
+
 Time counts on the day it happened. A session from 23:00 to 02:00 counts one hour on the first day and two on the next, in the stats and in the journal's day totals. The journal lists it under the day it started.
 
 ## Trust labels

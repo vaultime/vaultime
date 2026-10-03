@@ -60,6 +60,10 @@ pub struct GameMetadata {
     /// How the player cut each cover from its original file, by asset id.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cover_crops: BTreeMap<String, CropRect>,
+    /// Counts only while no other game runs, like a launcher or a game's
+    /// client. Its time beside another game is set aside.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub steps_aside: bool,
     /// Fields this version does not know, as a newer one wrote them, kept so
     /// that a write here does not drop them.
     #[serde(flatten)]
@@ -118,6 +122,14 @@ pub struct Session {
     pub runtime_ms: i64,
     pub integrity_status: String,
     pub closed_cleanly: bool,
+    /// Runtime, active and idle time set aside because the game steps aside
+    /// for others. Worked out from the play slices, never stored.
+    #[serde(default)]
+    pub set_aside_ms: i64,
+    #[serde(default)]
+    pub set_aside_active_ms: i64,
+    #[serde(default)]
+    pub set_aside_idle_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

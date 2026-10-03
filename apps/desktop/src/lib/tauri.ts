@@ -187,6 +187,11 @@ export async function trimSession(sessionId: string, endedAt: string, reason: st
   return invoke<Session>("trim_session", { sessionId, endedAt, reason });
 }
 
+/** Makes a game count only while no other game runs, like a launcher, or always again. */
+export async function setGameStepsAside(gameId: string, stepsAside: boolean): Promise<Game> {
+  return invoke<Game>("set_game_steps_aside", { gameId, stepsAside });
+}
+
 /** What a closed session would keep when it counted only up to `endedAt`. */
 export async function previewTrim(
   sessionId: string,

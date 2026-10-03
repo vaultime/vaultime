@@ -122,7 +122,23 @@ pub fn delete_game(
     asset_manager: State<'_, AssetManager>,
     id: String,
 ) -> Result<bool, VaultimeError> {
-    assets::delete_game(&db, &asset_manager, &id)
+    let deleted = assets::delete_game(&db, &asset_manager, &id)?;
+    // Games that stepped aside for it count that time again.
+    playtime::slices::rebuild_aside_all(&db)?;
+    Ok(deleted)
+}
+
+/// Makes a game count only while no other game runs, like a launcher, or
+/// always again, and works out where all play fell once more.
+#[tauri::command(async)]
+pub fn set_game_steps_aside(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+    steps_aside: bool,
+) -> Result<Game, VaultimeError> {
+    let game = games::set_steps_aside(&db, &game_id, steps_aside)?;
+    playtime::slices::rebuild_all(&db)?;
+    Ok(game)
 }
 
 #[tauri::command(async)]
@@ -214,6 +230,7 @@ pub fn list_sessions(
     for session in &mut all {
         live.apply(session);
     }
+    playtime::totals::fill_set_aside(&db, &live, &mut all, chrono::Utc::now().timestamp_millis())?;
     Ok(all)
 }
 
@@ -254,6 +271,12 @@ pub fn get_active_sessions(
     for session in &mut active {
         live.apply(session);
     }
+    playtime::totals::fill_set_aside(
+        &db,
+        &live,
+        &mut active,
+        chrono::Utc::now().timestamp_millis(),
+    )?;
     Ok(active)
 }
 

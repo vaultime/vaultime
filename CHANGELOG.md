@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Tracking
 
 - **A lighter, sharper session record.** Vaultime still checks your games every five seconds, but it now notes a session's time whenever it switches between active and idle, and at least every 30 seconds, instead of every five seconds. The record grows about six times slower, so backups stay small for years, and each note now marks a real change. After a crash, a session keeps its time up to the last note, at most 30 seconds before the crash.
+- **Launchers step aside.** A new switch on a game's page, Count only when no other game runs, is made for launchers and game clients like the League of Legends client. Its time beside another game is set aside: it stays in the session's record but counts nowhere, and switching it off brings it back. The journal draws such a game only where it ran alone and says how much was set aside, and a game's page suggests the switch when other games often ran beside it.
 
 ### Corrections
 

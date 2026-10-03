@@ -13,6 +13,7 @@ import {
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/session-stats";
+import { countedSession } from "@/lib/steps-aside";
 import type { EarlierPlaytime, Game, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
@@ -49,7 +50,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         api.listSessionNotes(),
       ]);
       setGames(nextGames);
-      setSessions(nextSessions);
+      // Time a game set aside for others counts nowhere, so pages see only what counts.
+      setSessions(nextSessions.map(countedSession));
       setEarlier(nextEarlier);
       setStatusChanges(nextChanges);
       setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
@@ -80,7 +82,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         .getActiveSessions()
         .then((next) => {
           if (cancelled) return;
-          setActive(next);
+          setActive(next.map(countedSession));
           setActivePolledAt(Date.now());
           // The first poll, or a session started or ended: totals changed.
           const ids = next.map((s) => s.id).sort().join(",");

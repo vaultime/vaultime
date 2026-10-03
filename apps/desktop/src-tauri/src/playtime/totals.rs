@@ -3,18 +3,19 @@
 
 //! Play time per day, week, month or year, added up from the slices.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Timelike, Utc};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::db::connection::Database;
+use crate::db::models::Session;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
 use crate::integrity;
-use crate::playtime::slices::{Slice, slices_of};
+use crate::playtime::slices::{STEPS_ASIDE, Slice, aside_stretches, slices_of};
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
 /// What one total covers, in local time.
@@ -108,14 +109,82 @@ fn running_slices(
                         },
                     ))
                 });
+            let aside = aside_stretches(conn, &session, now_ms)?;
             placed.extend(
-                slices_of(&session, &events, latest)
+                slices_of(&session, &events, latest, &aside)
                     .into_iter()
                     .map(|slice| (session.game_id.clone(), slice)),
             );
         }
         Ok(placed)
     }
+}
+
+/// Fills in the time set aside of sessions whose game steps aside for
+/// others: what the session holds minus what its slices count. Running
+/// sessions, already brought up to the latest tick, are placed up to it.
+pub fn fill_set_aside(
+    db: &Database,
+    live: &LiveSessions,
+    sessions: &mut [Session],
+    now_ms: i64,
+) -> Result<()> {
+    db.with_transaction(|conn| {
+        let stepping: HashSet<String> = {
+            let mut stmt = conn
+                .prepare_cached(&format!("SELECT id FROM games WHERE {STEPS_ASIDE}"))
+                .map_err(map_db)?;
+            let rows = stmt.query_map([], |row| row.get(0)).map_err(map_db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+        };
+        if stepping.is_empty() {
+            return Ok(());
+        }
+        let counted: HashMap<String, [i64; 3]> = {
+            let mut stmt = conn
+                .prepare_cached(&format!(
+                    "SELECT play_slices.session_id, SUM(play_slices.runtime_ms),
+                            SUM(play_slices.active_ms), SUM(play_slices.idle_ms)
+                     FROM play_slices
+                     JOIN sessions ON sessions.id = play_slices.session_id
+                     JOIN games ON games.id = sessions.game_id
+                     WHERE {STEPS_ASIDE}
+                     GROUP BY play_slices.session_id"
+                ))
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((row.get(0)?, [row.get(1)?, row.get(2)?, row.get(3)?]))
+                })
+                .map_err(map_db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+        };
+        for session in sessions
+            .iter_mut()
+            .filter(|session| stepping.contains(&session.game_id))
+        {
+            let kept = if session.ended_at_wall.is_some() {
+                counted.get(&session.id).copied().unwrap_or_default()
+            } else {
+                let events = integrity::load_session_events(conn, &session.id)?;
+                let latest = live.get(&session.id).map(|counters| (now_ms, counters));
+                let aside = aside_stretches(conn, session, now_ms)?;
+                slices_of(session, &events, latest, &aside)
+                    .iter()
+                    .fold([0; 3], |sum, slice| {
+                        [
+                            sum[0] + slice.runtime_ms,
+                            sum[1] + slice.active_ms,
+                            sum[2] + slice.idle_ms,
+                        ]
+                    })
+            };
+            session.set_aside_ms = (session.runtime_ms - kept[0]).max(0);
+            session.set_aside_active_ms = (session.active_ms - kept[1]).max(0);
+            session.set_aside_idle_ms = (session.idle_ms - kept[2]).max(0);
+        }
+        Ok(())
+    })
 }
 
 /// Each game's time per bucket, from the local day `from` up to but not
@@ -200,7 +269,7 @@ mod tests {
     use super::*;
     use crate::db::models::CreateGame;
     use crate::db::repo::{devices, games, sessions};
-    use crate::playtime::slices::rebuild_session;
+    use crate::playtime::slices::rebuild_session_and_around;
 
     const MINUTE: i64 = 60_000;
 
@@ -241,39 +310,42 @@ mod tests {
     /// A tracked session from `start` that ran all active for `minutes`,
     /// closed and sliced.
     fn played(library: &Library, start: &str, minutes: i64) {
-        let session =
-            sessions::create_session_at(&library.db, &library.game_id, "device", utc(start))
-                .unwrap();
+        played_game(&library.db, &library.game_id, start, minutes);
+    }
+
+    /// A tracked session of `game_id`, closed and sliced along with the
+    /// sessions that step aside around it. Returns its id.
+    fn played_game(db: &Database, game_id: &str, start: &str, minutes: i64) -> String {
+        let session = sessions::create_session_at(db, game_id, "device", utc(start)).unwrap();
         let runtime = minutes * MINUTE;
-        library
-            .db
-            .with_conn(|conn| {
-                let end = utc(start) + TimeDelta::milliseconds(runtime);
-                integrity::append_session_event(
-                    conn,
-                    &session.id,
-                    "ended",
-                    &integrity::format_timestamp(end),
-                    Some(runtime),
-                    &serde_json::json!({
-                        "runtime_ms": runtime,
-                        "active_ms": runtime,
-                        "idle_ms": 0,
-                        "integrity_status": "local",
-                        "closed_cleanly": true,
-                    })
-                    .to_string(),
-                )?;
-                conn.execute(
-                    "UPDATE sessions SET ended_at_wall = ?1, runtime_ms = ?2,
+        db.with_conn(|conn| {
+            let end = utc(start) + TimeDelta::milliseconds(runtime);
+            integrity::append_session_event(
+                conn,
+                &session.id,
+                "ended",
+                &integrity::format_timestamp(end),
+                Some(runtime),
+                &serde_json::json!({
+                    "runtime_ms": runtime,
+                    "active_ms": runtime,
+                    "idle_ms": 0,
+                    "integrity_status": "local",
+                    "closed_cleanly": true,
+                })
+                .to_string(),
+            )?;
+            conn.execute(
+                "UPDATE sessions SET ended_at_wall = ?1, runtime_ms = ?2,
                          elapsed_monotonic_ms = ?2, active_ms = ?2, closed_cleanly = 1
                      WHERE id = ?3",
-                    params![integrity::format_timestamp(end), runtime, session.id],
-                )
-                .map_err(map_db)?;
-                rebuild_session(conn, &session.id)
-            })
-            .unwrap();
+                params![integrity::format_timestamp(end), runtime, session.id],
+            )
+            .map_err(map_db)?;
+            rebuild_session_and_around(conn, &session.id)
+        })
+        .unwrap();
+        session.id
     }
 
     fn by_bucket(totals: &[PlayTotal]) -> Vec<(String, i64)> {
@@ -415,5 +487,76 @@ mod tests {
         )
         .unwrap();
         assert_eq!(by_bucket(&days), vec![("2026-10-02".into(), 40)]);
+    }
+
+    fn game(db: &Database, title: &str) -> String {
+        games::create_game(
+            db,
+            &CreateGame {
+                title: title.into(),
+                executable_path: Some(format!("{title}.exe")),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap()
+        .id
+    }
+
+    fn day_minutes(db: &Database, game_id: &str) -> i64 {
+        let totals = play_totals(
+            db,
+            &LiveSessions::default(),
+            &FixedOffset::east_opt(0).unwrap(),
+            date("2026-10-02"),
+            date("2026-10-03"),
+            Bucket::Day,
+            Some(game_id),
+            0,
+        )
+        .unwrap();
+        totals.iter().map(|total| total.runtime_ms).sum::<i64>() / MINUTE
+    }
+
+    #[test]
+    fn a_game_that_steps_aside_counts_only_while_nothing_else_runs() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        // The client from 18:00 to 21:00, a match inside it from 19:00 to 20:00.
+        let client_session = played_game(&db, &client, "2026-10-02T18:00:00Z", 180);
+        played_game(&db, &match_game, "2026-10-02T19:00:00Z", 60);
+
+        assert_eq!(day_minutes(&db, &client), 120);
+        assert_eq!(day_minutes(&db, &match_game), 60);
+        let mut listed = sessions::list_all_sessions(&db).unwrap();
+        fill_set_aside(&db, &LiveSessions::default(), &mut listed, 0).unwrap();
+        let client_row = listed
+            .iter()
+            .find(|session| session.id == client_session)
+            .unwrap();
+        assert_eq!(client_row.set_aside_ms, 60 * MINUTE);
+        assert_eq!(client_row.set_aside_active_ms, 60 * MINUTE);
+        // The record itself keeps all three hours.
+        assert_eq!(client_row.runtime_ms, 180 * MINUTE);
+
+        // Switched off, it counts in full again.
+        games::set_steps_aside(&db, &client, false).unwrap();
+        crate::playtime::slices::rebuild_all(&db).unwrap();
+        assert_eq!(day_minutes(&db, &client), 180);
+    }
+
+    #[test]
+    fn games_that_step_aside_do_not_set_each_other_aside() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (one, other) = (game(&db, "Launcher"), game(&db, "Store"));
+        games::set_steps_aside(&db, &one, true).unwrap();
+        games::set_steps_aside(&db, &other, true).unwrap();
+        played_game(&db, &one, "2026-10-02T18:00:00Z", 60);
+        played_game(&db, &other, "2026-10-02T18:30:00Z", 60);
+        assert_eq!(day_minutes(&db, &one), 60);
+        assert_eq!(day_minutes(&db, &other), 60);
     }
 }

@@ -961,6 +961,13 @@ mockIPC((cmd, payload) => {
       return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":
       return preferredAssets();
+    case "set_game_steps_aside": {
+      const game = games.find((entry) => entry.id === args.gameId);
+      if (!game) return null;
+      const metadata = JSON.parse(game.metadata_json || "{}");
+      game.metadata_json = JSON.stringify({ ...metadata, steps_aside: Boolean(args.stepsAside) || undefined });
+      return game;
+    }
     case "get_play_totals":
       return estimatePlayTotals(
         allSessions,

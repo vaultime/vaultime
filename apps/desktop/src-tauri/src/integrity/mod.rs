@@ -590,6 +590,9 @@ mod tests {
             runtime_ms: 300_000,
             integrity_status: STATUS_LOCAL.into(),
             closed_cleanly: true,
+            set_aside_ms: 0,
+            set_aside_active_ms: 0,
+            set_aside_idle_ms: 0,
         };
         let mut events = vec![SessionEvent {
             id: "event-1".into(),

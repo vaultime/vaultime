@@ -60,6 +60,10 @@ export interface Session {
   runtime_ms: number;
   integrity_status: string;
   closed_cleanly: boolean;
+  /** Runtime set aside because the game steps aside for other games. The core works it out. */
+  set_aside_ms?: number;
+  set_aside_active_ms?: number;
+  set_aside_idle_ms?: number;
 }
 
 /** Mirrors the Rust `ExportFormat` enum. */

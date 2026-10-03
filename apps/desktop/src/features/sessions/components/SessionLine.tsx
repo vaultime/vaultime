@@ -8,9 +8,9 @@ import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CorrectSessionDialog } from "@/features/sessions/components/CorrectSessionDialog";
-import { SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
+import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";
-import { formatSessionStart } from "@/lib/time";
+import { formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 
@@ -96,6 +96,9 @@ export function SessionLine({
         <div className="mt-1 text-[13px] text-faint">
           {sessionAmounts(session)}
           {live ? " so far." : "."}
+          {(session.set_aside_ms ?? 0) >= MINUTE_MS && (
+            <span> {formatHoursMinutes(session.set_aside_ms ?? 0)} set aside while other games ran.</span>
+          )}
           {trustNote && <span className="text-soft"> {trustNote}</span>}
         </div>
         {editing ? (
