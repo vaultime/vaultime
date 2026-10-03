@@ -77,9 +77,9 @@ const FALLBACK = {
 export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
   const [loaded, setLoaded] = useState(false);
-  // What the command palette asked for, like ?do=backup. Read once.
-  const [params] = useSearchParams();
-  const [intent] = useState(() => params.get("do"));
+  // What the command palette asked for, like ?do=backup, once the page is there.
+  const [params, setParams] = useSearchParams();
+  const intent = loaded ? params.get("do") : null;
   const [error, setError] = useState<string | null>(null);
   const [idleSeconds, setIdleSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
   // The idle time saved last, and a change still waiting to be saved.
@@ -252,14 +252,25 @@ export function SettingsPage() {
     });
 
   useScrollToAnchor(loaded);
-  // A backup asked for from the palette opens its folder dialog once the page is there.
+  // A request from the palette runs once the page is there, also when
+  // Settings is open already, then leaves the address, so going back does
+  // not run it again. Exports start in their own section.
   useEffect(() => {
-    if (!loaded || intent !== "backup") return;
-    const timer = setTimeout(() => void exportBackup());
+    if (!intent) return;
+    const timer = setTimeout(() => {
+      if (intent === "backup") void exportBackup();
+      setParams(
+        (next) => {
+          next.delete("do");
+          return next;
+        },
+        { replace: true },
+      );
+    });
     return () => clearTimeout(timer);
-    // Only once, when the page has loaded.
+    // Once per request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, intent]);
+  }, [intent]);
 
   const changeAutoBackupFolder = () =>
     runBackupTask(async () => {
@@ -531,7 +542,7 @@ export function SettingsPage() {
           )}
         </PageSection>
 
-        <ExportSection start={loaded && (intent === "export-csv" || intent === "export-json") ? (intent === "export-csv" ? "csv" : "json") : null} />
+        <ExportSection start={intent === "export-csv" ? "csv" : intent === "export-json" ? "json" : null} />
 
         <PageSection title="About">
           <PageRow label="Version">
