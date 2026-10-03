@@ -12,6 +12,8 @@ export interface Game {
   is_hidden: boolean;
   created_at: string;
   updated_at: string;
+  /** The PC this game came from with merged sessions. Null for this PC's games, the only ones tracked here. */
+  origin_device_id: string | null;
 }
 
 /** Mirrors the Rust `CreateGame` struct. */
@@ -53,6 +55,94 @@ export interface LedgerReport {
   missing_sessions: number;
   /** Whether any ledger fails its check. */
   broken: boolean;
+}
+
+/** A PC this database knows. */
+export interface Device {
+  id: string;
+  platform: string;
+  app_version: string;
+  key_id: string | null;
+  registered_at: string;
+  name: string | null;
+  /** When sessions of this PC were last merged here. Such sessions can only be corrected there. */
+  merged_at: string | null;
+}
+
+/** A game of another PC that counts as a game of this PC. */
+export interface GameLink {
+  game_id: string;
+  /** Its title on the other PC. */
+  title: string;
+  origin_device_id: string | null;
+  linked_game_id: string;
+}
+
+/** A game that comes with merged sessions. */
+export interface MergeGame {
+  game_id: string;
+  title: string;
+  launcher_source: string | null;
+  sessions: number;
+  runtime_ms: number;
+  /** The game of this PC it most likely is. */
+  suggested_game_id: string | null;
+  /** `launcher` for the same launcher id, `title` for the same title. */
+  suggested_because: "launcher" | "title" | null;
+}
+
+/** A session that stays as it is here. */
+export interface MergeConflict {
+  session_id: string;
+  game_title: string;
+  started_at_wall: string;
+  reason: "changed_on_both" | "update_fails_check";
+}
+
+/** What merging another PC's backup would bring in. */
+export interface MergePreview {
+  backup_path: string;
+  backup_created_at: string;
+  device_id: string;
+  device_name: string | null;
+  new_sessions: number;
+  grown_sessions: number;
+  already_here: number;
+  newer_here: number;
+  removed_here: number;
+  running_there: number;
+  /** Sessions that come in unvouched, as they fail their check there too. */
+  failing: number;
+  /** A ledger in the backup claims to be that PC with a key this PC does not trust for it. */
+  unknown_keys: boolean;
+  /** This PC has never seen that PC, so its ledgers are taken at their word. */
+  first_merge: boolean;
+  /** Sessions here that came in unvouched and pass their check now. */
+  vouched_now: number;
+  /** Sessions added by hand here that overlap sessions that come in. */
+  overlapping_manual: number;
+  conflicts: MergeConflict[];
+  games: MergeGame[];
+}
+
+/** The player's choice for a game that comes along. */
+export interface GameChoice {
+  game_id: string;
+  linked_game_id: string | null;
+}
+
+export interface MergeSummary {
+  device_id: string;
+  device_name: string | null;
+  sessions_added: number;
+  sessions_grown: number;
+  /** Sessions here this PC vouches for now. */
+  sessions_vouched: number;
+  failing: number;
+  games_added: number;
+  games_linked: number;
+  /** The backup saved just before, which a restore can go back to. */
+  safety_backup_path: string | null;
 }
 
 /** This PC: its name and what the ledgers say about the history. */

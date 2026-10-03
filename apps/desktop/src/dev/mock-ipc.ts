@@ -26,11 +26,14 @@ import type {
   CloudBackupRecord,
   CloudDevice,
   CropRect,
+  Device,
   EarlierPlaytime,
   Game,
   GameAssetView,
+  GameLink,
   GameStatusChange,
   IgnoredProgram,
+  MergePreview,
   PlayBucket,
   Session,
   SessionEvent,
@@ -62,6 +65,7 @@ const games: Game[] = titles.map((title, index) => ({
   is_hidden: params.get("hidden") === "1" && title === "Celeste",
   created_at: iso(now - 90 * DAY_MS),
   updated_at: iso(now - 90 * DAY_MS),
+  origin_device_id: null,
 }));
 
 // Over a year of weekday evenings and weekend afternoons, weighted towards the
@@ -173,6 +177,104 @@ const live: Session = {
 const played = scenario === "empty" || scenario === "unplayed" ? [] : [live, ...sessions];
 const allSessions = played.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
 const allGames = scenario === "empty" ? [] : games;
+
+// ?pcs=1 adds sessions merged from a laptop: some of a game linked to Hades II
+// here, one game that came along on its own, and one that failed its check.
+const devices: Device[] = [
+  {
+    id: "preview",
+    platform: "windows",
+    app_version: "0.3.0",
+    key_id: null,
+    registered_at: iso(now - 400 * DAY_MS),
+    name: "Desktop",
+    merged_at: null,
+  },
+];
+let gameLinks: GameLink[] = [];
+if (params.get("pcs") === "1") {
+  devices.push({
+    id: "laptop",
+    platform: "windows",
+    app_version: "0.3.0",
+    key_id: null,
+    registered_at: iso(now - 200 * DAY_MS),
+    name: "Laptop",
+    merged_at: iso(now - 2 * DAY_MS),
+  });
+  games.push({
+    id: "laptop-sun-haven",
+    title: "Sun Haven",
+    executable_path: "D:\\Games\\Sun Haven\\Sun Haven.exe",
+    install_folder: "D:\\Games\\Sun Haven",
+    launcher_source: "steam",
+    metadata_json: "{}",
+    is_hidden: false,
+    created_at: iso(now - 30 * DAY_MS),
+    updated_at: iso(now - 30 * DAY_MS),
+    origin_device_id: "laptop",
+  });
+  gameLinks = [{ game_id: "laptop-hades", title: "Hades II", origin_device_id: "laptop", linked_game_id: "game-2" }];
+  const laptopPlay = (daysAgo: number, hour: number, minutes: number, gameId: string, status = "local") => {
+    const start = now - daysAgo * DAY_MS - (now % DAY_MS) + hour * HOUR_MS;
+    allSessions.push({
+      id: `laptop-${daysAgo}-${hour}`,
+      game_id: gameId,
+      device_id: "laptop",
+      started_at_wall: iso(start),
+      ended_at_wall: iso(start + minutes * MINUTE_MS),
+      elapsed_monotonic_ms: minutes * MINUTE_MS,
+      active_ms: Math.round(minutes * MINUTE_MS * 0.9),
+      idle_ms: Math.round(minutes * MINUTE_MS * 0.1),
+      runtime_ms: minutes * MINUTE_MS,
+      integrity_status: status,
+      closed_cleanly: true,
+    });
+  };
+  laptopPlay(2, 21, 75, "game-2");
+  laptopPlay(3, 22, 50, "laptop-sun-haven");
+  laptopPlay(5, 20, 95, "laptop-sun-haven", "suspicious");
+  allSessions.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
+}
+
+const mergePreview: MergePreview = {
+  backup_path: "D:\\Backups\\Laptop\\vaultime-backup-20261003T120000Z",
+  backup_created_at: iso(now - 3 * HOUR_MS),
+  device_id: "laptop",
+  device_name: "Laptop",
+  new_sessions: 14,
+  grown_sessions: 1,
+  already_here: 37,
+  newer_here: 0,
+  removed_here: 0,
+  running_there: 1,
+  failing: 1,
+  unknown_keys: false,
+  first_merge: true,
+  vouched_now: 0,
+  overlapping_manual: 1,
+  conflicts: [],
+  games: [
+    {
+      game_id: "laptop-celeste",
+      title: "Celeste",
+      launcher_source: "steam",
+      sessions: 6,
+      runtime_ms: 7 * HOUR_MS,
+      suggested_game_id: "game-5",
+      suggested_because: "launcher",
+    },
+    {
+      game_id: "laptop-tunic",
+      title: "TUNIC",
+      launcher_source: null,
+      sessions: 3,
+      runtime_ms: 4 * HOUR_MS,
+      suggested_game_id: null,
+      suggested_because: null,
+    },
+  ],
+};
 
 // Steam's own count for three games. Balatro ran less on Steam than Vaultime
 // tracked, so it adds nothing.
@@ -841,11 +943,42 @@ mockIPC((cmd, payload) => {
       return "preview";
     case "get_this_pc":
       return thisPc;
+    case "list_devices":
+      return devices;
+    case "list_game_links":
+      return gameLinks;
+    case "link_game":
+      gameLinks = gameLinks.filter((link) => link.game_id !== args.gameId);
+      if (args.linkedGameId) {
+        const foreign = games.find((game) => game.id === args.gameId);
+        gameLinks.push({
+          game_id: String(args.gameId),
+          title: foreign?.title ?? "",
+          origin_device_id: foreign?.origin_device_id ?? null,
+          linked_game_id: String(args.linkedGameId),
+        });
+      }
+      return null;
+    case "preview_merge":
+      return mergePreview;
+    case "merge_backup":
+      return {
+        device_id: "laptop",
+        device_name: "Laptop",
+        sessions_added: 14,
+        sessions_grown: 1,
+        sessions_vouched: 0,
+        failing: 1,
+        games_added: 2,
+        games_linked: 1,
+        safety_backup_path: "C:\\Users\\you\\AppData\\Roaming\\com.vaultime.app\\backups\\vaultime-auto-20261003T150000Z",
+      };
     case "rename_this_pc":
       thisPc = { ...thisPc, name: String(args.name).trim().slice(0, DEVICE_NAME_MAX_CHARS) || thisPc.name };
       return thisPc;
     case "list_games":
-      return allGames;
+      // A linked game of another PC counts as the game it is linked to.
+      return allGames.filter((game) => !gameLinks.some((link) => link.game_id === game.id));
     case "list_earlier_playtime":
       return earlierPlaytime;
     case "list_status_changes":
@@ -887,7 +1020,10 @@ mockIPC((cmd, payload) => {
     }
     case "list_sessions":
       // Copies, as the real IPC sends, so corrections show up as new data.
-      return allSessions.map((session) => ({ ...session }));
+      return allSessions.map((session) => ({
+        ...session,
+        game_id: gameLinks.find((link) => link.game_id === session.game_id)?.linked_game_id ?? session.game_id,
+      }));
     case "export_sessions":
       return allSessions.filter((session) => session.ended_at_wall).length;
     case "trim_session": {

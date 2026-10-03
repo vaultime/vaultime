@@ -42,20 +42,23 @@ export function stepAside(sessions: Session[], stepping: Set<string>, now = new 
     const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
     return { start, end };
   };
-  // Where games that do not step aside ran, joined and sorted once, so each
-  // session that steps aside finds its overlaps by a binary search.
-  const covered: [number, number][] = [];
+  // Where games that do not step aside ran on each PC, joined and sorted
+  // once, so each session that steps aside finds its overlaps by a binary
+  // search. A launcher steps aside only for games on its own PC.
+  const coveredByPc = new Map<string, [number, number][]>();
   const others = sessions
     .filter((session) => !stepping.has(session.game_id) && countsAsPlay(session))
-    .map(spanOf)
+    .map((session) => ({ device: session.device_id, ...spanOf(session) }))
     .filter(({ start, end }) => end > start)
     .sort((a, b) => a.start - b.start);
-  for (const { start, end } of others) {
+  for (const { device, start, end } of others) {
+    const covered = coveredByPc.get(device) ?? [];
+    coveredByPc.set(device, covered);
     const last = covered.at(-1);
     if (last && start <= last[1]) last[1] = Math.max(last[1], end);
     else covered.push([start, end]);
   }
-  const firstEndingAfter = (moment: number) => {
+  const firstEndingAfter = (covered: [number, number][], moment: number) => {
     let [low, high] = [0, covered.length];
     while (low < high) {
       const middle = (low + high) >> 1;
@@ -68,10 +71,11 @@ export function stepAside(sessions: Session[], stepping: Set<string>, now = new 
     if (!stepping.has(session.game_id)) return [session];
     const { start, end } = spanOf(session);
     if (end <= start) return [session];
-    // The parts of the span no other game covered.
+    // The parts of the span no other game on the same PC covered.
+    const covered = coveredByPc.get(session.device_id) ?? [];
     const parts: [number, number][] = [];
     let cursor = start;
-    for (let index = firstEndingAfter(start); index < covered.length && covered[index][0] < end; index += 1) {
+    for (let index = firstEndingAfter(covered, start); index < covered.length && covered[index][0] < end; index += 1) {
       const [from, to] = covered[index];
       if (from > cursor) parts.push([cursor, from]);
       cursor = Math.max(cursor, to);
@@ -132,12 +136,18 @@ export function besideOthers(
     start: parseVaultimeDate(session.started_at_wall).getTime(),
     end: session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime(),
   });
-  const later = sessions
-    .filter((session) => session.game_id !== gameId && !stepping.has(session.game_id) && countsAsPlay(session))
-    .map(spanOf)
-    .sort((a, b) => a.start - b.start);
+  const laterByPc = new Map<string, { start: number; end: number }[]>();
+  for (const session of sessions) {
+    if (session.game_id === gameId || stepping.has(session.game_id) || !countsAsPlay(session)) continue;
+    const list = laterByPc.get(session.device_id) ?? [];
+    laterByPc.set(session.device_id, list);
+    list.push(spanOf(session));
+  }
+  for (const list of laterByPc.values()) list.sort((a, b) => a.start - b.start);
   let openedFirstMs = 0;
-  for (const { start, end } of own.map(spanOf)) {
+  for (const session of own) {
+    const { start, end } = spanOf(session);
+    const later = laterByPc.get(session.device_id) ?? [];
     let [low, high] = [0, later.length];
     while (low < high) {
       const middle = (low + high) >> 1;

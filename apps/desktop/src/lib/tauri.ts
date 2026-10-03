@@ -9,15 +9,20 @@ import type {
   CloudBackupUploadResult,
   CreateGameInput,
   CropRect,
+  Device,
   DiscoveredGame,
   EarlierPlaytime,
   ExportFormat,
   Game,
   GameAssetView,
+  GameChoice,
+  GameLink,
   GameStatus,
   GameStatusChange,
   IgnoredProgram,
   LocalBackupSummary,
+  MergePreview,
+  MergeSummary,
   PlayBucket,
   PlayTotal,
   Session,
@@ -45,6 +50,29 @@ export async function getThisPc(): Promise<ThisPc> {
 
 export async function renameThisPc(name: string): Promise<ThisPc> {
   return invoke<ThisPc>("rename_this_pc", { name });
+}
+
+/** Every PC this database knows, this one included. */
+export async function listDevices(): Promise<Device[]> {
+  return invoke<Device[]>("list_devices");
+}
+
+export async function listGameLinks(): Promise<GameLink[]> {
+  return invoke<GameLink[]>("list_game_links");
+}
+
+/** Makes a game of another PC count as a game of this PC, or as itself again with null. */
+export async function linkGame(gameId: string, linkedGameId: string | null): Promise<void> {
+  return invoke<void>("link_game", { gameId, linkedGameId });
+}
+
+/** With `trustNewKeys`, the player vouches that new keys claiming the backup's PC are its own. */
+export async function previewMerge(path: string, trustNewKeys = false): Promise<MergePreview> {
+  return invoke<MergePreview>("preview_merge", { path, trustNewKeys });
+}
+
+export async function mergeBackup(path: string, choices: GameChoice[], trustNewKeys = false): Promise<MergeSummary> {
+  return invoke<MergeSummary>("merge_backup", { path, choices, trustNewKeys });
 }
 
 export async function getAppVersion(): Promise<string> {

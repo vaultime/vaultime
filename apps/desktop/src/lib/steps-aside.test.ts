@@ -18,6 +18,7 @@ function game(metadata: string): Game {
     is_hidden: false,
     created_at: "",
     updated_at: "",
+    origin_device_id: null,
   };
 }
 
@@ -74,6 +75,12 @@ describe("stepAside", () => {
     stepAside(many, new Set(["client"]));
     // A quadratic walk took seconds here, a binary search takes milliseconds.
     expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it("steps aside only for games on the same PC", () => {
+    const elsewhere = { ...match, id: "laptop-match", device_id: "laptop" };
+    const drawn = stepAside([client, elsewhere], new Set(["client"]));
+    expect(drawn.filter((part) => part.game_id === "client")).toEqual([client]);
   });
 
   it("leaves everything alone without games that step aside", () => {

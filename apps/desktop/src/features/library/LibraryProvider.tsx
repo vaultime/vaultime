@@ -14,7 +14,7 @@ import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/session-stats";
 import { countedSession } from "@/lib/steps-aside";
-import type { EarlierPlaytime, Game, GameStatus, GameStatusChange, Session } from "@/lib/types";
+import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { describeError } from "@/lib/utils";
@@ -27,6 +27,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [earlier, setEarlier] = useState<EarlierPlaytime[]>([]);
   const [statusChanges, setStatusChanges] = useState<GameStatusChange[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [thisDeviceId, setThisDeviceId] = useState<string | null>(null);
+  const [links, setLinks] = useState<GameLink[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
   const [activePolledAt, setActivePolledAt] = useState(() => Date.now());
@@ -40,15 +43,22 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextGames, nextSessions, assets, settings, nextEarlier, nextChanges, nextNotes] = await Promise.all([
-        api.listGames(),
-        api.listSessions(),
-        api.listPreferredGameAssets(),
-        api.listSettings(),
-        api.listEarlierPlaytime(),
-        api.listStatusChanges(),
-        api.listSessionNotes(),
-      ]);
+      const [nextGames, nextSessions, assets, settings, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
+        await Promise.all([
+          api.listGames(),
+          api.listSessions(),
+          api.listPreferredGameAssets(),
+          api.listSettings(),
+          api.listEarlierPlaytime(),
+          api.listStatusChanges(),
+          api.listSessionNotes(),
+          api.listDevices(),
+          api.listGameLinks(),
+          api.getDeviceId(),
+        ]);
+      setDevices(nextDevices);
+      setLinks(nextLinks);
+      setThisDeviceId(deviceId);
       setGames(nextGames);
       // Time a game set aside for others counts nowhere, so pages see only what counts.
       setSessions(nextSessions.map(countedSession));
@@ -234,6 +244,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       visible,
       statusChanges,
       notes,
+      devices,
+      thisDeviceId,
+      links,
       loaded,
       error,
       refresh,
@@ -251,6 +264,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       visible,
       statusChanges,
       notes,
+      devices,
+      thisDeviceId,
+      links,
       loaded,
       error,
       refresh,

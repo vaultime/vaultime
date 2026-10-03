@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
+import { GameLinkPicker } from "@/features/library/components/GameLinkPicker";
 import { useLibrary } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { CoverCropDialog, type CropTarget } from "@/features/game-details/CoverCropDialog";
@@ -36,6 +37,7 @@ import {
   STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE,
   STEPS_ASIDE_HINT_MIN_SHARE,
 } from "@/lib/constants";
+import { pcName } from "@/lib/devices";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
 import { countsAsPlay } from "@/lib/session-stats";
@@ -232,10 +234,13 @@ function GamePage({ gameId }: { gameId: string }) {
               <h2 id="sessions-title" className="font-display text-[30px]">
                 {showAll ? "Every session" : "Recent sessions"}
               </h2>
-              <Button variant="ghost" size="sm" className="-mr-3.5 text-faint" onClick={() => setAddingSession(true)}>
-                <Plus className="size-3.5" />
-                Add a session
-              </Button>
+              {/* A game of another PC gets its sessions with each merge. */}
+              {!game.origin_device_id && (
+                <Button variant="ghost" size="sm" className="-mr-3.5 text-faint" onClick={() => setAddingSession(true)}>
+                  <Plus className="size-3.5" />
+                  Add a session
+                </Button>
+              )}
             </div>
             {sessions.length === 0 ? (
               <p className="py-3.5 text-faint">No sessions yet. They appear here as soon as you play.</p>
@@ -285,10 +290,18 @@ function GamePage({ gameId }: { gameId: string }) {
 
           {summary.earlier && <EarlierSection earlier={summary.earlier} />}
 
-          <CoverPicker gameId={gameId} gameTitle={game.title} assets={assets} onChanged={onAssetsChanged} />
+          <CoverPicker
+            gameId={gameId}
+            gameTitle={game.title}
+            assets={assets}
+            onChanged={onAssetsChanged}
+            scannable={!game.origin_device_id}
+          />
 
           <AsideSection title="Tracking">
-            {game.executable_path ? (
+            {game.origin_device_id ? (
+              <ForeignGameRows game={game} />
+            ) : game.executable_path ? (
               <>
                 <div className="font-mono text-xs leading-relaxed break-all text-soft">{game.executable_path}</div>
                 <p className="mt-2 text-[13px] text-faint">
@@ -303,6 +316,7 @@ function GamePage({ gameId }: { gameId: string }) {
                 No program set, so this game is not tracked yet. Edit it to pick one.
               </p>
             )}
+            {!game.origin_device_id && <LinkedGameRows gameId={game.id} />}
             <StepsAsideRow
               game={game}
               sessions={allSessions}
@@ -311,10 +325,12 @@ function GamePage({ gameId }: { gameId: string }) {
               onChange={(next) => void setStepping(next)}
             />
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => setEditing(game)}>
-                <Pencil className="size-3.5" />
-                Edit
-              </Button>
+              {!game.origin_device_id && (
+                <Button variant="outline" size="sm" onClick={() => setEditing(game)}>
+                  <Pencil className="size-3.5" />
+                  Edit
+                </Button>
+              )}
               <Button variant="ghost" size="sm" className="text-faint" onClick={() => void setHidden(!game.is_hidden)}>
                 {game.is_hidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
                 {game.is_hidden ? "Unhide" : "Hide"}
@@ -405,6 +421,71 @@ function StepsAsideRow({
   );
 }
 
+/** A game that came with sessions of another PC: where from, and which game of this PC it counts as. */
+function ForeignGameRows({ game }: { game: Game }) {
+  const { games, devices, refresh } = useLibrary();
+  const [error, setError] = useState<string | null>(null);
+  const ours = games.filter((candidate) => candidate.origin_device_id === null);
+  const from = pcName(devices, game.origin_device_id ?? "");
+
+  async function link(linkedGameId: string | null) {
+    setError(null);
+    try {
+      await api.linkGame(game.id, linkedGameId);
+      await refresh();
+    } catch (linkError) {
+      setError(describeError(linkError));
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-[13px] leading-relaxed text-faint">
+        Came with the sessions of {from}. Not tracked on this PC, its sessions come with each merge.
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[13px] text-text">Counts as</span>
+        <GameLinkPicker games={ours} value={null} onChange={(linked) => void link(linked)} />
+      </div>
+      {error && <p className="mt-2 text-[12px] text-amber">{error}</p>}
+    </div>
+  );
+}
+
+/** Games of other PCs that count as this game, each with a way to undo it. */
+function LinkedGameRows({ gameId }: { gameId: string }) {
+  const { links, devices, refresh } = useLibrary();
+  const [error, setError] = useState<string | null>(null);
+  const linked = links.filter((link) => link.linked_game_id === gameId);
+  if (linked.length === 0) return null;
+
+  async function unlink(foreignId: string) {
+    setError(null);
+    try {
+      await api.linkGame(foreignId, null);
+      await refresh();
+    } catch (linkError) {
+      setError(describeError(linkError));
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-rule pt-4">
+      {linked.map((link) => (
+        <div key={link.game_id} className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-soft">
+            Also played on {pcName(devices, link.origin_device_id ?? "")} as “{link.title}”
+          </span>
+          <Button variant="ghost" size="sm" className="text-faint" onClick={() => void unlink(link.game_id)}>
+            Keep apart
+          </Button>
+        </div>
+      ))}
+      {error && <p className="mt-2 text-[12px] text-amber">{error}</p>}
+    </div>
+  );
+}
+
 function AsideSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
@@ -448,11 +529,14 @@ function CoverPicker({
   gameTitle,
   assets,
   onChanged,
+  scannable = true,
 }: {
   gameId: string;
   gameTitle: string;
   assets: GameAssetView[];
   onChanged: (assets: GameAssetView[]) => void;
+  /** False for a game of another PC, whose folder is not on this PC. */
+  scannable?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -516,7 +600,9 @@ function CoverPicker({
   return (
     <AsideSection title="Cover">
       {withPreview.length === 0 ? (
-        <p className="text-[13px] text-faint">No artwork yet. Scan the game folder or add an image.</p>
+        <p className="text-[13px] text-faint">
+          {scannable ? "No artwork yet. Scan the game folder or add an image." : "No artwork yet. Add an image."}
+        </p>
       ) : (
         <div className="flex flex-col gap-4">
           <CoverGroup
@@ -530,8 +616,8 @@ function CoverPicker({
             onDelete={setDeleting}
           />
           <CoverGroup
-            title="Found on this PC"
-            empty="Nothing found. Scan the folder to look again."
+            title={scannable ? "Found on this PC" : "Came with its sessions"}
+            empty={scannable ? "Nothing found. Scan the folder to look again." : "None came along."}
             noun="found image"
             assets={found}
             busy={busy}
@@ -550,10 +636,12 @@ function CoverPicker({
         />
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={rescan} disabled={busy}>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          Scan folder
-        </Button>
+        {scannable && (
+          <Button variant="outline" size="sm" onClick={rescan} disabled={busy}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            Scan folder
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={addImage} disabled={busy}>
           <ImagePlus className="size-3.5" />
           Add image

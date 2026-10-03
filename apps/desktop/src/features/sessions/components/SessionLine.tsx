@@ -7,8 +7,10 @@ import { PhraseText } from "@/components/media/PhraseText";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLibrary } from "@/features/library/library-context";
 import { CorrectSessionDialog } from "@/features/sessions/components/CorrectSessionDialog";
 import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
+import { isMergedPc, recordedElsewhere } from "@/lib/devices";
 import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";
 import { formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
@@ -58,6 +60,11 @@ export function SessionLine({
     [session, gameTitle, gameSessions, earlierMs],
   );
   const live = !session.ended_at_wall;
+  const { devices, thisDeviceId } = useLibrary();
+  const elsewhere = recordedElsewhere(session, devices, thisDeviceId);
+  // Only the PC that recorded a merged session may change its history.
+  const merged = isMergedPc(devices, session.device_id);
+  const correctable = Boolean(onCorrected) && !live && !merged;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -99,6 +106,12 @@ export function SessionLine({
           {(session.set_aside_ms ?? 0) >= MINUTE_MS && (
             <span> {formatHoursMinutes(session.set_aside_ms ?? 0)} set aside while other games ran.</span>
           )}
+          {elsewhere && (
+            <span>
+              {" "}
+              Played on {elsewhere}.{merged && ` Only ${elsewhere} can correct it.`}
+            </span>
+          )}
           {trustNote && <span className="text-soft"> {trustNote}</span>}
         </div>
         {editing ? (
@@ -127,7 +140,7 @@ export function SessionLine({
           note && <p className="font-prose mt-1.5 text-[17px] leading-snug text-soft italic">“{note}”</p>
         )}
       </div>
-      {!editing && (onSaveNote || (onCorrected && !live)) && (
+      {!editing && (onSaveNote || correctable) && (
         <span className="flex self-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {onSaveNote && (
             <Button
@@ -141,7 +154,7 @@ export function SessionLine({
               <NotebookPen className="size-3.5" />
             </Button>
           )}
-          {onCorrected && !live && (
+          {correctable && (
             <Button
               variant="ghost"
               size="icon-sm"

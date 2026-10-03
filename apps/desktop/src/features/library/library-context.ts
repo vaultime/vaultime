@@ -3,7 +3,7 @@
 
 import { createContext, useContext } from "react";
 import type { GameTint } from "@/lib/game-tint";
-import type { EarlierPlaytime, Game, GameStatus, GameStatusChange, Session } from "@/lib/types";
+import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 
 export interface GameSummary {
   game: Game;
@@ -47,6 +47,12 @@ interface LibraryState {
   statusChanges: GameStatusChange[];
   /** Session notes by session id. */
   notes: Record<string, string>;
+  /** Every PC whose sessions are here, this one included. */
+  devices: Device[];
+  /** This PC's id, null until it is known. */
+  thisDeviceId: string | null;
+  /** Games of other PCs that count as games of this PC. */
+  links: GameLink[];
   loaded: boolean;
   /** Why the last load failed, null when it worked. */
   error: string | null;

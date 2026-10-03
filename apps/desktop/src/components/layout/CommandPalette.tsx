@@ -41,6 +41,7 @@ const FIXED: Command[] = [
   { id: "action-export-json", label: "Export as JSON", hint: "Sessions, games, statuses and earlier playtime", kind: "Action", to: "/settings?do=export-json#export" },
   { id: "setting-idle", label: "Idle time", hint: "When time stops counting as active", kind: "Setting", to: "/settings#tracking" },
   { id: "setting-this-pc", label: "This PC", hint: "Its name and the ledger of its sessions", kind: "Setting", to: "/settings#this-pc" },
+  { id: "setting-other-pcs", label: "Other PCs", hint: "Merge the sessions of another PC from its backup", kind: "Setting", to: "/settings#other-pcs" },
   { id: "setting-backups", label: "Local backups", hint: "Save, restore and where daily backups go", kind: "Setting", to: "/settings#local-backups" },
   { id: "setting-appearance", label: "Appearance", hint: "Light or dark, ground, accent and background", kind: "Setting", to: "/settings#appearance" },
   { id: "setting-window", label: "Window size", hint: "Compact to Extra large, or free", kind: "Setting", to: "/settings#window" },
