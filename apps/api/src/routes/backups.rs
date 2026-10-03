@@ -20,7 +20,8 @@ use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 use super::blobs::{
-    account_usage, attach_blobs, collect_unreferenced_blobs, storage_full, validate_blob_ids,
+    attach_blobs, collect_unreferenced_blobs, kept_usage, storage_full, upload_room,
+    validate_blob_ids,
 };
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
@@ -187,7 +188,7 @@ pub async fn upload_backup_content(
     }
 
     let max_backup_bytes = state.config.max_backup_bytes;
-    let room = state.config.max_account_bytes - account_usage(&state, auth.account_id).await?;
+    let room = upload_room(&state, auth.account_id).await?;
     let limit = room.clamp(0, max_backup_bytes);
     let received = receive_body(request.into_body(), &temp_path, limit).await;
     let (size_bytes, actual_checksum) = match received {
@@ -245,8 +246,20 @@ pub async fn upload_backup_content(
     if let Err(error) = rotate_complete_backups(&state, auth.account_id, backup_id).await {
         tracing::error!(account_id = %auth.account_id, error = %error, "backup rotation failed");
     }
+    let room = make_room(&state, auth.account_id, backup_id).await;
     if let Err(error) = collect_unreferenced_blobs(&state, auth.account_id).await {
         tracing::error!(account_id = %auth.account_id, error = %error, "artwork cleanup failed");
+    }
+    match room {
+        Ok(true) => {}
+        // Even alone, the new backup does not fit, so it goes again.
+        Ok(false) => {
+            remove_backup(&state, auth.account_id, backup_id, &backup.storage_key).await?;
+            return Err(storage_full(state.config.max_account_bytes));
+        }
+        Err(error) => {
+            tracing::error!(account_id = %auth.account_id, error = %error, "making room failed");
+        }
     }
 
     Ok(Json(row))
@@ -457,6 +470,52 @@ async fn rotate_complete_backups(
     }
 
     Ok(())
+}
+
+/// Rotates out the oldest complete backups until what the account keeps fits
+/// its storage, counting `keep_id`, the backup just stored. Returns false
+/// when it does not fit even with every other backup gone, which leaves the
+/// older ones in place.
+async fn make_room(state: &AppState, account_id: Uuid, keep_id: Uuid) -> AppResult<bool> {
+    let max_account_bytes = state.config.max_account_bytes;
+    let backups = sqlx::query_as::<_, (Uuid, String)>(
+        r#"
+        SELECT id, storage_key
+        FROM cloud_backups
+        WHERE account_id = $1 AND status = 'complete' AND id <> $2
+        ORDER BY uploaded_at ASC, id ASC
+        "#,
+    )
+    .bind(account_id)
+    .bind(keep_id)
+    .fetch_all(&state.db)
+    .await?;
+    if kept_usage(state, account_id).await? <= max_account_bytes {
+        return Ok(true);
+    }
+    // The new backup with its artwork, on its own.
+    let alone = sqlx::query_scalar::<_, i64>(
+        "SELECT
+             COALESCE((SELECT size_bytes FROM cloud_backups WHERE id = $2 AND account_id = $1), 0)::BIGINT
+           + COALESCE((SELECT SUM(b.size_bytes) FROM cloud_blobs b
+                       JOIN cloud_backup_blobs r ON r.account_id = b.account_id AND r.blob_id = b.id
+                       WHERE b.account_id = $1 AND r.backup_id = $2), 0)::BIGINT",
+    )
+    .bind(account_id)
+    .bind(keep_id)
+    .fetch_one(&state.db)
+    .await?;
+    if alone > max_account_bytes {
+        return Ok(false);
+    }
+    for (backup_id, storage_key) in backups {
+        remove_backup(state, account_id, backup_id, &storage_key).await?;
+        tracing::info!(%account_id, %backup_id, "rotated out an old backup to make room");
+        if kept_usage(state, account_id).await? <= max_account_bytes {
+            break;
+        }
+    }
+    Ok(true)
 }
 
 /// Removes files before the row. If file removal fails the row stays, so the delete can be

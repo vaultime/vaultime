@@ -99,7 +99,7 @@ To correct a session, point at it in the journal or on the game's page and pick 
 
 - **What stays on each PC.** The look, the background picture, the window size and the key that signs the PC's ledger belong to the PC they were set on. Backups leave them out, and a restore keeps the ones of the PC it runs on. A restore is noted in the ledger.
 - **Local backups** are folders you can keep anywhere. Vaultime makes one by itself once a day and when it quits, and keeps the newest seven. Pick their folder under Settings, Local backups, ideally on another drive or in a folder that syncs. Save a backup makes one by hand, and Restore from a backup shows what is inside before anything is replaced.
-- **Cloud backup** is optional, free and invite-only, a private beta that can end at any time. Vaultime works fully without it. Backups are encrypted on your PC with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe. Without it, a backup cannot be restored. When you have 30 backups, a new upload replaces the oldest one. When your 1 GiB of storage for backups and artwork is full, delete older backups to make room.
+- **Cloud backup** is optional, free and invite-only, a private beta that can end at any time. Vaultime works fully without it. Backups are encrypted on your PC with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe. Without it, a backup cannot be restored. When you have 30 backups, or when your 1 GiB of storage for backups and artwork is full, a new upload replaces the oldest ones. Only a backup larger than the whole storage is refused.
 
 ## Your data
 

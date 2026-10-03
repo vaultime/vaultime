@@ -359,7 +359,7 @@ export function CloudPage() {
       setRemoteBackupBusy(false);
     }
 
-    // Past the backup limit the server removed the oldest one.
+    // Past the backup limit or the space, the server removed the oldest ones.
     if (session) {
       await fetchBackups(session.user.id);
     }
@@ -485,7 +485,7 @@ export function CloudPage() {
           <>
             <PageSection
               title="Backups"
-              description="Kept on the server for this account. Past the backup limit, a new backup replaces the oldest. When the space is full, delete older backups to make room."
+              description="Kept on the server for this account. Past the backup limit, or when the space is full, a new backup replaces the oldest ones."
             >
               {!backupKeyReady && <UnlockBackupsForm onDone={showDone} />}
 

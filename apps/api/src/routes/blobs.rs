@@ -74,7 +74,7 @@ pub async fn upload_blob(
     }
 
     // The declared length turns a hopeless upload away before it starts.
-    let room = state.config.max_account_bytes - account_usage(&state, auth.account_id).await?;
+    let room = upload_room(&state, auth.account_id).await?;
     let declared = request
         .headers()
         .get(CONTENT_LENGTH)
@@ -260,6 +260,35 @@ pub(super) async fn collect_unreferenced_blobs(
 pub(super) async fn account_usage(state: &AppState, account_id: Uuid) -> AppResult<i64> {
     let (backup_bytes, artwork_bytes) = usage_parts(state, account_id).await?;
     Ok(backup_bytes.saturating_add(artwork_bytes))
+}
+
+/// What an upload may still add. While a new backup comes in, an account may
+/// go past its storage by up to one backup, since the oldest backups make
+/// room only once the new one is stored. A failed upload so never costs an
+/// old backup.
+pub(super) async fn upload_room(state: &AppState, account_id: Uuid) -> AppResult<i64> {
+    Ok(state
+        .config
+        .max_account_bytes
+        .saturating_add(state.config.max_backup_bytes)
+        .saturating_sub(account_usage(state, account_id).await?))
+}
+
+/// Storage the account keeps: its backups and the artwork they refer to.
+/// Artwork no backup needs any more goes with the next cleanup.
+pub(super) async fn kept_usage(state: &AppState, account_id: Uuid) -> AppResult<i64> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT
+             COALESCE((SELECT SUM(size_bytes) FROM cloud_backups WHERE account_id = $1), 0)::BIGINT
+           + COALESCE((SELECT SUM(b.size_bytes) FROM cloud_blobs b
+                       WHERE b.account_id = $1 AND EXISTS (
+                           SELECT 1 FROM cloud_backup_blobs r
+                           WHERE r.account_id = b.account_id AND r.blob_id = b.id
+                       )), 0)::BIGINT",
+    )
+    .bind(account_id)
+    .fetch_one(&state.db)
+    .await?)
 }
 
 async fn usage_parts(state: &AppState, account_id: Uuid) -> AppResult<(i64, i64)> {

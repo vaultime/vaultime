@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Backups
 
+- **Old cloud backups make room.** When your cloud storage is full, a new backup replaces the oldest ones once it is safely stored, instead of being turned away. Only a backup larger than the whole storage is refused. This needs the updated server.
 - **A restored history is checked right away.** After a restore, Vaultime checks the record of every restored session again before it shows it, instead of relying on the checks it made of the replaced history until the next start.
 
 ### Stats

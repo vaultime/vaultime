@@ -17,6 +17,12 @@ network=vaultime-e2e
 db=vaultime-e2e-db
 api=vaultime-e2e-api
 port=19005
+# A second API with little storage, to see old backups make room.
+small_api=vaultime-e2e-api-small
+small_port=19006
+# Its storage and largest backup, in bytes.
+small_account_bytes=3145728
+small_backup_bytes=4194304
 # The port the API listens on inside its container, as in install-api.sh.
 api_port=9005
 # Random bytes in each test secret, as install-api.sh makes them.
@@ -29,7 +35,7 @@ url="http://127.0.0.1:$port"
 python=$(command -v python3 || command -v python)
 
 cleanup() {
-  docker rm -f "$api" "$db" >/dev/null 2>&1 || true
+  docker rm -f "$api" "$small_api" "$db" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -142,9 +148,111 @@ stored=$(docker exec "$db" psql -U vaultime -d vaultime -tAc "SELECT COUNT(*) FR
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $token" "$url/v1/admin/beta-applications")" = 403 ] \
   || { echo "a normal account could list applications"; exit 1; }
 
+echo "== old backups make room"
+small_url="http://127.0.0.1:$small_port"
+MSYS_NO_PATHCONV=1 docker run -d --name "$small_api" --network "$network" \
+  -p "127.0.0.1:$small_port:$api_port" \
+  --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
+  -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
+  -e VAULTIME_PUBLIC_BASE_URL="$small_url" \
+  -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
+  -e VAULTIME_BACKUP_ROOT=/tmp/backups \
+  -e VAULTIME_ACCESS_TOKEN_SECRET="$(secret)" \
+  -e VAULTIME_REFRESH_TOKEN_PEPPER="$(secret)" \
+  -e VAULTIME_MAX_ACCOUNT_BYTES="$small_account_bytes" \
+  -e VAULTIME_MAX_BACKUP_BYTES="$small_backup_bytes" \
+  -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
+  -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
+  vaultime-linux-check /app/vaultime-api >/dev/null
+for _ in $(seq 1 "$health_wait_secs"); do
+  curl -fsS "$small_url/healthz" >/dev/null 2>&1 && break
+  sleep 1
+done
+code=$("$python" - "$repo/deploy/vps/generate-cloud-invite.py" "$db" <<'EOF'
+import importlib.util
+import subprocess
+import sys
+
+spec = importlib.util.spec_from_file_location("invite", sys.argv[1])
+invite = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(invite)
+run = subprocess.run
+
+
+def psql_in_container(command, *args, **kwargs):
+    if command[0] == "psql":
+        command = ["docker", "exec", "-i", sys.argv[2], "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
+    return run(command, *args, **kwargs)
+
+
+invite.subprocess.run = psql_in_container
+created = invite.generate_invite(invite.INVITE_PREFIX, 1, None, "e2e")
+invite.insert_invite("", created)
+print(created["code"])
+EOF
+)
+small_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \
+  -d "{\"email\":\"rotation@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
+  | field access_token)
+"$python" - "$small_url" "$small_token" "$small_account_bytes" <<'EOF'
+import hashlib
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+url, token, account_bytes = sys.argv[1], sys.argv[2], int(sys.argv[3])
+MIB = 1024 * 1024
+
+
+def call(method, path, body=None, content_type="application/json"):
+    request = urllib.request.Request(url + path, data=body, method=method)
+    request.add_header("authorization", f"Bearer {token}")
+    if body is not None:
+        request.add_header("content-type", content_type)
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.status, json.loads(response.read() or b"null")
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or b"null")
+
+
+def upload(size):
+    content = os.urandom(size)
+    checksum = hashlib.sha256(content).hexdigest()
+    status, backup = call("POST", "/v1/backups", json.dumps(
+        {"checksum": checksum, "backup_created_at": "2026-10-03T12:00:00Z"}).encode())
+    assert status == 201, (status, backup)
+    status, _ = call("PUT", f"/v1/backups/{backup['id']}/content", content, "application/octet-stream")
+    return backup["id"], status
+
+
+def stored():
+    status, backups = call("GET", "/v1/backups")
+    assert status == 200, status
+    return [backup["id"] for backup in backups if backup["status"] == "complete"]
+
+
+first, _ = upload(MIB + MIB // 4)
+second, _ = upload(MIB + MIB // 4)
+third, status = upload(MIB + MIB // 4)
+assert status == 200, f"the third backup was turned away: {status}"
+kept = stored()
+assert first not in kept and second in kept and third in kept, f"the oldest backup did not make room: {kept}"
+status, storage = call("GET", "/v1/storage")
+assert storage["backup_bytes"] + storage["artwork_bytes"] <= account_bytes, storage
+
+# A backup that does not fit even alone goes, and the older ones stay.
+_, status = upload(3 * MIB + MIB // 2)
+assert status == 413, f"a backup larger than the storage was kept: {status}"
+assert stored() == kept, f"older backups went for a backup that did not fit: {stored()}"
+print("old backups made room")
+EOF
+
 # Some failures, like a failed artwork cleanup, are only logged. The reused
 # refresh token above is expected to log a warning, not an error.
-if docker logs "$api" 2>&1 | grep "ERROR"; then
+if docker logs "$api" 2>&1 | grep "ERROR" || docker logs "$small_api" 2>&1 | grep "ERROR"; then
   echo "The API logged errors"
   exit 1
 fi
