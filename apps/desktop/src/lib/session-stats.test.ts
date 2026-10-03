@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
 import { at, session } from "@/test/sessions";
 import {
-  buildDailyActivity,
+  clipToWindow,
+  daysTouched,
   playedMs,
   playRuns,
   sideBySide,
@@ -13,56 +14,38 @@ import {
   summarizeRecentPlay,
 } from "./session-stats";
 
-describe("buildDailyActivity", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 8, 29, 21, 30));
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("has one point per day, oldest first", () => {
-    const points = buildDailyActivity([], 14);
-    expect(points).toHaveLength(14);
-    expect(points[0].key).toBe("2026-09-16");
-    expect(points[13].key).toBe("2026-09-29");
+describe("clipToWindow", () => {
+  it("keeps the part of a session inside the window, its time spread evenly", () => {
+    // 23:00 to 02:00 with an hour of it idle.
+    const late = session(at(2026, 9, 28, 23, 0), 180, { active_ms: 120 * MINUTE_MS, idle_ms: 60 * MINUTE_MS });
+    const nextDay = clipToWindow(late, new Date(2026, 8, 29), new Date(2026, 8, 30));
+    expect(nextDay?.started_at_wall).toBe(new Date(2026, 8, 29).toISOString());
+    expect(nextDay?.runtime_ms).toBe(120 * MINUTE_MS);
+    expect(nextDay?.active_ms).toBe(80 * MINUTE_MS);
+    expect(nextDay?.idle_ms).toBe(40 * MINUTE_MS);
+    expect(clipToWindow(late, new Date(2026, 8, 30), new Date(2026, 9, 1))).toBeNull();
   });
 
-  it("counts late evening play on the local day", () => {
-    // 22:30 in Los Angeles is already the next day in UTC.
-    const evening = session(at(2026, 9, 28, 22, 30), 60);
-    const points = buildDailyActivity([evening], 14);
-    expect(points.find((point) => point.key === "2026-09-28")?.runtimeMs).toBe(60 * MINUTE_MS);
-    expect(points.find((point) => point.key === "2026-09-29")?.runtimeMs).toBe(0);
-  });
-
-  it("counts play after midnight on the local day", () => {
-    // 00:30 in Berlin is still the previous day in UTC.
-    const lateNight = session(at(2026, 9, 29, 0, 30), 45, { active_ms: 40 * MINUTE_MS, idle_ms: 5 * MINUTE_MS });
-    const points = buildDailyActivity([lateNight], 14);
-    const today = points.find((point) => point.key === "2026-09-29");
-    expect(today?.activeMs).toBe(40 * MINUTE_MS);
-    expect(today?.idleMs).toBe(5 * MINUTE_MS);
-    expect(points.find((point) => point.key === "2026-09-28")?.runtimeMs).toBe(0);
+  it("runs a live session up to now", () => {
+    const live = session(at(2026, 9, 29, 20, 0), 60, { ended_at_wall: null });
+    const clipped = clipToWindow(live, new Date(2026, 8, 29), new Date(2026, 8, 30), new Date(2026, 8, 29, 21, 0));
+    expect(clipped?.ended_at_wall).toBe(new Date(2026, 8, 29, 21, 0).toISOString());
   });
 });
 
-describe("buildDailyActivity around daylight saving", () => {
-  afterEach(() => {
-    vi.useRealTimers();
+describe("daysTouched", () => {
+  it("lists every local day a session ran on", () => {
+    expect(daysTouched(session(at(2026, 9, 28, 23, 0), 180))).toEqual(["2026-09-28", "2026-09-29"]);
+    expect(daysTouched(session(at(2026, 9, 28, 20, 0), 60))).toEqual(["2026-09-28"]);
   });
 
-  it("has every calendar day once", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 10, 5, 12, 0));
-    const keys = buildDailyActivity([], 60).map((point) => point.key);
-    expect(new Set(keys).size).toBe(60);
-    expect(keys[0]).toBe("2026-09-07");
-    expect(keys.at(-1)).toBe("2026-11-05");
-    expect(keys).toContain("2026-09-27");
-    expect(keys).toContain("2026-10-25");
-    expect(keys).toContain("2026-11-01");
+  it("stops at a session that ends at midnight", () => {
+    expect(daysTouched(session(at(2026, 9, 28, 23, 0), 60))).toEqual(["2026-09-28"]);
+  });
+
+  it("counts the night the clocks go back as one day", () => {
+    // 25 October 2026 has 25 hours in Europe.
+    expect(daysTouched(session(at(2026, 10, 25, 0, 30), 120))).toEqual(["2026-10-25"]);
   });
 });
 

@@ -138,11 +138,19 @@ export const RECENT_DAYS = 7;
 /** The library grid marks a game Suspicious or Recovered only for sessions this many days old or newer. The game page counts all of them. */
 export const TRUST_BADGE_RECENT_DAYS = 30;
 
-/** Calendar days in the activity charts. */
-export const ACTIVITY_CHART_DAYS = 14;
+/** Days in the game page's daily history, today included. */
+export const GAME_HISTORY_DAYS = 30;
+/** Months in the game page's monthly history, this month included. */
+export const GAME_HISTORY_MONTHS = 12;
 
 /** Shortest visible bar in a chart, in percent of its height, so small days still show. */
 export const CHART_MIN_BAR_PERCENT = 3;
+
+/** How often charts read the totals again while a game runs. */
+export const LIVE_TOTALS_REFRESH_MS = MINUTE_MS;
+
+/** Games a chart's hover card names before it sums up the rest. */
+export const PLAY_CARD_GAMES = 5;
 
 /** Game results in the command palette before typing. */
 export const PALETTE_GAMES_IDLE = 5;

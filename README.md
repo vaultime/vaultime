@@ -32,7 +32,8 @@ Vaultime keeps track of how long you play your PC games, no matter which launche
 - **Your look.** Dark or light, six ground tones, any accent color and a background picture. The tray and taskbar icon take your accent.
 - **A window like a game client.** Fixed sizes from Compact to Extra large, or a free window you can resize.
 - **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
-- **Game pages in the game's colors.** The last two weeks at a glance, totals, and the cover you pick.
+- **Stats for every year.** A calendar of every day, the hours you play, your games and each month. Point at a day or a month to see what you played, and click a day to read its week in the journal.
+- **Game pages in the game's colors.** Its history by day, month and year, every day of the year, totals, and the cover you pick.
 - **Always in view.** A live bar shows the running game and its timer, Ctrl+K jumps to any game or page, and Ctrl+F finds a game in your library.
 - **Backups.** Automatic local backups every day, restore with a preview, and optional encrypted cloud backup.
 
@@ -71,6 +72,8 @@ Playtime from before Vaultime can be imported from Steam in Settings. It counts 
 You count as away after 5 minutes without keyboard, mouse or controller input. On Windows, controller input means Xbox controllers and controllers that act as one. On Linux it means every controller. You can change the 5 minutes in Settings.
 
 A game in the background turns idle 15 seconds after it leaves the front, so a quick look at another window does not cost you active time. In Settings you can choose to count background time as active instead.
+
+Time counts on the day it happened. A session from 23:00 to 02:00 counts one hour on the first day and two on the next, in the stats and in the journal's day totals. The journal lists it under the day it started.
 
 ## Trust labels
 

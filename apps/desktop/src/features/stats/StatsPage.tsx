@@ -1,17 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { DayBarsLegend } from "@/components/charts/DayBars";
+import { ActiveIdleLegend } from "@/components/charts/PlayBars";
 import { MonthBars } from "@/components/charts/MonthBars";
 import { WeekClock } from "@/components/charts/WeekClock";
 import { YearHeatmap } from "@/components/charts/YearHeatmap";
-import { PageHeader, PageSection, StepButton } from "@/components/layout/Page";
+import { Notice, PageHeader, PageSection, StepButton } from "@/components/layout/Page";
 import { StatTiles } from "@/components/layout/StatTiles";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
+import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import {
   SESSION_LONG_MAX_MS,
@@ -20,9 +21,13 @@ import {
   SESSION_SHORT_MAX_MS,
   STATS_IDLE_GAMES,
   STATS_IDLE_MIN_RUNTIME_MS,
+  LIVE_TOTALS_REFRESH_MS,
   STATS_IDLE_MIN_SHARE,
   STATS_TOP_GAMES,
 } from "@/lib/constants";
+import { markColors, tintForTitle } from "@/lib/game-tint";
+import { useRefreshWhile } from "@/lib/use-refresh-while";
+import { yearRange } from "@/lib/play-totals";
 import {
   busiestMonthSentence,
   rhythmSentence,
@@ -30,9 +35,18 @@ import {
   streakSentence,
   yearSentence,
 } from "@/lib/sentences";
-import { countsAsPlay } from "@/lib/session-stats";
-import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape } from "@/lib/stats";
-import { formatDayAndMonth, formatDayRange, formatHoursMinutes, formatHoursShort, parseVaultimeDate } from "@/lib/time";
+import { countsAsPlay, toDayKey } from "@/lib/session-stats";
+import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape, type YearPlay } from "@/lib/stats";
+import * as api from "@/lib/tauri";
+import {
+  formatDayAndMonth,
+  formatDayRange,
+  formatHoursMinutes,
+  formatHoursShort,
+  parseVaultimeDate,
+  startOfWeek,
+} from "@/lib/time";
+import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
 
 const SHAPES: Record<SessionShape, { label: string; range: string }> = {
@@ -49,12 +63,35 @@ function percent(part: number, whole: number): number {
 
 /** A year of play in numbers and sentences. */
 export function StatsPage() {
-  const { sessions, summaries, covers, loaded } = useLibrary();
+  const { sessions, active, summaries, covers, loaded } = useLibrary();
+  const { accentHues, mode } = useAppearance();
+  const navigate = useNavigate();
   // 0 is this year, -1 the year before and so on.
   const [offset, setOffset] = useState(0);
+  const [play, setPlay] = useState<(YearPlay & { year: number }) | null>(null);
+  const [playError, setPlayError] = useState<string | null>(null);
   const now = new Date();
   const year = now.getFullYear() + offset;
-  const stats = yearStats(sessions, year, now);
+  const refreshed = useRefreshWhile(active.length > 0, LIVE_TOTALS_REFRESH_MS);
+
+  // Read again whenever a session starts or ends.
+  useEffect(() => {
+    let cancelled = false;
+    const [from, to] = yearRange(year);
+    Promise.all([api.getPlayTotals(from, to, "day"), api.getPlayTotals(from, to, "hour_of_week")])
+      .then(([days, hours]) => {
+        if (cancelled) return;
+        setPlay({ year, days, hours });
+        setPlayError(null);
+      })
+      .catch((error) => {
+        if (!cancelled) setPlayError(describeError(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [year, sessions, refreshed]);
+
   const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
   const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
 
@@ -64,6 +101,26 @@ export function StatsPage() {
   );
 
   if (!loaded) return null;
+  if (playError) {
+    return (
+      <div className="px-8 pt-12 xl:px-14">
+        <Notice tone="warning">The year could not be read: {playError}</Notice>
+      </div>
+    );
+  }
+  if (!play || play.year !== year) return null;
+
+  const stats = yearStats(sessions, year, play, now);
+  // A color per game for the year, the main color of its art, nudged only
+  // where two games of the year would look alike.
+  const paletteOf = (gameId: string) => {
+    const summary = byGame.get(gameId);
+    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).colors;
+  };
+  const yearMarks = markColors(stats.games.map((game) => paletteOf(game.gameId)), accentHues, mode);
+  const marks = new Map(stats.games.map((game, index) => [game.gameId, yearMarks[index].color]));
+  const labelOf = (gameId: string) => ({ title: titleOf(gameId), color: marks.get(gameId) ?? "var(--soft)" });
+  const openDay = (day: Date) => navigate(`/journal?week=${toDayKey(startOfWeek(day))}`);
 
   const current = offset === 0;
   const top = stats.games[0];
@@ -136,7 +193,7 @@ export function StatsPage() {
 
           <div className="px-8 xl:px-14">
             <PageSection wide title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
-              <YearHeatmap year={year} activeByDay={stats.activeByDay} now={now} />
+              <YearHeatmap year={year} days={stats.days} now={now} labelOf={labelOf} onOpenDay={openDay} />
             </PageSection>
 
             <PageSection title="When you play" description={rhythm ? <PhraseText phrase={rhythm} /> : undefined}>
@@ -150,7 +207,7 @@ export function StatsPage() {
               }
             >
               <div className="mb-3 flex justify-end">
-                <DayBarsLegend />
+                <ActiveIdleLegend />
               </div>
               <ol>
                 {stats.games.slice(0, STATS_TOP_GAMES).map((game) => (
@@ -167,7 +224,7 @@ export function StatsPage() {
             </PageSection>
 
             <PageSection title="Month by month" description={busiestMonthSentence(stats.months, year) ?? undefined}>
-              <MonthBars months={stats.months} year={year} />
+              <MonthBars months={stats.months} year={year} labelOf={labelOf} />
             </PageSection>
 
             <PageSection title="Session lengths" description={shapesSentence(stats.shapes) ?? undefined}>

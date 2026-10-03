@@ -31,6 +31,22 @@ export interface UpdateGameInput {
   is_hidden?: boolean | null;
 }
 
+/** What one play total covers, in local time. */
+export type PlayBucket = "day" | "month" | "year" | "hour_of_week";
+
+/** A game's time in one bucket, worked out by the core from quarter hour slices. */
+export interface PlayTotal {
+  /**
+   * "2026-10-02" for a day, "2026-10" for a month, "2026" for a year, and
+   * "weekday-hour" with Monday as 0 for an hour of the week.
+   */
+  bucket: string;
+  game_id: string;
+  runtime_ms: number;
+  active_ms: number;
+  idle_ms: number;
+}
+
 /** Mirrors the Rust `Session` struct. */
 export interface Session {
   id: string;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useSearchParams } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
@@ -9,10 +10,10 @@ import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { DAYS_PER_WEEK, HOURS_PER_DAY, JOURNAL_MIN_SPAN_PERCENT, JOURNAL_TICK_HOURS } from "@/lib/constants";
+import { DAY_MS, DAYS_PER_WEEK, HOURS_PER_DAY, JOURNAL_MIN_SPAN_PERCENT, JOURNAL_TICK_HOURS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
-import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
-import { countsAsPlay, playedMs, playRuns, sideBySideGroups, type PlayRun } from "@/lib/session-stats";
+import { carriedOverPhrase, sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
+import { clipToWindow, countsAsPlay, playedMs, playRuns, sideBySideGroups, type PlayRun } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import {
   clockPercent,
@@ -27,7 +28,13 @@ import type { GameStatusChange, Session, SessionEvent } from "@/lib/types";
 
 interface JournalDay {
   start: Date;
+  /** Sessions that started on this day. */
   sessions: Session[];
+  /**
+   * The part of every session that ran on this day, for the strip and the
+   * totals, so play past midnight counts on the day it happened.
+   */
+  spans: Session[];
   /** Status changes of games on this day. */
   changes: GameStatusChange[];
   /** Time with a game running, games side by side counted once. */
@@ -52,20 +59,42 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
+/** How many weeks back the week of `day` ("2026-09-28") lies, 0 for this week or no day. */
+function weeksBack(day: string | null): number {
+  const [year, month, date] = (day ?? "").split("-").map(Number);
+  if (!year || !month || !date) return 0;
+  const thisWeek = startOfWeek(new Date());
+  const asked = startOfWeek(new Date(year, month - 1, date));
+  // Rounded, since a week with a clock change is an hour longer or shorter.
+  return Math.min(0, Math.round((asked.getTime() - thisWeek.getTime()) / (DAYS_PER_WEEK * DAY_MS)));
+}
+
 /** The sessions and status changes of the week from `start`, by day, newest day first. */
 function groupWeek(sessions: Session[], changes: GameStatusChange[], start: Date, now: Date): JournalDay[] {
   const end = addDays(start, DAYS_PER_WEEK);
   const grouped = new Map<number, JournalDay>();
   const dayOf = (moment: Date) => {
     const dayStart = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
-    const day = grouped.get(dayStart.getTime()) ?? { start: dayStart, sessions: [], changes: [], playedMs: 0 };
+    const day = grouped.get(dayStart.getTime()) ?? {
+      start: dayStart,
+      sessions: [],
+      spans: [],
+      changes: [],
+      playedMs: 0,
+    };
     grouped.set(dayStart.getTime(), day);
     return day;
   };
-  for (const session of sessions) {
+  // Sessions with time in the week, also those that started before it.
+  const inWeek = sessions.filter((session) => clipToWindow(session, start, end, now) !== null);
+  for (const session of inWeek) {
     const started = parseVaultimeDate(session.started_at_wall);
-    if (started < start || started >= end) continue;
-    dayOf(started).sessions.push(session);
+    if (started >= start) dayOf(started).sessions.push(session);
+  }
+  for (let day = start; day < end; day = addDays(day, 1)) {
+    const next = addDays(day, 1);
+    const spans = inWeek.flatMap((session) => clipToWindow(session, day, next, now) ?? []);
+    if (spans.some(countsAsPlay) || grouped.has(day.getTime())) dayOf(day).spans.push(...spans);
   }
   for (const change of changes) {
     const changed = parseVaultimeDate(change.changed_at);
@@ -74,7 +103,8 @@ function groupWeek(sessions: Session[], changes: GameStatusChange[], start: Date
   }
   for (const day of grouped.values()) {
     day.sessions.sort((a, b) => a.started_at_wall.localeCompare(b.started_at_wall));
-    day.playedMs = playedMs(day.sessions, now);
+    day.spans.sort((a, b) => a.started_at_wall.localeCompare(b.started_at_wall));
+    day.playedMs = playedMs(day.spans, now);
   }
   return [...grouped.values()].sort((a, b) => b.start.getTime() - a.start.getTime());
 }
@@ -120,10 +150,18 @@ function leaningClip(box: Place, place: Place, leanStart: boolean, leanEnd: bool
 
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
-  const { sessions, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
+  const { sessions: stored, active, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
+  // Running sessions as of the last poll, a few seconds old at most. The
+  // full list only reloads when a session starts or ends.
+  const sessions = useMemo(() => {
+    const running = new Map(active.map((session) => [session.id, session]));
+    return stored.map((session) => running.get(session.id) ?? session);
+  }, [stored, active]);
   const { accentHues, mode } = useAppearance();
-  // 0 is this week, -1 the week before and so on.
-  const [offset, setOffset] = useState(0);
+  // 0 is this week, -1 the week before and so on. `?week=2026-09-28` opens
+  // the week of that day, as the stats page asks for.
+  const [params] = useSearchParams();
+  const [offset, setOffset] = useState(() => weeksBack(params.get("week")));
   const [events, setEvents] = useState<SessionEvent[]>([]);
 
   const now = new Date();
@@ -148,7 +186,7 @@ export function JournalPage() {
   // nudged only when it would look like a game that showed up earlier. The
   // accent stays free for active time.
   const weekGames = [
-    ...new Set([...days].reverse().flatMap((day) => day.sessions.filter(countsAsPlay).map((session) => session.game_id))),
+    ...new Set([...days].reverse().flatMap((day) => day.spans.filter(countsAsPlay).map((session) => session.game_id))),
   ];
   const paletteOf = (gameId: string) => {
     const summary = byGame.get(gameId);
@@ -167,7 +205,7 @@ export function JournalPage() {
       .reduce((sum, session) => sum + session.runtime_ms, byGame.get(gameId)?.earlier?.earlier_ms ?? 0);
 
   // Events explain flagged sessions and skipped sleep. Only the games of this week are loaded.
-  const gameIds = [...new Set(days.flatMap((day) => day.sessions.map((session) => session.game_id)))].sort().join(",");
+  const gameIds = [...new Set(days.flatMap((day) => day.spans.map((session) => session.game_id)))].sort().join(",");
   useEffect(() => {
     let cancelled = false;
     Promise.all(gameIds ? gameIds.split(",").map((id) => api.getSessionEventsForGame(id)) : [])
@@ -178,7 +216,7 @@ export function JournalPage() {
     return () => {
       cancelled = true;
     };
-  }, [gameIds, sessions]);
+  }, [gameIds, stored]);
 
   const earliest = sessions.reduce<Date | null>((min, session) => {
     const started = parseVaultimeDate(session.started_at_wall);
@@ -189,13 +227,10 @@ export function JournalPage() {
   if (!loaded) return null;
 
   const longestDay = [...days].sort((a, b) => b.playedMs - a.playedMs)[0];
-  // Each game's own time, so games side by side both count. A live session counts up to now.
+  // Each game's own time in the week, so games side by side both count.
   const weekRuntime = new Map<string, number>();
-  for (const session of days.flatMap((day) => day.sessions).filter(countsAsPlay)) {
-    const ms = session.ended_at_wall
-      ? session.runtime_ms
-      : Math.max(session.runtime_ms, now.getTime() - parseVaultimeDate(session.started_at_wall).getTime());
-    weekRuntime.set(session.game_id, (weekRuntime.get(session.game_id) ?? 0) + ms);
+  for (const span of days.flatMap((day) => day.spans).filter(countsAsPlay)) {
+    weekRuntime.set(span.game_id, (weekRuntime.get(span.game_id) ?? 0) + span.runtime_ms);
   }
   const gamesMs = [...weekRuntime.values()].reduce((sum, ms) => sum + ms, 0);
   const [topGameId, topMs] = [...weekRuntime.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
@@ -204,7 +239,7 @@ export function JournalPage() {
     sessionsCount: days.reduce((sum, day) => sum + day.sessions.filter(countsAsPlay).length, 0),
     runtimeMs: days.reduce((sum, day) => sum + day.playedMs, 0),
     longestDay: longestDay ? longestDay.start.toLocaleDateString(UI_LOCALE, { weekday: "long" }) : null,
-    daysPlayed: days.filter((day) => day.sessions.some(countsAsPlay)).length,
+    daysPlayed: days.filter((day) => day.spans.some(countsAsPlay)).length,
     topTitle: topGameId ? (byGame.get(topGameId)?.game.title ?? null) : null,
     topShare: gamesMs > 0 ? topMs / gamesMs : 0,
     gamesCount: weekGames.length,
@@ -334,7 +369,16 @@ function DaySection({
   onCorrected: () => void;
   playedBefore: (gameId: string, moment: string) => number;
 }) {
-  const runs = playRuns(day.sessions, now);
+  const runs = playRuns(day.spans, now);
+  // Parts of sessions that started the day before.
+  const startedToday = new Set(day.sessions.map((session) => session.id));
+  const carried = day.spans.filter((span) => countsAsPlay(span) && !startedToday.has(span.id));
+  const carriedEnd = (span: Session) => {
+    const end = parseVaultimeDate(span.ended_at_wall ?? span.started_at_wall);
+    if (end >= addDays(day.start, 1)) return "midnight";
+    const original = sessionsByGame.get(span.game_id)?.find((session) => session.id === span.id);
+    return original && !original.ended_at_wall ? "now" : formatClockTime(end);
+  };
   const groups = sideBySideGroups(runs.flatMap((run) => run.pieces).filter((piece) => piece.gameIds.length > 1));
   const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
 
@@ -378,6 +422,16 @@ function DaySection({
           )}
         </div>
 
+        {carried.map((span) => (
+          <article key={`carried-${span.id}`} className="flex items-baseline gap-5">
+            <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
+              {formatClockTime(parseVaultimeDate(span.started_at_wall))} to {carriedEnd(span)}
+            </span>
+            <p className="font-prose min-w-0 flex-1 text-[20px] leading-snug text-soft">
+              <PhraseText phrase={carriedOverPhrase(titleOf(span.game_id))} emColor={markOf(span.game_id)} />
+            </p>
+          </article>
+        ))}
         {[
           ...day.sessions.map((session) => ({ at: session.started_at_wall, session, change: null })),
           ...day.changes.map((change) => ({ at: change.changed_at, session: null, change })),

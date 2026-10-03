@@ -326,6 +326,11 @@ export function phraseString(phrase: Phrase): string {
   return `${phrase.before}${phrase.em ?? ""}${phrase.after ?? ""}`;
 }
 
+/** A session from the day before that ran past midnight: "Still in Elden Ring after midnight". */
+export function carriedOverPhrase(title: string): Phrase {
+  return { before: "Still in ", em: title, after: " after midnight" };
+}
+
 /** "Elden Ring, Hades II and Balatro". */
 function listOf(titles: string[]): string {
   return titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : (titles[0] ?? "");

@@ -19,6 +19,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
+import { estimatePlayTotals } from "@/test/play-totals";
 import type {
   ArtworkSource,
   CloudAuthSession,
@@ -29,6 +30,7 @@ import type {
   Game,
   GameAssetView,
   GameStatusChange,
+  PlayBucket,
   Session,
   SessionEvent,
   SteamPlaytimePreview,
@@ -118,6 +120,8 @@ if (params.get("sidebyside") === "1") {
     [2, 4, 14, 2],
     [2, 1, 20, 3],
     [2, 2, 21, 1],
+    // Past midnight into the next day.
+    [2, 0, 23.5, 2],
     // One game left running all day while others come and go.
     [3, 5, 9, 14],
     [3, 0, 11, 2.5],
@@ -957,6 +961,14 @@ mockIPC((cmd, payload) => {
       return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":
       return preferredAssets();
+    case "get_play_totals":
+      return estimatePlayTotals(
+        allSessions,
+        String(args.from),
+        String(args.to),
+        args.bucket as PlayBucket,
+        (args.gameId as string | null) ?? null,
+      );
     case "plugin:updater|check":
       return params.get("update") === "1"
         ? { rid: 1, currentVersion: "0.3.0", version: "0.3.1", date: iso(now), body: "", rawJson: {} }

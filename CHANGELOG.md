@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A lighter, sharper session record.** Vaultime still checks your games every five seconds, but it now notes a session's time whenever it switches between active and idle, and at least every 30 seconds, instead of every five seconds. The record grows about six times slower, so backups stay small for years, and each note now marks a real change. After a crash, a session keeps its time up to the last note, at most 30 seconds before the crash.
 
+### Stats
+
+- **See what you played on any day.** Point at a day in the year calendar or at a month to see each game you played and for how long, in its own color, with idle time below. Click a day, or move there with the arrow keys and press Enter, to read that week in the journal.
+- **Time on the day it happened.** A session past midnight counts on both days, in the stats and in the journal. Stats now come from where each session's time actually fell, a quarter hour at a time, so active and idle time land in the right hours too.
+
+### Game pages
+
+- **A game's whole history.** The last two weeks became a history: the last 30 days, 12 months, every year, or every day of this year. Point at a bar or a day to see its time.
+
 ### Library
 
 - **Find a game.** A search field above your games filters them as you type, ignoring accents and the order of words. Ctrl+F jumps into it, and opens the search on other pages. The command palette finds games the same way.
@@ -21,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Journal
 
+- **Play past midnight on the next day too.** The next day's strip shows the rest of the session, with a short line in the journal, and each day's total counts only its own hours.
 - **Games side by side, drawn cleanly.** Sessions that overlap on the day strip now form one rounded block. The stripes run on without breaks from one stretch to the next, and every change between games leans along them. A client left open through several matches, like Teamfight Tactics in the League client, reads as one block with the matches striped inside it.
 - **The right games side by side.** The note under the strip names only the games that actually ran together, one line for each group. When one game ran through all of it, like a launcher, the note says which games ran alongside it. Before, it listed every game that overlapped any other that day as if they had all run at once.
 

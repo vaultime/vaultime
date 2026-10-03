@@ -2,56 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { RECENT_DAYS } from "@/lib/constants";
-import { parseVaultimeDate, UI_LOCALE } from "@/lib/time";
+import { parseVaultimeDate } from "@/lib/time";
 import type { Session } from "@/lib/types";
-
-export interface ActivityPoint {
-  key: string;
-  label: string;
-  runtimeMs: number;
-  activeMs: number;
-  idleMs: number;
-}
-
-export function buildDailyActivity(
-  sessions: Session[],
-  days: number,
-): ActivityPoint[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const points = new Map<string, ActivityPoint>();
-
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
-    const day = new Date(today);
-    day.setDate(today.getDate() - offset);
-    const key = toDayKey(day);
-    points.set(key, {
-      key,
-      label: day.toLocaleDateString(UI_LOCALE, {
-        month: "short",
-        day: "numeric",
-      }),
-      runtimeMs: 0,
-      activeMs: 0,
-      idleMs: 0,
-    });
-  }
-
-  for (const session of sessions) {
-    const key = toDayKey(parseVaultimeDate(session.started_at_wall));
-    const point = points.get(key);
-    if (!point) {
-      continue;
-    }
-
-    point.runtimeMs += session.runtime_ms;
-    point.activeMs += session.active_ms;
-    point.idleMs += session.idle_ms;
-  }
-
-  return [...points.values()];
-}
 
 /** False for a finished session whose time was all taken out. It stays in the history as no play. */
 export function countsAsPlay(session: Session): boolean {
@@ -62,6 +14,44 @@ export function countsAsPlay(session: Session): boolean {
 export function toDayKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * The part of a session that fell between `from` and `to`, with its time
+ * spread evenly over its span on the clock, so time the PC slept stays out.
+ * A running session runs up to `now`. Null when nothing of it falls inside.
+ */
+export function clipToWindow(session: Session, from: Date, to: Date, now = new Date()): Session | null {
+  const start = parseVaultimeDate(session.started_at_wall).getTime();
+  const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
+  if (end <= start) {
+    return start >= from.getTime() && start < to.getTime() ? session : null;
+  }
+  const clippedStart = Math.max(start, from.getTime());
+  const clippedEnd = Math.min(end, to.getTime());
+  if (clippedEnd <= clippedStart) return null;
+  const share = (clippedEnd - clippedStart) / (end - start);
+  return {
+    ...session,
+    started_at_wall: new Date(clippedStart).toISOString(),
+    ended_at_wall: new Date(clippedEnd).toISOString(),
+    runtime_ms: Math.round(session.runtime_ms * share),
+    active_ms: Math.round(session.active_ms * share),
+    idle_ms: Math.round(session.idle_ms * share),
+  };
+}
+
+/** The local days a session ran on, by `toDayKey`, first day first. */
+export function daysTouched(session: Session, now = new Date()): string[] {
+  const start = parseVaultimeDate(session.started_at_wall);
+  const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
+  const days = [toDayKey(start)];
+  let day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+  while (day < end) {
+    days.push(toDayKey(day));
+    day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  }
+  return days;
 }
 
 /** A session placed on the clock. */

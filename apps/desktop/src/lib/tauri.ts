@@ -17,6 +17,8 @@ import type {
   GameStatus,
   GameStatusChange,
   LocalBackupSummary,
+  PlayBucket,
+  PlayTotal,
   Session,
   SessionEvent,
   SessionNote,
@@ -149,6 +151,20 @@ export async function setPreferredGameAsset(
 
 export async function listSessions(): Promise<Session[]> {
   return invoke<Session[]>("list_sessions");
+}
+
+/**
+ * Each game's time per bucket from the local day `from` up to but not
+ * including `to`, both as `toDayKey` gives them. Running sessions count up
+ * to the tracker's latest tick.
+ */
+export async function getPlayTotals(
+  from: string,
+  to: string,
+  bucket: PlayBucket,
+  gameId?: string,
+): Promise<PlayTotal[]> {
+  return invoke<PlayTotal[]>("get_play_totals", { from, to, bucket, gameId: gameId ?? null });
 }
 
 export async function getActiveSessions(): Promise<Session[]> {

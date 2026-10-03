@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The numbers of the stats page, worked out from the sessions on this PC.
+// The numbers of the stats page, from the core's play totals and the
+// sessions on this PC.
 
 import {
   DAYS_PER_WEEK,
-  HOUR_MS,
   HOURS_PER_DAY,
   MONTHS_PER_YEAR,
   SESSION_LONG_MAX_MS,
@@ -13,20 +13,24 @@ import {
   SESSION_QUICK_MAX_MS,
   SESSION_SHORT_MAX_MS,
 } from "@/lib/constants";
-import { countsAsPlay, playedMs, toDayKey } from "@/lib/session-stats";
+import { groupByBucket, sumByGame, type BucketPlay, type GamePlay } from "@/lib/play-totals";
+import { clipToWindow, countsAsPlay, daysTouched, playedMs, toDayKey } from "@/lib/session-stats";
 import { parseVaultimeDate } from "@/lib/time";
-import type { Session } from "@/lib/types";
+import type { PlayTotal, Session } from "@/lib/types";
 
 /** Session lengths from a quick look to a marathon, shortest first. */
 export const SESSION_SHAPES = ["quick", "short", "plain", "long", "marathon"] as const;
 export type SessionShape = (typeof SESSION_SHAPES)[number];
 
-export interface GameYear {
-  gameId: string;
-  runtimeMs: number;
-  activeMs: number;
-  idleMs: number;
+export interface GameYear extends GamePlay {
+  /** Sessions that started in the year. */
   sessionsCount: number;
+}
+
+/** The core's play totals for a year, per day and game and per hour of the week and game. */
+export interface YearPlay {
+  days: PlayTotal[];
+  hours: PlayTotal[];
 }
 
 export interface Streak {
@@ -43,16 +47,16 @@ interface YearStats {
   activeMs: number;
   idleMs: number;
   sessionsCount: number;
-  /** Active time per local calendar day, by `toDayKey`. */
-  activeByDay: Map<string, number>;
+  /** What was played on each local day, by `toDayKey`. Time counts on the day it happened. */
+  days: Map<string, BucketPlay>;
   daysPlayed: number;
   longestStreak: Streak | null;
   /** Days in a row with play up to today, or up to yesterday while today has none yet. */
   currentStreak: number;
   /** Active time by weekday, Monday first, then by hour of the day. */
   weekClock: number[][];
-  /** Active and idle time per month, January first. */
-  months: { activeMs: number; idleMs: number }[];
+  /** What was played in each month, January first. */
+  months: BucketPlay[];
   /** Most runtime first. */
   games: GameYear[];
   shapes: Record<SessionShape, number>;
@@ -81,30 +85,6 @@ function previousDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
 }
 
-function endOf(session: Session, now: Date): Date {
-  return session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
-}
-
-/** Spreads a session's active time evenly over the hours it covered on the clock. */
-function spreadOverHours(session: Session, now: Date, add: (weekday: number, hour: number, ms: number) => void) {
-  const start = parseVaultimeDate(session.started_at_wall);
-  const end = endOf(session, now);
-  const span = end.getTime() - start.getTime();
-  if (span <= 0) {
-    add(weekdayOf(start), start.getHours(), session.active_ms);
-    return;
-  }
-  let cursor = start;
-  while (cursor < end) {
-    let next = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), cursor.getHours() + 1);
-    // Clocks turned back repeat an hour, which must not stop the walk.
-    if (next <= cursor) next = new Date(cursor.getTime() + HOUR_MS);
-    const stop = next < end ? next : end;
-    add(weekdayOf(cursor), cursor.getHours(), (session.active_ms * (stop.getTime() - cursor.getTime())) / span);
-    cursor = stop;
-  }
-}
-
 /** The longest run of days in a row among `days`, the earliest when runs tie. */
 function longestRun(days: Date[]): Streak | null {
   const sorted = [...days].sort((a, b) => a.getTime() - b.getTime());
@@ -121,51 +101,44 @@ function longestRun(days: Date[]): Streak | null {
   return best;
 }
 
-/** Everything the stats page shows for `year`. The current streak looks at all sessions. */
-export function yearStats(allSessions: Session[], year: number, now = new Date()): YearStats {
+/**
+ * Everything the stats page shows for `year`. Time comes from the core's
+ * totals and counts on the day it happened. Sessions count in the year they
+ * started. The current streak looks at all sessions.
+ */
+export function yearStats(allSessions: Session[], year: number, play: YearPlay, now = new Date()): YearStats {
   const sessions = allSessions.filter(countsAsPlay);
   const inYear = sessions.filter((session) => parseVaultimeDate(session.started_at_wall).getFullYear() === year);
-  const activeByDay = new Map<string, number>();
-  const playedDays = new Map<string, Date>();
+  const days = groupByBucket(play.days);
+  const monthsByKey = groupByBucket(play.days.map((total) => ({ ...total, bucket: total.bucket.slice(0, 7) })));
+  const months = Array.from({ length: MONTHS_PER_YEAR }, (_, index) => {
+    const key = `${year}-${String(index + 1).padStart(2, "0")}`;
+    return monthsByKey.get(key) ?? { runtimeMs: 0, activeMs: 0, idleMs: 0, games: [] };
+  });
   const weekClock = Array.from({ length: DAYS_PER_WEEK }, () => Array<number>(HOURS_PER_DAY).fill(0));
-  const months = Array.from({ length: MONTHS_PER_YEAR }, () => ({ activeMs: 0, idleMs: 0 }));
-  const games = new Map<string, GameYear>();
-  const shapes = Object.fromEntries(SESSION_SHAPES.map((shape) => [shape, 0])) as Record<SessionShape, number>;
-  let longest: Session | null = null;
-  let runtimeMs = 0;
-  let activeMs = 0;
-  let idleMs = 0;
-
-  for (const session of inYear) {
-    const started = parseVaultimeDate(session.started_at_wall);
-    const key = toDayKey(started);
-    activeByDay.set(key, (activeByDay.get(key) ?? 0) + session.active_ms);
-    playedDays.set(key, new Date(started.getFullYear(), started.getMonth(), started.getDate()));
-    spreadOverHours(session, now, (weekday, hour, ms) => {
-      weekClock[weekday][hour] += ms;
-    });
-    months[started.getMonth()].activeMs += session.active_ms;
-    months[started.getMonth()].idleMs += session.idle_ms;
-    const game = games.get(session.game_id) ?? {
-      gameId: session.game_id,
-      runtimeMs: 0,
-      activeMs: 0,
-      idleMs: 0,
-      sessionsCount: 0,
-    };
-    game.runtimeMs += session.runtime_ms;
-    game.activeMs += session.active_ms;
-    game.idleMs += session.idle_ms;
-    game.sessionsCount += 1;
-    games.set(session.game_id, game);
-    shapes[shapeOf(session)] += 1;
-    if (!longest || session.runtime_ms > longest.runtime_ms) longest = session;
-    runtimeMs += session.runtime_ms;
-    activeMs += session.active_ms;
-    idleMs += session.idle_ms;
+  for (const total of play.hours) {
+    const [weekday, hour] = total.bucket.split("-").map(Number);
+    if (weekClock[weekday]?.[hour] !== undefined) weekClock[weekday][hour] += total.active_ms;
   }
 
-  const allDays = new Set(sessions.map((session) => toDayKey(parseVaultimeDate(session.started_at_wall))));
+  const sessionsByGame = new Map<string, number>();
+  const shapes = Object.fromEntries(SESSION_SHAPES.map((shape) => [shape, 0])) as Record<SessionShape, number>;
+  let longest: Session | null = null;
+  for (const session of inYear) {
+    sessionsByGame.set(session.game_id, (sessionsByGame.get(session.game_id) ?? 0) + 1);
+    shapes[shapeOf(session)] += 1;
+    if (!longest || session.runtime_ms > longest.runtime_ms) longest = session;
+  }
+  const games = sumByGame(play.days).map((game) => ({ ...game, sessionsCount: sessionsByGame.get(game.gameId) ?? 0 }));
+
+  const playedDays = [...days.entries()]
+    .filter(([, day]) => day.runtimeMs > 0)
+    .map(([key]) => {
+      const [y, m, d] = key.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    });
+
+  const allDays = new Set(sessions.flatMap((session) => daysTouched(session, now)));
   let day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (!allDays.has(toDayKey(day))) day = previousDay(day);
   let currentStreak = 0;
@@ -174,20 +147,24 @@ export function yearStats(allSessions: Session[], year: number, now = new Date()
     day = previousDay(day);
   }
 
+  const [yearStart, yearEnd] = [new Date(year, 0, 1), new Date(year + 1, 0, 1)];
+  const clipped = sessions.flatMap((session) => clipToWindow(session, yearStart, yearEnd, now) ?? []);
+  const sum = (pick: (day: BucketPlay) => number) => [...days.values()].reduce((total, day) => total + pick(day), 0);
+
   return {
     year,
-    playedMs: playedMs(inYear, now),
-    runtimeMs,
-    activeMs,
-    idleMs,
+    playedMs: playedMs(clipped, now),
+    runtimeMs: sum((day) => day.runtimeMs),
+    activeMs: sum((day) => day.activeMs),
+    idleMs: sum((day) => day.idleMs),
     sessionsCount: inYear.length,
-    activeByDay,
-    daysPlayed: playedDays.size,
-    longestStreak: longestRun([...playedDays.values()]),
+    days,
+    daysPlayed: playedDays.length,
+    longestStreak: longestRun(playedDays),
     currentStreak,
     weekClock,
     months,
-    games: [...games.values()].sort((a, b) => b.runtimeMs - a.runtimeMs),
+    games,
     shapes,
     longest,
   };

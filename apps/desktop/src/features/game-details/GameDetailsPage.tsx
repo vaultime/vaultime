@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Crop, Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import { DayBars, DayBarsLegend } from "@/components/charts/DayBars";
 import { Notice } from "@/components/layout/Page";
 import {
   TintedHeader,
@@ -21,10 +20,10 @@ import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { CoverCropDialog, type CropTarget } from "@/features/game-details/CoverCropDialog";
+import { GameHistory } from "@/features/game-details/GameHistory";
 import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
-  ACTIVITY_CHART_DAYS,
   ARTWORK_DIALOG_EXTENSIONS,
   EVENT_LOG_LIMIT,
   GAME_RECENT_SESSIONS,
@@ -34,11 +33,10 @@ import {
 } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { gamePlaytime } from "@/lib/sentences";
-import { buildDailyActivity, countsAsPlay } from "@/lib/session-stats";
+import { countsAsPlay } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { EarlierPlaytime, Game, GameAssetView, SessionEvent } from "@/lib/types";
-import { numberWords } from "@/lib/words";
 import { cn, describeError } from "@/lib/utils";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -84,7 +82,6 @@ function GamePage({ gameId }: { gameId: string }) {
         .sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall)),
     [allSessions, gameId],
   );
-  const days = useMemo(() => buildDailyActivity(sessions, ACTIVITY_CHART_DAYS), [sessions]);
   const playing = active.some((session) => session.game_id === gameId);
 
   // Events explain flagged sessions. Reload them whenever the sessions change.
@@ -210,15 +207,7 @@ function GamePage({ gameId }: { gameId: string }) {
             </div>
           )}
 
-          <section aria-labelledby="days-title" className="flex flex-col gap-3.5">
-            <div className="flex items-baseline justify-between">
-              <h2 id="days-title" className="font-display text-[30px]">
-                The last {numberWords(ACTIVITY_CHART_DAYS)} days
-              </h2>
-              <DayBarsLegend />
-            </div>
-            <DayBars points={days} />
-          </section>
+          <GameHistory gameId={game.id} sessions={sessions} tint={tint} title={game.title} />
 
           <section aria-labelledby="sessions-title">
             <div className="mb-1.5 flex items-baseline justify-between gap-4">
