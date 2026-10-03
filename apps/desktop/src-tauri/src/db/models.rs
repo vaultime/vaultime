@@ -64,6 +64,10 @@ pub struct GameMetadata {
     /// client. Its time beside another game is set aside.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub steps_aside: bool,
+    /// The launcher's own id for the game, like the Steam app id, so the same
+    /// game can be told apart on another PC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher_id: Option<String>,
     /// Fields this version does not know, as a newer one wrote them, kept so
     /// that a write here does not drop them.
     #[serde(flatten)]

@@ -121,13 +121,35 @@ pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
 /// Makes a game count only while no other game runs, or always again. The
 /// rest of its metadata stays as it is.
 pub fn set_steps_aside(db: &Database, id: &str, steps_aside: bool) -> Result<Game> {
+    change_metadata(db, id, |metadata| metadata.steps_aside = steps_aside)
+}
+
+/// Stores the launcher's own id for a game. The rest of its metadata stays.
+pub fn set_launcher_id(db: &Database, id: &str, launcher_id: &str) -> Result<Game> {
+    change_metadata(db, id, |metadata| {
+        metadata.launcher_id = Some(launcher_id.to_owned());
+    })
+}
+
+/// The launcher's own id for a game, when it was imported from a launcher.
+pub fn launcher_id(game: &Game) -> Option<String> {
+    serde_json::from_str::<GameMetadata>(&game.metadata_json)
+        .ok()?
+        .launcher_id
+}
+
+fn change_metadata(
+    db: &Database,
+    id: &str,
+    change: impl FnOnce(&mut GameMetadata),
+) -> Result<Game> {
     db.with_transaction(|conn| {
         let game = conn
             .query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
             .map_err(map_db)?;
         let mut metadata: GameMetadata =
             serde_json::from_str(&game.metadata_json).unwrap_or_default();
-        metadata.steps_aside = steps_aside;
+        change(&mut metadata);
         let metadata_json = serde_json::to_string(&metadata)
             .map_err(|error| VaultimeError::Database(format!("invalid metadata json: {error}")))?;
         conn.execute(

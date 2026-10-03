@@ -732,7 +732,17 @@ pub fn remove_steam_playtime(db: State<'_, Arc<Database>>) -> Result<usize, Vaul
 pub fn discover_steam_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    discovery::without_ignored(&db, discovery::steam::discover_steam_games(&db)?)
+    let found = discovery::steam::discover_steam_games(&db)?;
+    remember_launcher_ids(&db, &found);
+    discovery::without_ignored(&db, found)
+}
+
+/// Games already in the library learn their launcher id from a scan. A
+/// failure here must not fail the scan.
+fn remember_launcher_ids(db: &Database, found: &[DiscoveredGame]) {
+    if let Err(error) = discovery::remember_launcher_ids(db, found) {
+        warn!("launcher ids not stored: {error}");
+    }
 }
 
 #[tauri::command(async)]
@@ -745,7 +755,9 @@ pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
 pub fn discover_launcher_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    discovery::without_ignored(&db, discovery::discover_launcher_games(&db)?)
+    let found = discovery::discover_launcher_games(&db)?;
+    remember_launcher_ids(&db, &found);
+    discovery::without_ignored(&db, found)
 }
 
 /// Programs the player said are no game, newest first.
@@ -795,7 +807,10 @@ pub fn import_discovered_games(
             launcher_source: Some(disc.source.clone()),
         };
 
-        let game = games::create_game(&db, &input)?;
+        let mut game = games::create_game(&db, &input)?;
+        if let Some(launcher_id) = disc.source_id.as_deref().filter(|id| !id.is_empty()) {
+            game = games::set_launcher_id(&db, &game.id, launcher_id)?;
+        }
         if let Err(error) = assets::scan_game_assets(&db, &asset_manager, &game.id) {
             warn!("artwork scan failed for {}: {error}", game.title);
         }

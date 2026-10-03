@@ -212,6 +212,10 @@ pub const SCREENSHOT_MAX_HEIGHT_PX: u32 = 720;
 pub const ARTWORK_BACKFILL_SETTING: &str = "artwork_backfill";
 /// Raise it to scan Steam games for artwork once more after an artwork change.
 pub const ARTWORK_BACKFILL_VERSION: &str = "1";
+/// Setting that records which backfill of launcher ids already ran.
+pub const LAUNCHER_IDS_BACKFILL_SETTING: &str = "launcher_ids_backfill";
+/// Raise it to read the launcher ids of earlier imports once more.
+pub const LAUNCHER_IDS_BACKFILL_VERSION: &str = "1";
 /// Cached images no asset uses are removed at start once they are this old,
 /// so an image a scan is writing right now stays.
 pub const ARTWORK_SWEEP_MIN_AGE: Duration = Duration::from_hours(1);

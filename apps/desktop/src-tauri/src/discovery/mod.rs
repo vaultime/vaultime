@@ -26,17 +26,19 @@ pub mod xbox;
 #[cfg(windows)]
 mod xml;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    EXECUTABLE_SCAN_DEPTH, SHIPPING_BONUS_BYTES, TITLE_MATCH_BONUS_BYTES, TITLE_WORD_MIN_CHARS,
+    EXECUTABLE_SCAN_DEPTH, LAUNCHER_IDS_BACKFILL_SETTING, LAUNCHER_IDS_BACKFILL_VERSION,
+    SHIPPING_BONUS_BYTES, STEAM_SOURCE, TITLE_MATCH_BONUS_BYTES, TITLE_WORD_MIN_CHARS,
     TOP_LEVEL_BONUS_BYTES,
 };
 use crate::db::connection::Database;
-use crate::db::repo::games;
+use crate::db::models::Game;
+use crate::db::repo::{games, settings};
 use crate::error::Result;
 use crate::platform::process::path_key;
 
@@ -84,6 +86,81 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     #[cfg(target_os = "linux")]
     games.extend(lutris::discover(&existing));
     Ok(games)
+}
+
+/// Stores the launcher ids that `found` knows for games in the library that
+/// came from the same launcher and have none yet, matched by executable or
+/// install folder. Returns how many games got one.
+pub fn remember_launcher_ids(db: &Database, found: &[DiscoveredGame]) -> Result<usize> {
+    let mut missing: HashMap<(String, String), Game> = HashMap::new();
+    for game in games::list_all_games(db)? {
+        let Some(source) = game.launcher_source.clone() else {
+            continue;
+        };
+        if games::launcher_id(&game).is_some() {
+            continue;
+        }
+        for path in [&game.executable_path, &game.install_folder]
+            .into_iter()
+            .flatten()
+        {
+            missing.insert((source.clone(), path_key(path)), game.clone());
+        }
+    }
+    let mut stored = HashSet::new();
+    for discovered in found {
+        let Some(id) = discovered.source_id.as_deref().filter(|id| !id.is_empty()) else {
+            continue;
+        };
+        let paths = [
+            Some(&discovered.executable_path),
+            discovered.install_folder.as_ref(),
+        ];
+        let game = paths
+            .into_iter()
+            .flatten()
+            .find_map(|path| missing.get(&(discovered.source.clone(), path_key(path))));
+        if let Some(game) = game
+            && stored.insert(game.id.clone())
+        {
+            games::set_launcher_id(db, &game.id, id)?;
+        }
+    }
+    Ok(stored.len())
+}
+
+/// Reads the launcher ids of games imported before Vaultime kept them, once.
+/// Steam games find theirs through Steam's manifests, the rest through the
+/// launchers' own records. Returns how many games got one.
+pub fn backfill_launcher_ids(db: &Database) -> Result<usize> {
+    if settings::get_setting(db, LAUNCHER_IDS_BACKFILL_SETTING)?.as_deref()
+        == Some(LAUNCHER_IDS_BACKFILL_VERSION)
+    {
+        return Ok(0);
+    }
+    let mut stored = 0;
+    for game in games::list_all_games(db)? {
+        if game.launcher_source.as_deref() != Some(STEAM_SOURCE)
+            || games::launcher_id(&game).is_some()
+        {
+            continue;
+        }
+        if let Some(app_id) = game
+            .install_folder
+            .as_deref()
+            .and_then(|folder| steam::app_id_for_install_folder(Path::new(folder)))
+        {
+            games::set_launcher_id(db, &game.id, &app_id)?;
+            stored += 1;
+        }
+    }
+    stored += remember_launcher_ids(db, &discover_launcher_games(db)?)?;
+    settings::set_setting(
+        db,
+        LAUNCHER_IDS_BACKFILL_SETTING,
+        LAUNCHER_IDS_BACKFILL_VERSION,
+    )?;
+    Ok(stored)
 }
 
 /// Path keys of every executable already in the library.
@@ -186,6 +263,55 @@ fn is_executable(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::models::CreateGame;
+
+    #[test]
+    fn games_learn_their_launcher_id_from_a_scan() {
+        let db = Database::open_in_memory().unwrap();
+        let add = |title: &str, exe: &str, source: Option<&str>| {
+            games::create_game(
+                &db,
+                &CreateGame {
+                    title: title.into(),
+                    executable_path: Some(exe.into()),
+                    install_folder: Some(format!("{exe}-folder")),
+                    launcher_source: source.map(str::to_owned),
+                },
+            )
+            .unwrap()
+        };
+        let by_exe = add("By exe", "/games/a/a.exe", Some("epic"));
+        let by_folder = add("By folder", "/games/b/b.exe", Some("epic"));
+        let other_launcher = add("Other launcher", "/games/c/c.exe", Some("gog"));
+        let known = add("Known", "/games/d/d.exe", Some("epic"));
+        games::set_launcher_id(&db, &known.id, "kept").unwrap();
+        let found = |exe: &str, folder: &str, id: &str| DiscoveredGame {
+            title: String::new(),
+            executable_path: exe.into(),
+            install_folder: Some(folder.into()),
+            source: "epic".into(),
+            source_id: Some(id.into()),
+            already_added: true,
+        };
+
+        let stored = remember_launcher_ids(
+            &db,
+            &[
+                found("/games/a/a.exe", "/elsewhere", "a-id"),
+                found("/games/b/other.exe", "/games/b/b.exe-folder", "b-id"),
+                found("/games/c/c.exe", "/games/c/c.exe-folder", "c-id"),
+                found("/games/d/d.exe", "/games/d/d.exe-folder", "d-id"),
+            ],
+        )
+        .unwrap();
+
+        let id_of = |game: &Game| games::launcher_id(&games::get_game(&db, &game.id).unwrap());
+        assert_eq!(stored, 2);
+        assert_eq!(id_of(&by_exe).as_deref(), Some("a-id"));
+        assert_eq!(id_of(&by_folder).as_deref(), Some("b-id"));
+        assert_eq!(id_of(&other_launcher), None);
+        assert_eq!(id_of(&known).as_deref(), Some("kept"));
+    }
 
     /// A game folder with executables of the given sizes, in a fresh temp folder.
     #[cfg(windows)]

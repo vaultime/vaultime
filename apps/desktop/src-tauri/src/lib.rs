@@ -241,6 +241,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(error) => log::warn!("artwork backfill failed: {error}"),
         }
+        match discovery::backfill_launcher_ids(&backfill_db) {
+            Ok(0) => {}
+            Ok(count) => info!("stored the launcher ids of {count} games"),
+            Err(error) => log::warn!("launcher id backfill failed: {error}"),
+        }
         match assets::sweep_cache(&backfill_db, &backfill_assets) {
             Ok(0) => {}
             Ok(count) => info!("removed {count} cached images no game uses"),
