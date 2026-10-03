@@ -284,9 +284,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(live);
 
     // New installs start with the system, so the first game of the day counts.
-    // Development builds leave the login items alone.
-    if first_start && !cfg!(debug_assertions) {
-        enable_autostart(app.handle());
+    // Later starts point a login item at this executable, so it never keeps
+    // starting an older copy. Development builds leave the login items alone.
+    if !cfg!(debug_assertions) {
+        if first_start {
+            enable_autostart(app.handle());
+        } else {
+            refresh_autostart(app.handle());
+        }
     }
 
     // The window starts hidden and a login item leaves it that way, in the tray
@@ -353,6 +358,20 @@ fn enable_autostart(app: &tauri::AppHandle) {
     match app.autolaunch().enable() {
         Ok(()) => info!("new install, starts with the system from now on"),
         Err(error) => log::warn!("could not turn on starting with the system: {error}"),
+    }
+}
+
+/// The login item stores the path of the executable that enabled it, which an
+/// install to another folder leaves pointing at the old one.
+fn refresh_autostart(app: &tauri::AppHandle) {
+    use tauri_plugin_autostart::ManagerExt;
+
+    let autolaunch = app.autolaunch();
+    if !autolaunch.is_enabled().unwrap_or(false) {
+        return;
+    }
+    if let Err(error) = autolaunch.enable() {
+        log::warn!("could not update the login item: {error}");
     }
 }
 

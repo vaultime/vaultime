@@ -5,6 +5,12 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- **Starts the version you installed.** Starting with the system now always opens the copy of Vaultime you last ran. A login item made by an older copy in another folder used to keep starting that copy after every restart.
+
 ## [0.4.0] - 2026-10-03
 
 ### Tracking
