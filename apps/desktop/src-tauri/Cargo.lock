@@ -5745,7 +5745,7 @@ dependencies = [
 
 [[package]]
 name = "vaultime"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "argon2",
  "base64 0.23.1",
