@@ -17,7 +17,7 @@
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
-import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
+import { DAY_MS, DEVICE_NAME_MAX_CHARS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
 import { estimatePlayTotals } from "@/test/play-totals";
 import type {
@@ -35,6 +35,7 @@ import type {
   Session,
   SessionEvent,
   SteamPlaytimePreview,
+  ThisPc,
   WindowSizeChoice,
   WindowSizeState,
 } from "@/lib/types";
@@ -814,6 +815,21 @@ if (coverStep) {
   if (params.has("save")) setTimeout(() => press("Use as cover"), 1500);
 }
 
+// ?ledger=missing or ?ledger=broken shows the ledger with a problem.
+const ledgerProblem = new URLSearchParams(window.location.search).get("ledger");
+let thisPc: ThisPc = {
+  device_id: "preview",
+  name: "Desktop",
+  ledger: {
+    key_id: "5f0c".padEnd(64, "0"),
+    began_at: iso(now - 400 * DAY_MS),
+    entries: 2417,
+    covered_sessions: 1204,
+    missing_sessions: ledgerProblem === "missing" ? 2 : 0,
+    broken: ledgerProblem === "broken",
+  },
+};
+
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   const appearanceAnswer = appearanceIpc(cmd, args);
@@ -823,6 +839,11 @@ mockIPC((cmd, payload) => {
       return "0.3.0";
     case "get_device_id":
       return "preview";
+    case "get_this_pc":
+      return thisPc;
+    case "rename_this_pc":
+      thisPc = { ...thisPc, name: String(args.name).trim().slice(0, DEVICE_NAME_MAX_CHARS) || thisPc.name };
+      return thisPc;
     case "list_games":
       return allGames;
     case "list_earlier_playtime":

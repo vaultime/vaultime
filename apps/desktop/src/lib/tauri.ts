@@ -25,6 +25,7 @@ import type {
   SessionNote,
   Setting,
   SteamPlaytimePreview,
+  ThisPc,
   TrackingDiagnostics,
   UpdateGameInput,
   WindowLook,
@@ -35,6 +36,15 @@ import type {
 /** The id of this PC, stored with its sessions and backups. */
 export async function getDeviceId(): Promise<string> {
   return invoke<string>("get_device_id");
+}
+
+/** This PC's name and what its ledger says. */
+export async function getThisPc(): Promise<ThisPc> {
+  return invoke<ThisPc>("get_this_pc");
+}
+
+export async function renameThisPc(name: string): Promise<ThisPc> {
+  return invoke<ThisPc>("rename_this_pc", { name });
 }
 
 export async function getAppVersion(): Promise<string> {

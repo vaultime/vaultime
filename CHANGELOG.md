@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Only ever less.** A correction can only take time out. Vaultime refuses one that would add time, move the end later or change nothing, and a recorded correction that added time marks the session Suspicious.
 - **Your reason in quotes.** A corrected session reads "Cut short by you from 2 h 08 (“Fell asleep”)", so a short reason never runs into a time.
 
+### Trust
+
+- **A ledger for every PC.** Vaultime keeps a ledger of the sessions played on each PC, signed with a key that never leaves it, not even in a backup. It holds on to each session's record when the session starts, ends or is corrected, and notes the sessions you remove with their game and every restore. A session rewritten outside Vaultime, even with its own record rebuilt to match, or one no ledger knows, turns Suspicious. Settings, This PC tells whether sessions went missing. Sessions from before this version are taken in as they are. Like the labels, the ledger shows changes but cannot prevent them.
+- **Name your PC.** Settings, This PC holds a name for the PC, its own name to begin with.
+
 ### Backups
 
 - **A restored history is checked right away.** After a restore, Vaultime checks the record of every restored session again before it shows it, instead of relying on the checks it made of the replaced history until the next start.

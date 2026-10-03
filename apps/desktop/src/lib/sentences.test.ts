@@ -4,12 +4,13 @@
 import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS } from "@/lib/constants";
 import { at, event, session } from "@/test/sessions";
-import type { Session } from "@/lib/types";
+import type { LedgerReport, Session } from "@/lib/types";
 import {
   busiestMonthSentence,
   describeSession,
   gamePlaytime,
   lastPlayedLine,
+  ledgerSentence,
   libraryPlaytime,
   phraseString,
   rhythmSentence,
@@ -400,5 +401,30 @@ describe("sideBySideSentence", () => {
     expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c", "d"], mostAtOnce: 3 }, titleOf)).toBe(
       "League of Legends, Teamfight Tactics, Balatro and Celeste ran side by side, up to three at a time, for 1 h 55.",
     );
+  });
+});
+
+describe("ledgerSentence", () => {
+  const ledger: LedgerReport = {
+    key_id: "key",
+    began_at: null,
+    entries: 10,
+    covered_sessions: 4,
+    missing_sessions: 0,
+    broken: false,
+  };
+
+  it("says how much the ledger covers", () => {
+    expect(ledgerSentence(ledger)).toBe("It covers all 4 sessions, and none is missing.");
+    expect(ledgerSentence({ ...ledger, covered_sessions: 1 })).toBe("It covers your one session, and none is missing.");
+    expect(ledgerSentence({ ...ledger, covered_sessions: 0 })).toBe("No sessions yet.");
+  });
+
+  it("names what went missing or changed", () => {
+    expect(ledgerSentence({ ...ledger, missing_sessions: 1 })).toBe(
+      "One session in the ledger is gone from the history without a note that you removed it.",
+    );
+    expect(ledgerSentence({ ...ledger, missing_sessions: 2 })).toContain("2 sessions in the ledger are gone");
+    expect(ledgerSentence({ ...ledger, broken: true })).toContain("changed outside Vaultime");
   });
 });

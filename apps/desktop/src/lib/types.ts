@@ -39,6 +39,29 @@ export interface IgnoredProgram {
   ignored_at: string;
 }
 
+/** What the ledgers say about the history as a whole. */
+export interface LedgerReport {
+  /** This PC's public key in hex, which names its ledger. */
+  key_id: string;
+  /** When this PC's ledger began, if it has. */
+  began_at: string | null;
+  /** Entries in this PC's ledger. */
+  entries: number;
+  /** Sessions that a ledger covers. */
+  covered_sessions: number;
+  /** Sessions a ledger names that are gone without a note that the player removed them. */
+  missing_sessions: number;
+  /** Whether any ledger fails its check. */
+  broken: boolean;
+}
+
+/** This PC: its name and what the ledgers say about the history. */
+export interface ThisPc {
+  device_id: string;
+  name: string;
+  ledger: LedgerReport;
+}
+
 /** What one play total covers, in local time. */
 export type PlayBucket = "day" | "month" | "year" | "hour_of_week";
 

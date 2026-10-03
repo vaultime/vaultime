@@ -89,13 +89,15 @@ Every session carries a label that tells how much its record can be trusted:
 
 The library marks a game when one of its sessions from the last 30 days is Suspicious or Recovered, and the game's page counts all of them.
 
-These labels show changes. They cannot prevent them. They are hints, not proof.
+Each PC also keeps a ledger of its sessions, signed with a key that stays on that PC and never goes into a backup. It holds on to every session's record when the session starts, ends or is corrected, and notes the sessions you remove with their game. A session rewritten outside Vaultime, or one no ledger knows, turns Suspicious, and Settings, This PC tells whether sessions went missing. Sessions from before the ledger are taken in as they were when it began.
+
+These labels and the ledger show changes. They cannot prevent them. Someone with the PC and its key can still rewrite both. They are hints, not proof.
 
 To correct a session, point at it in the journal or on the game's page and pick Correct the time. For a game left running, count it only until you stopped playing. Exactly the active and idle time after that point comes out. A correction can only take time out, never add any. For a session that was no play at all, take out all its time. To add play from elsewhere, pick Add a session on the game's page.
 
 ## Backups
 
-- **What stays on each PC.** The look, the background picture and the window size belong to the PC they were set on. Backups leave them out, and a restore keeps the ones of the PC it runs on.
+- **What stays on each PC.** The look, the background picture, the window size and the key that signs the PC's ledger belong to the PC they were set on. Backups leave them out, and a restore keeps the ones of the PC it runs on. A restore is noted in the ledger.
 - **Local backups** are folders you can keep anywhere. Vaultime makes one by itself once a day and when it quits, and keeps the newest seven. Pick their folder under Settings, Local backups, ideally on another drive or in a folder that syncs. Save a backup makes one by hand, and Restore from a backup shows what is inside before anything is replaced.
 - **Cloud backup** is optional, free and invite-only, a private beta that can end at any time. Vaultime works fully without it. Backups are encrypted on your PC with your backup passphrase before they are uploaded, so nobody else can read them. Keep the passphrase safe. Without it, a backup cannot be restored. When you have 30 backups, a new upload replaces the oldest one. When your 1 GiB of storage for backups and artwork is full, delete older backups to make room.
 

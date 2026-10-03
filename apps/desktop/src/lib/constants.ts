@@ -34,6 +34,9 @@ export const WEEKEND_DAYS_PER_WEEK = DAYS_PER_WEEK - WORKING_DAYS_PER_WEEK;
 
 // Settings
 
+/** Longest name a PC can have. Same as DEVICE_NAME_MAX_CHARS in constants.rs. */
+export const DEVICE_NAME_MAX_CHARS = 40;
+
 /** Keys of the settings table the page may change. Same as PAGE_SETTINGS in constants.rs. */
 export const SETTING_KEYS = {
   /** Same as IDLE_THRESHOLD_SETTING in constants.rs. */

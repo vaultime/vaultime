@@ -35,7 +35,7 @@ import {
   UI_LOCALE,
   type DayPart,
 } from "@/lib/time";
-import type { GameStatus, Session, SessionEvent } from "@/lib/types";
+import type { GameStatus, LedgerReport, Session, SessionEvent } from "@/lib/types";
 import { stableHash } from "@/lib/utils";
 import { capitalize, numberWords } from "@/lib/words";
 
@@ -354,6 +354,19 @@ export function sideBySideSentence(group: SideBySideGroup, titleOf: (gameId: str
 }
 
 /** "1 h 12 in all, 1 h 05 active, 7 min idle", or "1 h 12, all of it active". */
+/** What the ledger of this PC says, in a sentence. */
+export function ledgerSentence(ledger: LedgerReport): string {
+  if (ledger.broken) return "Its ledger was changed outside Vaultime, so the sessions it covers are marked Suspicious.";
+  if (ledger.missing_sessions > 0) {
+    const one = ledger.missing_sessions === 1;
+    return `${one ? "One session" : `${ledger.missing_sessions} sessions`} in the ledger ${one ? "is" : "are"} gone from the history without a note that you removed ${one ? "it" : "them"}.`;
+  }
+  if (ledger.covered_sessions === 0) return "No sessions yet.";
+  return ledger.covered_sessions === 1
+    ? "It covers your one session, and none is missing."
+    : `It covers all ${ledger.covered_sessions} sessions, and none is missing.`;
+}
+
 export function sessionAmounts(session: Session): string {
   const all = formatHoursMinutes(session.runtime_ms);
   if (session.runtime_ms >= MINUTE_MS) {

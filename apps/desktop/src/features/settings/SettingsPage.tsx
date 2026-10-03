@@ -22,6 +22,7 @@ import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
 import { IgnoredSection } from "@/features/settings/IgnoredSection";
 import { UpdatesRow } from "@/features/settings/UpdatesRow";
+import { ThisPcSection } from "@/features/settings/ThisPcSection";
 import { WindowSection } from "@/features/settings/WindowSection";
 import {
   AUTO_BACKUP_KEEP,
@@ -454,6 +455,8 @@ export function SettingsPage() {
             </PageRow>
           )}
         </PageSection>
+
+        <ThisPcSection onError={setError} />
 
         <PageSection
           title="Local backups"
