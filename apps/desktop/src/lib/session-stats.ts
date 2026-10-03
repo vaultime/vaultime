@@ -124,24 +124,127 @@ export function playedMs(sessions: Session[], now = new Date()): number {
 export interface SideBySide {
   start: Date;
   end: Date;
-  /** In the order the games started. */
+  /** In the order the games joined the run, so a game keeps its place while others come and go. */
   gameIds: string[];
+}
+
+/** A part of a run in which the same games ran. */
+export interface RunPiece {
+  start: Date;
+  end: Date;
+  /** In the order the games joined the run, so a game keeps its place while others come and go. */
+  gameIds: string[];
+  /** The first start and last end of the sessions running in it. */
+  sessionsStart: Date;
+  sessionsEnd: Date;
+}
+
+/** Sessions that overlap on the clock, with no gap in between. */
+export interface PlayRun {
+  start: Date;
+  end: Date;
+  /** From start to end, split where a game joins or leaves. */
+  pieces: RunPiece[];
+}
+
+/** The sessions as runs of overlapping play, in clock order. Sessions that only touch stay apart. */
+export function playRuns(sessions: Session[], now = new Date()): PlayRun[] {
+  const groups: Span[][] = [];
+  let groupEnd = 0;
+  for (const span of toSpans(sessions, now).sort((a, b) => a.start - b.start)) {
+    const group = groups.at(-1);
+    if (group && span.start < groupEnd) {
+      group.push(span);
+      groupEnd = Math.max(groupEnd, span.end);
+    } else {
+      groups.push([span]);
+      groupEnd = span.end;
+    }
+  }
+  return groups.map((group) => {
+    const start = group[0].start;
+    const end = Math.max(...group.map((span) => span.end));
+    const order = [...new Set(group.map((span) => span.session.game_id))];
+    const pieces: RunPiece[] = [];
+    for (const stretch of toStretches(group)) {
+      const running = new Set(stretch.running.map((span) => span.session.game_id));
+      const gameIds = order.filter((gameId) => running.has(gameId));
+      const sessionsStart = Math.min(...stretch.running.map((span) => span.start));
+      const sessionsEnd = Math.max(...stretch.running.map((span) => span.end));
+      const last = pieces.at(-1);
+      if (last && last.gameIds.join() === gameIds.join()) {
+        last.end = new Date(stretch.end);
+        last.sessionsStart = new Date(Math.min(last.sessionsStart.getTime(), sessionsStart));
+        last.sessionsEnd = new Date(Math.max(last.sessionsEnd.getTime(), sessionsEnd));
+      } else {
+        pieces.push({
+          start: new Date(stretch.start),
+          end: new Date(stretch.end),
+          gameIds,
+          sessionsStart: new Date(sessionsStart),
+          sessionsEnd: new Date(sessionsEnd),
+        });
+      }
+    }
+    // A session without time on the clock still gets a piece, so it shows.
+    if (pieces.length === 0) {
+      pieces.push({
+        start: new Date(start),
+        end: new Date(end),
+        gameIds: order.slice(0, 1),
+        sessionsStart: new Date(start),
+        sessionsEnd: new Date(end),
+      });
+    }
+    return { start: new Date(start), end: new Date(end), pieces };
+  });
 }
 
 /** The stretches in which games ran side by side, joined while the same games run. */
 export function sideBySide(sessions: Session[], now = new Date()): SideBySide[] {
-  const result: SideBySide[] = [];
-  for (const stretch of toStretches(toSpans(sessions, now))) {
-    const gameIds = [...new Set(stretch.running.map((span) => span.session.game_id))];
-    if (gameIds.length < 2) continue;
-    const last = result.at(-1);
-    if (last && last.end.getTime() === stretch.start && last.gameIds.join() === gameIds.join()) {
-      last.end = new Date(stretch.end);
-    } else {
-      result.push({ start: new Date(stretch.start), end: new Date(stretch.end), gameIds });
+  return playRuns(sessions, now)
+    .flatMap((run) => run.pieces)
+    .filter((piece) => piece.gameIds.length > 1)
+    .map(({ start, end, gameIds }) => ({ start, end, gameIds }));
+}
+
+/** Games that ran side by side with each other, or with a game they both ran beside. */
+export interface SideBySideGroup {
+  /** In the order the games joined. */
+  gameIds: string[];
+  /** The game in every stretch, when more than two games are in the group. */
+  alongside: string | null;
+  /** Clock time with at least two of the games running. */
+  ms: number;
+  /** The most games running at the same time. */
+  mostAtOnce: number;
+}
+
+/** Side by side stretches grouped by the games they share, in clock order. */
+export function sideBySideGroups(shared: SideBySide[]): SideBySideGroup[] {
+  let groups: SideBySide[][] = [];
+  for (const stretch of shared) {
+    const sharesGame = (group: SideBySide[]) =>
+      group.some((other) => other.gameIds.some((gameId) => stretch.gameIds.includes(gameId)));
+    const first = groups.findIndex(sharesGame);
+    if (first < 0) {
+      groups.push([stretch]);
+      continue;
     }
+    const joined = [...groups.filter(sharesGame).flat(), stretch].sort((a, b) => a.start.getTime() - b.start.getTime());
+    groups = [...groups.slice(0, first), joined, ...groups.slice(first + 1).filter((group) => !sharesGame(group))];
   }
-  return result;
+  return groups.map((stretches) => {
+    const gameIds = [...new Set(stretches.flatMap((stretch) => stretch.gameIds))];
+    const inEvery = gameIds.find((gameId) => stretches.every((stretch) => stretch.gameIds.includes(gameId)));
+    const alongside = gameIds.length > 2 ? (inEvery ?? null) : null;
+    return {
+      gameIds,
+      alongside,
+      ms: stretches.reduce((sum, stretch) => sum + stretch.end.getTime() - stretch.start.getTime(), 0),
+      mostAtOnce: Math.max(...stretches.map((stretch) => stretch.gameIds.length)),
+    };
+  });
 }
 
 export interface RecentPlay {

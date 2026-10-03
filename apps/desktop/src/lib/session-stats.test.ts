@@ -4,7 +4,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
 import { at, session } from "@/test/sessions";
-import { buildDailyActivity, playedMs, sideBySide, summarizeRecentPlay } from "./session-stats";
+import {
+  buildDailyActivity,
+  playedMs,
+  playRuns,
+  sideBySide,
+  sideBySideGroups,
+  summarizeRecentPlay,
+} from "./session-stats";
 
 describe("buildDailyActivity", () => {
   beforeEach(() => {
@@ -161,5 +168,100 @@ describe("sideBySide", () => {
   it("finds nothing when games take turns", () => {
     const sessions = [session(at(2026, 9, 29, 10, 0), 60), session(at(2026, 9, 29, 11, 0), 60, { game_id: "b" })];
     expect(sideBySide(sessions, now)).toEqual([]);
+  });
+
+  it("keeps one stretch when a game starts again while the other runs", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 10, 0), 120, { game_id: "a" }),
+      session(at(2026, 9, 29, 10, 30), 120, { game_id: "b" }),
+      session(at(2026, 9, 29, 12, 0), 60, { game_id: "a" }),
+    ];
+    const shared = sideBySide(sessions, now);
+    expect(shared.map((stretch) => stretch.gameIds.join(""))).toEqual(["ab"]);
+    expect(shared[0].end).toEqual(new Date(2026, 8, 29, 12, 30));
+  });
+});
+
+describe("playRuns", () => {
+  const now = new Date(2026, 8, 29, 23, 0);
+
+  it("puts a launcher and the matches inside it into one run", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 18, 57), 129, { game_id: "client" }),
+      session(at(2026, 9, 29, 19, 1), 35, { game_id: "match", id: "match-1" }),
+      session(at(2026, 9, 29, 19, 37), 41, { game_id: "match", id: "match-2" }),
+      session(at(2026, 9, 29, 20, 26), 39, { game_id: "match", id: "match-3" }),
+    ];
+    const runs = playRuns(sessions, now);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].start).toEqual(new Date(2026, 8, 29, 18, 57));
+    expect(runs[0].end).toEqual(new Date(2026, 8, 29, 21, 6));
+    expect(runs[0].pieces.map((piece) => piece.gameIds.join("+"))).toEqual([
+      "client",
+      "client+match",
+      "client",
+      "client+match",
+      "client",
+      "client+match",
+      "client",
+    ]);
+    // The client's pieces carry the whole session, so its fill spans all of it.
+    expect(runs[0].pieces[2].sessionsStart).toEqual(new Date(2026, 8, 29, 18, 57));
+    expect(runs[0].pieces[2].sessionsEnd).toEqual(new Date(2026, 8, 29, 21, 6));
+  });
+
+  it("keeps sessions that only touch apart", () => {
+    const sessions = [session(at(2026, 9, 29, 10, 0), 60), session(at(2026, 9, 29, 11, 0), 60, { game_id: "b" })];
+    expect(playRuns(sessions, now).map((run) => run.pieces.map((piece) => piece.gameIds.join("")))).toEqual([["game-1"], ["b"]]);
+  });
+
+  it("gives a session without time on the clock a piece", () => {
+    const instant = session(at(2026, 9, 29, 10, 0), 0, { runtime_ms: 1 });
+    expect(playRuns([instant], now)[0].pieces).toHaveLength(1);
+  });
+});
+
+describe("sideBySideGroups", () => {
+  const now = new Date(2026, 8, 29, 23, 0);
+  const groupsOf = (sessions: ReturnType<typeof session>[]) => sideBySideGroups(sideBySide(sessions, now));
+
+  it("keeps two pairs that never met apart", () => {
+    const groups = groupsOf([
+      session(at(2026, 9, 29, 13, 0), 120, { game_id: "a" }),
+      session(at(2026, 9, 29, 14, 0), 120, { game_id: "b" }),
+      session(at(2026, 9, 29, 20, 0), 180, { game_id: "c" }),
+      session(at(2026, 9, 29, 21, 0), 60, { game_id: "d" }),
+    ]);
+    expect(groups.map((group) => group.gameIds)).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+    expect(groups.map((group) => group.ms)).toEqual([60 * MINUTE_MS, 60 * MINUTE_MS]);
+  });
+
+  it("names the game that ran through every stretch", () => {
+    const [group] = groupsOf([
+      session(at(2026, 9, 29, 9, 0), 600, { game_id: "a" }),
+      session(at(2026, 9, 29, 11, 0), 150, { game_id: "b" }),
+      session(at(2026, 9, 29, 13, 0), 120, { game_id: "c" }),
+      session(at(2026, 9, 29, 17, 0), 60, { game_id: "d" }),
+    ]);
+    expect(group.gameIds).toEqual(["a", "b", "c", "d"]);
+    expect(group.alongside).toBe("a");
+    expect(group.mostAtOnce).toBe(3);
+    expect(group.ms).toBe((150 + 90 + 60) * MINUTE_MS);
+  });
+
+  it("joins games that met through another game, with none in every stretch", () => {
+    const [group, ...rest] = groupsOf([
+      session(at(2026, 9, 29, 10, 0), 60, { game_id: "a" }),
+      session(at(2026, 9, 29, 10, 30), 60, { game_id: "b" }),
+      session(at(2026, 9, 29, 11, 15), 60, { game_id: "c" }),
+      session(at(2026, 9, 29, 12, 0), 60, { game_id: "d" }),
+    ]);
+    expect(rest).toHaveLength(0);
+    expect(group.gameIds).toEqual(["a", "b", "c", "d"]);
+    expect(group.alongside).toBeNull();
+    expect(group.mostAtOnce).toBe(2);
   });
 });

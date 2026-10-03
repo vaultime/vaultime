@@ -24,7 +24,7 @@ import {
   WORKING_DAYS_PER_WEEK,
 } from "@/lib/constants";
 import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity";
-import { countsAsPlay } from "@/lib/session-stats";
+import { countsAsPlay, type SideBySideGroup } from "@/lib/session-stats";
 import { shapeOf, type SessionShape, type Streak } from "@/lib/stats";
 import {
   dayPartOf,
@@ -326,10 +326,26 @@ export function phraseString(phrase: Phrase): string {
   return `${phrase.before}${phrase.em ?? ""}${phrase.after ?? ""}`;
 }
 
-/** "Elden Ring and Hades II ran side by side for 1 h 40." */
-export function sideBySideSentence(titles: string[], ms: number): string {
-  const names = titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : (titles[0] ?? "");
-  return `${names} ran side by side for ${formatHoursMinutes(ms)}.`;
+/** "Elden Ring, Hades II and Balatro". */
+function listOf(titles: string[]): string {
+  return titles.length > 1 ? `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}` : (titles[0] ?? "");
+}
+
+/**
+ * "Elden Ring and Hades II ran side by side for 1 h 40." A game that ran
+ * through all of it, like a launcher left open, is named first: "Stardew
+ * Valley ran alongside Hades II and Balatro for 2 h 05."
+ */
+export function sideBySideSentence(group: SideBySideGroup, titleOf: (gameId: string) => string): string {
+  const time = formatHoursMinutes(group.ms);
+  const titles = group.gameIds.map(titleOf);
+  if (titles.length <= 2) return `${listOf(titles)} ran side by side for ${time}.`;
+  if (group.alongside) {
+    const others = group.gameIds.filter((gameId) => gameId !== group.alongside).map(titleOf);
+    return `${titleOf(group.alongside)} ran alongside ${listOf(others)} for ${time}.`;
+  }
+  const atOnce = group.mostAtOnce > 2 ? `up to ${numberWords(group.mostAtOnce)}` : "two";
+  return `${listOf(titles)} ran side by side, ${atOnce} at a time, for ${time}.`;
 }
 
 /** Ends the player's own words with a period unless they already end a sentence. */

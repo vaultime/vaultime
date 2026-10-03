@@ -11,7 +11,8 @@
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
 // password dialog on the cloud page. Signed out, ?signin=empty|wrong|ok and
 // ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
-// ?cover=add|adjust opens the cover crop dialog on a game page.
+// ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
+// fills the three days before today with games that ran side by side.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -92,6 +93,53 @@ for (let day = HISTORY_DAYS; day >= 1; day -= 1) {
       idle_ms: idle,
       runtime_ms: runtime,
       integrity_status: random() < 0.012 ? "suspicious" : random() < 0.01 ? "recovered" : "local",
+      closed_cleanly: true,
+    });
+  }
+}
+
+if (params.get("sidebyside") === "1") {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const dayStart = (daysAgo: number) =>
+    new Date(midnight.getFullYear(), midnight.getMonth(), midnight.getDate() - daysAgo).getTime();
+  const before = sessions.filter((session) => new Date(session.started_at_wall).getTime() < dayStart(3));
+  sessions.splice(0, sessions.length, ...before);
+  // [days ago, game index, start hour, hours]
+  const sideBySide: [number, number, number, number][] = [
+    // A launcher left open through three matches, like TFT in the League client.
+    [1, 5, 18.95, 2.15],
+    [1, 2, 19.03, 0.59],
+    [1, 2, 19.62, 0.68],
+    [1, 2, 20.43, 0.66],
+    // Two separate pairs.
+    [2, 3, 13, 2],
+    [2, 4, 14, 2],
+    [2, 1, 20, 3],
+    [2, 2, 21, 1],
+    // One game left running all day while others come and go.
+    [3, 5, 9, 14],
+    [3, 0, 11, 2.5],
+    [3, 2, 13, 2],
+    [3, 4, 17.5, 0.1],
+    [3, 1, 19, 1],
+    [3, 1, 20.2, 1],
+  ];
+  for (const [daysAgo, gameIndex, hour, hours] of sideBySide) {
+    const start = dayStart(daysAgo) + hour * HOUR_MS;
+    const runtime = Math.round(hours * HOUR_MS);
+    const idle = Math.round(runtime * 0.1);
+    sessions.push({
+      id: `session-side-${daysAgo}-${gameIndex}-${hour}`,
+      game_id: games[gameIndex].id,
+      device_id: "preview",
+      started_at_wall: iso(start),
+      ended_at_wall: iso(start + runtime),
+      elapsed_monotonic_ms: runtime,
+      active_ms: runtime - idle,
+      idle_ms: idle,
+      runtime_ms: runtime,
+      integrity_status: "local",
       closed_cleanly: true,
     });
   }

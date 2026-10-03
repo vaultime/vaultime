@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
@@ -12,7 +12,7 @@ import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { DAYS_PER_WEEK, HOURS_PER_DAY, JOURNAL_MIN_SPAN_PERCENT, JOURNAL_TICK_HOURS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
-import { countsAsPlay, playedMs, sideBySide, type SideBySide } from "@/lib/session-stats";
+import { countsAsPlay, playedMs, playRuns, sideBySideGroups, type PlayRun } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
 import {
   clockPercent,
@@ -38,6 +38,10 @@ interface JournalDay {
 const HATCH_STRIPE_PX = 3;
 /** Dark gap between the stripes, so games with similar colors still read as stripes. */
 const HATCH_GAP_PX = 1.5;
+/** Half the strip's height. Pieces of a block lean by it at both ends, along the stripes. */
+const HATCH_LEAN_PX = 5;
+/** How far a piece reaches under the next one, so no hairline shows between them. */
+const PIECE_OVERLAP_PX = 1;
 
 const TICKS = Array.from(
   { length: HOURS_PER_DAY / JOURNAL_TICK_HOURS + 1 },
@@ -75,7 +79,7 @@ function groupWeek(sessions: Session[], changes: GameStatusChange[], start: Date
   return [...grouped.values()].sort((a, b) => b.start.getTime() - a.start.getTime());
 }
 
-/** Diagonal stripes in the colors of games that ran side by side. */
+/** Diagonal stripes in the colors of games that ran side by side, one color per stripe in turn. */
 function hatch(colors: string[]): string {
   const step = HATCH_STRIPE_PX + HATCH_GAP_PX;
   const stripes = colors.map((color, index) => {
@@ -84,6 +88,34 @@ function hatch(colors: string[]): string {
     return `${color} ${start}px ${gap}px, var(--ink) ${gap}px ${start + step}px`;
   });
   return `repeating-linear-gradient(135deg, ${stripes.join(", ")})`;
+}
+
+/** Where something sits on the day's strip, in percent of the day. */
+interface Place {
+  left: number;
+  width: number;
+}
+
+function placeOnDay(start: Date, end: Date, day: Date): Place {
+  const left = clockPercent(start, day);
+  const width = Math.max(JOURNAL_MIN_SPAN_PERCENT, clockPercent(end, day) - left);
+  return { left: Math.min(left, 100 - width), width };
+}
+
+/**
+ * Cuts `place` out of a layer that covers `box`, with ends that lean along
+ * the stripes. An end at the end of its block stays upright.
+ */
+function leaningClip(box: Place, place: Place, leanStart: boolean, leanEnd: boolean): string {
+  const inBox = (at: number) => ((at - box.left) / box.width) * 100;
+  const edge = (at: number, shiftPx: number) => (shiftPx ? `calc(${inBox(at)}% + ${shiftPx}px)` : `${inBox(at)}%`);
+  const start = place.left;
+  const end = place.left + place.width;
+  const [startTop, startBottom] = leanStart ? [HATCH_LEAN_PX, -HATCH_LEAN_PX] : [0, 0];
+  const [endTop, endBottom] = leanEnd
+    ? [HATCH_LEAN_PX + PIECE_OVERLAP_PX, -HATCH_LEAN_PX + PIECE_OVERLAP_PX]
+    : [0, 0];
+  return `polygon(${edge(start, startTop)} 0, ${edge(end, endTop)} 0, ${edge(end, endBottom)} 100%, ${edge(start, startBottom)} 100%)`;
 }
 
 /** Play history week by week, one sentence per session. */
@@ -223,33 +255,55 @@ export function JournalPage() {
 }
 
 /**
- * Stripes over the stretch where games ran side by side. Its ends are round
- * only where no other session carries on, so it sits flush inside the bars.
+ * Sessions that overlap as one rounded block, in the fill of the game that
+ * ran alone and in stripes where games ran side by side. Every change leans
+ * with the stripes, so the block reads as one piece of play however many
+ * games come and go.
  */
-function SharedStretch({
-  stretch,
+function PlayBlock({
+  run,
   day,
-  now,
-  colors,
+  fillOf,
+  markOf,
 }: {
-  stretch: SideBySide;
-  day: JournalDay;
-  now: Date;
-  colors: string[];
+  run: PlayRun;
+  day: Date;
+  fillOf: (gameId: string) => string;
+  markOf: (gameId: string) => string;
 }) {
-  const spans = day.sessions.map((session) => ({
-    start: parseVaultimeDate(session.started_at_wall),
-    end: session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now,
-  }));
-  const carriesOnBefore = spans.some((span) => span.start < stretch.start && span.end >= stretch.start);
-  const carriesOnAfter = spans.some((span) => span.start <= stretch.end && span.end > stretch.end);
-  const left = clockPercent(stretch.start, day.start);
-  const width = Math.max(JOURNAL_MIN_SPAN_PERCENT, clockPercent(stretch.end, day.start) - left);
+  const block = placeOnDay(run.start, run.end, day);
+  const layer = (box: Place): CSSProperties => ({
+    left: `${((box.left - block.left) / block.width) * 100}%`,
+    width: `${(box.width / block.width) * 100}%`,
+  });
+  // Stripes come from layers as wide as the strip, so they run on from one
+  // stretch to the next and keep their spot when a game joins or leaves. A
+  // game's fill spans its sessions, so two colored art stays one gradient.
+  const strip: Place = { left: 0, width: 100 };
+  // Stripes go on top, so a short stretch side by side keeps its narrowest width.
+  const pieces = [...run.pieces].sort((a, b) => Number(a.gameIds.length > 1) - Number(b.gameIds.length > 1));
   return (
     <span
-      className={`absolute inset-y-0 ${carriesOnBefore ? "" : "rounded-l-full"} ${carriesOnAfter ? "" : "rounded-r-full"}`}
-      style={{ left: `${left}%`, width: `${width}%`, backgroundImage: hatch(colors) }}
-    />
+      className="absolute inset-y-0 overflow-hidden rounded-full"
+      style={{ left: `${block.left}%`, width: `${block.width}%` }}
+    >
+      {pieces.map((piece) => {
+        const alone = piece.gameIds.length === 1;
+        const box = alone ? placeOnDay(piece.sessionsStart, piece.sessionsEnd, day) : strip;
+        const place = placeOnDay(piece.start, piece.end, day);
+        return (
+          <span
+            key={piece.start.getTime()}
+            className="absolute inset-y-0"
+            style={{
+              ...layer(box),
+              background: alone ? fillOf(piece.gameIds[0]) : hatch(piece.gameIds.map(markOf)),
+              clipPath: leaningClip(box, place, piece.start > run.start, piece.end < run.end),
+            }}
+          />
+        );
+      })}
+    </span>
   );
 }
 
@@ -280,9 +334,9 @@ function DaySection({
   onCorrected: () => void;
   playedBefore: (gameId: string, moment: string) => number;
 }) {
-  const shared = sideBySide(day.sessions, now);
-  const sharedGames = [...new Set(shared.flatMap((stretch) => stretch.gameIds))];
-  const sharedMs = shared.reduce((sum, stretch) => sum + stretch.end.getTime() - stretch.start.getTime(), 0);
+  const runs = playRuns(day.sessions, now);
+  const groups = sideBySideGroups(runs.flatMap((run) => run.pieces).filter((piece) => piece.gameIds.length > 1));
+  const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
 
   return (
     <section className="flex flex-col gap-5 border-b border-rule py-7 xl:flex-row xl:gap-10">
@@ -299,27 +353,8 @@ function DaySection({
       <div className="flex min-w-0 flex-1 flex-col gap-3.5">
         <div>
           <div aria-hidden="true" className="relative h-2.5 rounded-full bg-raised">
-            {day.sessions.filter(countsAsPlay).map((session) => {
-              const start = parseVaultimeDate(session.started_at_wall);
-              const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
-              const left = clockPercent(start, day.start);
-              const width = Math.max(JOURNAL_MIN_SPAN_PERCENT, clockPercent(end, day.start) - left);
-              return (
-                <span
-                  key={session.id}
-                  className="absolute inset-y-0 rounded-full"
-                  style={{ left: `${left}%`, width: `${width}%`, background: fillOf(session.game_id) }}
-                />
-              );
-            })}
-            {shared.map((stretch) => (
-              <SharedStretch
-                key={stretch.start.getTime()}
-                stretch={stretch}
-                day={day}
-                now={now}
-                colors={stretch.gameIds.map(markOf)}
-              />
+            {runs.map((run) => (
+              <PlayBlock key={run.start.getTime()} run={run} day={day.start} fillOf={fillOf} markOf={markOf} />
             ))}
           </div>
           <div aria-hidden="true" className="mt-1.5 flex justify-between font-mono text-[10px] text-faint">
@@ -327,18 +362,19 @@ function DaySection({
               <span key={hour}>{String(hour).padStart(2, "0")}</span>
             ))}
           </div>
-          {shared.length > 0 && (
-            <p className="mt-2.5 flex items-center gap-2.5 text-[13px] text-faint">
-              <span
-                aria-hidden="true"
-                className="h-2.5 w-6 shrink-0 rounded-full"
-                style={{ backgroundImage: hatch(shared[0].gameIds.map(markOf)) }}
-              />
-              {sideBySideSentence(
-                sharedGames.map((gameId) => byGame.get(gameId)?.game.title ?? "a removed game"),
-                sharedMs,
-              )}
-            </p>
+          {groups.length > 0 && (
+            <div className="mt-2.5 flex flex-col gap-1.5">
+              {groups.map((group) => (
+                <p key={group.gameIds.join()} className="flex items-center gap-2.5 text-[13px] text-faint">
+                  <span
+                    aria-hidden="true"
+                    className="h-2.5 w-6 shrink-0 rounded-full"
+                    style={{ backgroundImage: hatch(group.gameIds.map(markOf)) }}
+                  />
+                  {sideBySideSentence(group, titleOf)}
+                </p>
+              ))}
+            </div>
           )}
         </div>
 
@@ -350,7 +386,7 @@ function DaySection({
           .map(({ session, change }) => {
             if (change) {
               if (change.status === "none") return null;
-              const title = byGame.get(change.game_id)?.game.title ?? "a removed game";
+              const title = titleOf(change.game_id);
               return (
                 <article key={change.id} className="flex items-baseline gap-5">
                   <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
@@ -375,7 +411,7 @@ function DaySection({
                 key={session.id}
                 session={session}
                 events={events}
-                gameTitle={byGame.get(session.game_id)?.game.title ?? "a removed game"}
+                gameTitle={titleOf(session.game_id)}
                 titleColor={markOf(session.game_id)}
                 titleFill={fillOf(session.game_id) === markOf(session.game_id) ? undefined : fillOf(session.game_id)}
                 gameSessions={sessionsByGame.get(session.game_id)}

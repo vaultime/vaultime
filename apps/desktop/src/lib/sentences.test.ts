@@ -17,6 +17,7 @@ import {
   type SessionContext,
   sessionTrustNote,
   shapesSentence,
+  sideBySideSentence,
   statusSentence,
   streakSentence,
   weekSentence,
@@ -369,5 +370,32 @@ describe("statusSentence", () => {
     expect(statusSentence("dropped", "Celeste", 3 * HOUR_MS).after).toBe(" down after three hours.");
     expect(statusSentence("finished", "Celeste", 0).after).toBe(".");
     expect(statusSentence("backlog", "Outer Wilds", 0)).toEqual({ before: "", em: "Outer Wilds", after: " went on your list." });
+  });
+});
+
+describe("sideBySideSentence", () => {
+  const titles: Record<string, string> = { a: "League of Legends", b: "Teamfight Tactics", c: "Balatro", d: "Celeste" };
+  const titleOf = (gameId: string) => titles[gameId];
+  const group = { ms: 115 * MINUTE_MS, alongside: null, mostAtOnce: 2 };
+
+  it("puts two games side by side", () => {
+    expect(sideBySideSentence({ ...group, gameIds: ["a", "b"] }, titleOf)).toBe(
+      "League of Legends and Teamfight Tactics ran side by side for 1 h 55.",
+    );
+  });
+
+  it("names a game that ran through all of it first", () => {
+    expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c"], alongside: "a", mostAtOnce: 3 }, titleOf)).toBe(
+      "League of Legends ran alongside Teamfight Tactics and Balatro for 1 h 55.",
+    );
+  });
+
+  it("says how many ran at once when no game ran through all of it", () => {
+    expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c"] }, titleOf)).toBe(
+      "League of Legends, Teamfight Tactics and Balatro ran side by side, two at a time, for 1 h 55.",
+    );
+    expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c", "d"], mostAtOnce: 3 }, titleOf)).toBe(
+      "League of Legends, Teamfight Tactics, Balatro and Celeste ran side by side, up to three at a time, for 1 h 55.",
+    );
   });
 });

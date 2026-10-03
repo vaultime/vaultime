@@ -5,6 +5,13 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Journal
+
+- **Games side by side, drawn cleanly.** Sessions that overlap on the day strip now form one rounded block. The stripes run on without breaks from one stretch to the next, and every change between games leans along them. A client left open through several matches, like Teamfight Tactics in the League client, reads as one block with the matches striped inside it.
+- **The right games side by side.** The note under the strip names only the games that actually ran together, one line for each group. When one game ran through all of it, like a launcher, the note says which games ran alongside it. Before, it listed every game that overlapped any other that day as if they had all run at once.
+
 ## [0.3.0] - 2026-10-02
 
 ### Appearance
