@@ -125,12 +125,12 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
       const previous = payload?.previous as Record<string, unknown> | undefined;
       const before = typeof previous?.runtime_ms === "number" ? formatHoursMinutes(previous.runtime_ms) : null;
       const after = typeof payload?.runtime_ms === "number" ? formatHoursMinutes(payload.runtime_ms) : null;
-      const why = typeof payload?.reason === "string" ? `: ${payload.reason}` : "";
+      const why = typeof payload?.reason === "string" && payload.reason.trim() ? ` (“${payload.reason.trim()}”)` : "";
       return before && after ? `Changed from ${before} to ${after}${why}` : `Corrected${why}`;
     }
     case "added_manually":
-      return typeof payload?.reason === "string" && payload.reason
-        ? `Added by you: ${payload.reason}`
+      return typeof payload?.reason === "string" && payload.reason.trim()
+        ? `Added by you (“${payload.reason.trim()}”)`
         : "Added by you";
     case "ended":
       return "Session closed cleanly";

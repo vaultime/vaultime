@@ -158,6 +158,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::list_earlier_playtime,
         commands::export_sessions,
         commands::trim_session,
+        commands::preview_trim,
         commands::discard_session,
         commands::add_manual_session,
         commands::list_status_changes,

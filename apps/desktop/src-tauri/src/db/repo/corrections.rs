@@ -99,8 +99,54 @@ fn gap_ms_between(
     Ok(total)
 }
 
-/// Counts a session only up to `ended_at`, for a game left running after
-/// play. The cut comes out of idle time first, then out of active time.
+/// What a session keeps when it counts only up to `new_end`. Its counters at
+/// that moment come from its checkpoints, so exactly the active and idle time
+/// after it comes out, and sleep, which never counted, stays out. A session
+/// without checkpoints inside, like one added by hand, loses idle time
+/// first, then active time, and sleep in the cut part is not taken out again.
+fn trim_timing(
+    conn: &rusqlite::Connection,
+    session: &Session,
+    new_end: DateTime<Utc>,
+) -> Result<Timing> {
+    let Some(old_end) = session.ended_at_wall.as_deref() else {
+        return Err(VaultimeError::Invalid(
+            "a running session cannot be corrected".into(),
+        ));
+    };
+    let (start, old_end) = (parse_time(&session.started_at_wall)?, parse_time(old_end)?);
+    if new_end < start || new_end > old_end {
+        return Err(VaultimeError::Invalid(
+            "the new end has to lie within the session".into(),
+        ));
+    }
+    let ended_at_wall = integrity::format_timestamp(new_end);
+    let events = integrity::load_session_events(conn, &session.id)?;
+    if let Some([_, active, idle]) = slices::counters_at(&events, new_end.timestamp_millis()) {
+        // Never more than the session holds now, which an earlier cut may have lowered.
+        let active_ms = active.clamp(0, session.active_ms);
+        let idle_ms = idle.clamp(0, session.idle_ms);
+        return Ok(Timing {
+            ended_at_wall,
+            runtime_ms: active_ms + idle_ms,
+            active_ms,
+            idle_ms,
+        });
+    }
+    let removed = ((old_end - new_end).num_milliseconds()
+        - gap_ms_between(conn, &session.id, new_end, old_end)?)
+    .clamp(0, session.runtime_ms);
+    let idle_cut = removed.min(session.idle_ms);
+    let active_cut = (removed - idle_cut).min(session.active_ms);
+    Ok(Timing {
+        ended_at_wall,
+        runtime_ms: session.runtime_ms - removed,
+        active_ms: session.active_ms - active_cut,
+        idle_ms: session.idle_ms - idle_cut,
+    })
+}
+
+/// Counts a session only up to `ended_at`, for a game left running after play.
 pub fn trim_session(
     db: &Database,
     session_id: &str,
@@ -111,32 +157,32 @@ pub fn trim_session(
     let new_end = parse_time(ended_at)?;
     db.with_transaction(|conn| {
         let session = load(conn, session_id)?;
-        let Some(old_end) = session.ended_at_wall.as_deref() else {
-            return Err(VaultimeError::Invalid(
-                "a running session cannot be corrected".into(),
-            ));
-        };
-        let (start, old_end) = (parse_time(&session.started_at_wall)?, parse_time(old_end)?);
-        if new_end < start || new_end > old_end {
-            return Err(VaultimeError::Invalid(
-                "the new end has to lie within the session".into(),
-            ));
-        }
-        // Sleep between the new and the old end was never counted, so it is
-        // not taken out again.
-        let removed = ((old_end - new_end).num_milliseconds()
-            - gap_ms_between(conn, &session.id, new_end, old_end)?)
-        .clamp(0, session.runtime_ms);
-        let idle_cut = removed.min(session.idle_ms);
-        let active_cut = (removed - idle_cut).min(session.active_ms);
-        let timing = Timing {
-            ended_at_wall: integrity::format_timestamp(new_end),
-            runtime_ms: session.runtime_ms - removed,
-            active_ms: session.active_ms - active_cut,
-            idle_ms: session.idle_ms - idle_cut,
-        };
+        let timing = trim_timing(conn, &session, new_end)?;
         apply_correction(conn, &session, &timing, reason)
     })
+}
+
+/// The runtime, active and idle time a session would keep when it counted
+/// only up to `ended_at`, without changing anything.
+pub fn preview_trim(db: &Database, session_id: &str, ended_at: &str) -> Result<TrimPreview> {
+    let new_end = parse_time(ended_at)?;
+    db.with_conn(|conn| {
+        let session = load(conn, session_id)?;
+        let timing = trim_timing(conn, &session, new_end)?;
+        Ok(TrimPreview {
+            runtime_ms: timing.runtime_ms,
+            active_ms: timing.active_ms,
+            idle_ms: timing.idle_ms,
+        })
+    })
+}
+
+/// What a trim would leave of a session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct TrimPreview {
+    pub runtime_ms: i64,
+    pub active_ms: i64,
+    pub idle_ms: i64,
 }
 
 /// Takes all time out of a session that was no play at all. The session
@@ -166,6 +212,25 @@ fn apply_correction(
     timing: &Timing,
     reason: &str,
 ) -> Result<Session> {
+    // A correction only ever takes time out, whatever asked for it.
+    let ends_later = match session.ended_at_wall.as_deref() {
+        Some(old_end) => parse_time(&timing.ended_at_wall)? > parse_time(old_end)?,
+        None => true,
+    };
+    if ends_later
+        || timing.runtime_ms > session.runtime_ms
+        || timing.active_ms > session.active_ms
+        || timing.idle_ms > session.idle_ms
+    {
+        return Err(VaultimeError::Invalid(
+            "a correction can only take time out".into(),
+        ));
+    }
+    if timing.runtime_ms == session.runtime_ms {
+        return Err(VaultimeError::Invalid(
+            "this correction takes no time out".into(),
+        ));
+    }
     let status = match session.integrity_status.as_str() {
         STATUS_SUSPICIOUS => STATUS_SUSPICIOUS,
         STATUS_MANUAL => STATUS_MANUAL,
@@ -416,6 +481,158 @@ mod tests {
     }
 
     #[test]
+    fn trimming_takes_out_exactly_the_time_after_the_new_end() {
+        let (db, game) = setup();
+        let session = sessions::create_session(&db, &game, DEVICE).unwrap();
+        let start = parse_time(&session.started_at_wall).unwrap();
+        // Active for half an hour, then idle for an hour.
+        let checkpoint = sessions::Checkpoint {
+            runtime_ms: 30 * MINUTE,
+            active_ms: 30 * MINUTE,
+            idle_ms: 0,
+            wall_elapsed_ms: 30 * MINUTE,
+            drift_ms: 0,
+        };
+        sessions::record_checkpoint(
+            &db,
+            &session.id,
+            &checkpoint,
+            "local",
+            start + chrono::Duration::minutes(30),
+        )
+        .unwrap();
+        let ended = db
+            .with_transaction(|conn| {
+                let end = integrity::format_timestamp(start + chrono::Duration::minutes(90));
+                conn.execute(
+                    "UPDATE sessions SET ended_at_wall = ?1, runtime_ms = ?2, elapsed_monotonic_ms = ?2,
+                         active_ms = ?3, idle_ms = ?4, closed_cleanly = 1
+                     WHERE id = ?5",
+                    params![end, 90 * MINUTE, 30 * MINUTE, 60 * MINUTE, session.id],
+                )
+                .map_err(map_db)?;
+                integrity::append_session_event(
+                    conn,
+                    &session.id,
+                    "ended",
+                    &end,
+                    Some(90 * MINUTE),
+                    &json!({
+                        "runtime_ms": 90 * MINUTE,
+                        "active_ms": 30 * MINUTE,
+                        "idle_ms": 60 * MINUTE,
+                        "integrity_status": "local",
+                        "closed_cleanly": true,
+                    })
+                    .to_string(),
+                )?;
+                load(conn, &session.id)
+            })
+            .unwrap();
+        assert_eq!(ended.integrity_status, "local");
+
+        // Cut at 20 minutes: ten active minutes go, and the whole idle hour.
+        let new_end = integrity::format_timestamp(start + chrono::Duration::minutes(20));
+        let preview = preview_trim(&db, &session.id, &new_end).unwrap();
+        assert_eq!(
+            (preview.runtime_ms, preview.active_ms, preview.idle_ms),
+            (20 * MINUTE, 20 * MINUTE, 0)
+        );
+        let trimmed = trim_session(&db, &session.id, &new_end, "Fell asleep").unwrap();
+        assert_eq!(
+            (trimmed.runtime_ms, trimmed.active_ms, trimmed.idle_ms),
+            (20 * MINUTE, 20 * MINUTE, 0)
+        );
+        assert_eq!(validated(&db, &session.id).integrity_status, STATUS_EDITED);
+    }
+
+    #[test]
+    fn corrections_only_take_time_out() {
+        let (db, game) = setup();
+        let session = played(&db, &game, 60, 40);
+        let end = session.ended_at_wall.clone().unwrap();
+        assert!(
+            trim_session(&db, &session.id, &end, "Same end").is_err(),
+            "a trim that takes nothing out"
+        );
+        discard_session(&db, &session.id, "No play").unwrap();
+        assert!(
+            discard_session(&db, &session.id, "Again").is_err(),
+            "nothing left to take out"
+        );
+
+        // Whatever calls it, the shared step refuses to add time or move the end later.
+        let fresh = played(&db, &game, 60, 40);
+        let fresh_end = parse_time(fresh.ended_at_wall.as_deref().unwrap()).unwrap();
+        for timing in [
+            Timing {
+                ended_at_wall: fresh.ended_at_wall.clone().unwrap(),
+                runtime_ms: fresh.runtime_ms + MINUTE,
+                active_ms: fresh.active_ms,
+                idle_ms: fresh.idle_ms,
+            },
+            Timing {
+                ended_at_wall: integrity::format_timestamp(
+                    fresh_end + chrono::Duration::minutes(5),
+                ),
+                runtime_ms: fresh.runtime_ms - MINUTE,
+                active_ms: fresh.active_ms - MINUTE,
+                idle_ms: fresh.idle_ms,
+            },
+        ] {
+            let refused =
+                db.with_transaction(|conn| apply_correction(conn, &fresh, &timing, "More"));
+            assert!(refused.is_err());
+        }
+        assert_eq!(validated(&db, &fresh.id).runtime_ms, 60 * MINUTE);
+    }
+
+    #[test]
+    fn a_recorded_correction_that_adds_time_turns_the_session_suspicious() {
+        let (db, game) = setup();
+        let session = played(&db, &game, 60, 60);
+        // Written past the checks, through the chain, as an edited database could.
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE sessions SET runtime_ms = ?1, elapsed_monotonic_ms = ?1, active_ms = ?1,
+                     integrity_status = 'edited'
+                 WHERE id = ?2",
+                params![120 * MINUTE, session.id],
+            )
+            .map_err(map_db)?;
+            integrity::append_session_event(
+                conn,
+                &session.id,
+                "corrected",
+                &integrity::now_timestamp(),
+                Some(120 * MINUTE),
+                &json!({
+                    "reason": "More",
+                    "ended_at_wall": session.ended_at_wall,
+                    "runtime_ms": 120 * MINUTE,
+                    "active_ms": 120 * MINUTE,
+                    "idle_ms": 0,
+                    "integrity_status": "edited",
+                    "closed_cleanly": true,
+                    "previous": {
+                        "ended_at_wall": session.ended_at_wall,
+                        "runtime_ms": 60 * MINUTE,
+                        "active_ms": 60 * MINUTE,
+                        "idle_ms": 0,
+                        "integrity_status": "local",
+                    },
+                })
+                .to_string(),
+            )
+        })
+        .unwrap();
+        assert_eq!(
+            validated(&db, &session.id).integrity_status,
+            STATUS_SUSPICIOUS
+        );
+    }
+
+    #[test]
     fn suspicious_sessions_stay_suspicious() {
         let (db, game) = setup();
         let session = sessions::create_session(&db, &game, DEVICE).unwrap();
@@ -581,11 +798,20 @@ mod tests {
     fn a_flag_survives_recovery_and_correction() {
         let (db, game) = setup();
         let session = sessions::create_session(&db, &game, DEVICE).unwrap();
+        // A minute on record, so the discard below has time to take out.
+        let checkpoint = sessions::Checkpoint {
+            runtime_ms: MINUTE,
+            active_ms: MINUTE,
+            idle_ms: 0,
+            wall_elapsed_ms: MINUTE,
+            drift_ms: 0,
+        };
+        sessions::record_checkpoint(&db, &session.id, &checkpoint, "local", Utc::now()).unwrap();
         sessions::flag_session_suspicious(
             &db,
             &session.id,
-            0,
-            0,
+            MINUTE,
+            MINUTE,
             30_000,
             "wall_clock_step_mismatch",
         )

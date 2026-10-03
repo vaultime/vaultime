@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A lighter, sharper session record.** Vaultime still checks your games every five seconds, but it now notes a session's time whenever it switches between active and idle, and at least every 30 seconds, instead of every five seconds. The record grows about six times slower, so backups stay small for years, and each note now marks a real change. After a crash, a session keeps its time up to the last note, at most 30 seconds before the crash.
 
+### Corrections
+
+- **Corrections take out exactly what happened.** Counting a session only until a time now removes exactly the active and idle time after it, read from the session's own record, instead of taking idle time first. The dialog shows the session's start, end and counted time, and what the correction would leave, worked out the same way as the correction itself.
+- **Only ever less.** A correction can only take time out. Vaultime refuses one that would add time, move the end later or change nothing, and a recorded correction that added time marks the session Suspicious.
+- **Your reason in quotes.** A corrected session reads "Cut short by you from 2 h 08 (“Fell asleep”)", so a short reason never runs into a time.
+
 ### Stats
 
 - **See what you played on any day.** Point at a day in the year calendar or at a month to see each game you played and for how long, in its own color, with idle time below. Click a day, or move there with the arrow keys and press Enter, to read that week in the journal.

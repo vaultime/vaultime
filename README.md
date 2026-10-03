@@ -89,7 +89,7 @@ The library marks a game when one of its sessions from the last 30 days is Suspi
 
 These labels show changes. They cannot prevent them. They are hints, not proof.
 
-To correct a session, point at it in the journal or on the game's page and pick Correct the time. For a game left running, count it only until you stopped playing. For a session that was no play at all, take out all its time. To add play from elsewhere, pick Add a session on the game's page.
+To correct a session, point at it in the journal or on the game's page and pick Correct the time. For a game left running, count it only until you stopped playing. Exactly the active and idle time after that point comes out. A correction can only take time out, never add any. For a session that was no play at all, take out all its time. To add play from elsewhere, pick Add a session on the game's page.
 
 ## Backups
 

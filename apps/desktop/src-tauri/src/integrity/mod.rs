@@ -117,6 +117,9 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     {
         return Ok(Some(reason));
     }
+    if let Some(reason) = check_corrections(&events) {
+        return Ok(Some(reason));
+    }
     let start = match first_event.event_type.as_str() {
         "started" => Some(first_event.event_time_wall.clone()),
         "added_manually" => wall_in_payload(first_event, "started_at_wall"),
@@ -175,6 +178,65 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
     }
 
     Ok(None)
+}
+
+/// A correction only ever takes time out. It starts from the counters the
+/// session had just before it, lowers none of them below zero, raises none
+/// of them and never moves the end later.
+fn check_corrections(events: &[SessionEvent]) -> Option<String> {
+    let counters = |payload: &Value| -> Option<[i64; 3]> {
+        Some([
+            payload_i64(payload, "runtime_ms")?,
+            payload_i64(payload, "active_ms")?,
+            payload_i64(payload, "idle_ms")?,
+        ])
+    };
+    let mut before: Option<[i64; 3]> = None;
+    for event in events {
+        let payload = parse_payload(&event.payload_json);
+        match event.event_type.as_str() {
+            "started" => before = Some([0; 3]),
+            "heartbeat" | "ended" | "recovered" | "added_manually" => {
+                before = payload.as_ref().and_then(counters);
+            }
+            "corrected" => {
+                let Some(payload) = payload else {
+                    return Some("correction_unreadable".into());
+                };
+                let after = counters(&payload);
+                let previous = payload.get("previous");
+                let from = previous.and_then(counters);
+                let (Some(after), Some(from)) = (after, from) else {
+                    return Some("correction_unreadable".into());
+                };
+                if before.is_some_and(|before| before != from) {
+                    return Some("correction_previous_mismatch".into());
+                }
+                let new_end = payload_str(&payload, "ended_at_wall").and_then(parse_wall);
+                let old_end = previous
+                    .and_then(|previous| payload_str(previous, "ended_at_wall"))
+                    .and_then(parse_wall);
+                let ends_later = matches!((new_end, old_end), (Some(new), Some(old)) if new > old);
+                if ends_later
+                    || after
+                        .iter()
+                        .zip(from)
+                        .any(|(after, from)| *after > from || *after < 0)
+                {
+                    return Some("correction_added_time".into());
+                }
+                before = Some(after);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn parse_wall(value: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|time| time.with_timezone(&Utc))
 }
 
 /// A Suspicious flag stays once it is set, and only a session added by hand

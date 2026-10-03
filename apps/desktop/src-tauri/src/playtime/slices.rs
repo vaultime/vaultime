@@ -117,6 +117,36 @@ fn points(events: &[SessionEvent]) -> Vec<Point> {
     points
 }
 
+/// A session's runtime, active and idle time at `wall_ms`, worked out from
+/// the points around it. Between two checkpoints the time is all of one
+/// kind, so this is exact for tracked sessions. None for a session without
+/// checkpoints, like one added by hand, and before a session's start.
+pub(crate) fn counters_at(events: &[SessionEvent], wall_ms: i64) -> Option<[i64; MEASURES]> {
+    if !events.iter().any(|event| event.event_type == "heartbeat") {
+        return None;
+    }
+    let points = points(events);
+    let after = points.iter().position(|point| point.wall_ms > wall_ms);
+    match after {
+        Some(0) => None,
+        None => points.last().map(|point| point.counters),
+        Some(index) => {
+            let (from, to) = (points[index - 1], points[index]);
+            let span = i128::from(to.wall_ms - from.wall_ms);
+            let into = i128::from(wall_ms - from.wall_ms);
+            let mut counters = from.counters;
+            for (value, (start, end)) in counters
+                .iter_mut()
+                .zip(from.counters.iter().zip(to.counters))
+            {
+                let grown = i128::from(end - start) * into / span.max(1);
+                *value = start + i64::try_from(grown).unwrap_or(0);
+            }
+            Some(counters)
+        }
+    }
+}
+
 fn slice_of(wall_ms: i64) -> i64 {
     wall_ms.div_euclid(PLAY_SLICE_MS) * PLAY_SLICE_MS
 }
@@ -662,6 +692,56 @@ mod tests {
         assert_eq!(stored(&db).1, 90_000);
         // Current now, so the next start does nothing.
         assert_eq!(ensure_current(&db).unwrap(), 0);
+    }
+
+    #[test]
+    fn counters_at_a_moment_come_from_the_points_around_it() {
+        let events = [
+            event(1, "started", &at(18, 0, 0), &serde_json::json!({})),
+            event(
+                2,
+                "heartbeat",
+                &at(18, 30, 0),
+                &counters(30 * MINUTE, 30 * MINUTE, 0),
+            ),
+            event(
+                3,
+                "heartbeat",
+                &at(19, 0, 0),
+                &counters(60 * MINUTE, 30 * MINUTE, 30 * MINUTE),
+            ),
+            event(
+                4,
+                "tracking_gap",
+                &at(21, 0, 0),
+                &serde_json::json!({ "wall_gap_ms": 120 * MINUTE }),
+            ),
+            event(
+                5,
+                "ended",
+                &at(21, 30, 0),
+                &counters(90 * MINUTE, 30 * MINUTE, 60 * MINUTE),
+            ),
+        ];
+        assert_eq!(
+            counters_at(&events, ms(&at(18, 15, 0))),
+            Some([15 * MINUTE, 15 * MINUTE, 0])
+        );
+        assert_eq!(
+            counters_at(&events, ms(&at(18, 45, 0))),
+            Some([45 * MINUTE, 30 * MINUTE, 15 * MINUTE])
+        );
+        // Asleep from 19:00 to 21:00, so nothing grew in between.
+        assert_eq!(
+            counters_at(&events, ms(&at(20, 0, 0))),
+            Some([60 * MINUTE, 30 * MINUTE, 30 * MINUTE])
+        );
+        assert_eq!(counters_at(&events, ms(&at(17, 0, 0))), None);
+        // Without checkpoints nothing tells where the time fell.
+        assert_eq!(
+            counters_at(&[events[0].clone(), events[4].clone()], ms(&at(18, 15, 0))),
+            None
+        );
     }
 
     #[test]

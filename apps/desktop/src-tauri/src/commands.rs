@@ -579,6 +579,16 @@ pub fn trim_session(
     corrections::trim_session(&db, &session_id, &ended_at, &reason)
 }
 
+/// What a closed session would keep when it counted only up to `ended_at`.
+#[tauri::command(async)]
+pub fn preview_trim(
+    db: State<'_, Arc<Database>>,
+    session_id: String,
+    ended_at: String,
+) -> Result<corrections::TrimPreview, VaultimeError> {
+    corrections::preview_trim(&db, &session_id, &ended_at)
+}
+
 /// Takes all time out of a closed session, with a reason.
 #[tauri::command]
 pub fn discard_session(

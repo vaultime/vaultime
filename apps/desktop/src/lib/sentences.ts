@@ -353,11 +353,6 @@ export function sideBySideSentence(group: SideBySideGroup, titleOf: (gameId: str
   return `${listOf(titles)} ran side by side, ${atOnce} at a time, for ${time}.`;
 }
 
-/** Ends the player's own words with a period unless they already end a sentence. */
-function endSentence(text: string): string {
-  return /[.!?…]$/.test(text) ? text : `${text}.`;
-}
-
 /** "1 h 12 in all, 1 h 05 active, 7 min idle", or "1 h 12, all of it active". */
 export function sessionAmounts(session: Session): string {
   const all = formatHoursMinutes(session.runtime_ms);
@@ -388,12 +383,20 @@ export function sessionTrustNote(session: Session, events: SessionEvent[]): stri
       gapMs += payload.wall_gap_ms;
     }
     const why = typeof payload?.reason === "string" ? payload.reason.trim() : "";
-    const withReason = (lead: string) => (why ? `${lead}: ${endSentence(why)}` : `${lead}.`);
+    // The player's words in quotes, so they never run into a time.
+    const withReason = (lead: string) => (why ? `${lead} (“${why}”).` : `${lead}.`);
     if (event.event_type === "corrected") {
       const previous = payload?.previous as Record<string, unknown> | undefined;
       const before = typeof previous?.runtime_ms === "number" ? formatHoursMinutes(previous.runtime_ms) : null;
-      const cut = payload?.runtime_ms === 0 ? "All time taken out" : "Cut short";
-      notes.push(withReason(before ? `${cut} by you, it had ${before}` : `${cut} by you`));
+      const lead =
+        payload?.runtime_ms === 0
+          ? before
+            ? `All ${before} taken out by you`
+            : "All time taken out by you"
+          : before
+            ? `Cut short by you from ${before}`
+            : "Cut short by you";
+      notes.push(withReason(lead));
     }
     if (event.event_type === "added_manually") {
       notes.push(withReason("Added by you"));

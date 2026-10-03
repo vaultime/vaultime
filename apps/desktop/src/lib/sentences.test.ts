@@ -293,16 +293,19 @@ describe("sessionTrustNote", () => {
     const corrected = [
       event(edited.id, "corrected", { reason: "left it running", runtime_ms: 30 * MINUTE_MS, previous: { runtime_ms: 5 * HOUR_MS } }),
     ];
-    expect(sessionTrustNote(edited, corrected)).toBe("Cut short by you, it had 5 h 00: left it running.");
+    expect(sessionTrustNote(edited, corrected)).toBe("Cut short by you from 5 h 00 (“left it running”).");
     const discarded = [
       event(edited.id, "corrected", { reason: "Only the launcher!", runtime_ms: 0, previous: { runtime_ms: HOUR_MS } }),
     ];
-    expect(sessionTrustNote(edited, discarded)).toBe("All time taken out by you, it had 1 h 00: Only the launcher!");
+    expect(sessionTrustNote(edited, discarded)).toBe("All 1 h 00 taken out by you (“Only the launcher!”).");
     const manual = session(at(2026, 9, 29, 21, 0), 30, { integrity_status: "manual" });
     expect(sessionTrustNote(manual, [event(manual.id, "added_manually", { reason: "On the Steam Deck" })])).toBe(
-      "Added by you: On the Steam Deck.",
+      "Added by you (“On the Steam Deck”).",
     );
     expect(sessionTrustNote(manual, [event(manual.id, "added_manually", { reason: "" })])).toBe("Added by you.");
+    // A short reason never reads like part of a time.
+    const short = [event(edited.id, "corrected", { reason: "123", runtime_ms: HOUR_MS, previous: { runtime_ms: 2 * HOUR_MS } })];
+    expect(sessionTrustNote(edited, short)).toBe("Cut short by you from 2 h 00 (“123”).");
   });
 });
 

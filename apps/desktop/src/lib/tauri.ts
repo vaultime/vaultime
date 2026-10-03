@@ -187,6 +187,14 @@ export async function trimSession(sessionId: string, endedAt: string, reason: st
   return invoke<Session>("trim_session", { sessionId, endedAt, reason });
 }
 
+/** What a closed session would keep when it counted only up to `endedAt`. */
+export async function previewTrim(
+  sessionId: string,
+  endedAt: string,
+): Promise<{ runtime_ms: number; active_ms: number; idle_ms: number }> {
+  return invoke("preview_trim", { sessionId, endedAt });
+}
+
 /** Takes all time out of a closed session, with a reason. */
 export async function discardSession(sessionId: string, reason: string): Promise<Session> {
   return invoke<Session>("discard_session", { sessionId, reason });

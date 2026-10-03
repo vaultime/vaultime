@@ -156,7 +156,6 @@ export function SessionLine({
       {onCorrected && correcting && (
         <CorrectSessionDialog
           session={session}
-          events={events}
           gameTitle={gameTitle}
           open={correcting}
           onOpenChange={setCorrecting}

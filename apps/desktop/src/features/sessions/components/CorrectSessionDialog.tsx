@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Notice } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,43 +15,33 @@ import {
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
-import { parseIntegrityPayload } from "@/lib/integrity";
 import * as api from "@/lib/tauri";
-import { formatHoursMinutes, fromLocalInput, parseVaultimeDate, toLocalInput } from "@/lib/time";
-import type { Session, SessionEvent } from "@/lib/types";
+import {
+  formatClockTime,
+  formatHoursMinutes,
+  fromLocalInput,
+  parseVaultimeDate,
+  toLocalInput,
+  UI_LOCALE,
+} from "@/lib/time";
+import type { Session } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 
 type Mode = "trim" | "discard";
 
-/** Sleep and pauses of a session between two times, which its runtime never held. */
-function gapMsBetween(events: SessionEvent[], sessionId: string, from: Date, to: Date): number {
-  let total = 0;
-  for (const event of events) {
-    if (event.session_id !== sessionId || event.event_type !== "tracking_gap") continue;
-    const gapMs = parseIntegrityPayload(event.payload_json)?.wall_gap_ms;
-    if (typeof gapMs !== "number") continue;
-    const resumedAt = parseVaultimeDate(event.event_time_wall).getTime();
-    const overlap = Math.min(resumedAt, to.getTime()) - Math.max(resumedAt - gapMs, from.getTime());
-    total += Math.max(overlap, 0);
-  }
-  return total;
-}
-
 /**
  * Corrects a finished session: counts it only up to a time, or takes all its
- * time out. The session keeps its old times and the reason in its history.
+ * time out. A correction only ever takes time out, the core refuses anything
+ * else. The session keeps its old times and the reason in its history.
  */
 export function CorrectSessionDialog({
   session,
-  events,
   gameTitle,
   open,
   onOpenChange,
   onCorrected,
 }: {
   session: Session;
-  /** Events of this session, so the preview leaves out sleep like the core. */
-  events: SessionEvent[];
   gameTitle?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -67,21 +57,29 @@ export function CorrectSessionDialog({
 
   // The field drops seconds, so an untouched field keeps the exact end.
   const newEnd = endInput === toLocalInput(end) ? end : fromLocalInput(endInput);
-  // The same rules as the core: sleep in the cut part was never counted, and
-  // the cut comes out of idle time first.
-  const removed =
-    mode === "discard"
-      ? session.runtime_ms
-      : newEnd
-        ? Math.min(
-            Math.max(0, end.getTime() - newEnd.getTime() - gapMsBetween(events, session.id, newEnd, end)),
-            session.runtime_ms,
-          )
-        : 0;
-  const idleCut = Math.min(removed, session.idle_ms);
-  const counts = session.runtime_ms - removed;
-  const activeAfter = session.active_ms - Math.min(removed - idleCut, session.active_ms);
   const endValid = mode === "discard" || (newEnd !== null && newEnd >= start && newEnd <= end);
+  const endIso = mode === "trim" && endValid && newEnd ? newEnd.toISOString() : null;
+  // The core works out what a cut keeps, from the session's own record, so
+  // the preview is exactly what saving does.
+  const [preview, setPreview] = useState<{ end: string; runtime_ms: number; active_ms: number } | null>(null);
+  useEffect(() => {
+    if (!open || !endIso) return;
+    let cancelled = false;
+    api
+      .previewTrim(session.id, endIso)
+      .then((kept) => {
+        if (!cancelled) setPreview({ end: endIso, ...kept });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, endIso, session.id]);
+  const kept = mode === "discard" ? { runtime_ms: 0, active_ms: 0 } : preview?.end === endIso ? preview : null;
+  const counts = kept?.runtime_ms ?? session.runtime_ms;
+  const activeAfter = kept?.active_ms ?? session.active_ms;
+  const day = (date: Date) => date.toLocaleDateString(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" });
+  const sameDay = day(start) === day(end);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -109,8 +107,8 @@ export function CorrectSessionDialog({
           <DialogHeader>
             <DialogTitle>Correct this session</DialogTitle>
             <DialogDescription>
-              {gameTitle ? `${gameTitle}, ` : ""}
-              {formatHoursMinutes(session.runtime_ms)} in all. The old times and your reason stay in its history
+              {gameTitle ? `${gameTitle}. ` : ""}A correction only takes time out, it never adds any. The old times
+              and your reason stay in its history
               {session.integrity_status === "suspicious"
                 ? ", and it stays labeled Suspicious."
                 : session.integrity_status === "manual"
@@ -118,6 +116,22 @@ export function CorrectSessionDialog({
                   : ", and it is labeled Edited."}
             </DialogDescription>
           </DialogHeader>
+
+          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-2 border-y border-rule py-3.5 text-sm">
+            <dt className="text-faint">Started</dt>
+            <dd>
+              {day(start)}, <span className="font-mono tabular-nums">{formatClockTime(start)}</span>
+            </dd>
+            <dt className="text-faint">Ended</dt>
+            <dd>
+              {sameDay ? "" : `${day(end)}, `}
+              <span className="font-mono tabular-nums">{formatClockTime(end)}</span>
+            </dd>
+            <dt className="text-faint">Counted</dt>
+            <dd className="font-mono tabular-nums">
+              {formatHoursMinutes(session.runtime_ms)}, {formatHoursMinutes(session.active_ms)} active
+            </dd>
+          </dl>
 
           <div role="radiogroup" aria-label="How to correct it" className="grid gap-2">
             {(
@@ -150,7 +164,15 @@ export function CorrectSessionDialog({
           </div>
 
           {mode === "trim" && (
-            <Field id="correct-end" label="Stopped playing at">
+            <Field
+              id="correct-end"
+              label="Stopped playing at"
+              hint={
+                sameDay
+                  ? `Any time from ${formatClockTime(start)} to ${formatClockTime(end)}.`
+                  : `Any time from ${day(start)}, ${formatClockTime(start)} to ${day(end)}, ${formatClockTime(end)}.`
+              }
+            >
               <Input
                 id="correct-end"
                 type="datetime-local"
