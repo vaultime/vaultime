@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** September 30, 2026
+**Effective date:** October 3, 2026
 
 Vaultime is a local-first desktop application for tracking PC game playtime. This policy explains what data it keeps, where, and why.
 
