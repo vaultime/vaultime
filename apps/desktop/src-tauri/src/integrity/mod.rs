@@ -29,8 +29,6 @@ pub const STATUS_MANUAL: &str = "manual";
 /// Events that close a session. A correction or a session added by hand
 /// carries its end in the payload, the others at their own time.
 const TERMINAL_EVENTS: [&str; 4] = ["ended", "recovered", "corrected", "added_manually"];
-/// Events that close a session for the first time. Only corrections follow.
-const CLOSING_EVENTS: [&str; 3] = ["ended", "recovered", "added_manually"];
 const TIMING_EVENTS: [&str; 6] = [
     "started",
     "heartbeat",
@@ -296,7 +294,7 @@ pub fn validate_session_history_from(
 fn check_after_close(events: &[SessionEvent]) -> Option<String> {
     let closed = events
         .iter()
-        .position(|event| CLOSING_EVENTS.contains(&event.event_type.as_str()))?;
+        .position(|event| TERMINAL_EVENTS.contains(&event.event_type.as_str()))?;
     events[closed + 1..]
         .iter()
         .any(|event| event.event_type != "corrected")

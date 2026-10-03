@@ -124,9 +124,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   event. A session is taken in, with an `adopted` entry, only after it passes
   its check with the keys that count for the PC that recorded it
   (`ledger::Trust`): this PC's own for its sessions and for a backup that
-  claims to be this PC, the keys trusted for a PC seen before (plus those of
-  the backup's PC if that one was trusted before), and the backup's keys for
-  PCs never seen. Keys of a PC never seen are trusted on its first merge and
+  claims to be this PC, the keys trusted for a PC (those alone), for a PC
+  seen without keys of its own those of the backup's PC if that one was
+  trusted before, and the backup's keys for PCs never seen. Keys of a PC never seen are trusted on its first merge and
   recorded with `trusted` entries. Any other new key counts only when the
   player confirms it, which also vouches for its sessions that came in
   unvouched. A backup must pass SQLite's integrity check and match the

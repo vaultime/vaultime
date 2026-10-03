@@ -465,8 +465,9 @@ pub(crate) fn check_same_schema(staged: &Database) -> Result<()> {
 /// A part of a database: its type, name, table and statement.
 type SchemaPart = (String, String, String, Option<String>);
 
-/// Every part of a database, with runs of whitespace in each statement as
-/// one space. Statistics SQLite may keep are left out.
+/// Every part of a database, its statements exactly as stored, since even
+/// a moved line break can end a comment elsewhere. Statistics SQLite may
+/// keep are left out.
 fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
     let refused = |error: rusqlite::Error| {
         VaultimeError::Backup(format!("failed to check the backup database: {error}"))
@@ -484,8 +485,7 @@ fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
                 row.get(0)?,
                 row.get(1)?,
                 row.get(2)?,
-                row.get::<_, Option<String>>(3)?
-                    .map(|sql| sql.split_whitespace().collect::<Vec<_>>().join(" ")),
+                row.get::<_, Option<String>>(3)?,
             ))
         })
         .map_err(refused)?;

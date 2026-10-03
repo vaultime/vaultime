@@ -822,10 +822,11 @@ pub(crate) fn keep_seen(conn: &Connection, seen: &[SeenPc]) -> Result<()> {
 
 /// Whose pins count for each session of a backup taken in here. A session
 /// recorded on this PC counts only with this PC's own keys. One of a PC this
-/// PC has seen counts with the keys it trusts for that PC, and with those of
-/// the backup's PC if this PC trusted that one before, as it took the
-/// session in after its own check. One of a PC never seen counts with the
-/// keys of the backup's PC. The backup's PC counts with the keys its ledgers
+/// PC trusts keys of counts with those keys alone. One of a PC seen without
+/// keys of its own, whose sessions came through another PC, counts with the
+/// keys of the backup's PC if this PC trusted that one before, as it took
+/// the session in after its own check. One of a PC never seen counts with
+/// the keys of the backup's PC. The backup's PC counts with the keys its ledgers
 /// name only when this PC has never seen it, the way any new PC is taken at
 /// its word, or when the player vouches for them. So a backup cannot bring a
 /// ledger of its own to vouch for sessions of PCs this PC knows, and one
@@ -866,7 +867,8 @@ impl Trust {
         } else if first_merge {
             (claimed, false)
         } else {
-            let unknown = !claimed.is_subset(&trusted);
+            // Once the player vouches for them, new keys are not unknown.
+            let unknown = !trust_new_keys && !claimed.is_subset(&trusted);
             let mut keys = trusted.clone();
             if trust_new_keys {
                 keys.extend(claimed);
@@ -897,14 +899,13 @@ impl Trust {
             return self.source_keys.clone();
         }
         let trusted = self.known.get(device).cloned().unwrap_or_default();
-        if trusted.is_empty() && !self.seen.contains(device) {
+        if !trusted.is_empty() {
+            return trusted;
+        }
+        if !self.seen.contains(device) || self.source_trusted {
             return self.source_keys.clone();
         }
-        if self.source_trusted {
-            trusted.union(&self.source_keys).cloned().collect()
-        } else {
-            trusted
-        }
+        HashSet::new()
     }
 
     /// The keys of the backup's PC whose pins count.

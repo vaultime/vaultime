@@ -57,7 +57,7 @@ export function OtherPcsSection({ onError }: { onError: (message: string | null)
   return (
     <PageSection
       title="Other PCs"
-      description="Bring in the sessions of another PC from one of its backups. They come in as that PC recorded them, and this PC's ledger vouches only for those that pass their check with the keys it trusts for that PC. The first time, it takes that PC's ledger at its word. Only the PC that recorded a session can correct it."
+      description="Bring in the sessions of another PC from one of its backups. They come in as that PC recorded them, and this PC's ledger vouches only for those that pass their check with the keys it trusts for that PC, or for a trusted PC that brought them. The first time, it takes that PC's ledger at its word. Only the PC that recorded a session can correct it."
     >
       {others.map(({ device, sessions: count }) => (
         <PageRow

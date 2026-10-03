@@ -315,7 +315,10 @@ pub fn apply(
         .filter(|planned| !matches!(planned.take, Take::Vouch))
         .map(|planned| planned.session.id.clone())
         .collect();
-    slices::rebuild_merged(db, &merged)?;
+    // The merge is done. Should this fail, the next start builds every slice.
+    if let Err(error) = slices::rebuild_merged(db, &merged) {
+        warn!("play slices not rebuilt after the merge: {error}");
+    }
 
     for planned in &plan.sessions {
         match planned.take {
@@ -2416,5 +2419,35 @@ mod tests {
         assert!(!preview.first_merge);
         assert!(preview.unknown_keys);
         assert_eq!(preview.failing, 1);
+    }
+
+    #[test]
+    fn a_pc_taken_at_its_word_cannot_vouch_for_a_pc_trusted_directly() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        laptop.play(&game, 20);
+        desktop.merge(&laptop.back_up(), &[]);
+
+        // A made up PC is merged once and taken at its word, then brings a
+        // session it says the laptop played.
+        let stranger = Pc::new("stranger");
+        let its_game = stranger.game("Hades", None);
+        stranger.play(&its_game, 20);
+        desktop.merge(&stranger.back_up(), &[]);
+        stranger.act();
+        devices::ensure_device(&stranger.db, "laptop", "linux", "0.4.0").unwrap();
+        let as_laptop = sessions::create_session(&stranger.db, &its_game, "laptop").unwrap();
+        sessions::end_session(
+            &stranger.db,
+            &as_laptop.id,
+            7_200_000,
+            7_200_000,
+            0,
+            STATUS_LOCAL,
+        )
+        .unwrap();
+        desktop.merge(&stranger.back_up(), &[]);
+        assert_eq!(desktop.status(&as_laptop.id), integrity::STATUS_SUSPICIOUS);
     }
 }
