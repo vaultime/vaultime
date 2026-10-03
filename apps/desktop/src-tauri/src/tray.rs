@@ -177,9 +177,12 @@ fn describe_status(
             let end = span.ended_at_wall.as_deref().map_or(Some(now), parse)?;
             // Only the part after midnight counts, its time spread evenly
             // over its span, as the journal splits a day.
+            // A session with no time on the clock, as when the clock was
+            // set back, counts in full on the day it started, like the
+            // journal counts it.
             let from = start.max(day_start);
             if end <= from {
-                return (end == start && start >= day_start).then(|| {
+                return (end <= start && start >= day_start).then(|| {
                     (
                         start.timestamp_millis(),
                         end.timestamp_millis(),
@@ -408,6 +411,14 @@ mod tests {
         assert_eq!(playing, "Playing Elden Ring, 1 h 00");
         assert_eq!(today, "30 min played today");
         assert_eq!(describe_status(&[], at(2, 0), at(0, 0)).0, NOTHING_RUNNING);
+    }
+
+    #[test]
+    fn a_session_that_ends_before_it_starts_counts_on_its_day() {
+        // The clock was set back while it ran.
+        let spans = [span("Hades II", at(20, 0), Some(at(19, 58)), 45)];
+        let (_, today) = describe_status(&spans, at(21, 0), at(0, 0));
+        assert_eq!(today, "45 min played today");
     }
 
     #[test]
