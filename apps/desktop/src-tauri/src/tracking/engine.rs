@@ -1053,6 +1053,103 @@ mod tests {
     }
 
     #[test]
+    fn every_signal_decides_activity_as_documented() {
+        let f = fixture();
+        let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(5));
+        let settings = TrackingSettings {
+            idle_threshold: Duration::from_secs(300),
+            treat_background_as_active: false,
+        };
+        let now = Instant::now();
+        let quiet = settings.idle_threshold + Duration::from_secs(1);
+        let in_front = GameObservation {
+            is_running: true,
+            has_foreground_window: true,
+            has_process_activity: true,
+        };
+        let behind = GameObservation {
+            has_foreground_window: false,
+            ..in_front
+        };
+        let still = GameObservation {
+            has_process_activity: false,
+            ..behind
+        };
+        let full = ActivitySnapshot {
+            foreground_pid: None,
+            foreground_supported: true,
+            foreground_known: true,
+            idle_for: Some(Duration::ZERO),
+            idle_supported: true,
+        };
+        let away = ActivitySnapshot {
+            idle_for: Some(settings.idle_threshold),
+            ..full
+        };
+        let heuristic = ActivitySnapshot {
+            foreground_supported: false,
+            idle_for: None,
+            idle_supported: false,
+            ..full
+        };
+        let decide = |session: &ActiveSession, observation, settings, snapshot| {
+            should_count_as_active(session, observation, settings, snapshot, now)
+        };
+
+        // Input and the window in front.
+        assert!(decide(&session, in_front, &settings, &full));
+        assert!(!decide(&session, in_front, &settings, &away));
+        assert!(!decide(&session, behind, &settings, &full));
+        let background = TrackingSettings {
+            treat_background_as_active: true,
+            ..settings
+        };
+        assert!(decide(&session, behind, &background, &full));
+        assert!(!decide(&session, behind, &background, &away));
+
+        // A quick switch away keeps counting for the grace period only.
+        session.last_foreground_at = now.checked_sub(FOREGROUND_GRACE);
+        assert!(decide(&session, behind, &settings, &full));
+        session.last_foreground_at = now.checked_sub(FOREGROUND_GRACE + Duration::from_secs(1));
+        assert!(!decide(&session, behind, &settings, &full));
+
+        // Without input or window APIs the game's CPU use stands in, for as
+        // long as the idle threshold after its last sign of life.
+        assert!(decide(&session, behind, &settings, &heuristic));
+        session.last_signal_at = now.checked_sub(Duration::from_secs(60)).unwrap();
+        assert!(decide(&session, still, &settings, &heuristic));
+        session.last_signal_at = now.checked_sub(quiet).unwrap();
+        assert!(!decide(&session, still, &settings, &heuristic));
+        assert!(!decide(&session, still, &background, &heuristic));
+    }
+
+    #[test]
+    fn each_clock_check_names_its_reason() {
+        let tick = POLL_INTERVAL.as_millis() as i64;
+        assert_eq!(detect_integrity_reason(tick, tick, 0), None);
+        assert_eq!(
+            detect_integrity_reason(-CLOCK_BACKWARDS_TOLERANCE_MS - 1, tick, 0).as_deref(),
+            Some("wall_clock_moved_backwards")
+        );
+        assert_eq!(
+            detect_integrity_reason(tick + CLOCK_STEP_TOLERANCE_MS + 1, tick, 0).as_deref(),
+            Some("wall_clock_step_mismatch")
+        );
+        assert_eq!(
+            detect_integrity_reason(tick + CLOCK_STEP_TOLERANCE_MS, tick, 0),
+            None
+        );
+        assert_eq!(
+            detect_integrity_reason(tick, tick, CLOCK_TOTAL_DRIFT_TOLERANCE_MS + 1).as_deref(),
+            Some("wall_clock_drift_exceeded")
+        );
+        assert_eq!(
+            detect_integrity_reason(tick, tick, -CLOCK_TOTAL_DRIFT_TOLERANCE_MS - 1).as_deref(),
+            Some("wall_clock_drift_exceeded")
+        );
+    }
+
+    #[test]
     fn a_short_suspend_is_skipped_not_flagged() {
         let f = fixture();
         // Half a minute asleep: too short for the gap limit, but the time
