@@ -502,28 +502,29 @@ pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Sessio
 
 /// Newest first.
 pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
-    db.with_conn(|conn| {
+    let sessions = db.with_conn(|conn| {
         let mut stmt = conn
             .prepare("SELECT * FROM sessions ORDER BY started_at_wall DESC")
             .map_err(map_db)?;
-
         let rows = stmt.query_map([], row_to_session).map_err(map_db)?;
-        let sessions = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)?;
-        sessions
-            .into_iter()
-            .map(|mut session| {
-                let (reason, checked_now) =
-                    integrity::validate_session_history_cached(conn, &session)?;
-                if let Some(reason) = reason {
-                    if checked_now {
-                        warn!("session {} failed validation: {reason}", session.id);
-                    }
-                    session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
+    })?;
+    // Each check takes the database on its own, so the first listing after a
+    // start, which checks every chain, never holds up the tracker for long.
+    sessions
+        .into_iter()
+        .map(|mut session| {
+            let (reason, checked_now) =
+                db.with_conn(|conn| integrity::validate_session_history_cached(conn, &session))?;
+            if let Some(reason) = reason {
+                if checked_now {
+                    warn!("session {} failed validation: {reason}", session.id);
                 }
-                Ok(session)
-            })
-            .collect()
-    })
+                session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+            }
+            Ok(session)
+        })
+        .collect()
 }
 
 #[cfg(test)]

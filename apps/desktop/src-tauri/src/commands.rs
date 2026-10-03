@@ -138,7 +138,7 @@ pub fn set_game_steps_aside(
     steps_aside: bool,
 ) -> Result<Game, VaultimeError> {
     let game = games::set_steps_aside(&db, &game_id, steps_aside)?;
-    playtime::slices::rebuild_all(&db)?;
+    playtime::slices::rebuild_for_game(&db, &game_id)?;
     Ok(game)
 }
 

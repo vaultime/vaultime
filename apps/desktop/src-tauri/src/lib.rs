@@ -23,6 +23,9 @@ pub mod tray;
 pub mod window_look;
 pub mod window_size;
 
+#[cfg(test)]
+mod perf;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

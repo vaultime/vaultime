@@ -3,6 +3,7 @@
 
 //! Session event hashing, chain validation and trust scoring.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
@@ -184,6 +185,9 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
 /// session had just before it, lowers none of them below zero, raises none
 /// of them and never moves the end later.
 fn check_corrections(events: &[SessionEvent]) -> Option<String> {
+    if !events.iter().any(|event| event.event_type == "corrected") {
+        return None;
+    }
     let counters = |payload: &Value| -> Option<[i64; 3]> {
         Some([
             payload_i64(payload, "runtime_ms")?,
@@ -248,9 +252,9 @@ fn check_status_history(events: &[SessionEvent], added_by_hand: bool) -> Option<
         .filter(|event| STATUS_EVENTS.contains(&event.event_type.as_str()))
     {
         let status = match event.event_type.as_str() {
-            "started" => STATUS_LOCAL.to_owned(),
-            "integrity_flagged" => STATUS_SUSPICIOUS.to_owned(),
-            _ => match wall_in_payload(event, "integrity_status") {
+            "started" => Cow::Borrowed(STATUS_LOCAL),
+            "integrity_flagged" => Cow::Borrowed(STATUS_SUSPICIOUS),
+            _ => match status_in_payload(&event.payload_json) {
                 Some(status) => status,
                 None => return Some("session_status_missing".into()),
             },
@@ -298,18 +302,23 @@ pub fn validate_session_history_cached(
         return Ok((validate_session_history(conn, session)?, true));
     }
     forget_checks_after_outside_writes(conn)?;
+    // The newest event, found through the index. A check passes only when
+    // the sequence runs from 1 without gaps, so its number is the count.
     let (events, last_hash) = conn
-        .query_row(
-            "SELECT COUNT(*),
-                    (SELECT hash_self FROM session_events
-                     WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1)
-             FROM session_events WHERE session_id = ?1",
-            [&session.id],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+        .prepare_cached(
+            "SELECT sequence, hash_self FROM session_events
+             WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
         )
+        .and_then(|mut stmt| {
+            stmt.query_row([&session.id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .optional()
+        })
         .map_err(|error| {
             VaultimeError::Integrity(format!("failed to read the event chain: {error}"))
-        })?;
+        })?
+        .unwrap_or((0, None));
     let state = CheckedState {
         events,
         last_hash,
@@ -525,6 +534,19 @@ pub(crate) fn load_session_events(
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|error| {
         VaultimeError::Integrity(format!("failed to collect session events: {error}"))
     })
+}
+
+/// The status a payload names, read without building the whole payload,
+/// since every checkpoint carries one and a chain check reads them all.
+fn status_in_payload(payload_json: &str) -> Option<Cow<'_, str>> {
+    #[derive(serde::Deserialize)]
+    struct Status<'a> {
+        #[serde(borrow)]
+        integrity_status: Option<Cow<'a, str>>,
+    }
+    serde_json::from_str::<Status>(payload_json)
+        .ok()?
+        .integrity_status
 }
 
 fn parse_payload(payload_json: &str) -> Option<Value> {

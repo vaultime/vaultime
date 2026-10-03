@@ -9,11 +9,11 @@
 //! exactly. Sessions from before checkpoints, and sessions added by hand,
 //! spread the same way over the points they have.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use chrono::DateTime;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
 
 use crate::constants::{PLAY_SLICE_MS, PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING};
 use crate::db::connection::Database;
@@ -50,9 +50,23 @@ fn wall_ms(value: &str) -> Option<i64> {
         .map(|time| time.timestamp_millis())
 }
 
-fn counters_in(payload: &Value) -> Option<[i64; MEASURES]> {
-    let field = |key: &str| payload.get(key).and_then(Value::as_i64);
-    Some([field("runtime_ms")?, field("active_ms")?, field("idle_ms")?])
+/// The fields of an event payload that place time, read without building
+/// the whole payload, since every checkpoint is read on each rebuild.
+#[derive(Default, serde::Deserialize)]
+struct Placing<'a> {
+    runtime_ms: Option<i64>,
+    active_ms: Option<i64>,
+    idle_ms: Option<i64>,
+    #[serde(borrow)]
+    started_at_wall: Option<Cow<'a, str>>,
+    #[serde(borrow)]
+    ended_at_wall: Option<Cow<'a, str>>,
+}
+
+impl Placing<'_> {
+    fn counters(&self) -> Option<[i64; MEASURES]> {
+        Some([self.runtime_ms?, self.active_ms?, self.idle_ms?])
+    }
 }
 
 /// The counters at every event that records them, in the order they were
@@ -62,16 +76,9 @@ fn counters_in(payload: &Value) -> Option<[i64; MEASURES]> {
 fn points(events: &[SessionEvent]) -> Vec<Point> {
     let mut points = Vec::new();
     for event in events {
-        let payload: Option<Value> = serde_json::from_str(&event.payload_json).ok();
+        let payload: Placing = serde_json::from_str(&event.payload_json).unwrap_or_default();
         let at = wall_ms(&event.event_time_wall);
-        let in_payload = |key: &str| {
-            payload
-                .as_ref()
-                .and_then(|payload| payload.get(key))
-                .and_then(Value::as_str)
-                .and_then(wall_ms)
-        };
-        let counters = payload.as_ref().and_then(counters_in);
+        let counters = payload.counters();
         match event.event_type.as_str() {
             "started" => points.extend(at.map(|wall_ms| Point {
                 wall_ms,
@@ -89,16 +96,17 @@ fn points(events: &[SessionEvent]) -> Vec<Point> {
                 }
             }
             "recovered" => {
-                if let (Some(wall_ms), Some(counters)) =
-                    (in_payload("ended_at_wall").or(at), counters)
-                {
+                if let (Some(wall_ms), Some(counters)) = (
+                    payload.ended_at_wall.as_deref().and_then(wall_ms).or(at),
+                    counters,
+                ) {
                     points.push(Point { wall_ms, counters });
                 }
             }
             "added_manually" => {
                 if let (Some(start), Some(end), Some(counters)) = (
-                    in_payload("started_at_wall"),
-                    in_payload("ended_at_wall"),
+                    payload.started_at_wall.as_deref().and_then(wall_ms),
+                    payload.ended_at_wall.as_deref().and_then(wall_ms),
                     counters,
                 ) {
                     points.push(Point {
@@ -516,6 +524,30 @@ pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Builds again the slices that depend on whether `game_id` steps aside:
+/// its own sessions, and those of games that step aside around them.
+pub fn rebuild_for_game(db: &Database, game_id: &str) -> Result<()> {
+    db.with_transaction(|conn| {
+        let spans: Vec<(String, String, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, started_at_wall, ended_at_wall FROM sessions
+                     WHERE game_id = ?1 AND ended_at_wall IS NOT NULL",
+                )
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map([game_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(map_db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+        };
+        for (id, start, end) in &spans {
+            rebuild_session(conn, id)?;
+            rebuild_aside_around(conn, start, end)?;
+        }
+        Ok(())
+    })
+}
+
 /// Builds again the slices of every session of a game that steps aside, as
 /// after a game they shared time with was deleted.
 pub fn rebuild_aside_all(db: &Database) -> Result<()> {
@@ -576,6 +608,8 @@ pub fn ensure_current(db: &Database) -> Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use super::*;
 
     const MINUTE: i64 = 60_000;
