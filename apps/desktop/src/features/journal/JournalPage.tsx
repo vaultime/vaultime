@@ -166,6 +166,12 @@ function leaningClip(box: Place, place: Place, leanStart: boolean, leanEnd: bool
 }
 
 /** Play history week by week, one sentence per session. */
+/**
+ * Chromium, which WebView2 runs on, opens a date picker for a date field.
+ * WebKitGTK may not, so there the field itself shows up to type a day.
+ */
+const HAS_DATE_PICKER = typeof navigator !== "undefined" && /Chrome\//.test(navigator.userAgent);
+
 export function JournalPage() {
   const { sessions: stored, active, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
   // Running sessions as of the last poll, a few seconds old at most. The
@@ -181,6 +187,8 @@ export function JournalPage() {
   const [offset, setOffset] = useState(() => weeksBack(params.get("week")));
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const dateInput = useRef<HTMLInputElement>(null);
+  // Shown as a field to type a day in where the webview has no date picker.
+  const [typingDay, setTypingDay] = useState(false);
 
   const now = new Date();
   const weekStart = addDays(startOfWeek(now), offset * DAYS_PER_WEEK);
@@ -279,9 +287,11 @@ export function JournalPage() {
               disabled={!earliest}
               onClick={() => {
                 try {
+                  if (!HAS_DATE_PICKER) throw new Error("no date picker");
                   dateInput.current?.showPicker();
                 } catch {
-                  dateInput.current?.focus();
+                  setTypingDay(true);
+                  setTimeout(() => dateInput.current?.focus());
                 }
               }}
             >
@@ -291,13 +301,20 @@ export function JournalPage() {
               ref={dateInput}
               type="date"
               aria-label="Go to the week of a day"
-              tabIndex={-1}
-              className="sr-only"
+              tabIndex={typingDay ? 0 : -1}
+              className={
+                typingDay
+                  ? "h-9 rounded-md border border-rule bg-raised px-2 font-mono text-[13px] text-text"
+                  : "sr-only"
+              }
               min={earliest ? toDayKey(earliest) : undefined}
               max={toDayKey(now)}
               onChange={(event) => {
-                if (event.target.value) setOffset(weeksBack(event.target.value));
+                if (!event.target.value) return;
+                setOffset(weeksBack(event.target.value));
+                setTypingDay(false);
               }}
+              onBlur={() => setTypingDay(false)}
             />
             <StepButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
               <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
@@ -416,7 +433,18 @@ function DaySection({
   const runs = playRuns(day.spans, now);
   // Parts of sessions that started the day before.
   const startedToday = new Set(day.sessions.map((session) => session.id));
-  const carried = day.spans.filter((span) => countsAsPlay(span) && !startedToday.has(span.id));
+  // One line per session, from its first part to its last, as a game that
+  // steps aside can come in several parts.
+  const carried = [
+    ...day.spans
+      .filter((span) => countsAsPlay(span) && !startedToday.has(span.id))
+      .reduce((byId, span) => {
+        const seen = byId.get(span.id);
+        byId.set(span.id, seen ? { ...seen, ended_at_wall: span.ended_at_wall } : span);
+        return byId;
+      }, new Map<string, Session>())
+      .values(),
+  ];
   const carriedEnd = (span: Session) => {
     const end = parseVaultimeDate(span.ended_at_wall ?? span.started_at_wall);
     if (end >= addDays(day.start, 1)) return "midnight";
