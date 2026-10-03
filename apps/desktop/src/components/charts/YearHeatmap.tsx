@@ -96,7 +96,7 @@ export function YearHeatmap({
   }
 
   return (
-    <figure className="flex flex-col gap-3">
+    <figure className="@container flex flex-col gap-3">
       <div ref={frame} className="relative">
         <div
           role="grid"
@@ -123,15 +123,24 @@ export function YearHeatmap({
                   role="columnheader"
                   className="h-4 font-mono text-[10px] whitespace-nowrap text-faint"
                 >
-                  {firstOfMonth?.toLocaleDateString(UI_LOCALE, { month: "short" })}
+                  {/* Single letters where the weeks are too narrow for names. */}
+                  <span className="@max-[420px]:hidden">
+                    {firstOfMonth?.toLocaleDateString(UI_LOCALE, { month: "short" })}
+                  </span>
+                  <span className="hidden @max-[420px]:inline">
+                    {firstOfMonth?.toLocaleDateString(UI_LOCALE, { month: "narrow" })}
+                  </span>
                 </span>
               );
             })}
           </div>
           {WEEKDAY_LABELS.map((label, weekday) => (
             <div key={weekday} role="row" className="contents">
-              <span role="rowheader" className="pr-2 text-[10px] leading-none text-faint">
-                {label}
+              {/* Out of the flow, so a label never makes its row taller than the days. */}
+              <span role="rowheader" className="relative w-8">
+                <span className="absolute inset-y-0 left-0 flex items-center text-[10px] leading-none text-faint">
+                  {label}
+                </span>
               </span>
               {weeks.map((week) => {
                 const day = week[weekday];
