@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Library
 
+- **More from Ctrl+K.** The command palette saves a backup, exports your sessions, checks for updates and jumps straight to any part of Settings. On a game's page it also sets the game's status, hides it and switches whether it counts only when no other game runs.
 - **Ignore what is no game.** A program that turns up in Discover but is no game, like a tool or a benchmark, can be ignored there or when you delete its game. Discover never offers it again and Vaultime never tracks it, also inside a game's folder. Settings lists ignored programs, each with Allow again. Hiding a game stays what it was: the game is still tracked, only the library leaves it out.
 - **Find a game.** A search field above your games filters them as you type, ignoring accents and the order of words. Ctrl+F jumps into it, and opens the search on other pages. The command palette finds games the same way.
 

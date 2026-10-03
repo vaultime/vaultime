@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   disable as disableAutostart,
@@ -35,6 +35,7 @@ import * as api from "@/lib/tauri";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
 import { describeError } from "@/lib/utils";
+import { useScrollToAnchor } from "@/lib/anchors";
 import { capitalize, numberWords, plural, whichPc } from "@/lib/words";
 
 
@@ -76,6 +77,9 @@ const FALLBACK = {
 export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
   const [loaded, setLoaded] = useState(false);
+  // What the command palette asked for, like ?do=backup. Read once.
+  const [params] = useSearchParams();
+  const [intent] = useState(() => params.get("do"));
   const [error, setError] = useState<string | null>(null);
   const [idleSeconds, setIdleSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
   // The idle time saved last, and a change still waiting to be saved.
@@ -246,6 +250,16 @@ export function SettingsPage() {
       setRestorePreview(null);
       setSnapshots(await api.listBackupSnapshots());
     });
+
+  useScrollToAnchor(loaded);
+  // A backup asked for from the palette opens its folder dialog once the page is there.
+  useEffect(() => {
+    if (!loaded || intent !== "backup") return;
+    const timer = setTimeout(() => void exportBackup());
+    return () => clearTimeout(timer);
+    // Only once, when the page has loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, intent]);
 
   const changeAutoBackupFolder = () =>
     runBackupTask(async () => {
@@ -517,7 +531,7 @@ export function SettingsPage() {
           )}
         </PageSection>
 
-        <ExportSection />
+        <ExportSection start={loaded && (intent === "export-csv" || intent === "export-json") ? (intent === "export-csv" ? "csv" : "json") : null} />
 
         <PageSection title="About">
           <PageRow label="Version">

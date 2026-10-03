@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { Braces, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Notice, PageSection } from "@/components/layout/Page";
@@ -18,7 +18,7 @@ const FORMATS: { format: ExportFormat; label: string; filter: string; icon: type
 ];
 
 /** Every finished session as a file for a spreadsheet or other tools. */
-export function ExportSection() {
+export function ExportSection({ start }: { start?: ExportFormat | null }) {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +41,15 @@ export function ExportSection() {
       setBusy(null);
     }
   }
+
+  // Asked for from the command palette. Started outside the effect, it
+  // opens its file dialog once the page is there.
+  useEffect(() => {
+    const format = FORMATS.find((entry) => entry.format === start);
+    if (!format) return;
+    const timer = setTimeout(() => void run(format.format, format.filter));
+    return () => clearTimeout(timer);
+  }, [start]);
 
   return (
     <PageSection

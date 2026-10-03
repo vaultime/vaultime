@@ -6,6 +6,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { anchorOf } from "@/lib/anchors";
 
 export function PageHeader({
   overline,
@@ -51,7 +52,7 @@ export function PageSection({
   children: ReactNode;
 }) {
   return (
-    <section className="@container border-b border-rule py-9">
+    <section id={anchorOf(title)} className="@container scroll-mt-6 border-b border-rule py-9">
       <div
         className={cn(
           "grid gap-x-12 gap-y-4",
