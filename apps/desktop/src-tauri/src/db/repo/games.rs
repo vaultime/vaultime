@@ -74,14 +74,20 @@ pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> 
             .map_err(map_db)?;
 
         let title = input.title.as_deref().unwrap_or(&current.title);
-        let exe = input
-            .executable_path
-            .as_deref()
-            .or(current.executable_path.as_deref());
-        let folder = input
-            .install_folder
-            .as_deref()
-            .or(current.install_folder.as_deref());
+        // An empty path clears the field, a missing one keeps it.
+        let path_or_keep = |given: Option<&str>, kept: Option<&str>| match given {
+            Some(path) if path.trim().is_empty() => None,
+            Some(path) => Some(path.to_owned()),
+            None => kept.map(str::to_owned),
+        };
+        let exe = path_or_keep(
+            input.executable_path.as_deref(),
+            current.executable_path.as_deref(),
+        );
+        let folder = path_or_keep(
+            input.install_folder.as_deref(),
+            current.install_folder.as_deref(),
+        );
         let launcher = input
             .launcher_source
             .as_deref()

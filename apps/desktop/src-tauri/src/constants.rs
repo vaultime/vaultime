@@ -21,6 +21,24 @@ pub const SESSION_NOTE_MAX_CHARS: usize = 280;
 /// Longest session a player can add by hand. Same as
 /// `MANUAL_SESSION_MAX_HOURS` in `lib/constants.ts`.
 pub const MANUAL_SESSION_MAX: Duration = Duration::from_hours(24);
+/// Launchers that give every game a folder of its own, so any game program
+/// in it counts for the game, whichever build or launcher step runs. Same
+/// as `FOLDER_MATCH_LAUNCHERS` in `lib/constants.ts`.
+pub const FOLDER_MATCH_LAUNCHERS: [&str; 13] = [
+    "steam",
+    "epic",
+    "gog",
+    "heroic",
+    "battlenet",
+    "riot",
+    "hoyoplay",
+    "ubisoft",
+    "ea",
+    "rockstar",
+    "xbox",
+    "amazon",
+    "itch",
+];
 /// Grace period so a quick alt-tab does not count as idle.
 pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// How long the tracker reuses install folders with their links resolved

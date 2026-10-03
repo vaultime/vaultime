@@ -162,6 +162,23 @@ export const HERO_TITLE_MIN_FONT_PX = 32;
 
 // Game page
 
+/** Launchers whose games also count by any game program in their install folder. Same as FOLDER_MATCH_LAUNCHERS in constants.rs. */
+export const FOLDER_MATCH_LAUNCHERS = [
+  "steam",
+  "epic",
+  "gog",
+  "heroic",
+  "battlenet",
+  "riot",
+  "hoyoplay",
+  "ubisoft",
+  "ea",
+  "rockstar",
+  "xbox",
+  "amazon",
+  "itch",
+];
+
 /** Share of a game's time other games must run beside it before its page suggests stepping aside. */
 export const STEPS_ASIDE_HINT_MIN_SHARE = 0.5;
 /** Time other games must run beside a game before its page suggests stepping aside. */

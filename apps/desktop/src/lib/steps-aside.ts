@@ -5,7 +5,7 @@
 // game's client. The core sets their time beside other games aside and says
 // how much per session. This file presents that.
 
-import { countsAsPlay } from "@/lib/session-stats";
+import { clipToWindow, countsAsPlay, playedMs } from "@/lib/session-stats";
 import { parseVaultimeDate } from "@/lib/time";
 import type { Game, Session } from "@/lib/types";
 
@@ -108,4 +108,18 @@ export function besideOthers(
     );
   const besideMs = Math.max(0, ownMs - alone);
   return { besideMs, share: ownMs > 0 ? besideMs / ownMs : 0 };
+}
+
+/**
+ * Time with a game running on the local day that holds `now`, the way the
+ * journal counts a day: split at midnight, games side by side once, and a
+ * game that steps aside only where it ran alone.
+ */
+export function playedToday(sessions: Session[], stepping: Set<string>, now = new Date()): number {
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const today = stepAside(sessions, stepping, now).flatMap(
+    (session) => clipToWindow(session, midnight, tomorrow, now) ?? [],
+  );
+  return playedMs(today, now);
 }

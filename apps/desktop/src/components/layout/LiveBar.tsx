@@ -9,6 +9,7 @@ import { useLibrary } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatHoursMinutes, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
+import { playedToday, stepsAside } from "@/lib/steps-aside";
 import { usePageVisible } from "@/lib/use-page-visible";
 
 /** The bar at the bottom of every page: the running game, like a music player. */
@@ -26,13 +27,16 @@ export function LiveBar() {
     return () => clearInterval(timer);
   }, [current, visible]);
 
+  // Running sessions as of the last poll, so today keeps up while they run.
   const todayMs = useMemo(() => {
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    return sessions
-      .filter((session) => parseVaultimeDate(session.started_at_wall) >= midnight)
-      .reduce((sum, session) => sum + session.runtime_ms, 0);
-  }, [sessions]);
+    const running = new Map(active.map((session) => [session.id, session]));
+    const stepping = new Set(games.filter(stepsAside).map((game) => game.id));
+    return playedToday(
+      sessions.map((session) => running.get(session.id) ?? session),
+      stepping,
+      new Date(activePolledAt),
+    );
+  }, [sessions, active, games, activePolledAt]);
 
   if (!current) {
     const watched = games.filter((game) => game.executable_path).length;

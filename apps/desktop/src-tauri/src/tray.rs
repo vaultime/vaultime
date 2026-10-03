@@ -147,8 +147,8 @@ fn local_day_start(now: DateTime<Utc>) -> DateTime<Utc> {
         .map_or(now, |start| start.with_timezone(&Utc))
 }
 
-/// "Playing Elden Ring, 1 h 24" and "2 h 40 played today". A session counts
-/// for the day it started on, as in the journal.
+/// "Playing Elden Ring, 1 h 24" and "2 h 40 played today". Time counts on
+/// the day it happened, as in the journal.
 fn describe_status(
     spans: &[SessionSpan],
     now: DateTime<Utc>,
@@ -174,15 +174,24 @@ fn describe_status(
         .iter()
         .filter_map(|span| {
             let start = parse(&span.started_at_wall)?;
-            if start < day_start {
-                return None;
-            }
             let end = span.ended_at_wall.as_deref().map_or(Some(now), parse)?;
-            Some((
-                start.timestamp_millis(),
-                end.timestamp_millis(),
-                span.runtime_ms,
-            ))
+            // Only the part after midnight counts, its time spread evenly
+            // over its span, as the journal splits a day.
+            let from = start.max(day_start);
+            if end <= from {
+                return (end == start && start >= day_start).then(|| {
+                    (
+                        start.timestamp_millis(),
+                        end.timestamp_millis(),
+                        span.runtime_ms,
+                    )
+                });
+            }
+            let span_ms = i128::from((end - start).num_milliseconds().max(1));
+            let part_ms = i128::from((end - from).num_milliseconds());
+            let runtime =
+                i64::try_from(i128::from(span.runtime_ms) * part_ms / span_ms).unwrap_or(0);
+            Some((from.timestamp_millis(), end.timestamp_millis(), runtime))
         })
         .collect();
     let played = played_ms(&timed);
@@ -392,11 +401,12 @@ mod tests {
     }
 
     #[test]
-    fn counts_a_session_for_the_day_it_started() {
+    fn counts_only_the_part_of_a_session_after_the_day_started() {
+        // Running since 01:00, the day here starts at 01:30.
         let spans = [span("Elden Ring", at(1, 0), None, 60)];
         let (playing, today) = describe_status(&spans, at(2, 0), at(1, 30));
         assert_eq!(playing, "Playing Elden Ring, 1 h 00");
-        assert_eq!(today, NOTHING_TODAY);
+        assert_eq!(today, "30 min played today");
         assert_eq!(describe_status(&[], at(2, 0), at(0, 0)).0, NOTHING_RUNNING);
     }
 

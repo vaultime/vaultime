@@ -27,6 +27,7 @@ import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
   ARTWORK_DIALOG_EXTENSIONS,
   EVENT_LOG_LIMIT,
+  FOLDER_MATCH_LAUNCHERS,
   GAME_RECENT_SESSIONS,
   MINUTE_MS,
   PLAYER_ARTWORK_SOURCE,
@@ -290,7 +291,10 @@ function GamePage({ gameId }: { gameId: string }) {
               <>
                 <div className="font-mono text-xs leading-relaxed break-all text-soft">{game.executable_path}</div>
                 <p className="mt-2 text-[13px] text-faint">
-                  Matched by its full path. By file name only when Windows hides the path or the game runs through Wine.
+                  {game.install_folder && FOLDER_MATCH_LAUNCHERS.includes(game.launcher_source ?? "")
+                    ? "Matched by its full path, or by any game program in its install folder, since its launcher starts games in steps."
+                    : "Matched by its full path."}{" "}
+                  By file name only when Windows hides the path or the game runs through Wine.
                 </p>
               </>
             ) : (

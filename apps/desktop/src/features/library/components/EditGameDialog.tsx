@@ -54,7 +54,8 @@ export function EditGameDialog({
       await api.updateGame(game.id, {
         title: title.trim(),
         executable_path: executablePath || null,
-        install_folder: installFolder || null,
+        // An empty field clears the folder.
+        install_folder: installFolder,
       });
       if (pathsChanged && (executablePath || installFolder)) {
         await api.scanGameAssets(game.id).catch(() => {});

@@ -413,8 +413,8 @@ pub struct SessionSpan {
     pub runtime_ms: i64,
 }
 
-/// Sessions that started at `since` or later and every running session,
-/// oldest first. It skips the integrity check, so it stays cheap to call often.
+/// Sessions that ran at `since` or later, running ones included, oldest
+/// first. It skips the integrity check, so it stays cheap to call often.
 pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
     db.with_conn(|conn| {
         let mut stmt = conn
@@ -422,7 +422,7 @@ pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
                 "SELECT sessions.id, games.title, sessions.started_at_wall,
                         sessions.ended_at_wall, sessions.runtime_ms
                  FROM sessions JOIN games ON games.id = sessions.game_id
-                 WHERE sessions.started_at_wall >= ?1 OR sessions.ended_at_wall IS NULL
+                 WHERE sessions.ended_at_wall IS NULL OR sessions.ended_at_wall > ?1
                  ORDER BY sessions.started_at_wall",
             )
             .map_err(map_db)?;

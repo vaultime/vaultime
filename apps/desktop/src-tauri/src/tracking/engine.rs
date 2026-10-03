@@ -16,8 +16,9 @@ use sysinfo::System;
 use crate::constants::{
     BACKGROUND_ACTIVE_SETTING, CHECKPOINT_INTERVAL, CLOCK_BACKWARDS_TOLERANCE_MS,
     CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS, DEFAULT_IDLE_THRESHOLD_SECS,
-    FOREGROUND_GRACE, IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH, MAX_TICK_GAP_MS,
-    MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_PERCENT, SUSPEND_DETECT_MS,
+    FOLDER_MATCH_LAUNCHERS, FOREGROUND_GRACE, IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH,
+    MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_PERCENT,
+    SUSPEND_DETECT_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
@@ -468,26 +469,11 @@ fn game_processes<'a>(
     folders: &mut FolderCache,
 ) -> Option<Vec<&'a RunningProcess>> {
     let exe_path = game.executable_path.as_deref()?;
-    // Launchers give every game a folder of its own, so any game program
-    // in it counts, whichever build or launcher step is running.
-    let own_folder = if matches!(
-        game.launcher_source.as_deref(),
-        Some(
-            "steam"
-                | "epic"
-                | "gog"
-                | "heroic"
-                | "battlenet"
-                | "riot"
-                | "hoyoplay"
-                | "ubisoft"
-                | "ea"
-                | "rockstar"
-                | "xbox"
-                | "amazon"
-                | "itch"
-        )
-    ) {
+    let own_folder = if game
+        .launcher_source
+        .as_deref()
+        .is_some_and(|source| FOLDER_MATCH_LAUNCHERS.contains(&source))
+    {
         game.install_folder
             .as_deref()
             .map(|folder| folders.get(folder))
