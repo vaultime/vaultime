@@ -502,29 +502,43 @@ pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Sessio
 
 /// Newest first.
 pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
-    let sessions = db.with_conn(|conn| {
+    let ids: Vec<String> = db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare("SELECT * FROM sessions ORDER BY started_at_wall DESC")
+            .prepare("SELECT id FROM sessions ORDER BY started_at_wall DESC")
             .map_err(map_db)?;
-        let rows = stmt.query_map([], row_to_session).map_err(map_db)?;
+        let rows = stmt.query_map([], |row| row.get(0)).map_err(map_db)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })?;
-    // Each check takes the database on its own, so the first listing after a
-    // start, which checks every chain, never holds up the tracker for long.
-    sessions
-        .into_iter()
-        .map(|mut session| {
-            let (reason, checked_now) =
-                db.with_conn(|conn| integrity::validate_session_history_cached(conn, &session))?;
-            if let Some(reason) = reason {
-                if checked_now {
-                    warn!("session {} failed validation: {reason}", session.id);
-                }
-                session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+    // Each session is read and checked under a lock of its own, so the first
+    // listing after a start, which checks every chain, never holds up the
+    // tracker for long, and a write in between never meets a stale row. A
+    // session removed in between is left out.
+    let mut listed = Vec::with_capacity(ids.len());
+    for id in ids {
+        let checked = db.with_conn(|conn| {
+            let session = conn
+                .prepare_cached("SELECT * FROM sessions WHERE id = ?1")
+                .and_then(|mut stmt| stmt.query_row([&id], row_to_session).optional())
+                .map_err(map_db)?;
+            session
+                .map(|session| {
+                    integrity::validate_session_history_cached(conn, &session)
+                        .map(|(reason, checked_now)| (session, reason, checked_now))
+                })
+                .transpose()
+        })?;
+        let Some((mut session, reason, checked_now)) = checked else {
+            continue;
+        };
+        if let Some(reason) = reason {
+            if checked_now {
+                warn!("session {} failed validation: {reason}", session.id);
             }
-            Ok(session)
-        })
-        .collect()
+            session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+        }
+        listed.push(session);
+    }
+    Ok(listed)
 }
 
 #[cfg(test)]
