@@ -27,7 +27,7 @@ Vaultime keeps track of how long you play your PC games, no matter which launche
 - **Real playtime.** Runtime, active playtime and idle time are counted separately.
 - **Sleep aware.** Time while your PC sleeps is never counted.
 - **Runs in the background.** Closing the window keeps Vaultime tracking in the tray, and it starts when you log in. Both can be turned off in Settings. The tray menu shows the game running and how long you played today.
-- **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest. Any other game can be added by hand.
+- **Game discovery.** Reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris have installed, and scans common game folders on every drive for the rest. Any other game can be added by hand, and a program that is no game can be ignored for good.
 - **Your artwork.** Steam games get Steam's own covers, others the art from their game folders. Choose the cover per game, frame it, add your own pictures in most image formats, and delete the ones you do not want.
 - **Your look.** Dark or light, six ground tones, any accent color and a background picture. The tray and taskbar icon take your accent.
 - **A window like a game client.** Fixed sizes from Compact to Extra large, or a free window you can resize.

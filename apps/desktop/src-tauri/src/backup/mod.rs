@@ -372,6 +372,7 @@ const RESTORE_TABLES: &[&str] = &[
     "session_notes",
     "settings",
     "backup_snapshots",
+    "ignored_programs",
 ];
 
 fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()> {

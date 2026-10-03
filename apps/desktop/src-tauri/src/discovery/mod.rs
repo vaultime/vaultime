@@ -55,6 +55,18 @@ pub struct DiscoveredGame {
     pub already_added: bool,
 }
 
+/// The candidates without programs the player said are no game.
+pub fn without_ignored(db: &Database, games: Vec<DiscoveredGame>) -> Result<Vec<DiscoveredGame>> {
+    let ignored = crate::db::repo::ignored::keys(db)?;
+    if ignored.is_empty() {
+        return Ok(games);
+    }
+    Ok(games
+        .into_iter()
+        .filter(|game| !ignored.contains(&path_key(&game.executable_path)))
+        .collect())
+}
+
 /// Games from every launcher other than Steam whose data exists here.
 pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     let existing = library_executables(db)?;

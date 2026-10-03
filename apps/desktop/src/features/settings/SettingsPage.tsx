@@ -20,6 +20,7 @@ import { AppearanceSection } from "@/features/settings/AppearanceSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
+import { IgnoredSection } from "@/features/settings/IgnoredSection";
 import { UpdatesRow } from "@/features/settings/UpdatesRow";
 import { WindowSection } from "@/features/settings/WindowSection";
 import {
@@ -392,6 +393,8 @@ export function SettingsPage() {
             ))}
           </PageSection>
         )}
+
+        <IgnoredSection onError={setError} />
 
         <EarlierPlaytimeSection onError={setError} />
 

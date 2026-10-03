@@ -27,6 +27,7 @@ use crate::db::models::{
     BackupSnapshot, CreateGame, CropRect, EarlierPlaytime, Game, GameStatusChange, Session,
     SessionEvent, SessionNote, Setting, UpdateGame,
 };
+use crate::db::repo::ignored::{self, IgnoredProgram};
 use crate::db::repo::{
     annotations, backup_snapshots, corrections, earlier_playtime, games, session_events, sessions,
     settings,
@@ -572,7 +573,7 @@ pub fn discover_games(
     db: State<'_, Arc<Database>>,
     paths: Vec<String>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    discovery::scanner::scan_folders(&db, &paths)
+    discovery::without_ignored(&db, discovery::scanner::scan_folders(&db, &paths)?)
 }
 
 /// Saves every finished session as CSV or JSON and returns how many.
@@ -711,7 +712,7 @@ pub fn remove_steam_playtime(db: State<'_, Arc<Database>>) -> Result<usize, Vaul
 pub fn discover_steam_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    discovery::steam::discover_steam_games(&db)
+    discovery::without_ignored(&db, discovery::steam::discover_steam_games(&db)?)
 }
 
 #[tauri::command(async)]
@@ -724,7 +725,34 @@ pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
 pub fn discover_launcher_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    discovery::discover_launcher_games(&db)
+    discovery::without_ignored(&db, discovery::discover_launcher_games(&db)?)
+}
+
+/// Programs the player said are no game, newest first.
+#[tauri::command(async)]
+pub fn list_ignored_programs(
+    db: State<'_, Arc<Database>>,
+) -> Result<Vec<IgnoredProgram>, VaultimeError> {
+    ignored::list(&db)
+}
+
+/// Never offers this program again and never counts it.
+#[tauri::command(async)]
+pub fn ignore_program(
+    db: State<'_, Arc<Database>>,
+    path: String,
+    title: String,
+) -> Result<(), VaultimeError> {
+    ignored::ignore(&db, &path, &title)
+}
+
+/// Lets discovery offer an ignored program again and the tracker count it.
+#[tauri::command(async)]
+pub fn allow_program(
+    db: State<'_, Arc<Database>>,
+    path_key: String,
+) -> Result<bool, VaultimeError> {
+    ignored::allow(&db, &path_key)
 }
 
 #[tauri::command(async)]

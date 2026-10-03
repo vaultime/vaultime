@@ -16,6 +16,7 @@ import type {
   GameAssetView,
   GameStatus,
   GameStatusChange,
+  IgnoredProgram,
   LocalBackupSummary,
   PlayBucket,
   PlayTotal,
@@ -185,6 +186,21 @@ export async function exportSessions(path: string, format: ExportFormat): Promis
 /** Counts a closed session only up to `endedAt`, with a reason. */
 export async function trimSession(sessionId: string, endedAt: string, reason: string): Promise<Session> {
   return invoke<Session>("trim_session", { sessionId, endedAt, reason });
+}
+
+/** Programs the player said are no game, newest first. */
+export async function listIgnoredPrograms(): Promise<IgnoredProgram[]> {
+  return invoke<IgnoredProgram[]>("list_ignored_programs");
+}
+
+/** Never offers this program again and never counts it. */
+export async function ignoreProgram(path: string, title: string): Promise<void> {
+  await invoke("ignore_program", { path, title });
+}
+
+/** Lets discovery offer an ignored program again and the tracker count it. */
+export async function allowProgram(pathKey: string): Promise<boolean> {
+  return invoke<boolean>("allow_program", { pathKey });
 }
 
 /** Makes a game count only while no other game runs, like a launcher, or always again. */

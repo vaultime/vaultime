@@ -129,6 +129,21 @@ export function DiscoverGamesDialog({
     }
   }
 
+  async function ignore(game: DiscoveredGame) {
+    try {
+      setError(null);
+      await api.ignoreProgram(game.executable_path, game.title);
+      setResults((previous) => previous.filter((entry) => entry.executable_path !== game.executable_path));
+      setSelected((previous) => {
+        const next = new Set(previous);
+        next.delete(game.executable_path);
+        return next;
+      });
+    } catch (ignoreError) {
+      setError(describeError(ignoreError));
+    }
+  }
+
   function toggle(path: string) {
     setSelected((previous) => {
       const next = new Set(previous);
@@ -210,13 +225,16 @@ export function DiscoverGamesDialog({
                 const isSelected = selected.has(game.executable_path);
                 const added = game.already_added;
                 return (
-                  <li key={game.executable_path} className="border-b border-rule last:border-b-0">
+                  <li
+                    key={game.executable_path}
+                    className="group flex items-center border-b border-rule transition-colors last:border-b-0 hover:bg-raised/60"
+                  >
                     <button
                       type="button"
                       aria-pressed={added || isSelected}
                       disabled={added}
                       onClick={() => toggle(game.executable_path)}
-                      className="flex w-full items-center gap-3 px-1 py-2.5 text-left transition-colors hover:bg-raised/60 focus-visible:bg-raised focus-visible:outline-none disabled:opacity-50 disabled:hover:bg-transparent"
+                      className="flex min-w-0 flex-1 items-center gap-3 px-1 py-2.5 text-left focus-visible:bg-raised focus-visible:outline-none disabled:opacity-50"
                     >
                       <span
                         aria-hidden="true"
@@ -237,6 +255,16 @@ export function DiscoverGamesDialog({
                         <span className="block truncate font-mono text-[11px] text-faint">{game.executable_path}</span>
                       </span>
                     </button>
+                    {!added && (
+                      <button
+                        type="button"
+                        onClick={() => void ignore(game)}
+                        title="Not a game. Never suggest it again and never track it."
+                        className="shrink-0 rounded-full px-2.5 py-1 text-xs text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-text focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+                      >
+                        Ignore
+                      </button>
+                    )}
                   </li>
                 );
               })}

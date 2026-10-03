@@ -13,7 +13,7 @@
 // ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
 // fills the three days before today with games that ran side by side.
-// ?update=1 offers a new version.
+// ?update=1 offers a new version. ?ignored=1 lists an ignored program.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -30,6 +30,7 @@ import type {
   Game,
   GameAssetView,
   GameStatusChange,
+  IgnoredProgram,
   PlayBucket,
   Session,
   SessionEvent,
@@ -342,6 +343,12 @@ function discovered(title: string, path: string, source: string, alreadyAdded = 
   const installFolder = source === "folder_scan" ? null : path.slice(0, path.lastIndexOf("/"));
   return { title, executable_path: path, install_folder: installFolder, source, source_id: null, already_added: alreadyAdded };
 }
+
+/** Programs ignored in the preview, ?ignored=1 starts with one. */
+let ignoredPrograms: IgnoredProgram[] =
+  params.get("ignored") === "1"
+    ? [{ path_key: "c:\\tools\\benchmark.exe", path: "C:\\Tools\\Benchmark.exe", title: "Benchmark", ignored_at: iso(now) }]
+    : [];
 
 const MOCK_CLOUD_PASSWORD = "correct horse battery";
 const MOCK_INVITE_CODE = "VTLINV-PREV-IEWA-BCDE-FGHJ-KLMN-PQRS";
@@ -961,6 +968,18 @@ mockIPC((cmd, payload) => {
       return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":
       return preferredAssets();
+    case "list_ignored_programs":
+      return ignoredPrograms;
+    case "ignore_program": {
+      const path = String(args.path);
+      if (!ignoredPrograms.some((program) => program.path === path)) {
+        ignoredPrograms.unshift({ path_key: path.toLowerCase(), path, title: String(args.title), ignored_at: iso(Date.now()) });
+      }
+      return null;
+    }
+    case "allow_program":
+      ignoredPrograms = ignoredPrograms.filter((program) => program.path_key !== args.pathKey);
+      return true;
     case "set_game_steps_aside": {
       const game = games.find((entry) => entry.id === args.gameId);
       if (!game) return null;

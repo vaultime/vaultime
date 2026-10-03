@@ -31,6 +31,14 @@ export interface UpdateGameInput {
   is_hidden?: boolean | null;
 }
 
+/** A program the player said is no game. Mirrors the Rust `IgnoredProgram`. */
+export interface IgnoredProgram {
+  path_key: string;
+  path: string;
+  title: string;
+  ignored_at: string;
+}
+
 /** What one play total covers, in local time. */
 export type PlayBucket = "day" | "month" | "year" | "hour_of_week";
 

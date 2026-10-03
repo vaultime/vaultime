@@ -28,10 +28,12 @@ export function DeleteGameDialog({
   onDeleted,
 }: DeleteGameDialogProps) {
   const [deleting, setDeleting] = useState(false);
+  const [ignoreProgram, setIgnoreProgram] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function close() {
     setError(null);
+    setIgnoreProgram(false);
     onClose();
   }
 
@@ -41,8 +43,9 @@ export function DeleteGameDialog({
     setError(null);
     try {
       await api.deleteGame(game.id);
+      if (ignoreProgram && game.executable_path) await api.ignoreProgram(game.executable_path, game.title);
       onDeleted();
-      onClose();
+      close();
     } catch (e) {
       setError(`Could not delete the game: ${describeError(e)}`);
     } finally {
@@ -60,6 +63,19 @@ export function DeleteGameDialog({
             removed from this PC. Backups you made earlier keep them.
           </DialogDescription>
         </DialogHeader>
+        {game?.executable_path && (
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-soft">
+            <input
+              type="checkbox"
+              checked={ignoreProgram}
+              onChange={(event) => setIgnoreProgram(event.target.checked)}
+              className="mt-0.5 accent-violet"
+            />
+            <span>
+              It is not a game. Never suggest its program again and never track it.
+            </span>
+          </label>
+        )}
         {error && <Notice tone="warning">{error}</Notice>}
         <DialogFooter>
           <Button variant="ghost" onClick={close}>
