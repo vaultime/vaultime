@@ -8,6 +8,7 @@ import { Search } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
 import { useLibrary } from "@/features/library/library-context";
 import { PALETTE_GAMES_IDLE, PALETTE_GAMES_SEARCHING } from "@/lib/constants";
+import { matchesSearch } from "@/lib/search";
 import { formatHoursShort } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -39,11 +40,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const [selected, setSelected] = useState(0);
 
   const results = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matches = (text: string) => !needle || text.toLowerCase().includes(needle);
+    const matches = (text: string) => matchesSearch(text, query);
     const games: Command[] = summaries
       .filter(({ game }) => matches(game.title))
-      .slice(0, needle ? PALETTE_GAMES_SEARCHING : PALETTE_GAMES_IDLE)
+      .slice(0, query.trim() ? PALETTE_GAMES_SEARCHING : PALETTE_GAMES_IDLE)
       .map(({ game, cover, totalMs }) => ({
         id: `game-${game.id}`,
         label: game.title,

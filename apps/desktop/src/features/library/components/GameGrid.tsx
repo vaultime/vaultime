@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { GameSummary } from "@/features/library/library-context";
 import { TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
+import { onFind } from "@/lib/find";
 import { GAME_SORTS, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
+import { matchesSearch } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -41,17 +43,37 @@ export function GameGrid({
 }) {
   const [sort, setSort] = useState<GameSort>("recent");
   const [filter, setFilter] = useState<GameStatus | "all">("all");
+  const [query, setQuery] = useState("");
+  const section = useRef<HTMLElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   const statuses = GAME_STATUSES.filter((status) => summaries.some((summary) => summary.status === status));
   const shownFilter = filter !== "all" && statuses.includes(filter) ? filter : "all";
 
   const sorted = useMemo(() => {
-    const filtered =
-      shownFilter === "all" ? summaries : summaries.filter((summary) => summary.status === shownFilter);
+    const filtered = summaries.filter(
+      (summary) =>
+        (shownFilter === "all" || summary.status === shownFilter) && matchesSearch(summary.game.title, query),
+    );
     return sortGames(filtered, sort);
-  }, [summaries, sort, shownFilter]);
+  }, [summaries, sort, shownFilter, query]);
+
+  useEffect(
+    () =>
+      onFind(() => {
+        section.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+        search.current?.focus({ preventScroll: true });
+        search.current?.select();
+      }),
+    [],
+  );
 
   return (
-    <section id="all-games" aria-labelledby="all-games-title" className="scroll-mt-6 px-8 pt-12 xl:px-14">
+    <section
+      ref={section}
+      id="all-games"
+      aria-labelledby="all-games-title"
+      className="scroll-mt-6 px-8 pt-12 xl:px-14"
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-baseline gap-3">
           <h2 id="all-games-title" className="font-display text-[34px]">
@@ -60,8 +82,55 @@ export function GameGrid({
           <span className="font-mono text-sm text-faint">{sorted.length}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={onDiscover}>
+            <Search className="size-4" strokeWidth={1.8} />
+            Discover
+          </Button>
+          <Button onClick={onAdd}>
+            <Plus className="size-4" strokeWidth={1.8} />
+            Add a game
+          </Button>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-faint"
+            strokeWidth={1.8}
+          />
+          <input
+            ref={search}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && query) {
+                event.stopPropagation();
+                setQuery("");
+              }
+            }}
+            placeholder="Find a game"
+            aria-label="Find a game"
+            className="h-9 w-[180px] rounded-full border border-hairline bg-transparent pr-8 pl-8 text-[13px] text-text transition-colors outline-none placeholder:text-faint focus-visible:border-violet focus-visible:ring-2 focus-visible:ring-violet/30 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                search.current?.focus();
+              }}
+              aria-label="Clear"
+              className="absolute top-1/2 right-2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-faint hover:text-text"
+            >
+              <X className="size-3.5" strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
           {statuses.length > 0 && (
-            <div role="group" aria-label="Show games by status" className="mr-2 flex rounded-full border border-hairline p-0.5">
+            <div role="group" aria-label="Show games by status" className="flex rounded-full border border-hairline p-0.5">
               {(["all", ...statuses] as const).map((key) => (
                 <button
                   key={key}
@@ -78,7 +147,7 @@ export function GameGrid({
               ))}
             </div>
           )}
-          <div role="group" aria-label="Sort games" className="mr-2 flex rounded-full border border-hairline p-0.5">
+          <div role="group" aria-label="Sort games" className="flex rounded-full border border-hairline p-0.5">
             {(Object.keys(GAME_SORTS) as GameSort[]).map((key) => (
               <button
                 key={key}
@@ -94,17 +163,11 @@ export function GameGrid({
               </button>
             ))}
           </div>
-          <Button variant="outline" onClick={onDiscover}>
-            <Search className="size-4" strokeWidth={1.8} />
-            Discover
-          </Button>
-          <Button onClick={onAdd}>
-            <Plus className="size-4" strokeWidth={1.8} />
-            Add a game
-          </Button>
         </div>
       </div>
-
+      {sorted.length === 0 && query && (
+        <p className="mt-6 text-sm text-faint">No game matches "{query.trim()}".</p>
+      )}
       <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-5 gap-y-7">
         {sorted.map((summary) => (
           <GameTile

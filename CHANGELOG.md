@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Library
+
+- **Find a game.** A search field above your games filters them as you type, ignoring accents and the order of words. Ctrl+F jumps into it, and opens the search on other pages. The command palette finds games the same way.
+
 ### Updates
 
 - **Check for updates yourself.** Settings, About shows whether Vaultime is up to date and has a button to check now. A running Vaultime also looks for a new version every six hours, not only when it starts.

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router";
 import { Backdrop } from "@/features/appearance/Backdrop";
+import { requestFind } from "@/lib/find";
 import { CommandPalette } from "./CommandPalette";
 import { LiveBar } from "./LiveBar";
 import { Rail } from "./Rail";
@@ -14,9 +15,15 @@ export function AppLayout() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") {
         event.preventDefault();
         setPaletteOpen((open) => !open);
+      } else if (key === "f") {
+        // The page's own search, or the palette where a page has none.
+        event.preventDefault();
+        if (!requestFind()) setPaletteOpen(true);
       }
     }
     window.addEventListener("keydown", onKeyDown);

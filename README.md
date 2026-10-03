@@ -33,7 +33,7 @@ Vaultime keeps track of how long you play your PC games, no matter which launche
 - **A window like a game client.** Fixed sizes from Compact to Extra large, or a free window you can resize.
 - **A journal of your play.** Every session written as a sentence, week by week, with an honest trust label and the reason when something looked off.
 - **Game pages in the game's colors.** The last two weeks at a glance, totals, and the cover you pick.
-- **Always in view.** A live bar shows the running game and its timer, and Ctrl+K jumps to any game or page.
+- **Always in view.** A live bar shows the running game and its timer, Ctrl+K jumps to any game or page, and Ctrl+F finds a game in your library.
 - **Backups.** Automatic local backups every day, restore with a preview, and optional encrypted cloud backup.
 
 ## Download
