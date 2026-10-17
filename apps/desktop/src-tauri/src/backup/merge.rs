@@ -44,7 +44,7 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{ASSET_CACHE_DIR, DATABASE_FILE};
 use crate::db::connection::Database;
 use crate::db::models::Session;
-use crate::db::repo::sessions::row_to_session;
+use crate::db::repo::sessions::{row_to_session, stored_session};
 use crate::db::repo::{games, map_db};
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, ledger};
@@ -486,12 +486,7 @@ fn sort_candidates(
 /// Whether this PC's copy of a session is sound but no pin of this PC
 /// vouches for it, as after a merge whose keys it did not trust yet.
 fn unvouched_here(conn: &Connection, session_id: &str) -> Result<bool> {
-    let session = conn
-        .query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
-            [session_id],
-            row_to_session,
-        )
+    let session = stored_session(conn, session_id)
         .optional()
         .map_err(map_db)?;
     Ok(match session {

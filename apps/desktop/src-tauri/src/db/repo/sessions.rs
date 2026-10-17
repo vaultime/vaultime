@@ -39,6 +39,12 @@ pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
     })
 }
 
+/// The row of a session as stored, without its check.
+pub(crate) fn stored_session(conn: &Connection, session_id: &str) -> rusqlite::Result<Session> {
+    conn.prepare_cached("SELECT * FROM sessions WHERE id = ?1")?
+        .query_row([session_id], row_to_session)
+}
+
 pub(crate) fn attach_validated_status(conn: &Connection, mut session: Session) -> Result<Session> {
     if let Some(reason) = integrity::validate_session_history(conn, &session)? {
         warn!("session {} failed validation: {reason}", session.id);
@@ -99,12 +105,7 @@ pub fn create_session_at(
             &payload.to_string(),
         )?;
 
-        conn.query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
-            [&id],
-            row_to_session,
-        )
-        .map_err(map_db)
+        stored_session(conn, &id).map_err(map_db)
     })
 }
 
@@ -165,12 +166,7 @@ pub fn end_session(
         )?;
         slices::rebuild_session_and_around(conn, session_id)?;
 
-        conn.query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
-            [session_id],
-            row_to_session,
-        )
-        .map_err(map_db)
+        stored_session(conn, session_id).map_err(map_db)
     })
 }
 
@@ -323,32 +319,19 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
     let recovered_at = integrity::now_timestamp();
 
     db.with_transaction(|conn| {
-        let session = attach_validated_status(
-            conn,
-            conn.query_row(
-                "SELECT * FROM sessions WHERE id = ?1",
-                [session_id],
-                row_to_session,
-            )
-            .map_err(map_db)?,
-        )?;
+        let session =
+            attach_validated_status(conn, stored_session(conn, session_id).map_err(map_db)?)?;
         let status = if session.integrity_status == integrity::STATUS_SUSPICIOUS {
             integrity::STATUS_SUSPICIOUS
         } else {
             integrity::STATUS_RECOVERED
         };
-        let mut ended_at_wall: String = conn
-            .query_row(
-                "SELECT event_time_wall FROM session_events
-                 WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
-                [session_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(map_db)?
-            .unwrap_or_else(|| session.started_at_wall.clone());
-        let recorded = [session.runtime_ms, session.active_ms, session.idle_ms];
         let events = integrity::load_session_events(conn, session_id)?;
+        let mut ended_at_wall = events.last().map_or_else(
+            || session.started_at_wall.clone(),
+            |last| last.event_time_wall.clone(),
+        );
+        let recorded = [session.runtime_ms, session.active_ms, session.idle_ms];
         let limit = integrity::ledger::own_tail_limit(conn, session_id, &events)?;
         let [runtime_ms, active_ms, idle_ms] =
             limit.as_ref().map_or(recorded, |limit| limit.cap(recorded));
@@ -411,12 +394,7 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
         )?;
         slices::rebuild_session_and_around(conn, session_id)?;
 
-        conn.query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
-            [session_id],
-            row_to_session,
-        )
-        .map_err(map_db)
+        stored_session(conn, session_id).map_err(map_db)
     })
 }
 
@@ -634,10 +612,7 @@ pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
     let mut listed = Vec::with_capacity(ids.len());
     for id in ids {
         let checked = db.with_conn(|conn| {
-            let session = conn
-                .prepare_cached("SELECT * FROM sessions WHERE id = ?1")
-                .and_then(|mut stmt| stmt.query_row([&id], row_to_session).optional())
-                .map_err(map_db)?;
+            let session = stored_session(conn, &id).optional().map_err(map_db)?;
             session
                 .map(|session| {
                     integrity::validate_session_history_cached(conn, &session)
@@ -670,9 +645,7 @@ mod tests {
 
     fn get_session(db: &Database, id: &str) -> Result<Session> {
         db.with_conn(|conn| {
-            let session = conn
-                .query_row("SELECT * FROM sessions WHERE id = ?1", [id], row_to_session)
-                .map_err(map_db)?;
+            let session = stored_session(conn, id).map_err(map_db)?;
             attach_validated_status(conn, session)
         })
     }

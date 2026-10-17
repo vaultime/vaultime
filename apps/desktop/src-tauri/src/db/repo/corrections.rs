@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use crate::constants::{MANUAL_SESSION_MAX, SESSION_NOTE_MAX_CHARS, STEAM_SOURCE};
 use crate::db::connection::Database;
 use crate::db::models::Session;
-use crate::db::repo::sessions::{attach_validated_status, row_to_session};
+use crate::db::repo::sessions::{attach_validated_status, stored_session};
 use crate::db::repo::{games, map_db};
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, STATUS_EDITED, STATUS_MANUAL, STATUS_SUSPICIOUS};
@@ -51,13 +51,7 @@ fn check_text(text: &str, required: bool) -> Result<&str> {
 /// The session with the label its history supports, so a correction never
 /// starts from a status someone changed by hand in the database.
 fn load(conn: &rusqlite::Connection, session_id: &str) -> Result<Session> {
-    let session = conn
-        .query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
-            [session_id],
-            row_to_session,
-        )
-        .map_err(map_db)?;
+    let session = stored_session(conn, session_id).map_err(map_db)?;
     attach_validated_status(conn, session)
 }
 
