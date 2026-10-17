@@ -28,6 +28,12 @@ const RANGES: Record<Range, string> = {
   calendar: "Every day",
 };
 
+// Made once, since a range formats a date or two per column on every render.
+const DAY_LABEL = new Intl.DateTimeFormat(UI_LOCALE, { day: "numeric", month: "short" });
+const DAY_NAME = new Intl.DateTimeFormat(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" });
+const MONTH_LABEL = new Intl.DateTimeFormat(UI_LOCALE, { month: "short" });
+const MONTH_NAME = new Intl.DateTimeFormat(UI_LOCALE, { month: "long", year: "numeric" });
+
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -69,21 +75,13 @@ function pointsOf(range: Exclude<Range, "calendar">, totals: PlayTotal[], now: D
   if (range === "days") {
     return Array.from({ length: GAME_HISTORY_DAYS }, (_, index) => {
       const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (GAME_HISTORY_DAYS - 1 - index));
-      return point(
-        toDayKey(day),
-        day.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" }),
-        day.toLocaleDateString(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" }),
-      );
+      return point(toDayKey(day), DAY_LABEL.format(day), DAY_NAME.format(day));
     });
   }
   if (range === "months") {
     return Array.from({ length: GAME_HISTORY_MONTHS }, (_, index) => {
       const month = new Date(now.getFullYear(), now.getMonth() - (GAME_HISTORY_MONTHS - 1 - index), 1);
-      return point(
-        monthKey(month),
-        month.toLocaleDateString(UI_LOCALE, { month: "short" }),
-        month.toLocaleDateString(UI_LOCALE, { month: "long", year: "numeric" }),
-      );
+      return point(monthKey(month), MONTH_LABEL.format(month), MONTH_NAME.format(month));
     });
   }
   return Array.from({ length: now.getFullYear() - firstYear + 1 }, (_, index) => {

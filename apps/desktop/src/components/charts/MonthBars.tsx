@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils";
 import { cardPosition, describePlay, type GameLabel } from "./play-card";
 import { PlayCard } from "./PlayCard";
 
+// Made once, since the bars name every month twice on each render.
+const MONTH_FORMATS = {
+  short: new Intl.DateTimeFormat(UI_LOCALE, { month: "short" }),
+  long: new Intl.DateTimeFormat(UI_LOCALE, { month: "long" }),
+};
+
 /**
  * One column per month, active time in violet with idle time stacked on
  * top. Pointing at a month, or tabbing to it, shows what was played.
@@ -28,8 +34,7 @@ export function MonthBars({
   const max = Math.max(1, ...totals);
   const busiest = totals.indexOf(Math.max(...totals));
   const height = (ms: number) => `${Math.max(CHART_MIN_BAR_PERCENT, (ms / max) * 100)}%`;
-  const name = (index: number, style: "short" | "long") =>
-    new Date(year, index, 1).toLocaleDateString(UI_LOCALE, { month: style });
+  const name = (index: number, style: "short" | "long") => MONTH_FORMATS[style].format(new Date(year, index, 1));
   const show = (index: number, column: Element) => {
     if (!frame.current) return;
     setShown({ index, style: cardPosition(column.getBoundingClientRect(), frame.current.getBoundingClientRect()) });
