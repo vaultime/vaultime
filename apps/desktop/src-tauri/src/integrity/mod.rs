@@ -7,7 +7,7 @@ pub mod ledger;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 
 use crate::constants::SESSION_TIME_MAX_MS;
 use crate::db::models::{Session, SessionEvent};
-use crate::db::repo::session_events::row_to_session_event;
+use crate::db::repo::session_events::{SESSION_EVENT_COLUMNS, row_to_session_event};
 use crate::error::{Result, VaultimeError};
 
 pub const STATUS_LOCAL: &str = "local";
@@ -131,36 +131,30 @@ pub(crate) fn adopt_sound_sessions(
     backup_id: &str,
 ) -> Result<usize> {
     let sessions: Vec<Session> = {
+        let failed = |error| VaultimeError::Integrity(format!("failed to read sessions: {error}"));
         let mut stmt = conn
             .prepare("SELECT * FROM sessions ORDER BY started_at_wall")
-            .map_err(|error| {
-                VaultimeError::Integrity(format!("failed to read sessions: {error}"))
-            })?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map([], crate::db::repo::sessions::row_to_session)
-            .map_err(|error| {
-                VaultimeError::Integrity(format!("failed to read sessions: {error}"))
-            })?;
-        rows.collect::<rusqlite::Result<_>>().map_err(|error| {
-            VaultimeError::Integrity(format!("failed to read sessions: {error}"))
-        })?
+            .map_err(failed)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(failed)?
     };
     // Checked first and taken in after, so the ledger check is done once.
-    let no_keys = std::collections::HashSet::new();
     let mut sound = Vec::new();
     for session in &sessions {
-        if validate_session_history(conn, session)?.is_none() {
+        let events = load_session_events(conn, &session.id)?;
+        let chain_sound = chain_problem(session, &events).is_none();
+        let ledger_problem =
+            |viewpoint| ledger::session_problem(conn, session, &events, &TIMING_EVENTS, viewpoint);
+        if chain_sound && ledger_problem(ledger::Viewpoint::ThisPc)?.is_none() {
             continue;
         }
         let keys = trust.keys_for(&session.device_id);
-        let passes =
-            validate_session_history_from(conn, session, ledger::Viewpoint::Keys(&keys))?.is_none();
-        let events = load_session_events(conn, &session.id)?;
+        let passes = chain_sound && ledger_problem(ledger::Viewpoint::Keys(&keys))?.is_none();
         // Sound apart from the ledger, and at a state this PC pinned before.
         let known_here = !passes
-            && validate_session_history_from(conn, session, ledger::Viewpoint::Keys(&no_keys))?
-                .as_deref()
-                == Some("not_in_ledger")
+            && chain_sound
             && vouched_before
                 .get(&session.id)
                 .is_some_and(|pins| pins_confirm(pins, session, &events));
@@ -232,36 +226,43 @@ pub fn validate_session_history_from(
     viewpoint: ledger::Viewpoint,
 ) -> Result<Option<String>> {
     let events = load_session_events(conn, &session.id)?;
-    if events.is_empty() {
-        return Ok(Some("missing_event_chain".into()));
+    if let Some(reason) = chain_problem(session, &events) {
+        return Ok(Some(reason.into()));
     }
+    Ok(
+        ledger::session_problem(conn, session, &events, &TIMING_EVENTS, viewpoint)?
+            .map(str::to_owned),
+    )
+}
 
-    if let Some(reason) = validate_event_chain(&events) {
-        return Ok(Some(reason));
+/// Why a session disagrees with its own events, `events` in order, leaving
+/// the ledgers aside.
+fn chain_problem(session: &Session, events: &[SessionEvent]) -> Option<&'static str> {
+    let (Some(first_event), Some(last_event)) = (events.first(), events.last()) else {
+        return Some("missing_event_chain");
+    };
+    if let Some(problem) = validate_event_chain(events) {
+        return Some(problem);
     }
-
-    if let Some(reason) = check_time_range(session, &events) {
-        return Ok(Some(reason));
-    }
-
-    if let Some(reason) = check_after_close(&events) {
-        return Ok(Some(reason));
-    }
-    let first_event = events.first().expect("events checked non-empty");
-    if let Some(reason) = check_status_history(&events, first_event.event_type == "added_manually")
-    {
-        return Ok(Some(reason));
-    }
-    if let Some(reason) = check_corrections(&events) {
-        return Ok(Some(reason));
+    let fields: Vec<EventFields> = events
+        .iter()
+        .map(|event| EventFields::read(&event.payload_json))
+        .collect();
+    let added_by_hand = first_event.event_type == "added_manually";
+    let problem = check_time_range(session, events, &fields)
+        .or_else(|| check_after_close(events))
+        .or_else(|| check_status_history(events, &fields, added_by_hand))
+        .or_else(|| check_corrections(events));
+    if problem.is_some() {
+        return problem;
     }
     let start = match first_event.event_type.as_str() {
         "started" => Some(first_event.event_time_wall.clone()),
         "added_manually" => wall_in_payload(first_event, "started_at_wall"),
-        _ => return Ok(Some("event_chain_missing_start".into())),
+        _ => return Some("event_chain_missing_start"),
     };
     if start.as_deref() != Some(session.started_at_wall.as_str()) {
-        return Ok(Some("session_start_mismatch".into()));
+        return Some("session_start_mismatch");
     }
     // The first event names the game and the PC the time belongs to.
     for (key, value) in [
@@ -269,15 +270,14 @@ pub fn validate_session_history_from(
         ("device_id", &session.device_id),
     ] {
         if wall_in_payload(first_event, key).is_some_and(|recorded| &recorded != value) {
-            return Ok(Some("session_owner_mismatch".into()));
+            return Some("session_owner_mismatch");
         }
     }
 
-    let last_event = events.last().expect("events checked non-empty");
     let last_is_terminal = TERMINAL_EVENTS.contains(&last_event.event_type.as_str());
     if let Some(ended_at_wall) = session.ended_at_wall.as_deref() {
         if !last_is_terminal {
-            return Ok(Some("closed_session_missing_terminal_event".into()));
+            return Some("closed_session_missing_terminal_event");
         }
 
         let end = match last_event.event_type.as_str() {
@@ -288,46 +288,79 @@ pub fn validate_session_history_from(
             _ => Some(last_event.event_time_wall.clone()),
         };
         if end.as_deref() != Some(ended_at_wall) {
-            return Ok(Some("session_end_mismatch".into()));
+            return Some("session_end_mismatch");
         }
     } else if last_is_terminal {
-        return Ok(Some("open_session_terminal_event_invalid".into()));
+        return Some("open_session_terminal_event_invalid");
     }
 
-    let latest_timing_event = events
-        .iter()
-        .rev()
-        .find(|event| TIMING_EVENTS.contains(&event.event_type.as_str()))
-        .expect("a start event guarantees a timing event");
-    if !timing_event_matches_session(latest_timing_event, session) {
-        return Ok(Some("session_timing_mismatch".into()));
+    // A chain that begins with a start holds a timing and a status event.
+    let newest_of = |kinds: &[&str]| {
+        events
+            .iter()
+            .rev()
+            .find(|event| kinds.contains(&event.event_type.as_str()))
+    };
+    if !newest_of(&TIMING_EVENTS).is_some_and(|event| timing_event_matches_session(event, session))
+    {
+        return Some("session_timing_mismatch");
     }
-
-    let latest_status_event = events
-        .iter()
-        .rev()
-        .find(|event| STATUS_EVENTS.contains(&event.event_type.as_str()))
-        .expect("a start event guarantees a status event");
-    if !status_event_matches_session(latest_status_event, session) {
-        return Ok(Some("session_status_mismatch".into()));
+    if !newest_of(&STATUS_EVENTS).is_some_and(|event| status_event_matches_session(event, session))
+    {
+        return Some("session_status_mismatch");
     }
+    None
+}
 
-    Ok(
-        ledger::session_problem(conn, session, &events, &TIMING_EVENTS, viewpoint)?
-            .map(str::to_owned),
-    )
+/// What the checks read from the payload of every event.
+struct EventFields<'a> {
+    /// Runtime, active and idle time, or `None` when they cannot be read.
+    amounts: Option<[Option<i64>; 3]>,
+    integrity_status: Option<Cow<'a, str>>,
+}
+
+impl<'a> EventFields<'a> {
+    /// Reads both in one pass, since a chain check reads every payload. One
+    /// that pass fails on is read again for each part alone, as a part may
+    /// still be readable.
+    fn read(payload_json: &'a str) -> Self {
+        #[derive(serde::Deserialize)]
+        #[expect(clippy::struct_field_names)]
+        struct Amounts {
+            runtime_ms: Option<i64>,
+            active_ms: Option<i64>,
+            idle_ms: Option<i64>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Both<'a> {
+            runtime_ms: Option<i64>,
+            active_ms: Option<i64>,
+            idle_ms: Option<i64>,
+            #[serde(borrow)]
+            integrity_status: Option<Cow<'a, str>>,
+        }
+        match serde_json::from_str::<Both>(payload_json) {
+            Ok(both) => Self {
+                amounts: Some([both.runtime_ms, both.active_ms, both.idle_ms]),
+                integrity_status: both.integrity_status,
+            },
+            Err(_) => Self {
+                amounts: serde_json::from_str::<Amounts>(payload_json)
+                    .ok()
+                    .map(|amounts| [amounts.runtime_ms, amounts.active_ms, amounts.idle_ms]),
+                integrity_status: status_in_payload(payload_json),
+            },
+        }
+    }
 }
 
 /// Every amount of time a session and its events name lies between zero and
 /// `SESSION_TIME_MAX_MS`. Others only come from a damaged or made up record.
-fn check_time_range(session: &Session, events: &[SessionEvent]) -> Option<String> {
-    #[derive(serde::Deserialize)]
-    #[expect(clippy::struct_field_names)]
-    struct Amounts {
-        runtime_ms: Option<i64>,
-        active_ms: Option<i64>,
-        idle_ms: Option<i64>,
-    }
+fn check_time_range(
+    session: &Session,
+    events: &[SessionEvent],
+    fields: &[EventFields],
+) -> Option<&'static str> {
     let in_range = |value: i64| (0..=SESSION_TIME_MAX_MS).contains(&value);
     let row = [
         session.runtime_ms,
@@ -335,35 +368,31 @@ fn check_time_range(session: &Session, events: &[SessionEvent]) -> Option<String
         session.idle_ms,
         session.elapsed_monotonic_ms,
     ];
-    let events_in_range = events.iter().all(|event| {
-        let amounts = serde_json::from_str::<Amounts>(&event.payload_json).ok();
+    let events_in_range = events.iter().zip(fields).all(|(event, fields)| {
         event.event_time_monotonic.is_none_or(in_range)
-            && amounts.is_none_or(|amounts| {
-                [amounts.runtime_ms, amounts.active_ms, amounts.idle_ms]
-                    .into_iter()
-                    .flatten()
-                    .all(in_range)
-            })
+            && fields
+                .amounts
+                .is_none_or(|amounts| amounts.into_iter().flatten().all(in_range))
     });
-    (!row.into_iter().all(in_range) || !events_in_range).then(|| "time_out_of_range".into())
+    (!row.into_iter().all(in_range) || !events_in_range).then_some("time_out_of_range")
 }
 
 /// Once a session closed, only corrections follow, so nothing can add time
 /// to it after its end.
-fn check_after_close(events: &[SessionEvent]) -> Option<String> {
+fn check_after_close(events: &[SessionEvent]) -> Option<&'static str> {
     let closed = events
         .iter()
         .position(|event| TERMINAL_EVENTS.contains(&event.event_type.as_str()))?;
     events[closed + 1..]
         .iter()
         .any(|event| event.event_type != "corrected")
-        .then(|| "event_after_close".into())
+        .then_some("event_after_close")
 }
 
 /// A correction only ever takes time out. It starts from the counters the
 /// session had just before it, lowers none of them below zero, raises none
 /// of them and never moves the end later.
-fn check_corrections(events: &[SessionEvent]) -> Option<String> {
+fn check_corrections(events: &[SessionEvent]) -> Option<&'static str> {
     if !events.iter().any(|event| event.event_type == "corrected") {
         return None;
     }
@@ -384,16 +413,16 @@ fn check_corrections(events: &[SessionEvent]) -> Option<String> {
             }
             "corrected" => {
                 let Some(payload) = payload else {
-                    return Some("correction_unreadable".into());
+                    return Some("correction_unreadable");
                 };
                 let after = counters(&payload);
                 let previous = payload.get("previous");
                 let from = previous.and_then(counters);
                 let (Some(after), Some(from)) = (after, from) else {
-                    return Some("correction_unreadable".into());
+                    return Some("correction_unreadable");
                 };
                 if before.is_some_and(|before| before != from) {
-                    return Some("correction_previous_mismatch".into());
+                    return Some("correction_previous_mismatch");
                 }
                 let new_end = payload_str(&payload, "ended_at_wall").and_then(parse_wall);
                 let old_end = previous
@@ -406,7 +435,7 @@ fn check_corrections(events: &[SessionEvent]) -> Option<String> {
                         .zip(from)
                         .any(|(after, from)| *after > from || *after < 0)
                 {
-                    return Some("correction_added_time".into());
+                    return Some("correction_added_time");
                 }
                 before = Some(after);
             }
@@ -424,28 +453,33 @@ fn parse_wall(value: &str) -> Option<DateTime<Utc>> {
 
 /// A Suspicious flag stays once it is set, and only a session added by hand
 /// may carry the Manual label, always unless it was flagged.
-fn check_status_history(events: &[SessionEvent], added_by_hand: bool) -> Option<String> {
+fn check_status_history(
+    events: &[SessionEvent],
+    fields: &[EventFields],
+    added_by_hand: bool,
+) -> Option<&'static str> {
     let mut flagged = false;
-    for event in events
+    for (event, fields) in events
         .iter()
-        .filter(|event| STATUS_EVENTS.contains(&event.event_type.as_str()))
+        .zip(fields)
+        .filter(|(event, _)| STATUS_EVENTS.contains(&event.event_type.as_str()))
     {
         let status = match event.event_type.as_str() {
-            "started" => Cow::Borrowed(STATUS_LOCAL),
-            "integrity_flagged" => Cow::Borrowed(STATUS_SUSPICIOUS),
-            _ => match status_in_payload(&event.payload_json) {
+            "started" => STATUS_LOCAL,
+            "integrity_flagged" => STATUS_SUSPICIOUS,
+            _ => match fields.integrity_status.as_deref() {
                 Some(status) => status,
-                None => return Some("session_status_missing".into()),
+                None => return Some("session_status_missing"),
             },
         };
         if flagged && status != STATUS_SUSPICIOUS {
-            return Some("suspicious_flag_dropped".into());
+            return Some("suspicious_flag_dropped");
         }
         if status == STATUS_MANUAL && !added_by_hand {
-            return Some("manual_label_on_tracked_session".into());
+            return Some("manual_label_on_tracked_session");
         }
         if added_by_hand && status != STATUS_MANUAL && status != STATUS_SUSPICIOUS {
-            return Some("tracked_label_on_manual_session".into());
+            return Some("tracked_label_on_manual_session");
         }
         flagged |= status == STATUS_SUSPICIOUS;
     }
@@ -544,7 +578,8 @@ pub fn forget_checks() {
 fn forget_checks_after_outside_writes(conn: &Connection) -> Result<()> {
     static SEEN_VERSION: Mutex<Option<i64>> = Mutex::new(None);
     let version: i64 = conn
-        .query_row("PRAGMA data_version", [], |row| row.get(0))
+        .prepare_cached("PRAGMA data_version")
+        .and_then(|mut stmt| stmt.query_row([], |row| row.get(0)))
         .map_err(|error| {
             VaultimeError::Integrity(format!("failed to read the data version: {error}"))
         })?;
@@ -561,16 +596,19 @@ fn next_sequence_and_previous_hash(
     session_id: &str,
 ) -> Result<(i64, Option<String>)> {
     let row = conn
-        .query_row(
+        .prepare_cached(
             "SELECT sequence, hash_self
              FROM session_events
              WHERE session_id = ?1
              ORDER BY sequence DESC
              LIMIT 1",
-            [session_id],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
         )
-        .optional()
+        .and_then(|mut stmt| {
+            stmt.query_row([session_id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .optional()
+        })
         .map_err(|error| {
             VaultimeError::Integrity(format!("failed to query event chain: {error}"))
         })?;
@@ -590,56 +628,106 @@ pub(crate) fn compute_event_hash(
     payload_json: &str,
     previous_hash: Option<&str>,
 ) -> String {
+    crate::hex::encode(&event_digest(
+        session_id,
+        sequence,
+        event_type,
+        event_time_wall,
+        event_time_monotonic,
+        payload_json,
+        previous_hash,
+    ))
+}
+
+/// `compute_event_hash` before it is written as hex.
+fn event_digest(
+    session_id: &str,
+    sequence: i64,
+    event_type: &str,
+    event_time_wall: &str,
+    event_time_monotonic: Option<i64>,
+    payload_json: &str,
+    previous_hash: Option<&str>,
+) -> [u8; 32] {
+    // Numbers are written in decimal without a buffer on the heap, as a
+    // chain check hashes every event.
+    fn update_number(hasher: &mut Sha256, value: i64) {
+        // `i64::MIN` takes 20 characters.
+        let mut buffer = [0_u8; 20];
+        let mut cursor = std::io::Cursor::new(&mut buffer[..]);
+        match std::io::Write::write_fmt(&mut cursor, format_args!("{value}")) {
+            Ok(()) => {
+                let written = usize::try_from(cursor.position()).unwrap_or_default();
+                hasher.update(&buffer[..written]);
+            }
+            Err(_) => hasher.update(value.to_string().as_bytes()),
+        }
+    }
     let mut hasher = Sha256::new();
     hasher.update(session_id.as_bytes());
     hasher.update(b"\n");
-    hasher.update(sequence.to_string().as_bytes());
+    update_number(&mut hasher, sequence);
     hasher.update(b"\n");
     hasher.update(event_type.as_bytes());
     hasher.update(b"\n");
     hasher.update(event_time_wall.as_bytes());
     hasher.update(b"\n");
-    hasher.update(
-        event_time_monotonic
-            .map(|value| value.to_string())
-            .unwrap_or_default()
-            .as_bytes(),
-    );
+    if let Some(monotonic) = event_time_monotonic {
+        update_number(&mut hasher, monotonic);
+    }
     hasher.update(b"\n");
     hasher.update(payload_json.as_bytes());
     hasher.update(b"\n");
     hasher.update(previous_hash.unwrap_or_default().as_bytes());
-    crate::hex::encode(&hasher.finalize())
+    hasher.finalize().into()
 }
 
-fn validate_event_chain(events: &[SessionEvent]) -> Option<String> {
-    let mut previous_hash: Option<String> = None;
+/// Whether `text` is `digest` in lowercase hex, as `crate::hex` writes it.
+fn is_hex_of(text: &str, digest: &[u8]) -> bool {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    text.len() == digest.len() * 2
+        && text
+            .as_bytes()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(digest)
+            .all(|([high, low], byte)| {
+                *high == DIGITS[usize::from(byte >> 4)] && *low == DIGITS[usize::from(byte & 0x0f)]
+            })
+}
+
+fn validate_event_chain(events: &[SessionEvent]) -> Option<&'static str> {
+    let mut previous_hash: Option<&str> = None;
 
     for (index, event) in events.iter().enumerate() {
         let expected_sequence = (index as i64) + 1;
         if event.sequence != expected_sequence {
-            return Some("event_sequence_gap".into());
+            return Some("event_sequence_gap");
         }
 
-        if event.hash_prev != previous_hash {
-            return Some("event_previous_hash_mismatch".into());
+        if event.hash_prev.as_deref() != previous_hash {
+            return Some("event_previous_hash_mismatch");
         }
 
-        let expected_hash = compute_event_hash(
+        let expected = event_digest(
             &event.session_id,
             event.sequence,
             &event.event_type,
             &event.event_time_wall,
             event.event_time_monotonic,
             &event.payload_json,
-            previous_hash.as_deref(),
+            previous_hash,
         );
+        let Some(hash) = event
+            .hash_self
+            .as_deref()
+            .filter(|hash| is_hex_of(hash, &expected))
+        else {
+            return Some("event_hash_invalid");
+        };
 
-        if event.hash_self.as_deref() != Some(expected_hash.as_str()) {
-            return Some("event_hash_invalid".into());
-        }
-
-        previous_hash = Some(expected_hash);
+        previous_hash = Some(hash);
     }
 
     None
@@ -700,16 +788,16 @@ pub(crate) fn load_session_events(
     conn: &Connection,
     session_id: &str,
 ) -> Result<Vec<SessionEvent>> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT *
-             FROM session_events
-             WHERE session_id = ?1
-             ORDER BY sequence ASC",
+    static QUERY: LazyLock<String> = LazyLock::new(|| {
+        format!(
+            "SELECT {SESSION_EVENT_COLUMNS} FROM session_events se
+             WHERE se.session_id = ?1
+             ORDER BY se.sequence ASC"
         )
-        .map_err(|error| {
-            VaultimeError::Integrity(format!("failed to prepare session event query: {error}"))
-        })?;
+    });
+    let mut stmt = conn.prepare_cached(&QUERY).map_err(|error| {
+        VaultimeError::Integrity(format!("failed to prepare session event query: {error}"))
+    })?;
 
     let rows = stmt
         .query_map([session_id], row_to_session_event)
@@ -722,8 +810,7 @@ pub(crate) fn load_session_events(
     })
 }
 
-/// The status a payload names, read without building the whole payload,
-/// since every checkpoint carries one and a chain check reads them all.
+/// The status a payload names, read without building the whole payload.
 fn status_in_payload(payload_json: &str) -> Option<Cow<'_, str>> {
     #[derive(serde::Deserialize)]
     struct Status<'a> {
@@ -785,6 +872,43 @@ mod tests {
     }
 
     #[test]
+    fn event_hash_writes_numbers_in_decimal() {
+        for (sequence, monotonic) in [(1, None), (42, Some(0)), (i64::MAX, Some(i64::MIN))] {
+            let previous = (sequence > 1).then_some("previous");
+            let mut hasher = Sha256::new();
+            let monotonic_text = monotonic.map(|value: i64| value.to_string());
+            for part in [
+                "session",
+                &sequence.to_string(),
+                "heartbeat",
+                "2026-01-01T00:00:00.000Z",
+                monotonic_text.as_deref().unwrap_or_default(),
+                "{}",
+            ] {
+                hasher.update(part.as_bytes());
+                hasher.update(b"\n");
+            }
+            hasher.update(previous.unwrap_or_default().as_bytes());
+            let expected = crate::hex::encode(&hasher.finalize());
+            let hash = compute_event_hash(
+                "session",
+                sequence,
+                "heartbeat",
+                "2026-01-01T00:00:00.000Z",
+                monotonic,
+                "{}",
+                previous,
+            );
+            assert_eq!(hash, expected);
+            assert!(is_hex_of(&hash, &crate::hex::decode(&expected).unwrap()));
+            assert!(!is_hex_of(
+                &hash.to_uppercase(),
+                &crate::hex::decode(&expected).unwrap()
+            ));
+        }
+    }
+
+    #[test]
     fn validation_detects_hash_mismatch() {
         let session = Session {
             id: "session-1".into(),
@@ -843,9 +967,6 @@ mod tests {
             signature: None,
         });
 
-        assert_eq!(
-            validate_event_chain(&events).as_deref(),
-            Some("event_hash_invalid")
-        );
+        assert_eq!(validate_event_chain(&events), Some("event_hash_invalid"));
     }
 }

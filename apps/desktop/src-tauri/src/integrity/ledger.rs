@@ -344,13 +344,14 @@ fn entry_hash(
 
 /// The newest entry of a ledger: its sequence and hash.
 fn tail(conn: &Connection, key_id: &str) -> Result<Option<(i64, String)>> {
-    conn.query_row(
+    conn.prepare_cached(
         "SELECT sequence, hash_self FROM ledger_entries
          WHERE key_id = ?1 ORDER BY sequence DESC LIMIT 1",
-        [key_id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
     )
-    .optional()
+    .and_then(|mut stmt| {
+        stmt.query_row([key_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .optional()
+    })
     .map_err(ledger_error)
 }
 

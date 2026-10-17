@@ -10,18 +10,24 @@ use crate::db::models::SessionEvent;
 use crate::db::repo::map_db;
 use crate::error::Result;
 
+/// The columns `row_to_session_event` reads, in its order, from a table
+/// named `se`. Read by position, since a chain check reads every event.
+pub(crate) const SESSION_EVENT_COLUMNS: &str = "se.id, se.session_id, se.sequence, se.event_type,
+    se.event_time_wall, se.event_time_monotonic, se.payload_json, se.hash_prev, se.hash_self,
+    se.signature";
+
 pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> {
     Ok(SessionEvent {
-        id: row.get("id")?,
-        session_id: row.get("session_id")?,
-        sequence: row.get("sequence")?,
-        event_type: row.get("event_type")?,
-        event_time_wall: row.get("event_time_wall")?,
-        event_time_monotonic: row.get("event_time_monotonic")?,
-        payload_json: row.get("payload_json")?,
-        hash_prev: row.get("hash_prev")?,
-        hash_self: row.get("hash_self")?,
-        signature: row.get("signature")?,
+        id: row.get(0)?,
+        session_id: row.get(1)?,
+        sequence: row.get(2)?,
+        event_type: row.get(3)?,
+        event_time_wall: row.get(4)?,
+        event_time_monotonic: row.get(5)?,
+        payload_json: row.get(6)?,
+        hash_prev: row.get(7)?,
+        hash_self: row.get(8)?,
+        signature: row.get(9)?,
     })
 }
 
@@ -30,14 +36,14 @@ pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> 
 pub fn list_events_for_game(db: &Database, game_id: &str) -> Result<Vec<SessionEvent>> {
     db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare(
-                "SELECT se.*
+            .prepare(&format!(
+                "SELECT {SESSION_EVENT_COLUMNS}
                  FROM session_events se
                  INNER JOIN sessions s ON s.id = se.session_id
                  WHERE s.game_id = ?1
                     OR s.game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1)
-                 ORDER BY se.event_time_wall DESC, se.sequence DESC",
-            )
+                 ORDER BY se.event_time_wall DESC, se.sequence DESC"
+            ))
             .map_err(map_db)?;
 
         let rows = stmt
