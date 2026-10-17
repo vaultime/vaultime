@@ -170,7 +170,6 @@ pub fn draw_icon(accent: &str, signed_in: bool) -> Option<Image<'static>> {
         .ok()?;
     let mut pixmap = tiny_skia::Pixmap::new(WINDOW_ICON_PX, WINDOW_ICON_PX)?;
     let scale = f64::from(WINDOW_ICON_PX) / f64::from(tree.size().width());
-    #[allow(clippy::cast_possible_truncation, reason = "a scale near 1 fits f32")]
     let scale = scale as f32;
     resvg::render(
         &tree,
