@@ -3,9 +3,9 @@
 
 import { DAY_MS, DAYS_PER_WEEK } from "@/lib/constants";
 import { parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
-import type { GameStatusChange, JournalWeekPlay, PlayRun, SideBySideGroup, StripPart } from "@/lib/types";
+import type { JournalWeekPlay, PlayRun, SideBySideGroup, StripPart, WeekStatusChange } from "@/lib/types";
 
-/** One day of the journal, as the core worked it out, with the status changes of games on it. */
+/** One day of the journal, as the core worked it out, with the status changes on it. */
 export interface JournalDay {
   /** Local midnight at the start of the day. */
   start: Date;
@@ -15,7 +15,7 @@ export interface JournalDay {
   parts: StripPart[];
   runs: PlayRun[];
   groups: SideBySideGroup[];
-  changes: GameStatusChange[];
+  changes: WeekStatusChange[];
   /** Time with a game running, games side by side counted once. */
   playedMs: number;
 }
@@ -41,12 +41,10 @@ export function weekStart(offset: number, now: Date): Date {
 }
 
 /**
- * The core's days of the week from `start`, with the status changes of the
- * week on their days, newest day first. A day with only changes has no
- * strip.
+ * The core's days of the week, with its status changes on their days,
+ * newest day first. A day with only changes has no strip.
  */
-export function journalDays(week: JournalWeekPlay, changes: GameStatusChange[], start: Date): JournalDay[] {
-  const end = startOfDay(start, DAYS_PER_WEEK);
+export function journalDays(week: JournalWeekPlay): JournalDay[] {
   const days = new Map<string, JournalDay>(
     week.days.map((day) => [
       day.day,
@@ -61,9 +59,8 @@ export function journalDays(week: JournalWeekPlay, changes: GameStatusChange[], 
       },
     ]),
   );
-  for (const change of changes) {
+  for (const change of week.status_changes) {
     const changed = parseVaultimeDate(change.changed_at);
-    if (change.status === "none" || changed < start || changed >= end) continue;
     const key = toDayKey(changed);
     const day = days.get(key) ?? {
       start: startOfDay(changed),

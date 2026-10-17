@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import { toDayKey } from "@/lib/time";
 import { at } from "@/test/sessions";
-import type { GameStatusChange, JournalWeekPlay } from "@/lib/types";
+import type { JournalWeekPlay, WeekStatusChange } from "@/lib/types";
 import { journalDays, weekStart, weeksBack } from "./week";
 
 // A Wednesday. The week runs from Monday 5 October.
 const NOW = new Date(2026, 9, 7, 12, 0);
 
-function change(changedAt: string, status: GameStatusChange["status"]): GameStatusChange {
-  return { id: `change-${changedAt}`, game_id: "game-1", status, changed_at: changedAt };
+function change(changedAt: string, status: WeekStatusChange["status"]): WeekStatusChange {
+  return { id: `change-${changedAt}`, game_id: "game-1", status, changed_at: changedAt, played_before_ms: 0 };
 }
 
 const EMPTY_WEEK: JournalWeekPlay = {
@@ -25,6 +25,7 @@ const EMPTY_WEEK: JournalWeekPlay = {
   days_played: 0,
   longest_day: null,
   carried_over: 0,
+  status_changes: [],
 };
 
 describe("weekStart", () => {
@@ -42,14 +43,9 @@ describe("journalDays", () => {
         { day: "2026-10-06", played_ms: 1, session_ids: [], parts: [], runs: [], side_by_side: [] },
         { day: "2026-10-05", played_ms: 2, session_ids: ["late"], parts: [], runs: [], side_by_side: [] },
       ],
+      status_changes: [change(at(2026, 10, 6, 20, 0), "finished"), change(at(2026, 10, 7, 9, 0), "playing")],
     };
-    const changes = [
-      change(at(2026, 10, 6, 20, 0), "finished"),
-      change(at(2026, 10, 7, 9, 0), "playing"),
-      change(at(2026, 10, 7, 10, 0), "none"),
-      change(at(2026, 10, 12, 9, 0), "dropped"),
-    ];
-    const days = journalDays(week, changes, weekStart(0, NOW));
+    const days = journalDays(week);
     expect(days.map((day) => toDayKey(day.start))).toEqual(["2026-10-07", "2026-10-06", "2026-10-05"]);
     expect(days[0].changes.map((each) => each.status)).toEqual(["playing"]);
     expect(days[0].parts).toEqual([]);

@@ -148,7 +148,6 @@ export const DaySection = memo(function DaySection({
   notes,
   onSaveNote,
   onCorrected,
-  playedBefore,
   linked,
   onLink,
   onJump,
@@ -167,7 +166,6 @@ export const DaySection = memo(function DaySection({
   notes: Record<string, string>;
   onSaveNote: (sessionId: string, note: string) => Promise<void>;
   onCorrected: () => void;
-  playedBefore: (gameId: string, moment: string) => number;
   /** The session marked on every day it ran. */
   linked: string | null;
   onLink: (sessionId: string | null) => void;
@@ -381,7 +379,6 @@ export const DaySection = memo(function DaySection({
           .sort((a, b) => compareTimes(a.at, b.at))
           .map(({ session, change }) => {
             if (change) {
-              if (change.status === "none") return null;
               const title = titleOf(change.game_id);
               return (
                 <article key={change.id} className="flex items-baseline gap-5">
@@ -391,9 +388,7 @@ export const DaySection = memo(function DaySection({
                   <p className="font-prose flex min-w-0 flex-1 items-baseline gap-2.5 text-[20px] leading-snug">
                     <GameStatusIcon status={change.status} className="size-4 shrink-0 translate-y-0.5 text-violet" />
                     <span>
-                      <PhraseText
-                        phrase={statusSentence(change.status, title, playedBefore(change.game_id, change.changed_at))}
-                      />
+                      <PhraseText phrase={statusSentence(change.status, title, change.played_before_ms)} />
                     </span>
                   </p>
                 </article>

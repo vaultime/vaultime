@@ -13,13 +13,17 @@ use serde::Serialize;
 use crate::constants::{DAYS_PER_WEEK, SESSION_SPREAD_MAX_MS};
 use crate::db::connection::Database;
 use crate::db::models::Session;
+use crate::db::repo::annotations::{STATUS_NONE, list_status_changes};
 use crate::db::repo::sessions::row_to_session;
 use crate::db::repo::{games, map_db};
+use crate::earlier::shown_earlier_playtime;
 use crate::error::Result;
 use crate::integrity;
 use crate::playtime::slices::{STEPS_ASIDE, Span, apportion, aside_stretches, wall_ms};
 use crate::playtime::strip::{PlayRun, SideBySideGroup, StripPart, play_runs, side_by_side};
-use crate::playtime::totals::{DayTotals, day_start_ms, day_totals, open_session_spans};
+use crate::playtime::totals::{
+    DayTotals, counted_until, day_start_ms, day_totals, open_session_spans,
+};
 use crate::tracking::live::LiveSessions;
 
 /// The part of a session that ran on one local day.
@@ -46,6 +50,19 @@ pub struct GameTime {
     pub runtime_ms: i64,
     pub active_ms: i64,
     pub idle_ms: i64,
+}
+
+/// A status the player gave a game in the week.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WeekStatusChange {
+    pub id: String,
+    /// The game shown.
+    pub game_id: String,
+    pub status: String,
+    pub changed_at: String,
+    /// The game's counted time up to the change, as the stats count it,
+    /// with its playtime from before Vaultime.
+    pub played_before_ms: i64,
 }
 
 /// One day of the journal.
@@ -84,6 +101,8 @@ pub struct JournalWeek {
     pub longest_day: Option<String>,
     /// Sessions that began before the week and ran on into it.
     pub carried_over: usize,
+    /// Statuses given in the week, oldest first, without cleared ones.
+    pub status_changes: Vec<WeekStatusChange>,
 }
 
 /// A session as the journal places it.
@@ -442,6 +461,43 @@ pub(crate) fn game_times(totals: &DayTotals) -> Vec<GameTime> {
     times
 }
 
+/// The status changes from `from_ms` up to `to_ms`, each with the time its
+/// game had counted by then.
+fn status_changes_between(
+    db: &Database,
+    live: &LiveSessions,
+    links: &HashMap<String, String>,
+    (from_ms, to_ms): (i64, i64),
+    now_ms: i64,
+) -> Result<Vec<WeekStatusChange>> {
+    let changes: Vec<(i64, _)> = list_status_changes(db)?
+        .into_iter()
+        .filter(|change| change.status != STATUS_NONE)
+        .filter_map(|change| Some((wall_ms(&change.changed_at)?, change)))
+        .filter(|(at, _)| (from_ms..to_ms).contains(at))
+        .collect();
+    if changes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let earlier: HashMap<String, i64> = shown_earlier_playtime(db)?
+        .into_iter()
+        .map(|entry| (entry.game_id, entry.earlier_ms))
+        .collect();
+    changes
+        .into_iter()
+        .map(|(at, change)| {
+            let counted = counted_until(db, live, links, &change.game_id, at, now_ms)?;
+            Ok(WeekStatusChange {
+                played_before_ms: counted + earlier.get(&change.game_id).copied().unwrap_or(0),
+                id: change.id,
+                game_id: change.game_id,
+                status: change.status,
+                changed_at: change.changed_at,
+            })
+        })
+        .collect()
+}
+
 /// The week of the journal from the local day `from`, a Monday. Running
 /// sessions count up to the tracker's latest tick, at `now_ms`.
 pub fn journal_week<Tz: TimeZone>(
@@ -470,6 +526,7 @@ pub fn journal_week<Tz: TimeZone>(
     })?;
     let totals = day_totals(db, live, tz, dates[0], dates[dates.len() - 1], now_ms)?;
     let days_played = totals.days_played();
+    let status_changes = status_changes_between(db, live, &links, (week_start, week_end), now_ms)?;
 
     let mut days = Vec::new();
     for (index, date) in dates[..dates.len() - 1].iter().enumerate() {
@@ -533,6 +590,7 @@ pub fn journal_week<Tz: TimeZone>(
         games,
         sessions_count,
         carried_over,
+        status_changes,
     })
 }
 
@@ -562,6 +620,27 @@ mod tests {
             utc(now).timestamp_millis(),
         )
         .unwrap()
+    }
+
+    /// A status given to `game_id` at `at`.
+    fn status_at(db: &Database, game_id: &str, status: &str, at: &str) {
+        db.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO game_status_changes (id, game_id, status, changed_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![format!("{game_id}-{at}"), game_id, status, at],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+    }
+
+    /// The minutes played before each status change of the week.
+    fn played_before(week: &JournalWeek) -> Vec<i64> {
+        week.status_changes
+            .iter()
+            .map(|change| change.played_before_ms / MINUTE)
+            .collect()
     }
 
     fn minutes(shares: &[DayShare]) -> Vec<i64> {
@@ -820,12 +899,12 @@ mod tests {
         )
         .unwrap();
 
+        let year = year_play(&db, &live, &Berlin, 2026, date("2026-10-08"), now_ms).unwrap();
         for day in &week.days {
             assert_eq!(day.played_ms, stats.played[&day.day], "{}", day.day);
         }
         let played: Vec<i64> = week.days.iter().map(|day| day.played_ms / MINUTE).collect();
         assert_eq!(played, [60, 240, 180]);
-        let year = year_play(&db, &live, &Berlin, 2026, date("2026-10-08"), now_ms).unwrap();
         assert_eq!(year.played_ms, stats.played_ms());
         assert_eq!(year.played_ms, week.played_ms);
         // Each game's week is its time in the stats' days.
@@ -848,5 +927,81 @@ mod tests {
                 .sum();
             assert_eq!(time.runtime_ms, summed);
         }
+    }
+    #[test]
+    fn a_status_change_counts_only_the_time_before_it() {
+        let db = database();
+        let one = game(&db, "One");
+        played(&db, &one, "2026-09-28T18:00:00Z", 60);
+        // Two hours from 18:00, finished at 19:10 while it still ran.
+        played(&db, &one, "2026-10-06T18:00:00Z", 120);
+        status_at(&db, &one, "finished", "2026-10-06T19:10:00Z");
+        status_at(&db, &one, "none", "2026-10-06T19:20:00Z");
+        let week = week_of(&db, &Berlin, "2026-10-05", "2026-10-07T10:00:00Z");
+        assert_eq!(week.status_changes.len(), 1);
+        assert_eq!(week.status_changes[0].status, "finished");
+        assert_eq!(played_before(&week), [60 + 70]);
+        // The week before shows no change.
+        let before = week_of(&db, &Berlin, "2026-09-28", "2026-10-07T10:00:00Z");
+        assert!(before.status_changes.is_empty());
+    }
+
+    #[test]
+    fn a_status_change_counts_linked_installs_and_earlier_playtime() {
+        let db = database();
+        let (steam, gog) = (game(&db, "Steam"), game(&db, "GOG"));
+        played(&db, &steam, "2026-10-05T18:00:00Z", 60);
+        played(&db, &gog, "2026-10-06T18:00:00Z", 90);
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        crate::db::repo::earlier_playtime::replace_earlier_playtime(
+            &db,
+            &[crate::db::models::EarlierPlaytime {
+                game_id: steam.clone(),
+                source: "steam".into(),
+                launcher_minutes: 600,
+                tracked_before_ms: 0,
+                earlier_ms: 0,
+                last_played_at: None,
+                imported_at: "2026-01-01T00:00:00Z".into(),
+            }],
+        )
+        .unwrap();
+        status_at(&db, &steam, "dropped", "2026-10-07T08:00:00Z");
+        let week = week_of(&db, &Berlin, "2026-10-05", "2026-10-07T10:00:00Z");
+        assert_eq!(played_before(&week), [600 + 60 + 90]);
+    }
+
+    #[test]
+    fn a_status_change_leaves_out_time_set_aside() {
+        let db = database();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        // Three hours of the client with an hour of a match inside.
+        played(&db, &client, "2026-10-05T18:00:00Z", 180);
+        played(&db, &match_game, "2026-10-05T19:00:00Z", 60);
+        status_at(&db, &client, "finished", "2026-10-06T08:00:00Z");
+        let week = week_of(&db, &Berlin, "2026-10-05", "2026-10-07T10:00:00Z");
+        assert_eq!(played_before(&week), [120]);
+    }
+
+    #[test]
+    fn a_status_change_counts_a_running_session_up_to_it() {
+        let db = database();
+        let one = game(&db, "One");
+        let start = utc("2026-10-17T18:00:00Z");
+        let running = sessions::create_session_at(&db, &one, "device", start).unwrap();
+        let live = LiveSessions::default();
+        live.update(
+            &running.id,
+            LiveCounters {
+                runtime_ms: 90 * MINUTE,
+                active_ms: 90 * MINUTE,
+                idle_ms: 0,
+            },
+        );
+        status_at(&db, &one, "playing", "2026-10-17T19:00:00Z");
+        let now = (start + TimeDelta::minutes(90)).timestamp_millis();
+        let week = journal_week(&db, &live, &Berlin, date("2026-10-12"), "device", now).unwrap();
+        assert_eq!(played_before(&week), [60]);
     }
 }

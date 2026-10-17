@@ -11,6 +11,7 @@ import { countsAsPlay } from "@/lib/sessions";
 import { parseVaultimeDate, startOfDay, toDayKey } from "@/lib/time";
 import type {
   DayShare,
+  GameStatusChange,
   GameTime,
   JournalDayPlay,
   JournalWeekPlay,
@@ -21,6 +22,7 @@ import type {
   SideBySideGroup,
   Streak,
   StripPart,
+  WeekStatusChange,
   YearPlay,
 } from "@/lib/types";
 
@@ -176,8 +178,39 @@ function gameTimes(sessions: Session[], from: Date, to: Date, now: number): Game
   return [...games.values()].filter((game) => game.runtime_ms > 0).sort((a, b) => b.runtime_ms - a.runtime_ms);
 }
 
-/** What `get_journal_week` answers for the week from the local Monday `from`. */
-export function estimateJournalWeek(sessions: Session[], from: string, now = Date.now()): JournalWeekPlay {
+/**
+ * The status changes from `from` up to `to`, each with its game's time
+ * before it and the game's earlier playtime from `earlierMs`.
+ */
+function statusChangesBetween(
+  changes: GameStatusChange[],
+  spans: Span[],
+  earlierMs: Record<string, number>,
+  from: number,
+  to: number,
+): WeekStatusChange[] {
+  return changes.flatMap(({ status, ...change }) => {
+    const moment = parseVaultimeDate(change.changed_at).getTime();
+    if (status === "none" || moment < from || moment >= to) return [];
+    const played = spans
+      .filter((span) => span.session.game_id === change.game_id)
+      .reduce((sum, span) => sum + runtimeWithin(span, -Infinity, moment), 0);
+    return [{ ...change, status, played_before_ms: played + (earlierMs[change.game_id] ?? 0) }];
+  });
+}
+
+/**
+ * What `get_journal_week` answers for the week from the local Monday `from`,
+ * with the status changes among `changes` and the earlier playtime of each
+ * game in `earlierMs`.
+ */
+export function estimateJournalWeek(
+  sessions: Session[],
+  from: string,
+  now = Date.now(),
+  changes: GameStatusChange[] = [],
+  earlierMs: Record<string, number> = {},
+): JournalWeekPlay {
   const start = parseVaultimeDate(from);
   const end = startOfDay(start, DAYS_PER_WEEK);
   const spans = sessions
@@ -231,6 +264,13 @@ export function estimateJournalWeek(sessions: Session[], from: string, now = Dat
     days_played: days.filter((day) => day.played_ms > 0).length,
     longest_day: longest?.day ?? null,
     carried_over: counting.filter((span) => span.start < start.getTime()).length,
+    status_changes: statusChangesBetween(
+      changes,
+      sessions.filter(countsAsPlay).map((session) => spanOf(session, now)),
+      earlierMs,
+      start.getTime(),
+      end.getTime(),
+    ),
   };
 }
 

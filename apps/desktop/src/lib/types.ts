@@ -283,6 +283,19 @@ export interface JournalWeekPlay {
   longest_day: string | null;
   /** Sessions that began before the week and ran on into it. */
   carried_over: number;
+  /** Statuses given in the week, oldest first, without cleared ones. */
+  status_changes: WeekStatusChange[];
+}
+
+/** A status given in a journal week. Mirrors the Rust `WeekStatusChange` struct. */
+export interface WeekStatusChange {
+  id: string;
+  /** The game shown. */
+  game_id: string;
+  status: GameStatus;
+  changed_at: string;
+  /** The game's counted time up to the change, with its playtime from before Vaultime. */
+  played_before_ms: number;
 }
 
 /** Days in a row with play. Mirrors the Rust `Streak` struct. */

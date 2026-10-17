@@ -836,6 +836,64 @@ pub fn play_totals<Tz: TimeZone>(
     Ok(bucketed(tz, &once_at_a_time(&range.slices, &links), bucket))
 }
 
+/// The runtime of `span` that falls between `from` and `to`, spread evenly.
+/// One without length counts where it ended.
+fn runtime_within(span: &Span, from: i64, to: i64) -> i128 {
+    let length = span.length_ms();
+    if length <= 0 {
+        return if span.end_ms >= from && span.end_ms < to {
+            i128::from(span.runtime_ms)
+        } else {
+            0
+        };
+    }
+    let overlap = span.end_ms.min(to) - span.start_ms.max(from);
+    if overlap <= 0 {
+        return 0;
+    }
+    i128::from(span.runtime_ms) * i128::from(overlap) / i128::from(length)
+}
+
+/// The runtime `game_id` counts before `moment_ms`, the game shown with the
+/// games linked to it, as the totals count it. The quarter hour the moment
+/// falls in counts the share of its time placed before the moment. Running
+/// sessions count up to the tracker's latest tick, at `now_ms`.
+pub(crate) fn counted_until(
+    db: &Database,
+    live: &LiveSessions,
+    links: &HashMap<String, String>,
+    game_id: &str,
+    moment_ms: i64,
+    now_ms: i64,
+) -> Result<i64> {
+    let quarter = slice_of(moment_ms);
+    let end = quarter + PLAY_SLICE_MS;
+    let range = range_play(db, live, links, i64::MIN, end, Some(game_id), now_ms, true)?;
+    let (mut whole, mut cut) = (0, 0);
+    for ((_, start_ms), [runtime_ms, _, _]) in once_at_a_time(&range.slices, links) {
+        if start_ms < quarter {
+            whole += runtime_ms;
+        } else {
+            cut += runtime_ms;
+        }
+    }
+    let (before, within) = range
+        .spans
+        .iter()
+        .fold((0, 0), |(before, within), (_, span)| {
+            (
+                before + runtime_within(span, quarter, moment_ms),
+                within + runtime_within(span, quarter, end),
+            )
+        });
+    let part = if within > 0 {
+        i64::try_from(i128::from(cut) * before.min(within) / within).unwrap_or(0)
+    } else {
+        0
+    };
+    Ok(whole + part)
+}
+
 /// Each game's time per local day, and the clock time with a game running on
 /// each, games side by side counted once.
 #[derive(Debug, Clone, Default)]

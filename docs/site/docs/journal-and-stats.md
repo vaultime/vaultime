@@ -14,7 +14,7 @@ Each day shows its total and a strip of 24 hours in the colors of the games you 
 >
 > 3 h 12 in all, 2 h 58 active, 14 min idle.
 
-The wording changes from session to session but always stays the same for the same session. Sessions note first looks, returns after a long break, records and games left running. Status changes you set, like finishing a game, show up between the sessions.
+The wording changes from session to session but always stays the same for the same session. Sessions note first looks, returns after a long break, records and games left running. Status changes you set, like finishing a game, show up between the sessions and say how long you had played the game by then: its time up to that moment, counted as the stats count it, with any playtime from before Vaultime.
 
 ### Game colors
 

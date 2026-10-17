@@ -1573,7 +1573,13 @@ mockIPC((cmd, payload) => {
     case "get_active_sessions":
       return { sessions: runningNow(), played_today_ms: estimatePlayedToday(sessionsNow()) };
     case "get_journal_week":
-      return estimateJournalWeek(sessionsNow(), String(args.from));
+      return estimateJournalWeek(
+        sessionsNow(),
+        String(args.from),
+        Date.now(),
+        statusChanges,
+        Object.fromEntries(earlierPlaytime.map((entry) => [entry.game_id, entry.earlier_ms])),
+      );
     case "get_year_play":
       return estimateYearPlay(sessionsNow(), Number(args.year));
     case "get_recent_play":

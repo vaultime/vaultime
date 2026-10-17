@@ -56,8 +56,9 @@ export function JournalPage() {
   // Shown as a field to type a day in where the webview has no date picker.
   const [typingDay, setTypingDay] = useState(false);
 
-  // Read again when a session starts or ends, on a new day, and while a game
-  // runs and this week is on the page, as its time grows.
+  // Read again when a session starts or ends, when a status changes, on a
+  // new day, and while a game runs and this week is on the page, as its time
+  // grows.
   const refreshed = useRefreshWhile(active.length > 0 && offset === 0, LIVE_TOTALS_REFRESH_MS);
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +76,7 @@ export function JournalPage() {
     return () => {
       cancelled = true;
     };
-  }, [offset, stored, today, refreshed]);
+  }, [offset, stored, statusChanges, today, refreshed]);
 
   const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
   // Kept between polls, so session lines can reuse their sentences.
@@ -89,10 +90,7 @@ export function JournalPage() {
     return byId;
   }, [sessions]);
   const sessionsById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
-  const days = useMemo(
-    () => (shown ? journalDays(shown.play, statusChanges, shown.start) : []),
-    [shown, statusChanges],
-  );
+  const days = useMemo(() => (shown ? journalDays(shown.play) : []), [shown]);
   const sharesOf = useCallback((sessionId: string) => shown?.play.shares[sessionId] ?? NO_SHARES, [shown]);
   const weekGames = shown?.play.games;
 
@@ -141,14 +139,6 @@ export function JournalPage() {
     };
   }, [weekGames, byGame, accentHues, mode]);
 
-  /** A game's playtime up to a moment, with the playtime from before Vaultime. */
-  const playedBefore = useCallback(
-    (gameId: string, moment: string) =>
-      sessions
-        .filter((session) => session.game_id === gameId && session.started_at_wall < moment)
-        .reduce((sum, session) => sum + session.counted_runtime_ms, byGame.get(gameId)?.earlier?.earlier_ms ?? 0),
-    [sessions, byGame],
-  );
   const onCorrected = useCallback(() => void refresh(), [refresh]);
 
   // Events explain flagged sessions and skipped sleep. Only the games of this week are loaded.
@@ -278,7 +268,6 @@ export function JournalPage() {
             notes={notes}
             onSaveNote={saveNote}
             onCorrected={onCorrected}
-            playedBefore={playedBefore}
             linked={linked !== null && hasSession(day, linked) ? linked : null}
             onLink={setLinked}
             onJump={jumpTo}
