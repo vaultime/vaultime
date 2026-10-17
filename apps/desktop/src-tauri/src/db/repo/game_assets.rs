@@ -3,6 +3,8 @@
 
 //! Queries for the `game_assets` table.
 
+use std::collections::HashMap;
+
 use rusqlite::{Row, params};
 
 use crate::db::connection::Database;
@@ -52,18 +54,41 @@ pub fn create_asset(
     })
 }
 
+/// Newest first, then by type, then in the order they were added.
 pub fn list_assets_for_game(db: &Database, game_id: &str) -> Result<Vec<GameAsset>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
                 "SELECT * FROM game_assets
                  WHERE game_id = ?1
-                 ORDER BY created_at DESC, asset_type ASC",
+                 ORDER BY created_at DESC, asset_type ASC, rowid ASC",
             )
             .map_err(map_db)?;
 
         let rows = stmt.query_map([game_id], row_to_asset).map_err(map_db)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
+    })
+}
+
+/// Every game's assets in one query, each game's in the order of
+/// `list_assets_for_game`.
+pub fn list_assets_by_game(db: &Database) -> Result<HashMap<String, Vec<GameAsset>>> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT * FROM game_assets
+                 ORDER BY game_id, created_at DESC, asset_type ASC, rowid ASC",
+            )
+            .map_err(map_db)?;
+        let mut by_game: HashMap<String, Vec<GameAsset>> = HashMap::new();
+        for asset in stmt.query_map([], row_to_asset).map_err(map_db)? {
+            let asset = asset.map_err(map_db)?;
+            by_game
+                .entry(asset.game_id.clone())
+                .or_default()
+                .push(asset);
+        }
+        Ok(by_game)
     })
 }
 

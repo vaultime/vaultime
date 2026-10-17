@@ -75,9 +75,10 @@ pub fn list_game_assets(db: &Database, game_id: &str) -> Result<Vec<GameAssetVie
 /// the next readable asset stands in.
 pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
     let mut views = Vec::new();
+    let mut by_game = game_assets::list_assets_by_game(db)?;
 
     for game in games::list_all_games(db)? {
-        let assets = game_assets::list_assets_for_game(db, &game.id)?;
+        let assets = by_game.remove(&game.id).unwrap_or_default();
         let preferred = resolve_preferred(&assets, preferred_asset_id(&game).as_deref());
         let is_preferred = |asset: &GameAsset| preferred.is_some_and(|p| p.id == asset.id);
         let cover = preferred
