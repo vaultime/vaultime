@@ -29,6 +29,22 @@ export const UI_LOCALE = (() => {
   }
 })();
 
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * A date in the UI locale, like `toLocaleDateString` with these options.
+ * Making a formatter costs far more than using one, so each is made once.
+ */
+export function formatDate(date: Date, options: Intl.DateTimeFormatOptions): string {
+  const key = JSON.stringify(options);
+  let format = dateFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(UI_LOCALE, options);
+    dateFormats.set(key, format);
+  }
+  return format.format(date);
+}
+
 export function parseVaultimeDate(value: string): Date {
   if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(value)) {
     return new Date(value);
@@ -44,14 +60,14 @@ export function parseVaultimeDate(value: string): Date {
 }
 
 export function formatCalendarDay(value: string): string {
-  return parseVaultimeDate(value).toLocaleDateString(UI_LOCALE, {
+  return formatDate(parseVaultimeDate(value), {
     month: "short",
     day: "numeric",
   });
 }
 
 export function formatLongDate(value: string): string {
-  return parseVaultimeDate(value).toLocaleDateString(UI_LOCALE, {
+  return formatDate(parseVaultimeDate(value), {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -79,9 +95,9 @@ export function formatRelativeDay(value: string, now = new Date()): string {
     return hours === 1 ? "An hour ago" : `${hours} hours ago`;
   }
   if (days === 1) return "Yesterday";
-  if (days < WEEKDAY_NAME_DAYS) return date.toLocaleDateString(UI_LOCALE, { weekday: "long" });
+  if (days < WEEKDAY_NAME_DAYS) return formatDate(date, { weekday: "long" });
 
-  const month = date.toLocaleDateString(UI_LOCALE, { month: "long" });
+  const month = formatDate(date, { month: "long" });
   return date.getFullYear() === now.getFullYear()
     ? `In ${month}`
     : `In ${month} ${date.getFullYear()}`;
@@ -129,7 +145,7 @@ export function formatDayPart(value: string, now = new Date()): string {
   const days = calendarDaysAgo(day, now);
   if (days === 0) return part === "night" ? "Tonight" : `This ${part}`;
   if (days === 1) return part === "night" ? "Last night" : `Yesterday ${part}`;
-  if (days < WEEKDAY_NAME_DAYS) return `${day.toLocaleDateString(UI_LOCALE, { weekday: "long" })} ${part}`;
+  if (days < WEEKDAY_NAME_DAYS) return `${formatDate(day, { weekday: "long" })} ${part}`;
   return formatCalendarDay(value);
 }
 
@@ -140,8 +156,8 @@ export function formatSessionStart(value: string, now = new Date()): string {
   const days = calendarDaysAgo(date, now);
   if (days === 0) return `Today ${clock}`;
   if (days === 1) return `Yesterday ${clock}`;
-  if (days < WEEKDAY_NAME_DAYS) return `${date.toLocaleDateString(UI_LOCALE, { weekday: "short" })} ${clock}`;
-  return `${date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })} ${clock}`;
+  if (days < WEEKDAY_NAME_DAYS) return `${formatDate(date, { weekday: "short" })} ${clock}`;
+  return `${formatDate(date, { day: "numeric", month: "short" })} ${clock}`;
 }
 
 /** Midnight at the start of the Monday of the week that holds `date`. */
@@ -175,7 +191,7 @@ export function fromLocalInput(value: string): Date | null {
 
 /** "14 March", in the order of the user's region. */
 export function formatDayAndMonth(date: Date): string {
-  return date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" });
+  return formatDate(date, { day: "numeric", month: "long" });
 }
 
 /** "3 to 14 March", or "27 February to 2 March" across months. */
@@ -186,14 +202,14 @@ export function formatDayRange(start: Date, end: Date): string {
 
 /** "14:10", in the regional clock. */
 export function formatClockTime(value: Date): string {
-  return value.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
+  return formatDate(value, { hour: "2-digit", minute: "2-digit" });
 }
 
 /** "Sun" for a day within a week of `day`, "3 Oct" further away. */
 export function formatNearDay(date: Date, day: Date): string {
   return Math.abs(calendarDaysAgo(date, day)) < WEEKDAY_NAME_DAYS
-    ? date.toLocaleDateString(UI_LOCALE, { weekday: "short" })
-    : date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" });
+    ? formatDate(date, { weekday: "short" })
+    : formatDate(date, { day: "numeric", month: "short" });
 }
 
 /**

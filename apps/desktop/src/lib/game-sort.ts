@@ -15,6 +15,9 @@ export function isGameSort(value: unknown): value is GameSort {
   return typeof value === "string" && Object.hasOwn(GAME_SORTS, value);
 }
 
+/** Titles in the order of the user's region, case and accents aside, "Game 9" before "Game 10". */
+const TITLE_ORDER = new Intl.Collator(UI_LOCALE, { sensitivity: "base", numeric: true });
+
 interface Sortable {
   game: { title: string };
   totalMs: number;
@@ -24,9 +27,7 @@ interface Sortable {
 export function sortGames<T extends Sortable>(games: T[], sort: GameSort): T[] {
   if (sort === "recent") return games;
   const copy = [...games];
-  if (sort === "title") {
-    copy.sort((a, b) => a.game.title.localeCompare(b.game.title, UI_LOCALE, { sensitivity: "base", numeric: true }));
-  }
+  if (sort === "title") copy.sort((a, b) => TITLE_ORDER.compare(a.game.title, b.game.title));
   if (sort === "played") copy.sort((a, b) => b.totalMs - a.totalMs);
   return copy;
 }

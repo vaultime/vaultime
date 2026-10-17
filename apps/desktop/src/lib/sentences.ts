@@ -31,11 +31,12 @@ import { shapeOf, type SessionShape, type Streak } from "@/lib/stats";
 import {
   calendarDaysAgo,
   dayPartOf,
+  formatDate,
+  formatDayAndMonth,
   formatDayRange,
   formatHoursMinutes,
   formatRelativeDay,
   parseVaultimeDate,
-  UI_LOCALE,
   type DayPart,
 } from "@/lib/time";
 import type { GameStatus, LedgerReport, Session, SessionEvent } from "@/lib/types";
@@ -227,7 +228,7 @@ function lineWords(session: Session): LineWords {
     adjective: words.adjective,
     adverb: smallHours ? "in the small hours" : words.adverb,
     noun: words.noun,
-    occasion: weekend ? `${day.toLocaleDateString(UI_LOCALE, { weekday: "long" })} ${words.noun}` : words.noun,
+    occasion: weekend ? `${formatDate(day, { weekday: "long" })} ${words.noun}` : words.noun,
     length: roundedLength(session.runtime_ms),
     night: part === "night",
   };
@@ -347,9 +348,9 @@ export interface ContinuedPhrase {
 /** "Saturday night", "early Saturday", "3 October": when a session that went on began, seen from `day`. */
 export function beganWords(started: Date, day: Date): string {
   if (Math.abs(calendarDaysAgo(started, day)) >= WEEKDAY_NAME_DAYS) {
-    return started.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" });
+    return formatDayAndMonth(started);
   }
-  const weekday = started.toLocaleDateString(UI_LOCALE, { weekday: "long" });
+  const weekday = formatDate(started, { weekday: "long" });
   const part = dayPartOf(started);
   if (part === "night" && started.getHours() < DAY_PART_HOURS.morning) return `early ${weekday}`;
   return `${weekday} ${PART_WORDS[part].noun}`;
@@ -681,7 +682,7 @@ export function busiestMonthSentence(months: { activeMs: number; idleMs: number 
   const totals = months.map((month) => month.activeMs + month.idleMs);
   const busiest = totals.indexOf(Math.max(...totals));
   if (busiest < 0 || totals[busiest] < MINUTE_MS) return null;
-  const name = new Date(year, busiest, 1).toLocaleDateString(UI_LOCALE, { month: "long" });
+  const name = formatDate(new Date(year, busiest, 1), { month: "long" });
   return `${name} was your busiest month, ${amount(totals[busiest])}.`;
 }
 
