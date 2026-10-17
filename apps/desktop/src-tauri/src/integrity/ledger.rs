@@ -1172,13 +1172,17 @@ fn ledger_state(conn: &Connection) -> Result<LedgerState> {
         })
         .map_err(ledger_error)?;
     let database = conn.path().unwrap_or_default().to_owned();
-    let mut cache = state_cache().lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some((checked, state)) = cache.get(&database)
+    if let Some((checked, state)) = state_cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&database)
         && *checked == newest
     {
         return Ok(state.clone());
     }
+    // Checked without holding the cache, so checks of other databases go on.
     let state = check_ledgers(conn)?;
+    let mut cache = state_cache().lock().unwrap_or_else(PoisonError::into_inner);
     // Staged backups come and go, so only a few databases are remembered.
     if cache.len() >= LEDGER_CHECKS_REMEMBERED {
         cache.clear();
