@@ -7,15 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Library
+
+- **One game, two launchers.** A game installed twice, like Cyberpunk 2077 through Steam and GOG or a game in the Xbox app and on Steam, can count as one game. On a game's page, Counts as links it to another game of your library. Both installs stay tracked, each with its own program, and the library, journal, stats, live bar and tray show one game with one history. Its page lists the installs that count for it, each with its program, a way to edit it and Unlink, which brings it back as its own game with its own sessions. Each session says which install recorded it. Nothing in the record changes, so linking and unlinking can be undone at any time.
+- **Discovery knows a second copy.** When a scan finds a game from another launcher with the title of a game in your library, the Discover dialog shows it as the same game and links it when you add it. Untick it to add it as a game of its own.
+- **Counted once.** Two installs of one game running at the same time count once in the stats, a session added by hand cannot overlap play of a linked install, and Steam's earlier playtime only leaves out time the Steam copy tracked. Exports name the game shown and the install that recorded each session.
+- **Linked on every PC.** A merge brings another PC's linked installs along as one game, counting as whatever its main copy counts as here. A restore of this PC's backup keeps its links.
+- **New games find you.** When Vaultime starts, it reads what Steam and your other launchers installed and offers the games that are not in your library yet. It offers each game only once, so games you leave out stay quiet, and Discover in the library still lists everything. When Vaultime starts in the tray, it waits until you open the window. Settings, In the background turns it off.
+
 ### Journal
 
 - **One session past midnight reads as one.** Play still counts on the day it happened, but a session that runs past midnight no longer looks like two. Its bar runs out at the right edge of the first day and in from the left edge of the next, and the next day shows a quiet line like "Still in Elden Ring from Saturday night" instead of a second entry. The entry reads "22:40 to Sun 02:15" with the whole session's time and how much of it counts after midnight, the line says how much of the whole falls on its day, and each leads to the other, also into the next or last week. Pointing at either marks every part of the session, and pointing at a bar shows each day's part and the whole. A week that opens with the end of a session from the week before says so.
+
 ### Stats
 
 - **Share your year.** Share your year, on the Stats page and in the command palette, makes a picture of the year to post: your hours of active play, the days you played, the calendar, your most played games with their covers and journal colors, the busiest month and a line about the year. It comes wide for X, Discord and Mastodon, square for feeds or tall for stories, dark or light in your ground and accent. Game titles and covers, the calendar and the name of your PC can stay off, and hidden games never show. It counts play exactly as the Stats page does. Vaultime draws the picture on your PC and uploads nothing. Save it as a PNG, or copy it to paste it straight into a post where your system allows it.
-### Library
-
-- **New games find you.** When Vaultime starts, it reads what Steam and your other launchers installed and offers the games that are not in your library yet. It offers each game only once, so games you leave out stay quiet, and Discover in the library still lists everything. When Vaultime starts in the tray, it waits until you open the window. Settings, In the background turns it off.
 
 ### Fixes
 

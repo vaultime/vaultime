@@ -135,7 +135,14 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   way or that this PC's earlier pins confirm up to their newest timing
   event. After a session's first closing event only corrections follow.
   Never extend a chain recorded by a merged PC, and keep foreign games out
-  of the tracker. Linked games are shown as the local game by the core.
+  of the tracker.
+- Games are linked, never merged. `game_links` maps a game to the game it
+  counts as: another install on this PC, like a copy from a second launcher,
+  which stays tracked, or a game of another PC. The map stays flat: a linked
+  game is never a target, and linking a target moves its links along. The
+  core shows linked games as the game they count as, while rules about a
+  launcher, like Steam's earlier playtime, read the game that recorded a
+  session.
 - Every schema change is a new migration. Never edit a shipped migration.
 - The API migrations 0001 to 0004 carry no SPDX lines and never change,
   because the live database recorded their checksums. New migrations carry
