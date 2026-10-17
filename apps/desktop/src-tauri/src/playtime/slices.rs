@@ -76,6 +76,70 @@ impl Placing<'_> {
     }
 }
 
+/// A session event as far as placing time reads it.
+pub trait TimedEvent {
+    fn event_type(&self) -> &str;
+    fn event_time_wall(&self) -> &str;
+    fn payload_json(&self) -> &str;
+}
+
+impl TimedEvent for SessionEvent {
+    fn event_type(&self) -> &str {
+        &self.event_type
+    }
+
+    fn event_time_wall(&self) -> &str {
+        &self.event_time_wall
+    }
+
+    fn payload_json(&self) -> &str {
+        &self.payload_json
+    }
+}
+
+/// The fields of a stored session event that place time. A rebuild reads
+/// every event of every session, and leaving out the hashes and signatures
+/// makes that several times faster.
+pub struct StoredEvent {
+    event_type: String,
+    event_time_wall: String,
+    payload_json: String,
+}
+
+impl TimedEvent for StoredEvent {
+    fn event_type(&self) -> &str {
+        &self.event_type
+    }
+
+    fn event_time_wall(&self) -> &str {
+        &self.event_time_wall
+    }
+
+    fn payload_json(&self) -> &str {
+        &self.payload_json
+    }
+}
+
+/// The events of a session as far as placing time reads them, oldest first.
+pub(crate) fn placing_events(conn: &Connection, session_id: &str) -> Result<Vec<StoredEvent>> {
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT event_type, event_time_wall, payload_json FROM session_events
+             WHERE session_id = ?1 ORDER BY sequence ASC",
+        )
+        .map_err(map_db)?;
+    let rows = stmt
+        .query_map([session_id], |row| {
+            Ok(StoredEvent {
+                event_type: row.get(0)?,
+                event_time_wall: row.get(1)?,
+                payload_json: row.get(2)?,
+            })
+        })
+        .map_err(map_db)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+}
+
 /// Counters held between zero and `SESSION_TIME_MAX_MS`, so a damaged or
 /// made up record cannot overflow the sums.
 fn within_range(counters: [i64; MEASURES]) -> [i64; MEASURES] {
@@ -86,13 +150,13 @@ fn within_range(counters: [i64; MEASURES]) -> [i64; MEASURES] {
 /// written. A tracking gap is a point where the counters stood still, so the
 /// time after a sleep stays after it. A correction is left out, the end of
 /// the session row cuts the points instead.
-fn points(events: &[SessionEvent]) -> Vec<Point> {
+fn points(events: &[impl TimedEvent]) -> Vec<Point> {
     let mut points = Vec::new();
     for event in events {
-        let payload: Placing = serde_json::from_str(&event.payload_json).unwrap_or_default();
-        let at = wall_ms(&event.event_time_wall);
+        let payload: Placing = serde_json::from_str(event.payload_json()).unwrap_or_default();
+        let at = wall_ms(event.event_time_wall());
         let counters = payload.counters();
-        match event.event_type.as_str() {
+        match event.event_type() {
             "started" => points.extend(at.map(|wall_ms| Point {
                 wall_ms,
                 counters: [0; MEASURES],
@@ -142,8 +206,8 @@ fn points(events: &[SessionEvent]) -> Vec<Point> {
 /// the points around it. Between two checkpoints the time is all of one
 /// kind, so this is exact for tracked sessions. None for a session without
 /// checkpoints, like one added by hand, and before a session's start.
-pub(crate) fn counters_at(events: &[SessionEvent], wall_ms: i64) -> Option<[i64; MEASURES]> {
-    if !events.iter().any(|event| event.event_type == "heartbeat") {
+pub(crate) fn counters_at(events: &[impl TimedEvent], wall_ms: i64) -> Option<[i64; MEASURES]> {
+    if !events.iter().any(|event| event.event_type() == "heartbeat") {
         return None;
     }
     let points = points(events);
@@ -192,6 +256,9 @@ pub(crate) fn apportion(weights: &[i64], amount: i64) -> Vec<i64> {
     if amount <= 0 || sum <= 0 {
         return vec![0; weights.len()];
     }
+    if weights.len() == 1 {
+        return vec![amount];
+    }
     let products: Vec<i128> = weights
         .iter()
         .map(|weight| i128::from(*weight) * i128::from(amount))
@@ -218,8 +285,16 @@ pub(crate) fn apportion(weights: &[i64], amount: i64) -> Vec<i64> {
     parts
 }
 
-/// Adds `amounts` spread evenly over the clock from `from` to `to`. Time
-/// whose clock went backwards lands in the quarter hour it ended in.
+fn add(placed: &mut BTreeMap<i64, [i64; MEASURES]>, slice: i64, amounts: [i64; MEASURES]) {
+    let entry = placed.entry(slice).or_default();
+    for (value, amount) in entry.iter_mut().zip(amounts) {
+        *value += amount;
+    }
+}
+
+/// Adds `amounts`, none below zero, spread evenly over the clock from
+/// `from` to `to`. Time whose clock went backwards lands in the quarter
+/// hour it ended in.
 fn spread(
     placed: &mut BTreeMap<i64, [i64; MEASURES]>,
     from: i64,
@@ -227,10 +302,12 @@ fn spread(
     amounts: [i64; MEASURES],
 ) {
     if to <= from {
-        let entry = placed.entry(slice_of(to)).or_default();
-        for (value, amount) in entry.iter_mut().zip(amounts) {
-            *value += amount;
-        }
+        add(placed, slice_of(to), amounts);
+        return;
+    }
+    let first = slice_of(from);
+    if to <= first + PLAY_SLICE_MS {
+        add(placed, first, amounts);
         return;
     }
     let mut overlaps = Vec::new();
@@ -286,7 +363,7 @@ fn split_by(from: i64, to: i64, aside: &[(i64, i64)]) -> Vec<(i64, i64, bool)> {
 /// the session's totals exactly.
 pub fn slices_of(
     session: &Session,
-    events: &[SessionEvent],
+    events: &[impl TimedEvent],
     live: Option<(i64, LiveCounters)>,
     aside: &[(i64, i64)],
 ) -> Vec<Slice> {
@@ -346,6 +423,10 @@ pub fn slices_of(
         // Between two points the time is all of one kind, so it splits by
         // how long each piece lasted.
         let pieces = split_by(within_reach(from.wall_ms, to.wall_ms), to.wall_ms, aside);
+        if let [(piece_start, piece_end, false)] = pieces[..] {
+            spread(&mut placed, piece_start, piece_end, amounts);
+            continue;
+        }
         let lengths: Vec<i64> = pieces
             .iter()
             .map(|&(start, end, _)| (end - start).max(1))
@@ -696,7 +777,7 @@ pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
     let Some(session) = session.filter(|session| session.ended_at_wall.is_some()) else {
         return Ok(());
     };
-    let events = integrity::load_session_events(conn, session_id)?;
+    let events = placing_events(conn, session_id)?;
     let aside = aside_stretches(conn, &session, chrono::Utc::now().timestamp_millis())?;
     let mut insert = conn
         .prepare_cached(

@@ -115,6 +115,114 @@ fn build_history(db: &Database) -> Vec<String> {
     game_ids
 }
 
+/// The session row and events of `minutes` of play from `start` with a
+/// checkpoint every `step_secs`, without a database.
+fn session_in_memory(
+    start: DateTime<Utc>,
+    minutes: i64,
+    step_secs: i64,
+) -> (
+    crate::db::models::Session,
+    Vec<crate::db::models::SessionEvent>,
+) {
+    let total_ms = minutes * 60_000;
+    let event = |sequence: i64, kind: &str, at_ms: i64, payload: serde_json::Value| {
+        crate::db::models::SessionEvent {
+            id: format!("event-{sequence}"),
+            session_id: "session".into(),
+            sequence,
+            event_type: kind.into(),
+            event_time_wall: integrity::format_timestamp(start + TimeDelta::milliseconds(at_ms)),
+            event_time_monotonic: Some(at_ms),
+            payload_json: payload.to_string(),
+            hash_prev: None,
+            hash_self: None,
+            signature: None,
+        }
+    };
+    let counters =
+        |at: i64| json!({ "runtime_ms": at, "active_ms": at * 4 / 5, "idle_ms": at - at * 4 / 5 });
+    let mut events = vec![event(0, "started", 0, json!({}))];
+    let mut at = step_secs * 1_000;
+    while at < total_ms {
+        events.push(event(
+            i64::try_from(events.len()).unwrap(),
+            "heartbeat",
+            at,
+            counters(at),
+        ));
+        at += step_secs * 1_000;
+    }
+    events.push(event(
+        i64::try_from(events.len()).unwrap(),
+        "ended",
+        total_ms,
+        counters(total_ms),
+    ));
+    let session = crate::db::models::Session {
+        id: "session".into(),
+        game_id: "game".into(),
+        device_id: "device".into(),
+        started_at_wall: integrity::format_timestamp(start),
+        ended_at_wall: Some(integrity::format_timestamp(
+            start + TimeDelta::milliseconds(total_ms),
+        )),
+        elapsed_monotonic_ms: total_ms,
+        active_ms: total_ms * 4 / 5,
+        idle_ms: total_ms - total_ms * 4 / 5,
+        runtime_ms: total_ms,
+        integrity_status: "local".into(),
+        closed_cleanly: true,
+        set_aside_ms: 0,
+        set_aside_active_ms: 0,
+        set_aside_idle_ms: 0,
+        copy_overlap_ms: 0,
+        copy_overlap_active_ms: 0,
+        copy_overlap_idle_ms: 0,
+        recorded_game_id: None,
+        still_running_on: None,
+    };
+    (session, events)
+}
+
+/// Times slice building alone, without the database:
+/// `cargo test --release -- --ignored --nocapture slice_building`.
+#[test]
+#[ignore = "prints timings"]
+fn slice_building() {
+    const ROUNDS: u32 = 200;
+    let start = Utc::now() - TimeDelta::days(1);
+    for (label, step_secs, aside) in [
+        ("5 s heartbeats", 5, false),
+        ("30 s checkpoints", 30, false),
+        ("30 s checkpoints, set aside", 30, true),
+    ] {
+        let (session, events) = session_in_memory(start, 90, step_secs);
+        let begin = start.timestamp_millis();
+        let stretches: Vec<(i64, i64)> = if aside {
+            (0..3)
+                .map(|index| {
+                    let from = begin + index * 30 * 60_000 + 7 * 60_000;
+                    (from, from + 11 * 60_000)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut placed = 0;
+        let started = Instant::now();
+        for _ in 0..ROUNDS {
+            placed += slices::slices_of(&session, &events, None, &stretches).len();
+        }
+        println!(
+            "{label}: {:?} per session of {} events, {} slices",
+            started.elapsed() / ROUNDS,
+            events.len(),
+            placed / ROUNDS as usize
+        );
+    }
+}
+
 #[test]
 #[ignore = "builds a large history and prints timings"]
 fn large_history() {

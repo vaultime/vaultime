@@ -16,9 +16,9 @@ use crate::db::repo::games;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
-use crate::integrity;
 use crate::playtime::slices::{
-    STEPS_ASIDE, Slice, apportion, aside_stretches, slice_of, slices_of, sum_of, wall_ms,
+    STEPS_ASIDE, Slice, TimedEvent, apportion, aside_stretches, placing_events, slice_of,
+    slices_of, sum_of, wall_ms,
 };
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
@@ -114,13 +114,13 @@ fn open_session_slices(
     session: &Session,
     now_ms: i64,
 ) -> Result<Vec<Slice>> {
-    let events = integrity::load_session_events(conn, &session.id)?;
+    let events = placing_events(conn, &session.id)?;
     let latest = live
         .get(&session.id)
         .map(|counters| (now_ms, counters))
         .or_else(|| {
             Some((
-                wall_ms(&events.last()?.event_time_wall)?,
+                wall_ms(events.last()?.event_time_wall())?,
                 LiveCounters {
                     runtime_ms: session.runtime_ms,
                     active_ms: session.active_ms,
@@ -528,6 +528,7 @@ mod tests {
     use super::*;
     use crate::db::models::CreateGame;
     use crate::db::repo::{devices, games, sessions};
+    use crate::integrity;
     use crate::playtime::slices::rebuild_session_and_around;
 
     const MINUTE: i64 = 60_000;
