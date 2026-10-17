@@ -693,8 +693,11 @@ fn games_coming(
         .filter(|game| coming.contains_key(&game.id))
     {
         let (sessions, runtime_ms) = coming[&game.id];
+        // Only a link of a flat map is followed, so a backup cannot bring a
+        // chain or a loop.
         let counts_as = their_links
             .get(&game.id)
+            .filter(|there| **there != game.id && !their_links.contains_key(*there))
             .filter(|there| coming.contains_key(*there) || known.contains(*there))
             .cloned();
         let launcher_match = game
@@ -3053,6 +3056,37 @@ mod tests {
             self.act();
             games::links(&self.db).unwrap()
         }
+    }
+
+    #[test]
+    fn links_of_a_backup_that_loop_or_chain_are_left_out() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let a = laptop.game("Hades", None);
+        let b = laptop.game("Celeste", None);
+        let c = laptop.game("Balatro", None);
+        let itself = laptop.game("Outer Wilds", None);
+        for game in [&a, &b, &c, &itself] {
+            laptop.play(game, 10);
+        }
+        laptop
+            .db
+            .with_conn(|conn| {
+                for (game, to) in [(&a, &b), (&b, &a), (&c, &a), (&itself, &itself)] {
+                    conn.execute(
+                        "INSERT INTO game_links (game_id, linked_game_id) VALUES (?1, ?2)",
+                        [game, to],
+                    )
+                    .map_err(map_db)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+
+        desktop.merge(&laptop.back_up(), &[]);
+        let links = desktop.links();
+        assert!(links.is_empty(), "{links:?}");
+        assert_eq!(desktop.shown().len(), 4);
     }
 
     #[test]
