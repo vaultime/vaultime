@@ -120,7 +120,7 @@ def inline(text):
     text = re.sub(r"(?<![*\w])\*(?=\S)(.+?)(?<=\S)\*(?![*\w])", r"<em>\1</em>", text)
 
     def link(match):
-        label, target = match.group(1), match.group(2)
+        label, target = match.group(1), html.unescape(match.group(2))
         return f'<a href="{html.escape(link_target(target))}">{label}</a>'
 
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", link, text)
@@ -129,8 +129,13 @@ def inline(text):
     return re.sub(r"\x00(\d+)\x00", lambda match: codes[int(match.group(1))], text)
 
 
+def plain(fragment):
+    """The text of an HTML fragment, without tags and entities."""
+    return html.unescape(re.sub(r"<[^>]+>", "", fragment))
+
+
 def slug(text):
-    words = re.sub(r"[^\w\s-]", "", re.sub(r"<[^>]+>", "", text).lower())
+    words = re.sub(r"[^\w\s-]", "", plain(text).lower())
     return re.sub(r"[\s-]+", "-", words).strip("-") or "section"
 
 
@@ -170,7 +175,7 @@ def markdown(text, anchors=False, rendered=None):
         if paragraph:
             body = inline(" ".join(paragraph))
             if after_title and not out.lead:
-                out.lead = re.sub(r"<[^>]+>", "", body)
+                out.lead = plain(body)
                 out.blocks.append(f'<p class="lead">{body}</p>')
             else:
                 out.blocks.append(f"<p>{body}</p>")
@@ -213,7 +218,7 @@ def markdown(text, anchors=False, rendered=None):
             level = len(heading.group(1))
             body = inline(heading.group(2))
             if level == 1:
-                out.title = re.sub(r"<[^>]+>", "", body)
+                out.title = plain(body)
                 out.blocks.append(f"<h1>{body}</h1>")
                 after_title = True
             else:
@@ -221,7 +226,7 @@ def markdown(text, anchors=False, rendered=None):
                 link = f' <a class="anchor" href="#{anchor_id}" aria-label="Link to this section">#</a>' if anchors else ""
                 out.blocks.append(f'<h{level} id="{anchor_id}">{body}{link}</h{level}>')
                 if level in (2, 3):
-                    out.sections.append((level, anchor_id, re.sub(r"<[^>]+>", "", body)))
+                    out.sections.append((level, anchor_id, plain(body)))
         elif stripped.startswith("::: "):
             flush()
             out.blocks.append(f"<!--{stripped[4:].strip()}-->")
@@ -272,14 +277,12 @@ def markdown(text, anchors=False, rendered=None):
                 paragraph.clear()
             terms[-1][1].append(stripped[2:])
         elif stripped.startswith("- ") or ordered:
-            if paragraph or terms:
-                flush()
             tag = "ol" if ordered else "ul"
-            if items and tag != list_tag:
+            if paragraph or terms or (items and tag != list_tag):
                 flush()
             list_tag = tag
             items.append(ordered.group(1) if ordered else stripped[2:])
-        elif items and line.startswith(" "):
+        elif items:
             items[-1] += " " + stripped
         elif terms and line.startswith(" "):
             terms[-1][1][-1] += " " + stripped
