@@ -6,7 +6,12 @@ import { HOUR_MS, MINUTE_MS } from "@/lib/constants";
 import { at, event, session } from "@/test/sessions";
 import type { LedgerReport, Session } from "@/lib/types";
 import {
+  afterMidnightLead,
+  beganWords,
   busiestMonthSentence,
+  continuedAmounts,
+  continuedPhrase,
+  type ContinuedPhrase,
   describeSession,
   gamePlaytime,
   lastPlayedLine,
@@ -261,6 +266,71 @@ describe("weekSentence", () => {
     );
     expect(phraseString(weekSentence({ ...week, sessionsCount: 1, daysPlayed: 1, weekNumber: 1 }))).toBe(
       "Ten hours in one session. All of it on Saturday.",
+    );
+  });
+
+  it("counts the end of a session from the week before apart from the week's own", () => {
+    const week = { runtimeMs: 5 * HOUR_MS, longestDay: "Monday", daysPlayed: 2, carriedOver: 1, current: false };
+    expect(phraseString(weekSentence({ ...week, sessionsCount: 2, weekNumber: 2 }))).toBe(
+      "Two sessions and the end of one from the week before, five hours in all. Monday was the longest day.",
+    );
+    expect(phraseString(weekSentence({ ...week, sessionsCount: 2, weekNumber: 1 }))).toBe(
+      "Five hours over two sessions and the end of one from the week before. Monday was the longest day.",
+    );
+    expect(phraseString(weekSentence({ ...week, sessionsCount: 0, runtimeMs: 110 * MINUTE_MS, daysPlayed: 1 }))).toBe(
+      "One hour and fifty minutes from the end of a session that began the week before. All of it on Monday.",
+    );
+  });
+});
+
+describe("play past midnight", () => {
+  // Saturday 22:40 to Sunday 02:15.
+  const late = session(at(2026, 10, 17, 22, 40), 215, { id: "late" });
+  const sunday = new Date(2026, 9, 18);
+
+  it("names when a session that went on began", () => {
+    expect(beganWords(new Date(2026, 9, 17, 22, 40), sunday)).toBe("Saturday night");
+    expect(beganWords(new Date(2026, 9, 17, 19, 0), sunday)).toBe("Saturday evening");
+    expect(beganWords(new Date(2026, 9, 17, 2, 0), sunday)).toBe("early Saturday");
+    expect(beganWords(new Date(2026, 9, 3, 20, 0), sunday)).toBe("3 October");
+  });
+
+  it("puts the next day's part as the same session going on", () => {
+    const lines = new Set(
+      Array.from({ length: 20 }, (_, index) => {
+        const phrase = continuedPhrase({ ...late, id: `late-${index}` }, "Elden Ring", sunday);
+        return `${phrase.before}${phrase.em}${phrase.middle}[${phrase.link}]${phrase.after}`;
+      }),
+    );
+    expect(lines).toEqual(
+      new Set(["Still in Elden Ring from [Saturday night]", "Elden Ring, carried on from [Saturday night]"]),
+    );
+    expect(continuedPhrase(late, "Elden Ring", sunday)).toEqual(continuedPhrase(late, "Elden Ring", sunday));
+  });
+
+  it("says when it ran all day or still runs", () => {
+    const text = (phrase: ContinuedPhrase) =>
+      `${phrase.before}${phrase.em}${phrase.middle}[${phrase.link}]${phrase.after}`;
+    expect([
+      "Still in Stardew Valley from [Saturday night], all through the day",
+      "Stardew Valley ran on all day, open since [Saturday night]",
+    ]).toContain(text(continuedPhrase(late, "Stardew Valley", sunday, { throughDay: true })));
+    expect([
+      "Still playing Elden Ring from [Saturday night]",
+      "Elden Ring has been running since [Saturday night]",
+    ]).toContain(text(continuedPhrase({ ...late, ended_at_wall: null }, "Elden Ring", sunday)));
+  });
+
+  it("gives the part after midnight and the part on a later day with the whole", () => {
+    // Amounts never break across lines.
+    const plain = (text: string) => text.replaceAll(" ", " ");
+    expect(afterMidnightLead(135 * MINUTE_MS)).toBe("2 h 15 of it after midnight, counted on ");
+    expect(afterMidnightLead(20 * 1000)).toBe("Under a minute of it after midnight, counted on ");
+    expect(plain(continuedAmounts(135 * MINUTE_MS, 215 * MINUTE_MS, false))).toBe(
+      "2 h 15 of its 3 h 35 count on this day.",
+    );
+    expect(plain(continuedAmounts(20 * MINUTE_MS, 70 * MINUTE_MS, true))).toBe(
+      "20 min of its 1 h 10 so far count on this day.",
     );
   });
 });

@@ -20,6 +20,7 @@ import {
   SESSION_RETURN_MIN_MS,
   SESSION_WORDS_MINUTE_STEP_MS,
   WEEK_TOP_GAME_MIN_SHARE,
+  WEEKDAY_NAME_DAYS,
   WEEKEND_DAYS_PER_WEEK,
   WORKING_DAYS_PER_WEEK,
 } from "@/lib/constants";
@@ -27,6 +28,7 @@ import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity
 import { countsAsPlay, type SideBySideGroup } from "@/lib/session-stats";
 import { shapeOf, type SessionShape, type Streak } from "@/lib/stats";
 import {
+  calendarDaysAgo,
   dayPartOf,
   formatDayRange,
   formatHoursMinutes,
@@ -38,6 +40,8 @@ import {
 import type { GameStatus, LedgerReport, Session, SessionEvent } from "@/lib/types";
 import { stableHash } from "@/lib/utils";
 import { capitalize, numberWords } from "@/lib/words";
+
+const NO_BREAK_SPACE = " ";
 
 /** A sentence with an optional part set in italics. */
 export interface Phrase {
@@ -326,9 +330,75 @@ export function phraseString(phrase: Phrase): string {
   return `${phrase.before}${phrase.em ?? ""}${phrase.after ?? ""}`;
 }
 
-/** A session from the day before that ran past midnight: "Still in Elden Ring after midnight". */
-export function carriedOverPhrase(title: string): Phrase {
-  return { before: "Still in ", em: title, after: " after midnight" };
+/**
+ * A line for the day a session went on to, built around two parts: the
+ * title in italics and the time it began, which links back to it. "Still in
+ * *Elden Ring* from [Saturday night]."
+ */
+export interface ContinuedPhrase {
+  before: string;
+  em: string;
+  middle: string;
+  link: string;
+  after: string;
+}
+
+/** "Saturday night", "early Saturday", "3 October": when a session that went on began, seen from `day`. */
+export function beganWords(started: Date, day: Date): string {
+  if (Math.abs(calendarDaysAgo(started, day)) >= WEEKDAY_NAME_DAYS) {
+    return started.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" });
+  }
+  const weekday = started.toLocaleDateString(UI_LOCALE, { weekday: "long" });
+  const part = dayPartOf(started);
+  if (part === "night" && started.getHours() < DAY_PART_HOURS.morning) return `early ${weekday}`;
+  return `${weekday} ${PART_WORDS[part].noun}`;
+}
+
+/**
+ * The line for a session on a day after the one it began on, so it reads as
+ * the same session going on rather than a new one. `throughDay` is a day it
+ * ran through to the end. The wording varies between sessions and stays the
+ * same for each one.
+ */
+export function continuedPhrase(
+  session: Session,
+  title: string,
+  day: Date,
+  { throughDay = false }: { throughDay?: boolean } = {},
+): ContinuedPhrase {
+  const link = beganWords(parseVaultimeDate(session.started_at_wall), day);
+  const options: [before: string, middle: string, after: string][] = !session.ended_at_wall
+    ? [
+        ["Still playing ", " from ", ""],
+        ["", " has been running since ", ""],
+      ]
+    : throughDay
+      ? [
+          ["Still in ", " from ", ", all through the day"],
+          ["", " ran on all day, open since ", ""],
+        ]
+      : [
+          ["Still in ", " from ", ""],
+          ["", ", carried on from ", ""],
+        ];
+  const [before, middle, after] = options[stableHash(session.id) % options.length];
+  return { before, em: title, middle, link, after };
+}
+
+/** "2 h 15" kept on one line, or "Under a minute" at the start of a sentence. */
+function partAmount(ms: number, start: boolean): string {
+  if (ms >= MINUTE_MS) return formatHoursMinutes(ms).replaceAll(" ", NO_BREAK_SPACE);
+  return start ? "Under a minute" : "under a minute";
+}
+
+/** "2 h 15 of it after midnight, counted on ", followed by the days. */
+export function afterMidnightLead(laterMs: number): string {
+  return `${partAmount(laterMs, true)} of it after midnight, counted on `;
+}
+
+/** "2 h 15 of its 3 h 35 count on this day." for a day a session went on to. */
+export function continuedAmounts(partMs: number, wholeMs: number, live: boolean): string {
+  return `${partAmount(partMs, true)} of its ${partAmount(wholeMs, false)}${live ? " so far" : ""} count on this day.`;
 }
 
 /** "Elden Ring, Hades II and Balatro". */
@@ -456,8 +526,10 @@ export function weekSentence({
   topShare = 0,
   gamesCount = 0,
   weekNumber = 0,
+  carriedOver = 0,
   current,
 }: {
+  /** Sessions that began in the week. */
   sessionsCount: number;
   runtimeMs: number;
   longestDay: string | null;
@@ -468,17 +540,25 @@ export function weekSentence({
   gamesCount?: number;
   /** Picks the wording, so weeks read differently. */
   weekNumber?: number;
+  /** Sessions from the week before that went on past its last midnight. */
+  carriedOver?: number;
   /** This week, which may still get more play. */
   current: boolean;
 }): Phrase {
-  if (sessionsCount === 0 || !longestDay) {
+  if ((sessionsCount === 0 && carriedOver === 0) || !longestDay) {
     return { before: current ? "Nothing played yet this week." : "Nothing played that week." };
   }
   const sessions = `${numberWords(sessionsCount)} session${sessionsCount === 1 ? "" : "s"}`;
+  // A session that began the week before counts only its part in this week.
+  const ends = carriedOver === 1 ? "the end of one" : `the ends of ${numberWords(carriedOver)}`;
+  const fromBefore = carriedOver > 0 ? ` and ${ends} from the week before` : "";
+  const onlyCarried = carriedOver === 1 ? "the end of a session" : `${ends} sessions`;
   const lead =
-    weekNumber % 2 === 0
-      ? `${capitalize(sessions)}, ${durationWords(runtimeMs)} in all.`
-      : `${capitalize(durationWords(runtimeMs))} ${sessionsCount === 1 ? "in one session" : `over ${sessions}`}.`;
+    sessionsCount === 0
+      ? `${capitalize(durationWords(runtimeMs))} from ${onlyCarried} that began the week before.`
+      : weekNumber % 2 === 0
+        ? `${capitalize(sessions)}${fromBefore}, ${durationWords(runtimeMs)} in all.`
+        : `${capitalize(durationWords(runtimeMs))} ${sessionsCount === 1 ? "in one session" : `over ${sessions}`}${fromBefore}.`;
   if (daysPlayed === 1) return { before: `${lead} All of it on `, em: longestDay, after: "." };
   if (topTitle && gamesCount === 1) return { before: `${lead} All of it in `, em: topTitle, after: "." };
   const leading = topTitle && topShare >= WEEK_TOP_GAME_MIN_SHARE;
