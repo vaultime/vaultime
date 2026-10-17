@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Crop, Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Crop, Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2, Unlink, X } from "lucide-react";
 import { Notice } from "@/components/layout/Page";
 import {
   TintedHeader,
@@ -17,7 +17,7 @@ import { PhraseText } from "@/components/media/PhraseText";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
-import { EditGameDialog } from "@/features/library/components/EditGameDialog";
+import { EditGameDialog, type EditableGame } from "@/features/library/components/EditGameDialog";
 import { GameLinkPicker } from "@/features/library/components/GameLinkPicker";
 import { useLibrary } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
@@ -39,31 +39,15 @@ import {
 } from "@/lib/constants";
 import { pcName } from "@/lib/devices";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
+import { launchersOf, linkTargets, linkedTo, whereFrom } from "@/lib/links";
 import { gamePlaytime } from "@/lib/sentences";
 import { countsAsPlay } from "@/lib/session-stats";
 import { besideOthers, stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
-import type { EarlierPlaytime, Game, GameAssetView, Session, SessionEvent } from "@/lib/types";
+import type { EarlierPlaytime, Game, GameAssetView, GameLink, Session, SessionEvent } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
-
-const SOURCE_LABELS: Record<string, string> = {
-  steam: "Steam",
-  epic: "Epic Games",
-  battlenet: "Battle.net",
-  riot: "Riot",
-  hoyoplay: "HoYoPlay",
-  ubisoft: "Ubisoft Connect",
-  ea: "EA app",
-  rockstar: "Rockstar",
-  xbox: "Xbox",
-  amazon: "Amazon Games",
-  itch: "itch.io",
-  gog: "GOG",
-  heroic: "Heroic",
-  lutris: "Lutris",
-  folder_scan: "Found in a folder",
-};
+import { capitalize } from "@/lib/words";
 
 export function GameDetailsPage() {
   const { gameId } = useParams();
@@ -73,7 +57,8 @@ export function GameDetailsPage() {
 
 function GamePage({ gameId }: { gameId: string }) {
   const navigate = useNavigate();
-  const { summaries, sessions: allSessions, active, loaded, refresh, notes, saveNote, setStatus } = useLibrary();
+  const { summaries, sessions: allSessions, active, loaded, refresh, notes, saveNote, setStatus, links, thisDeviceId } =
+    useLibrary();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
   const [showAll, setShowAll] = useState(false);
@@ -177,7 +162,7 @@ function GamePage({ gameId }: { gameId: string }) {
                 Library
               </Link>
               <span aria-hidden="true">/</span>
-              <span>{SOURCE_LABELS[game.launcher_source ?? ""] ?? "Added by hand"}</span>
+              <span>{launchersOf(game, links, thisDeviceId) ?? capitalize(whereFrom(game.launcher_source))}</span>
               {playing && (
                 <>
                   <span aria-hidden="true">/</span>
@@ -316,7 +301,10 @@ function GamePage({ gameId }: { gameId: string }) {
                 No program set, so this game is not tracked yet. Edit it to pick one.
               </p>
             )}
-            {!game.origin_device_id && <LinkedGameRows gameId={game.id} />}
+            <LinkedGameRows gameId={game.id} />
+            {!game.origin_device_id && (
+              <SameGameRow game={game} onLinked={(targetId) => navigate(`/library/${targetId}`)} />
+            )}
             <StepsAsideRow
               game={game}
               sessions={allSessions}
@@ -363,6 +351,7 @@ function GamePage({ gameId }: { gameId: string }) {
       )}
       <DeleteGameDialog
         game={deleting}
+        linkedCount={links.filter((link) => link.linked_game_id === game.id).length}
         onClose={() => setDeleting(null)}
         onDeleted={() => {
           navigate("/library");
@@ -452,18 +441,112 @@ function ForeignGameRows({ game }: { game: Game }) {
   );
 }
 
-/** Games of other PCs that count as this game, each with a way to undo it. */
+/**
+ * What else counts as this game: other installs here, like a copy from a
+ * second launcher, each still tracked with its own program, and games of
+ * other PCs. Each can be edited where it is this PC's, and unlinked.
+ */
 function LinkedGameRows({ gameId }: { gameId: string }) {
-  const { links, devices, refresh } = useLibrary();
+  const { links, devices, thisDeviceId, refresh } = useLibrary();
   const [error, setError] = useState<string | null>(null);
-  const linked = links.filter((link) => link.linked_game_id === gameId);
-  if (linked.length === 0) return null;
+  const [editing, setEditing] = useState<EditableGame | null>(null);
+  const { installs, elsewhere } = linkedTo(gameId, links, thisDeviceId);
+  if (installs.length === 0 && elsewhere.length === 0) return null;
 
-  async function unlink(foreignId: string) {
+  async function unlink(linkedId: string) {
     setError(null);
     try {
-      await api.linkGame(foreignId, null);
+      await api.linkGame(linkedId, null);
       await refresh();
+    } catch (linkError) {
+      setError(describeError(linkError));
+    }
+  }
+
+  const unlinkButton = (link: GameLink, name: string) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-faint"
+      aria-label={`Unlink ${name}`}
+      title="Unlink, so it counts as its own game again"
+      onClick={() => void unlink(link.game_id)}
+    >
+      <Unlink className="size-3.5" />
+    </Button>
+  );
+
+  return (
+    <div className="mt-4 border-t border-rule pt-4">
+      <p className="text-[13px] text-text">Also counts</p>
+      <ul className="mt-1">
+        {installs.map((link) => {
+          const name = `${link.title} ${whereFrom(link.launcher_source)}`;
+          return (
+            <li key={link.game_id} className="flex items-start gap-2 border-b border-rule py-2 last:border-b-0">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] text-soft">{name}</p>
+                <p className="mt-0.5 font-mono text-xs leading-relaxed break-all text-faint">
+                  {link.executable_path ?? "No program set, so it is not tracked."}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-faint"
+                aria-label={`Edit ${name}`}
+                title="Edit this install"
+                onClick={() =>
+                  setEditing({
+                    id: link.game_id,
+                    title: link.title,
+                    executable_path: link.executable_path,
+                    install_folder: link.install_folder,
+                  })
+                }
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              {unlinkButton(link, name)}
+            </li>
+          );
+        })}
+        {elsewhere.map((link) => {
+          const pc = pcName(devices, link.origin_device_id ?? "");
+          return (
+            <li key={link.game_id} className="flex items-start gap-2 border-b border-rule py-2 last:border-b-0">
+              <p className="min-w-0 flex-1 text-[13px] text-soft">
+                Played on {pc} as “{link.title}”{link.launcher_source ? ` ${whereFrom(link.launcher_source)}` : ""}
+              </p>
+              {unlinkButton(link, `${link.title} on ${pc}`)}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-[12px] leading-relaxed text-faint">
+        Each install keeps its own sessions and stays tracked. Unlinking brings it back as its own game with its own
+        history.
+      </p>
+      {error && <p className="mt-2 text-[12px] text-amber">{error}</p>}
+      <EditGameDialog game={editing} onClose={() => setEditing(null)} onSaved={refresh} />
+    </div>
+  );
+}
+
+/** Makes this game count as another game of the library, like a second install of it. */
+function SameGameRow({ game, onLinked }: { game: Game; onLinked: (targetId: string) => void }) {
+  const { games, refresh } = useLibrary();
+  const [error, setError] = useState<string | null>(null);
+  const targets = linkTargets(game, games);
+  if (targets.length === 0) return null;
+
+  async function link(targetId: string | null) {
+    if (!targetId) return;
+    setError(null);
+    try {
+      await api.linkGame(game.id, targetId);
+      await refresh();
+      onLinked(targetId);
     } catch (linkError) {
       setError(describeError(linkError));
     }
@@ -471,16 +554,14 @@ function LinkedGameRows({ gameId }: { gameId: string }) {
 
   return (
     <div className="mt-4 border-t border-rule pt-4">
-      {linked.map((link) => (
-        <div key={link.game_id} className="flex items-center justify-between gap-3">
-          <span className="text-[13px] text-soft">
-            Also played on {pcName(devices, link.origin_device_id ?? "")} as “{link.title}”
-          </span>
-          <Button variant="ghost" size="sm" className="text-faint" onClick={() => void unlink(link.game_id)}>
-            Keep apart
-          </Button>
-        </div>
-      ))}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] text-text">Counts as</span>
+        <GameLinkPicker games={targets} value={null} onChange={(targetId) => void link(targetId)} />
+      </div>
+      <p className="mt-2 text-[12px] leading-relaxed text-faint">
+        For the same game installed twice, like through Steam and GOG. Both stay tracked and show as one game with
+        one history.
+      </p>
       {error && <p className="mt-2 text-[12px] text-amber">{error}</p>}
     </div>
   );

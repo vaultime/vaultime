@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useLibrary } from "@/features/library/library-context";
 import { GameLinkPicker } from "@/features/library/components/GameLinkPicker";
+import { launcherName, whereFrom } from "@/lib/links";
 import { mergeChangesSomething, mergeDone, mergeHeadline, mergeNotes, sourceName } from "@/lib/merge";
 import * as api from "@/lib/tauri";
 import { formatHoursMinutes, formatLongDate } from "@/lib/time";
@@ -200,15 +201,23 @@ function MergeDialog({
                     <p className="truncate text-[14px] text-text">{game.title}</p>
                     <p className="text-[12px] text-faint tabular-nums">
                       {plural(game.sessions, "session")}, {formatHoursMinutes(game.runtime_ms)}
+                      {launcherName(game.launcher_source) && `, ${whereFrom(game.launcher_source)}`}
                     </p>
                   </div>
-                  <GameLinkPicker
-                    games={ours}
-                    value={choices[game.game_id] ?? null}
-                    suggested={game.suggested_game_id}
-                    suggestedBecause={game.suggested_because}
-                    onChange={(linked) => setChoices((current) => ({ ...current, [game.game_id]: linked }))}
-                  />
+                  {game.counts_as ? (
+                    // It follows the game it counts as there, whatever that one counts as here.
+                    <span className="max-w-64 shrink-0 truncate text-right text-[13px] text-faint">
+                      Same game as {game.counts_as_title ?? "another game"} there
+                    </span>
+                  ) : (
+                    <GameLinkPicker
+                      games={ours}
+                      value={choices[game.game_id] ?? null}
+                      suggested={game.suggested_game_id}
+                      suggestedBecause={game.suggested_because}
+                      onChange={(linked) => setChoices((current) => ({ ...current, [game.game_id]: linked }))}
+                    />
+                  )}
                 </div>
               ))}
             </div>

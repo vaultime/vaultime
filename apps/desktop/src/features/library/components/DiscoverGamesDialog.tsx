@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { foundGamesText, offeredPaths } from "@/lib/found-games";
+import { whereFrom } from "@/lib/links";
 import * as api from "@/lib/tauri";
 import type { DiscoveredGame, NewGames } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
@@ -71,6 +72,8 @@ export function DiscoverGamesDialog({
   // while the dialog closes, so its words stay.
   const [shownFound, setShownFound] = useState(found ?? null);
   const showingFound = shownFound !== null;
+  // Games marked as another install of a library game that the player keeps as games of their own.
+  const [apart, setApart] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   // Start over every time the dialog opens, with the found games if there are any.
@@ -83,6 +86,7 @@ export function DiscoverGamesDialog({
       setSelected(new Set(initial.map((game) => game.executable_path)));
       setScanned(Boolean(found));
       setShownFound(found ?? null);
+      setApart(new Set());
       setError(null);
       setScanning(false);
       setImporting(false);
@@ -96,6 +100,7 @@ export function DiscoverGamesDialog({
       setError(null);
       setResults([]);
       setSelected(new Set());
+      setApart(new Set());
 
       const [steamResult, launcherResult, folderResult] = await Promise.allSettled([
         api.discoverSteamGames(),
@@ -166,6 +171,15 @@ export function DiscoverGamesDialog({
     }
   }
 
+  function toggleApart(path: string) {
+    setApart((previous) => {
+      const next = new Set(previous);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
   function toggle(path: string) {
     setSelected((previous) => {
       const next = new Set(previous);
@@ -181,7 +195,9 @@ export function DiscoverGamesDialog({
     try {
       setImporting(true);
       setError(null);
-      await api.importDiscoveredGames(toImport);
+      await api.importDiscoveredGames(
+        toImport.map((game) => (apart.has(game.executable_path) ? { ...game, same_game: null } : game)),
+      );
       onOpenChange(false);
       onImported();
     } catch (importError) {
@@ -247,10 +263,11 @@ export function DiscoverGamesDialog({
               {results.map((game) => {
                 const isSelected = selected.has(game.executable_path);
                 const added = game.already_added;
+                const same = !added ? game.same_game : null;
                 return (
                   <li
                     key={game.executable_path}
-                    className="group flex items-center border-b border-rule transition-colors last:border-b-0 hover:bg-raised/60"
+                    className="group flex flex-wrap items-center border-b border-rule transition-colors last:border-b-0 hover:bg-raised/60"
                   >
                     <button
                       type="button"
@@ -287,6 +304,19 @@ export function DiscoverGamesDialog({
                       >
                         Ignore
                       </button>
+                    )}
+                    {same && (
+                      <label className="-mt-1.5 flex basis-full cursor-pointer items-center gap-2 pb-2.5 pl-9 text-[13px] text-soft">
+                        <input
+                          type="checkbox"
+                          checked={!apart.has(game.executable_path)}
+                          onChange={() => toggleApart(game.executable_path)}
+                          className="accent-violet"
+                        />
+                        <span className="min-w-0 truncate">
+                          Same game as {same.title} {whereFrom(same.launcher_source)}
+                        </span>
+                      </label>
                     )}
                   </li>
                 );

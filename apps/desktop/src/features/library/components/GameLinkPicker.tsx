@@ -5,7 +5,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Game } from "@/lib/types";
 
-/** Which game of this PC a game of another PC counts as, or none. */
+/** Which game of this PC a game counts as, or none: for a game of another PC, or another install here. */
 export function GameLinkPicker({
   games,
   value,
@@ -13,7 +13,7 @@ export function GameLinkPicker({
   suggestedBecause,
   onChange,
 }: {
-  /** Games of this PC to pick from. */
+  /** Games of this PC to pick from, none of them linked to another. */
   games: Game[];
   value: string | null;
   suggested?: string | null;

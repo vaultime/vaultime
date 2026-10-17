@@ -12,18 +12,22 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/layout/Page";
+import { linkedGoToo } from "@/lib/links";
 import * as api from "@/lib/tauri";
 import { describeError } from "@/lib/utils";
 import type { Game } from "@/lib/types";
 
 interface DeleteGameDialogProps {
   game: Game | null;
+  /** Other installs and games of other PCs that count as it, which go with it. */
+  linkedCount?: number;
   onClose: () => void;
   onDeleted: () => void;
 }
 
 export function DeleteGameDialog({
   game,
+  linkedCount = 0,
   onClose,
   onDeleted,
 }: DeleteGameDialogProps) {
@@ -64,7 +68,7 @@ export function DeleteGameDialog({
           <DialogTitle>Delete this game?</DialogTitle>
           <DialogDescription>
             <strong className="font-medium text-text">{game?.title}</strong> and all of its sessions are
-            removed from this PC. Backups you made earlier keep them.
+            removed from this PC. {linkedGoToo(linkedCount)} Backups you made earlier keep them.
           </DialogDescription>
         </DialogHeader>
         {game?.executable_path && (

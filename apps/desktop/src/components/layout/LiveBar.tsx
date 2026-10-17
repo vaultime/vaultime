@@ -68,6 +68,8 @@ export function LiveBar() {
 
   const game = games.find((g) => g.id === current.game_id);
   const title = game?.title ?? "Unknown game";
+  // Two installs of one game running at once are one game here.
+  const others = new Set(active.map((session) => session.game_id).filter((id) => id !== current.game_id)).size;
   const sincePoll = Math.max(0, now - activePolledAt);
   const runtimeMs = current.runtime_ms + sincePoll;
   const counted = current.active_ms + current.idle_ms;
@@ -88,7 +90,7 @@ export function LiveBar() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-[15px] font-medium">
             {title}
-            {active.length > 1 && <span className="ml-2 text-[13px] text-faint">and {active.length - 1} more</span>}
+            {others > 0 && <span className="ml-2 text-[13px] text-faint">and {others} more</span>}
           </span>
           <span className="flex items-center gap-2 text-[13px] text-faint">
             <span className="size-2 rounded-full bg-violet ring-3 ring-violet/25" />

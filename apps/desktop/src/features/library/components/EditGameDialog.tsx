@@ -17,12 +17,15 @@ import type { Game } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { GameFields } from "./GameFields";
 
+/** What the dialog edits: a game, or another install that counts as one. */
+export type EditableGame = Pick<Game, "id" | "title" | "executable_path" | "install_folder">;
+
 export function EditGameDialog({
   game,
   onClose,
   onSaved,
 }: {
-  game: Game | null;
+  game: EditableGame | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -31,7 +34,7 @@ export function EditGameDialog({
   const [installFolder, setInstallFolder] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formGame, setFormGame] = useState<Game | null>(null);
+  const [formGame, setFormGame] = useState<EditableGame | null>(null);
 
   // Reset the form during render whenever the dialog opens for a game.
   if (game !== formGame) {

@@ -70,12 +70,17 @@ export interface Device {
 }
 
 /** A game of another PC that counts as a game of this PC. */
+/** A game that counts as another one: another install here, or a game of another PC. */
 export interface GameLink {
   game_id: string;
-  /** Its title on the other PC. */
+  /** Its own title, on its PC or for its install. */
   title: string;
+  /** Null for another install on this PC. */
   origin_device_id: string | null;
   linked_game_id: string;
+  launcher_source: string | null;
+  executable_path: string | null;
+  install_folder: string | null;
 }
 
 /** A game that comes with merged sessions. */
@@ -89,6 +94,9 @@ export interface MergeGame {
   suggested_game_id: string | null;
   /** `launcher` for the same launcher id, `title` for the same title. */
   suggested_because: "launcher" | "title" | null;
+  /** The game it counts as on its PC, which it follows here without a choice of its own. */
+  counts_as: string | null;
+  counts_as_title: string | null;
 }
 
 /** A session that stays as it is here. */
@@ -185,6 +193,8 @@ export interface Session {
   set_aside_ms?: number;
   set_aside_active_ms?: number;
   set_aside_idle_ms?: number;
+  /** The game that recorded it, when that game is linked to the one in `game_id`. */
+  recorded_game_id?: string;
 }
 
 /** Mirrors the Rust `ExportFormat` enum. */
@@ -289,6 +299,17 @@ export interface DiscoveredGame {
   source: string;
   source_id: string | null;
   already_added: boolean;
+  /** The library game it is most likely another install of. Adding it links the two unless this is cleared. */
+  same_game?: SameGame | null;
+}
+
+/** A library game a discovered game seems to be another install of. */
+export interface SameGame {
+  /** The game the library shows. */
+  game_id: string;
+  title: string;
+  /** The launcher of the install that matched. */
+  launcher_source: string | null;
 }
 
 /** Games the look at start found that the player was never shown. */

@@ -11,6 +11,7 @@ import { useLibrary } from "@/features/library/library-context";
 import { CorrectSessionDialog } from "@/features/sessions/components/CorrectSessionDialog";
 import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import { isMergedPc, recordedElsewhere } from "@/lib/devices";
+import { recordedThrough } from "@/lib/links";
 import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";
 import { formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
@@ -66,8 +67,9 @@ export function SessionLine({
     [session, gameTitle, gameSessions, earlierMs],
   );
   const live = !session.ended_at_wall;
-  const { devices, thisDeviceId } = useLibrary();
+  const { devices, thisDeviceId, links } = useLibrary();
   const elsewhere = recordedElsewhere(session, devices, thisDeviceId);
+  const through = recordedThrough(session, links, thisDeviceId);
   // Only the PC that recorded a merged session may change its history.
   const merged = isMergedPc(devices, session.device_id);
   const correctable = Boolean(onCorrected) && !live && !merged;
@@ -122,6 +124,7 @@ export function SessionLine({
               Played on {elsewhere}.{merged && ` Only ${elsewhere} can correct it.`}
             </span>
           )}
+          {through && <span> Played through {through}.</span>}
           {trustNote && <span className="text-soft"> {trustNote}</span>}
         </div>
         {editing ? (
