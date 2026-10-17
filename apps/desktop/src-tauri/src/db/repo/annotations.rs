@@ -4,12 +4,12 @@
 //! What the player adds to their history: the status of a game over time and
 //! short notes on sessions. Neither touches tracked time.
 
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Row, params};
 
 use crate::constants::SESSION_NOTE_MAX_CHARS;
 use crate::db::connection::Database;
 use crate::db::models::{GameStatusChange, SessionNote};
-use crate::db::repo::map_db;
+use crate::db::repo::{games, map_db};
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
@@ -35,17 +35,31 @@ fn row_to_note(row: &Row) -> rusqlite::Result<SessionNote> {
     })
 }
 
-/// Every status change, oldest first. One of a linked game, another install
-/// or a game of another PC, counts for the game it is linked to.
+/// Every status change that counts, oldest first, each for the game shown.
+/// Changes of a game of another PC count for the game it is linked to, so
+/// the newest change on any PC wins. Another install on this PC that counts
+/// as a game here keeps its changes, but they wait until it is unlinked, so
+/// the game shown keeps the status the player gave it.
 pub fn list_status_changes(db: &Database) -> Result<Vec<GameStatusChange>> {
-    let links = crate::db::repo::games::links(db)?;
-    let mut changes = db.with_conn(|conn| {
-        let mut stmt = conn
-            .prepare("SELECT * FROM game_status_changes ORDER BY changed_at, rowid")
-            .map_err(map_db)?;
-        let rows = stmt.query_map([], row_to_change).map_err(map_db)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
-    })?;
+    db.with_conn(counted_changes)
+}
+
+fn counted_changes(conn: &rusqlite::Connection) -> Result<Vec<GameStatusChange>> {
+    let this = integrity::ledger::this_device().ok();
+    let links = games::links_in(conn)?;
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT changes.* FROM game_status_changes AS changes
+             LEFT JOIN game_links ON game_links.game_id = changes.game_id
+             LEFT JOIN games ON games.id = changes.game_id
+             WHERE game_links.game_id IS NULL
+                OR (games.origin_device_id IS NOT NULL
+                    AND games.origin_device_id IS NOT ?1)
+             ORDER BY changes.changed_at, changes.rowid",
+        )
+        .map_err(map_db)?;
+    let rows = stmt.query_map([this], row_to_change).map_err(map_db)?;
+    let mut changes = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)?;
     for change in &mut changes {
         if let Some(linked) = links.get(&change.game_id) {
             change.game_id.clone_from(linked);
@@ -54,8 +68,9 @@ pub fn list_status_changes(db: &Database) -> Result<Vec<GameStatusChange>> {
     Ok(changes)
 }
 
-/// Records a new status for a game. Setting the status it already has records
-/// nothing and returns `None`.
+/// Records a new status for a game, or for the game it counts as, which is
+/// the one the player sees. Setting the status the game shows already
+/// records nothing and returns `None`.
 pub fn set_game_status(
     db: &Database,
     game_id: &str,
@@ -67,21 +82,18 @@ pub fn set_game_status(
         )));
     }
     db.with_conn(|conn| {
-        let current: Option<String> = conn
-            .query_row(
-                "SELECT status FROM game_status_changes WHERE game_id = ?1
-                 ORDER BY changed_at DESC, rowid DESC LIMIT 1",
-                [game_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(map_db)?;
-        if current.as_deref().unwrap_or("none") == status {
+        let game_id = games::shown_id(conn, game_id)?;
+        let current = counted_changes(conn)?
+            .into_iter()
+            .rev()
+            .find(|change| change.game_id == game_id)
+            .map(|change| change.status);
+        if current.as_deref().unwrap_or(STATUS_NONE) == status {
             return Ok(None);
         }
         let change = GameStatusChange {
             id: uuid::Uuid::new_v4().to_string(),
-            game_id: game_id.to_owned(),
+            game_id,
             status: status.to_owned(),
             changed_at: integrity::now_timestamp(),
         };
@@ -178,6 +190,73 @@ mod tests {
             .map(|change| change.status)
             .collect();
         assert_eq!(statuses, ["playing", "finished"]);
+    }
+
+    /// The status each game shows, by the last change that counts for it.
+    fn shown_statuses(db: &Database) -> std::collections::HashMap<String, String> {
+        list_status_changes(db)
+            .unwrap()
+            .into_iter()
+            .map(|change| (change.game_id, change.status))
+            .collect()
+    }
+
+    #[test]
+    fn a_linked_install_keeps_its_status_until_unlinked() {
+        let db = Database::open_in_memory().unwrap();
+        let (steam, gog) = (game(&db), game(&db));
+        set_game_status(&db, &steam, "backlog").unwrap();
+        set_game_status(&db, &gog, "playing").unwrap();
+
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        assert_eq!(
+            shown_statuses(&db),
+            [(steam.clone(), "backlog".into())].into()
+        );
+        // Set on the install, the status goes to the game shown.
+        let change = set_game_status(&db, &gog, "finished").unwrap().unwrap();
+        assert_eq!(change.game_id, steam);
+        assert!(set_game_status(&db, &gog, "finished").unwrap().is_none());
+
+        games::link_game(&db, &gog, None).unwrap();
+        assert_eq!(
+            shown_statuses(&db),
+            [(steam, "finished".into()), (gog, "playing".into())].into()
+        );
+    }
+
+    #[test]
+    fn the_newest_status_on_any_pc_wins() {
+        let db = Database::open_in_memory().unwrap();
+        let (here, laptop) = (game(&db), game(&db));
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE games SET origin_device_id = 'laptop' WHERE id = ?1",
+                [&laptop],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        db.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO game_status_changes (id, game_id, status, changed_at) VALUES
+                     ('here', ?1, 'playing', '2026-01-01T00:00:00Z'),
+                     ('from-laptop', ?2, 'finished', '2026-02-01T00:00:00Z')",
+                [&here, &laptop],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        games::link_game(&db, &laptop, Some(&here)).unwrap();
+
+        assert_eq!(
+            shown_statuses(&db),
+            [(here.clone(), "finished".into())].into()
+        );
+        // What the game shows is what a new status is compared with.
+        assert!(set_game_status(&db, &here, "finished").unwrap().is_none());
+        assert!(set_game_status(&db, &here, "playing").unwrap().is_some());
+        assert_eq!(shown_statuses(&db), [(here, "playing".into())].into());
     }
 
     #[test]
