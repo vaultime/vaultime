@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Starts the version you installed.** Starting with the system now always opens the copy of Vaultime you last ran. A login item made by an older copy in another folder used to keep starting that copy after every restart.
 - **A broken record stays small.** A session whose record spans more than a year on the clock, which only a damaged or edited record does, now counts in the quarter hour it ended in. Merging or restoring such a session used to fill every quarter hour of those years and could stall Vaultime.
 - **A merged PC stays merged.** Restoring a backup of a PC whose sessions were merged here keeps those sessions correctable only on that PC. The restore used to forget the merge, so a correction here could split a session from its record there.
+- **PC names stay short.** A PC name that comes along with a merged or restored backup is cleaned the way a rename cleans it: control characters go and it is cut to 40 characters. A backup used to bring any name along.
 
 ### Website
 

@@ -92,7 +92,7 @@ pub fn describe_this_device(db: &Database, id: &str, key_id: &str, name: &str) -
     })
 }
 
-/// Renames a PC. The name is trimmed and cut to `DEVICE_NAME_MAX_CHARS`.
+/// Renames a PC. The name is cleaned as `clean_name` does.
 pub fn rename_device(db: &Database, id: &str, name: &str) -> Result<Device> {
     let name = clean_name(name);
     if name.is_empty() {
@@ -109,6 +109,51 @@ pub fn rename_device(db: &Database, id: &str, name: &str) -> Result<Device> {
     })
 }
 
-fn clean_name(name: &str) -> String {
-    name.trim().chars().take(DEVICE_NAME_MAX_CHARS).collect()
+/// A PC name without control characters, trimmed and cut to
+/// `DEVICE_NAME_MAX_CHARS`.
+pub(crate) fn clean_name(name: &str) -> String {
+    name.chars()
+        .filter(|char| !char.is_control())
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(DEVICE_NAME_MAX_CHARS)
+        .collect()
+}
+
+/// Cleans every PC name in `conn` the way a rename does, for names a backup
+/// brought along. A name with nothing left goes.
+pub(crate) fn clean_names(conn: &rusqlite::Connection) -> Result<()> {
+    let names: Vec<(String, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT id, name FROM main.devices WHERE name IS NOT NULL")
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(map_db)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+    };
+    for (id, name) in names {
+        let clean = clean_name(&name);
+        if clean != name {
+            conn.execute(
+                "UPDATE main.devices SET name = ?1 WHERE id = ?2",
+                params![(!clean.is_empty()).then_some(clean), id],
+            )
+            .map_err(map_db)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_lose_control_characters_and_are_cut_to_length() {
+        assert_eq!(clean_name("  Desk\u{7}top\n "), "Desktop");
+        let long = "x".repeat(DEVICE_NAME_MAX_CHARS * 2);
+        assert_eq!(clean_name(&long).chars().count(), DEVICE_NAME_MAX_CHARS);
+    }
 }

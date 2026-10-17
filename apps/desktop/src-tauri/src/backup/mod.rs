@@ -403,7 +403,7 @@ fn take_in_restored(
         .map_err(crate::db::repo::map_db)?;
         conn.execute("UPDATE devices SET merged_at = NULL WHERE id = ?1", [&this])
             .map_err(crate::db::repo::map_db)?;
-        Ok(())
+        devices::clean_names(conn)
     })?;
     Ok(())
 }

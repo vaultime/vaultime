@@ -396,11 +396,13 @@ fn read_candidates(
         refuse_unmergeable(conn, source, &this, trust.source_keys())?;
         let device_name: Option<String> = conn
             .query_row("SELECT name FROM devices WHERE id = ?1", [source], |row| {
-                row.get(0)
+                row.get::<_, Option<String>>(0)
             })
             .optional()
             .map_err(map_db)?
-            .flatten();
+            .flatten()
+            .map(|name| crate::db::repo::devices::clean_name(&name))
+            .filter(|name| !name.is_empty());
         let mut stmt = conn
             .prepare("SELECT * FROM sessions WHERE device_id != ?1 ORDER BY started_at_wall")
             .map_err(map_db)?;
@@ -909,7 +911,8 @@ fn copy_devices(conn: &Connection, devices: &str, source: &str) -> Result<()> {
         [source],
     )
     .map_err(map_db)?;
-    Ok(())
+    // A name is cleaned as a rename here would clean it.
+    crate::db::repo::devices::clean_names(conn)
 }
 
 /// Games that come along, never tracked here, their status changes and the
@@ -2521,6 +2524,55 @@ mod tests {
         )
         .unwrap_err();
         assert!(refused.to_string().contains("laptop"));
+    }
+
+    #[test]
+    fn a_pc_name_from_a_backup_is_cleaned_like_a_rename() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        laptop.play(&game, 20);
+        let long = format!(
+            "Lap\u{1b}[31mtop{}",
+            "x".repeat(crate::constants::DEVICE_NAME_MAX_CHARS * 4)
+        );
+        laptop
+            .db
+            .with_conn(|conn| {
+                conn.execute("UPDATE devices SET name = ?1 WHERE id = 'laptop'", [&long])
+                    .map_err(map_db)
+            })
+            .unwrap();
+        let backup = laptop.back_up();
+        let expected = crate::db::repo::devices::clean_name(&long);
+        assert!(expected.starts_with("Lap[31mtop"));
+        assert_eq!(
+            expected.chars().count(),
+            crate::constants::DEVICE_NAME_MAX_CHARS
+        );
+
+        let preview = desktop.preview(&backup).unwrap();
+        assert_eq!(preview.device_name.as_deref(), Some(expected.as_str()));
+        desktop.merge(&backup, &[]);
+        let name = |pc: &Pc| {
+            pc.db
+                .with_conn(|conn| {
+                    conn.query_row("SELECT name FROM devices WHERE id = 'laptop'", [], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .map_err(map_db)
+                })
+                .unwrap()
+        };
+        assert_eq!(name(&desktop), expected);
+
+        // A restore cleans the names it brings along too.
+        let other = Pc::new("other");
+        let its_game = other.game("Celeste", None);
+        other.play(&its_game, 5);
+        other.act();
+        import_local_backup(&other.db, &other.assets, &other.context, &backup).unwrap();
+        assert_eq!(name(&other), expected);
     }
 
     impl Pc {
