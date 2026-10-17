@@ -165,7 +165,7 @@ fn slice_of(wall_ms: i64) -> i64 {
 /// Splits `amount` in proportion to `weights`, in whole milliseconds that
 /// add up to `amount`. Leftovers go to the largest remainders, the earlier
 /// part first on a tie.
-fn apportion(weights: &[i64], amount: i64) -> Vec<i64> {
+pub(crate) fn apportion(weights: &[i64], amount: i64) -> Vec<i64> {
     let sum: i128 = weights.iter().map(|weight| i128::from(*weight)).sum();
     if amount <= 0 || sum <= 0 {
         return vec![0; weights.len()];
@@ -779,6 +779,9 @@ mod tests {
             set_aside_ms: 0,
             set_aside_active_ms: 0,
             set_aside_idle_ms: 0,
+            copy_overlap_ms: 0,
+            copy_overlap_active_ms: 0,
+            copy_overlap_idle_ms: 0,
             recorded_game_id: None,
         }
     }

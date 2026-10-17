@@ -76,6 +76,9 @@ mod tests {
             set_aside_ms: 0,
             set_aside_active_ms: 0,
             set_aside_idle_ms: 0,
+            copy_overlap_ms: 0,
+            copy_overlap_active_ms: 0,
+            copy_overlap_idle_ms: 0,
             recorded_game_id: None,
         }
     }

@@ -137,6 +137,16 @@ pub struct Session {
     pub set_aside_active_ms: i64,
     #[serde(default)]
     pub set_aside_idle_ms: i64,
+    /// Runtime, active and idle time that another copy of the same game ran
+    /// through as well, like a linked install or the game on another PC. One
+    /// game cannot be played twice at once, so that time counts once, shared
+    /// between the copies. Worked out from the play slices, never stored.
+    #[serde(default)]
+    pub copy_overlap_ms: i64,
+    #[serde(default)]
+    pub copy_overlap_active_ms: i64,
+    #[serde(default)]
+    pub copy_overlap_idle_ms: i64,
     /// The game the session was recorded with, when it is shown as the game
     /// that one is linked to. Never stored, the session keeps its own game.
     #[serde(default, skip_serializing_if = "Option::is_none")]

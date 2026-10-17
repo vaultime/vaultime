@@ -194,6 +194,17 @@ fn large_history() {
         .unwrap();
         String::new()
     });
+    timed("fill copy overlap", &mut || {
+        let mut copy = listed.clone();
+        totals::fill_copy_overlap(
+            &db,
+            &LiveSessions::default(),
+            &mut copy,
+            Utc::now().timestamp_millis(),
+        )
+        .unwrap();
+        String::new()
+    });
     let bytes = std::fs::metadata(&path).map_or(0, |meta| meta.len());
     println!("database file: {} MB", bytes / 1_000_000);
     drop(db);

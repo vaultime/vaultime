@@ -12,11 +12,12 @@ use serde::{Deserialize, Serialize};
 use crate::constants::PLAY_SLICE_MS;
 use crate::db::connection::Database;
 use crate::db::models::Session;
+use crate::db::repo::games;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
 use crate::integrity;
-use crate::playtime::slices::{STEPS_ASIDE, Slice, aside_stretches, slices_of};
+use crate::playtime::slices::{STEPS_ASIDE, Slice, apportion, aside_stretches, slices_of};
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
 /// What one total covers, in local time.
@@ -204,49 +205,254 @@ pub fn fill_set_aside(
     })
 }
 
-/// Each shown game's time per quarter hour. One game cannot be played twice
-/// at once, so where two of its copies ran at the same time, like linked
-/// installs or two PCs, the quarter hour holds no more than it lasts. Their
+/// Each slice as it counts, in the order given, each with the shown game it
+/// belongs to. One game cannot be played twice at once, so where two of its
+/// copies ran at the same time, like linked installs or two PCs, the quarter
+/// hour holds no more than it lasts, shared by what each copy ran. Their
 /// active and idle time shrink alike. A slice that holds more than a quarter
 /// hour on its own, time whose clock went backwards, has no place on the
 /// clock to share and counts in full.
+fn counted_once(slices: &[(&str, Slice)]) -> Vec<Slice> {
+    let mut cells: HashMap<(&str, i64), Vec<usize>> = HashMap::new();
+    for (index, (game, slice)) in slices.iter().enumerate() {
+        if slice.runtime_ms <= PLAY_SLICE_MS {
+            cells.entry((game, slice.start_ms)).or_default().push(index);
+        }
+    }
+    let mut counted: Vec<Slice> = slices.iter().map(|(_, slice)| *slice).collect();
+    for indices in cells.into_values() {
+        let whole: i64 = indices
+            .iter()
+            .map(|&index| slices[index].1.runtime_ms)
+            .sum();
+        if whole <= PLAY_SLICE_MS {
+            continue;
+        }
+        let measure = |pick: fn(&Slice) -> i64| -> Vec<i64> {
+            indices
+                .iter()
+                .map(|&index| pick(&slices[index].1))
+                .collect()
+        };
+        let shrunk = |parts: &[i64]| {
+            let sum: i64 = parts.iter().sum();
+            let kept = i128::from(sum) * i128::from(PLAY_SLICE_MS) / i128::from(whole);
+            apportion(parts, i64::try_from(kept).unwrap_or(sum))
+        };
+        let runtime = apportion(&measure(|slice| slice.runtime_ms), PLAY_SLICE_MS);
+        let active = shrunk(&measure(|slice| slice.active_ms));
+        let idle = shrunk(&measure(|slice| slice.idle_ms));
+        for (part, &index) in indices.iter().enumerate() {
+            counted[index].runtime_ms = runtime[part];
+            counted[index].active_ms = active[part];
+            counted[index].idle_ms = idle[part];
+        }
+    }
+    counted
+}
+
+/// Each shown game's time per quarter hour, its copies running at the same
+/// time counted once.
 fn once_at_a_time(
-    slices: Vec<(String, Slice)>,
+    slices: &[(String, Slice)],
     links: &HashMap<String, String>,
 ) -> BTreeMap<(String, i64), [i64; 3]> {
-    // What fits a quarter hour and what does not, per game and quarter hour.
-    let mut summed: BTreeMap<(String, i64), ([i64; 3], [i64; 3])> = BTreeMap::new();
-    for (game, slice) in slices {
-        let game = links.get(&game).cloned().unwrap_or(game);
-        let (placed, unplaced) = summed.entry((game, slice.start_ms)).or_default();
-        let part = if slice.runtime_ms > PLAY_SLICE_MS {
-            unplaced
-        } else {
-            placed
-        };
-        part[0] += slice.runtime_ms;
-        part[1] += slice.active_ms;
-        part[2] += slice.idle_ms;
+    let shown: Vec<(&str, Slice)> = slices
+        .iter()
+        .map(|(game, slice)| {
+            (
+                links.get(game).map_or(game.as_str(), String::as_str),
+                *slice,
+            )
+        })
+        .collect();
+    let mut summed: BTreeMap<(String, i64), [i64; 3]> = BTreeMap::new();
+    for ((game, _), slice) in shown.iter().zip(counted_once(&shown)) {
+        let total = summed
+            .entry(((*game).to_owned(), slice.start_ms))
+            .or_default();
+        total[0] += slice.runtime_ms;
+        total[1] += slice.active_ms;
+        total[2] += slice.idle_ms;
     }
     summed
-        .into_iter()
-        .map(|(key, (mut placed, unplaced))| {
-            if placed[0] > PLAY_SLICE_MS {
-                let whole = i128::from(placed[0]);
-                for value in &mut placed[1..] {
-                    *value = i64::try_from(i128::from(*value) * i128::from(PLAY_SLICE_MS) / whole)
-                        .unwrap_or(*value);
-                }
-                placed[0] = PLAY_SLICE_MS;
-            }
-            let total = [
-                placed[0] + unplaced[0],
-                placed[1] + unplaced[1],
-                placed[2] + unplaced[2],
-            ];
-            (key, total)
+}
+
+/// Stored slices in quarter hours that copies of one shown game fill past
+/// their length, each with its session and its shown game.
+fn stored_shared_slices(conn: &rusqlite::Connection) -> Result<Vec<(String, String, Slice)>> {
+    let mut stmt = conn
+        .prepare_cached(
+            "WITH placed AS (
+                 SELECT play_slices.session_id, play_slices.slice_start, play_slices.runtime_ms,
+                        play_slices.active_ms, play_slices.idle_ms,
+                        COALESCE(game_links.linked_game_id, sessions.game_id) AS game
+                 FROM play_slices
+                 JOIN sessions ON sessions.id = play_slices.session_id
+                 LEFT JOIN game_links ON game_links.game_id = sessions.game_id
+                 WHERE play_slices.runtime_ms <= ?1),
+             shared AS (
+                 SELECT game, slice_start FROM placed
+                 GROUP BY game, slice_start HAVING SUM(runtime_ms) > ?1)
+             SELECT placed.session_id, placed.game, placed.slice_start, placed.runtime_ms,
+                    placed.active_ms, placed.idle_ms
+             FROM placed JOIN shared USING (game, slice_start)",
+        )
+        .map_err(map_db)?;
+    let rows = stmt
+        .query_map([PLAY_SLICE_MS], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                Slice {
+                    start_ms: row.get(2)?,
+                    runtime_ms: row.get(3)?,
+                    active_ms: row.get(4)?,
+                    idle_ms: row.get(5)?,
+                },
+            ))
         })
-        .collect()
+        .map_err(map_db)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+}
+
+/// Stored slices of the games `game_ids` from `from_ms` on, each with its
+/// session.
+fn stored_slices_since(
+    conn: &rusqlite::Connection,
+    game_ids: &[String],
+    from_ms: i64,
+) -> Result<Vec<(String, Slice)>> {
+    let ids = serde_json::to_string(game_ids).unwrap_or_default();
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT play_slices.session_id, play_slices.slice_start, play_slices.runtime_ms,
+                    play_slices.active_ms, play_slices.idle_ms
+             FROM play_slices JOIN sessions ON sessions.id = play_slices.session_id
+             WHERE play_slices.slice_start >= ?1
+               AND sessions.game_id IN (SELECT value FROM json_each(?2))",
+        )
+        .map_err(map_db)?;
+    let rows = stmt
+        .query_map(params![from_ms, ids], |row| {
+            Ok((
+                row.get(0)?,
+                Slice {
+                    start_ms: row.get(1)?,
+                    runtime_ms: row.get(2)?,
+                    active_ms: row.get(3)?,
+                    idle_ms: row.get(4)?,
+                },
+            ))
+        })
+        .map_err(map_db)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+}
+
+/// Running sessions that another session of the same shown game ran beside,
+/// each with the games that count as that game, the shown one first.
+fn running_beside_copies(conn: &rusqlite::Connection) -> Result<Vec<(Session, Vec<String>)>> {
+    let open = {
+        let mut stmt = conn
+            .prepare_cached("SELECT * FROM sessions WHERE ended_at_wall IS NULL")
+            .map_err(map_db)?;
+        stmt.query_map([], row_to_session)
+            .map_err(map_db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_db)?
+    };
+    let mut beside = Vec::new();
+    for session in open {
+        let set = games::linked_set(conn, &session.game_id)?;
+        let ids = serde_json::to_string(&set).unwrap_or_default();
+        let other: bool = conn
+            .prepare_cached(
+                "SELECT EXISTS (SELECT 1 FROM sessions
+                     WHERE id != ?1 AND game_id IN (SELECT value FROM json_each(?2))
+                       AND (ended_at_wall IS NULL OR ended_at_wall > ?3))",
+            )
+            .and_then(|mut stmt| {
+                stmt.query_row(params![session.id, ids, session.started_at_wall], |row| {
+                    row.get(0)
+                })
+            })
+            .map_err(map_db)?;
+        if other {
+            beside.push((session, set));
+        }
+    }
+    Ok(beside)
+}
+
+/// Fills in the time each session shares with another copy of its game in
+/// the same quarter hours, which the totals count once. Running sessions,
+/// already brought up to the latest tick, are placed up to it.
+pub fn fill_copy_overlap(
+    db: &Database,
+    live: &LiveSessions,
+    sessions: &mut [Session],
+    now_ms: i64,
+) -> Result<()> {
+    let any_closed = sessions
+        .iter()
+        .any(|session| session.ended_at_wall.is_some());
+    let slices: Vec<(String, String, Slice)> = db.with_transaction(|conn| {
+        let mut slices = Vec::new();
+        let mut seen: HashSet<(String, i64)> = HashSet::new();
+        let mut add = |session: String, game: String, slice: Slice| {
+            if seen.insert((session.clone(), slice.start_ms)) {
+                slices.push((session, game, slice));
+            }
+        };
+        if any_closed {
+            for (session, game, slice) in stored_shared_slices(conn)? {
+                add(session, game, slice);
+            }
+        }
+        for (running, set) in running_beside_copies(conn)? {
+            let game = set[0].clone();
+            let from_ms = DateTime::parse_from_rfc3339(&running.started_at_wall)
+                .map_or(0, |start| start.timestamp_millis())
+                .div_euclid(PLAY_SLICE_MS)
+                * PLAY_SLICE_MS;
+            for (session, slice) in stored_slices_since(conn, &set, from_ms)? {
+                add(session, game.clone(), slice);
+            }
+            for slice in open_session_slices(conn, live, &running, now_ms)? {
+                add(running.id.clone(), game.clone(), slice);
+            }
+        }
+        Ok(slices)
+    })?;
+    if slices.is_empty() {
+        return Ok(());
+    }
+    let cells: Vec<(&str, Slice)> = slices
+        .iter()
+        .map(|(_, game, slice)| (game.as_str(), *slice))
+        .collect();
+    let mut shared: HashMap<&str, [i64; 3]> = HashMap::new();
+    for ((session, _, slice), counted) in slices.iter().zip(counted_once(&cells)) {
+        let lost = [
+            slice.runtime_ms - counted.runtime_ms,
+            slice.active_ms - counted.active_ms,
+            slice.idle_ms - counted.idle_ms,
+        ];
+        if lost != [0; 3] {
+            let sum = shared.entry(session.as_str()).or_default();
+            for (total, part) in sum.iter_mut().zip(lost) {
+                *total += part;
+            }
+        }
+    }
+    for session in sessions.iter_mut() {
+        if let Some([runtime_ms, active_ms, idle_ms]) = shared.get(session.id.as_str()) {
+            session.copy_overlap_ms = *runtime_ms;
+            session.copy_overlap_active_ms = *active_ms;
+            session.copy_overlap_idle_ms = *idle_ms;
+        }
+    }
+    Ok(())
 }
 
 /// Each game's time per bucket, from the local day `from` up to but not
@@ -303,8 +509,8 @@ pub fn play_totals<Tz: TimeZone>(
     let mut totals: BTreeMap<(String, String), [i64; 3]> = BTreeMap::new();
     // A linked game, another install here or a game of another PC, counts
     // as the game it is linked to.
-    let links = crate::db::repo::games::links(db)?;
-    for ((game, start_ms), [runtime_ms, active_ms, idle_ms]) in once_at_a_time(slices, &links) {
+    let links = games::links(db)?;
+    for ((game, start_ms), [runtime_ms, active_ms, idle_ms]) in once_at_a_time(&slices, &links) {
         let Some(key) = bucket_of(tz, start_ms, bucket) else {
             continue;
         };
@@ -668,6 +874,106 @@ mod tests {
         games::link_game(&db, &gog, None).unwrap();
         assert_eq!(day_minutes(&db, &steam), 60);
         assert_eq!(day_minutes(&db, &gog), 120);
+    }
+
+    /// Each listed session's runtime, active and idle time without what it
+    /// shares with another copy of its game.
+    fn counted_once_by_session(db: &Database, live: &LiveSessions, now_ms: i64) -> Vec<[i64; 3]> {
+        let mut listed = sessions::list_all_sessions(db).unwrap();
+        for session in &mut listed {
+            live.apply(session);
+        }
+        fill_copy_overlap(db, live, &mut listed, now_ms).unwrap();
+        listed
+            .iter()
+            .map(|session| {
+                [
+                    session.runtime_ms - session.copy_overlap_ms,
+                    session.active_ms - session.copy_overlap_active_ms,
+                    session.idle_ms - session.copy_overlap_idle_ms,
+                ]
+            })
+            .collect()
+    }
+
+    #[test]
+    fn sessions_of_linked_installs_add_up_to_the_totals() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (steam, gog, other) = (
+            game(&db, "Steam copy"),
+            game(&db, "GOG copy"),
+            game(&db, "Other"),
+        );
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        played_game(&db, &steam, "2026-10-02T18:00:00Z", 60);
+        played_game(&db, &gog, "2026-10-02T18:30:00Z", 60);
+        // A copy that starts and ends inside a quarter hour of the other.
+        played_game(&db, &gog, "2026-10-02T21:05:00Z", 5);
+        played_game(&db, &steam, "2026-10-02T21:00:00Z", 15);
+        // Another game beside it is no copy and keeps all of its time.
+        played_game(&db, &other, "2026-10-02T18:00:00Z", 90);
+
+        let once = counted_once_by_session(&db, &LiveSessions::default(), 0);
+        let sum = |index: usize| once.iter().map(|measures| measures[index]).sum::<i64>();
+        let totals = play_totals(
+            &db,
+            &LiveSessions::default(),
+            &FixedOffset::east_opt(0).unwrap(),
+            date("2026-10-02"),
+            date("2026-10-03"),
+            Bucket::Day,
+            None,
+            0,
+        )
+        .unwrap();
+        let total = |pick: fn(&PlayTotal) -> i64| totals.iter().map(pick).sum::<i64>();
+        assert_eq!(sum(0), total(|total| total.runtime_ms));
+        assert_eq!(sum(1), total(|total| total.active_ms));
+        assert_eq!(sum(2), total(|total| total.idle_ms));
+        assert_eq!(day_minutes(&db, &steam), 90 + 15);
+        assert_eq!(day_minutes(&db, &other), 90);
+        assert!(once.contains(&[90 * MINUTE, 90 * MINUTE, 0]));
+
+        // Unlinked, nothing is shared.
+        games::link_game(&db, &gog, None).unwrap();
+        let apart = counted_once_by_session(&db, &LiveSessions::default(), 0);
+        assert_eq!(
+            apart.iter().map(|measures| measures[0]).sum::<i64>(),
+            (60 + 60 + 5 + 15 + 90) * MINUTE
+        );
+    }
+
+    #[test]
+    fn a_running_copy_shares_its_time_with_the_copy_beside_it() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (steam, gog) = (game(&db, "Steam copy"), game(&db, "GOG copy"));
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        played_game(&db, &steam, "2026-10-02T18:00:00Z", 60);
+        let start = "2026-10-02T18:30:00Z";
+        let running = sessions::create_session_at(&db, &gog, "device", utc(start)).unwrap();
+        let live = LiveSessions::default();
+        live.update(
+            &running.id,
+            LiveCounters {
+                runtime_ms: 60 * MINUTE,
+                active_ms: 60 * MINUTE,
+                idle_ms: 0,
+            },
+        );
+        let now = (utc(start) + TimeDelta::minutes(60)).timestamp_millis();
+
+        let mut active = vec![running.clone()];
+        live.apply(&mut active[0]);
+        fill_copy_overlap(&db, &live, &mut active, now).unwrap();
+        // Half of the half hour both ran is the running copy's.
+        assert_eq!(active[0].copy_overlap_ms, 15 * MINUTE);
+        let once = counted_once_by_session(&db, &live, now);
+        assert_eq!(
+            once.iter().map(|measures| measures[0]).sum::<i64>(),
+            90 * MINUTE
+        );
     }
 
     #[test]

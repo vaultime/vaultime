@@ -332,7 +332,8 @@ pub fn set_preferred_game_asset(
     assets::set_preferred_game_asset(&db, &game_id, &asset_id)
 }
 
-/// Every session, running ones as of the tracker's latest tick.
+/// Every session, running ones as of the tracker's latest tick, each with
+/// the time it set aside and the time it shares with another copy of its game.
 #[tauri::command(async)]
 pub fn list_sessions(
     db: State<'_, Arc<Database>>,
@@ -342,7 +343,9 @@ pub fn list_sessions(
     for session in &mut all {
         live.apply(session);
     }
-    playtime::totals::fill_set_aside(&db, &live, &mut all, chrono::Utc::now().timestamp_millis())?;
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    playtime::totals::fill_set_aside(&db, &live, &mut all, now_ms)?;
+    playtime::totals::fill_copy_overlap(&db, &live, &mut all, now_ms)?;
     show_linked_games(&db, &mut all)?;
     Ok(all)
 }
@@ -384,12 +387,9 @@ pub fn get_active_sessions(
     for session in &mut active {
         live.apply(session);
     }
-    playtime::totals::fill_set_aside(
-        &db,
-        &live,
-        &mut active,
-        chrono::Utc::now().timestamp_millis(),
-    )?;
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    playtime::totals::fill_set_aside(&db, &live, &mut active, now_ms)?;
+    playtime::totals::fill_copy_overlap(&db, &live, &mut active, now_ms)?;
     show_linked_games(&db, &mut active)?;
     Ok(active)
 }
