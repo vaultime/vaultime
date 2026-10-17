@@ -3,7 +3,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   disable as disableAutostart,
   enable as enableAutostart,
@@ -11,22 +10,23 @@ import {
 } from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArchiveRestore, Download, ExternalLink, Eye, Loader2, RotateCcw, Upload } from "lucide-react";
+import { ExternalLink, Eye, RotateCcw } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { AppearanceSection } from "@/features/settings/AppearanceSection";
+import { DetectionSection } from "@/features/settings/DetectionSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
 import { IgnoredSection } from "@/features/settings/IgnoredSection";
+import { LocalBackupsSection } from "@/features/settings/LocalBackupsSection";
 import { UpdatesRow } from "@/features/settings/UpdatesRow";
 import { OtherPcsSection } from "@/features/settings/OtherPcsSection";
 import { ThisPcSection } from "@/features/settings/ThisPcSection";
 import { WindowSection } from "@/features/settings/WindowSection";
 import {
-  AUTO_BACKUP_KEEP,
   COPYRIGHT_NOTICE,
   DEFAULT_IDLE_THRESHOLD_SECS,
   IDLE_SAVE_DELAY_MS,
@@ -34,13 +34,10 @@ import {
   VAULTIME_URL,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
-import { formatLongDate, formatSessionStart } from "@/lib/time";
-import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
+import type { BackupSnapshot, TrackingDiagnostics } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { useScrollToAnchor } from "@/lib/anchors";
-import { continuesAs } from "@/lib/devices";
-import { capitalize, numberWords, plural, whichPc } from "@/lib/words";
-
+import { numberWords } from "@/lib/words";
 
 const LINKS = [
   { label: "Website", url: VAULTIME_URL },
@@ -50,32 +47,6 @@ const LINKS = [
 ];
 
 const PLATFORM_NAMES: Record<string, string> = { windows: "Windows", linux: "Linux", macos: "macOS" };
-
-const FOREGROUND: Record<string, { title: string; description: string }> = {
-  win32_api: { title: "Windows foreground window", description: "Read straight from Windows." },
-  x11: { title: "X11 active window", description: "The active X11 window is traced back to its process." },
-  macos_system: { title: "macOS frontmost app", description: "Asked from the macOS window server." },
-};
-
-const IDLE: Record<string, { title: string; description: string }> = {
-  win32_api: { title: "Windows last input", description: "The time since the last key press or mouse move." },
-  x11_input: { title: "X11 input events", description: "The time since the last key press, click or mouse move." },
-  x11: { title: "X11 idle timer", description: "The idle time X11 reports for this session." },
-  gnome_dbus: { title: "GNOME idle monitor", description: "The time since the last input, from GNOME." },
-  macos_ioreg: { title: "macOS input timer", description: "The idle counter of the input devices." },
-};
-
-const CONTROLLERS: Record<string, { title: string; description: string }> = {
-  xinput: { title: "XInput", description: "Buttons and sticks of Xbox and other XInput controllers count as input." },
-  evdev: { title: "Controller devices", description: "Buttons and sticks of every connected controller count as input." },
-};
-
-const NO_CONTROLLERS = { title: "Not read", description: "Only the keyboard and mouse count as input here." };
-
-const FALLBACK = {
-  title: "Process activity",
-  description: "No direct signal here, so Vaultime judges by what the game process does.",
-};
 
 export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
@@ -90,19 +61,17 @@ export function SettingsPage() {
   const pendingIdle = useRef<{ seconds: number; timer: number } | null>(null);
   const [backgroundActive, setBackgroundActive] = useState(false);
   const [diagnostics, setDiagnostics] = useState<TrackingDiagnostics | null>(null);
-  const [snapshots, setSnapshots] = useState<BackupSnapshot[]>([]);
+  const [backups, setBackups] = useState<{ autoBackup: boolean; folder: string; snapshots: BackupSnapshot[] }>({
+    autoBackup: true,
+    folder: "",
+    snapshots: [],
+  });
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [backupBusy, setBackupBusy] = useState(false);
-  const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [restorePreview, setRestorePreview] = useState<LocalBackupSummary | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
   const [trayAvailable, setTrayAvailable] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
-  const [autoBackup, setAutoBackup] = useState(true);
-  const [autoBackupFolder, setAutoBackupFolder] = useState("");
   const [autostart, setAutostart] = useState(false);
   const [autoDiscover, setAutoDiscover] = useState(true);
-  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,24 +84,24 @@ export function SettingsPage() {
       api.trayAvailable().catch(() => false),
       autostartEnabled().catch(() => false),
       api.getAutoBackupFolder().catch(() => ""),
-      api.getDeviceId().catch(() => null),
     ])
-      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder, thisDevice]) => {
+      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder]) => {
         if (cancelled) return;
         const values = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
         setTrayAvailable(Boolean(tray));
         setCloseToTray(values[SETTING_KEYS.closeToTray] !== "false");
-        setAutoBackup(values[SETTING_KEYS.autoBackup] !== "false");
         setAutoDiscover(values[SETTING_KEYS.autoDiscover] !== "false");
-        setAutoBackupFolder(backupFolder);
-        setDeviceId(thisDevice);
+        setBackups({
+          autoBackup: values[SETTING_KEYS.autoBackup] !== "false",
+          folder: backupFolder,
+          snapshots: nextSnapshots,
+        });
         setAutostart(Boolean(startsAtLogin));
         const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
         savedIdle.current = Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS;
         setIdleSeconds(savedIdle.current);
         setBackgroundActive(values[SETTING_KEYS.backgroundActive] === "true");
         setDiagnostics(nextDiagnostics);
-        setSnapshots(nextSnapshots);
         setAppVersion(version);
       })
       .catch((loadError) => {
@@ -188,92 +157,25 @@ export function SettingsPage() {
     pendingIdle.current = { seconds: next, timer };
   }
 
-  async function changeBackgroundActive(next: boolean) {
-    setBackgroundActive(next);
+  /** Shows a switch's new state at once and turns it back when saving fails. */
+  async function toggle(set: (value: boolean) => void, next: boolean, save: () => Promise<unknown>) {
+    set(next);
     try {
-      await api.setSetting(SETTING_KEYS.backgroundActive, String(next));
+      await save();
     } catch (saveError) {
-      setBackgroundActive(!next);
+      set(!next);
       setError(describeError(saveError));
     }
   }
-
-  async function changeCloseToTray(next: boolean) {
-    setCloseToTray(next);
-    try {
-      await api.setSetting(SETTING_KEYS.closeToTray, String(next));
-    } catch (saveError) {
-      setCloseToTray(!next);
-      setError(describeError(saveError));
-    }
-  }
-
-  async function changeAutoBackup(next: boolean) {
-    setAutoBackup(next);
-    try {
-      await api.setSetting(SETTING_KEYS.autoBackup, String(next));
-    } catch (saveError) {
-      setAutoBackup(!next);
-      setError(describeError(saveError));
-    }
-  }
-
-  async function changeAutoDiscover(next: boolean) {
-    setAutoDiscover(next);
-    try {
-      await api.setSetting(SETTING_KEYS.autoDiscover, String(next));
-    } catch (saveError) {
-      setAutoDiscover(!next);
-      setError(describeError(saveError));
-    }
-  }
-
-  async function changeAutostart(next: boolean) {
-    setAutostart(next);
-    try {
-      await (next ? enableAutostart() : disableAutostart());
-    } catch (autostartError) {
-      setAutostart(!next);
-      setError(describeError(autostartError));
-    }
-  }
-
-  async function runBackupTask(task: () => Promise<void>) {
-    try {
-      setBackupBusy(true);
-      setError(null);
-      setBackupMessage(null);
-      await task();
-    } catch (backupError) {
-      setError(describeError(backupError));
-    } finally {
-      setBackupBusy(false);
-    }
-  }
-
-  async function chooseFolder(title: string): Promise<string | null> {
-    const selected = await openFileDialog({ multiple: false, directory: true, title });
-    return typeof selected === "string" ? selected : null;
-  }
-
-  const exportBackup = () =>
-    runBackupTask(async () => {
-      const folder = await chooseFolder("Choose where to save the backup");
-      if (!folder) return;
-      const summary = await api.exportLocalBackup(folder);
-      setBackupMessage(`Saved to ${summary.backup_path}`);
-      setRestorePreview(null);
-      setSnapshots(await api.listBackupSnapshots());
-    });
+  const saveSetting = (key: string, next: boolean) => () => api.setSetting(key, String(next));
 
   useScrollToAnchor(loaded);
   // A request from the palette runs once the page is there, also when
   // Settings is open already, then leaves the address, so going back does
-  // not run it again. Exports start in their own section.
+  // not run it again. Backups and exports start in their own sections.
   useEffect(() => {
     if (!intent) return;
     const timer = setTimeout(() => {
-      if (intent === "backup") void exportBackup();
       setParams(
         (next) => {
           next.delete("do");
@@ -286,32 +188,6 @@ export function SettingsPage() {
     // Once per request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent]);
-
-  const changeAutoBackupFolder = () =>
-    runBackupTask(async () => {
-      const folder = await chooseFolder("Choose where automatic backups go");
-      if (!folder) return;
-      await api.setSetting(SETTING_KEYS.autoBackupFolder, folder);
-      setAutoBackupFolder(await api.getAutoBackupFolder());
-    });
-
-  const chooseRestore = () =>
-    runBackupTask(async () => {
-      const folder = await chooseFolder("Choose a Vaultime backup folder");
-      if (!folder) return;
-      setRestorePreview(await api.inspectLocalBackup(folder));
-    });
-
-  const restore = () =>
-    runBackupTask(async () => {
-      if (!restorePreview) return;
-      const summary = await api.importLocalBackup(restorePreview.backup_path);
-      setRestorePreview(null);
-      setBackupMessage(summary.continues_as ? `Backup restored. ${continuesAs(summary.continues_as)}` : "Backup restored.");
-      if (summary.restart_required) setRestartRequired(true);
-      setSnapshots(await api.listBackupSnapshots());
-      await refresh();
-    });
 
   if (!loaded) return null;
 
@@ -327,9 +203,6 @@ export function SettingsPage() {
   }
 
   const platform = PLATFORM_NAMES[diagnostics?.platform ?? ""] ?? "this system";
-  const foreground = FOREGROUND[diagnostics?.foreground_detection ?? ""] ?? FALLBACK;
-  const idle = IDLE[diagnostics?.idle_detection ?? ""] ?? FALLBACK;
-  const controllers = CONTROLLERS[diagnostics?.controller_detection ?? ""];
   const pollSeconds = diagnostics?.poll_interval_seconds;
 
   return (
@@ -372,7 +245,9 @@ export function SettingsPage() {
             <Switch
               id="background-active"
               checked={backgroundActive}
-              onCheckedChange={(checked) => void changeBackgroundActive(checked)}
+              onCheckedChange={(checked) =>
+                void toggle(setBackgroundActive, checked, saveSetting(SETTING_KEYS.backgroundActive, checked))
+              }
             />
           </PageRow>
         </PageSection>
@@ -391,7 +266,9 @@ export function SettingsPage() {
               id="close-to-tray"
               checked={trayAvailable && closeToTray}
               disabled={!trayAvailable}
-              onCheckedChange={(checked) => void changeCloseToTray(checked)}
+              onCheckedChange={(checked) =>
+                void toggle(setCloseToTray, checked, saveSetting(SETTING_KEYS.closeToTray, checked))
+              }
             />
           </PageRow>
           <PageRow
@@ -403,7 +280,13 @@ export function SettingsPage() {
                 : "Opens Vaultime when you log in."
             }
           >
-            <Switch id="autostart" checked={autostart} onCheckedChange={(checked) => void changeAutostart(checked)} />
+            <Switch
+              id="autostart"
+              checked={autostart}
+              onCheckedChange={(checked) =>
+                void toggle(setAutostart, checked, () => (checked ? enableAutostart() : disableAutostart()))
+              }
+            />
           </PageRow>
           <PageRow
             label="Look for new games when Vaultime starts"
@@ -413,7 +296,9 @@ export function SettingsPage() {
             <Switch
               id="auto-discover"
               checked={autoDiscover}
-              onCheckedChange={(checked) => void changeAutoDiscover(checked)}
+              onCheckedChange={(checked) =>
+                void toggle(setAutoDiscover, checked, saveSetting(SETTING_KEYS.autoDiscover, checked))
+              }
             />
           </PageRow>
         </PageSection>
@@ -449,137 +334,18 @@ export function SettingsPage() {
 
         <EarlierPlaytimeSection onError={setError} />
 
-        <PageSection
-          title="Detection"
-          description="The signals this PC offers. Where a direct signal is missing, Vaultime falls back to process activity."
-        >
-          <PageRow label="System">{platform}</PageRow>
-          <PageRow label="Tracking">
-            <span className="flex items-center gap-2">
-              <span className={diagnostics?.running ? "size-2 rounded-full bg-violet" : "size-2 rounded-full bg-amber"} />
-              {diagnostics?.running ? "Running" : "Stopped"}
-            </span>
-          </PageRow>
-          <PageRow label="Which window is in front" hint={foreground.description}>
-            <span className="text-soft">{foreground.title}</span>
-          </PageRow>
-          <PageRow label="Whether you are there" hint={idle.description}>
-            <span className="text-soft">{idle.title}</span>
-          </PageRow>
-          <PageRow label="Controllers" hint={(controllers ?? NO_CONTROLLERS).description}>
-            <span className="text-soft">
-              {(controllers ?? NO_CONTROLLERS).title}
-              {controllers && diagnostics && (
-                <span className="text-faint tabular-nums">, {diagnostics.controllers_connected} connected</span>
-              )}
-            </span>
-          </PageRow>
-          {pollSeconds && (
-            <PageRow label="Checks every">
-              <span className="font-mono">{pollSeconds} s</span>
-            </PageRow>
-          )}
-        </PageSection>
+        <DetectionSection diagnostics={diagnostics} platform={platform} />
 
         <ThisPcSection onError={setError} />
 
         <OtherPcsSection onError={setError} />
 
-        <PageSection
-          title="Local backups"
-          description="A backup is a folder with the database, the cached artwork and a checksum for every file."
-        >
-          <PageRow
-            label="Back up automatically"
-            htmlFor="auto-backup"
-            hint={`Once a day and when Vaultime quits. The newest ${numberWords(AUTO_BACKUP_KEEP)} are kept, backups you save yourself are never deleted.`}
-          >
-            <Switch id="auto-backup" checked={autoBackup} onCheckedChange={(checked) => void changeAutoBackup(checked)} />
-          </PageRow>
-          <PageRow
-            label={
-              <>
-                Automatic backups go to
-                <span className="mt-1 block font-mono text-xs break-all text-soft">
-                  {autoBackupFolder || "Not set"}
-                </span>
-              </>
-            }
-            hint="A folder on another drive or one that syncs keeps them safe if this drive fails."
-          >
-            <Button variant="outline" size="sm" onClick={changeAutoBackupFolder} disabled={backupBusy}>
-              Change
-            </Button>
-          </PageRow>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button onClick={exportBackup} disabled={backupBusy}>
-              {backupBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-              Save a backup
-            </Button>
-            <Button variant="outline" onClick={chooseRestore} disabled={backupBusy}>
-              <Upload className="size-4" />
-              Restore from a backup
-            </Button>
-          </div>
-          {backupMessage && <Notice className="mt-5">{backupMessage}</Notice>}
-
-          {restorePreview && (
-            <div className="mt-6 border-l-2 border-amber py-1 pl-5">
-              <p className="text-[15px]">
-                Backup from {formatLongDate(restorePreview.created_at)}
-                {whichPc(restorePreview.source_device_id, deviceId) &&
-                  `, made on ${whichPc(restorePreview.source_device_id, deviceId)}`}
-                .
-              </p>
-              <p className="mt-2 font-mono text-sm text-soft">
-                {plural(restorePreview.games_count, "game")}, {plural(restorePreview.sessions_count, "session")},{" "}
-                {plural(restorePreview.asset_file_count, "image")}
-              </p>
-              {restorePreview.continues_as && (
-                <p className="mt-3 max-w-[560px] text-[15px] leading-relaxed">
-                  {continuesAs(restorePreview.continues_as)}{" "}
-                  <span className="text-[13px] text-faint">
-                    This PC has no history of its own yet, so it takes over the backup&apos;s PC: its sessions count
-                    as this PC&apos;s own, and so do sessions it played after the backup that come in by merge.
-                  </span>
-                </p>
-              )}
-              <p className="mt-3 max-w-[560px] text-[13px] leading-relaxed text-faint">
-                Restoring replaces the library, sessions, event logs and covers on this PC. Close running games
-                first. Vaultime asks for a restart afterwards so tracking picks up cleanly.
-              </p>
-              <div className="mt-4 flex items-center gap-4">
-                <Button variant="destructive" onClick={restore} disabled={backupBusy}>
-                  <ArchiveRestore className="size-4" />
-                  Replace with this backup
-                </Button>
-                <Button variant="ghost" onClick={() => setRestorePreview(null)} disabled={backupBusy}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <h3 className="label-caps mt-8 mb-1">History</h3>
-          {snapshots.length === 0 ? (
-            <p className="py-3 text-sm text-faint">No backups saved or restored yet.</p>
-          ) : (
-            snapshots.map((snapshot) => (
-              <div key={snapshot.id} className="flex items-baseline gap-5 border-b border-rule py-3 last:border-b-0">
-                <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
-                  {formatSessionStart(snapshot.created_at)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm">{capitalize(snapshot.restore_point_label ?? "Local backup")}</div>
-                  <div className="mt-0.5 truncate text-xs text-faint">
-                    {[whichPc(snapshot.source_device_id, deviceId), snapshot.remote_path].filter(Boolean).join(", ")}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </PageSection>
+        <LocalBackupsSection
+          initial={backups}
+          start={intent === "backup"}
+          onError={setError}
+          onRestartRequired={() => setRestartRequired(true)}
+        />
 
         <ExportSection start={intent === "export-csv" ? "csv" : intent === "export-json" ? "json" : null} />
 
