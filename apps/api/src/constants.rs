@@ -57,6 +57,12 @@ pub const HASH_QUEUE_WAIT_SECS: u64 = 10;
 pub const UPLOAD_LOCK_WAIT_SECS: u64 = 60;
 /// Longest pause between two parts of an upload before it counts as stalled, in seconds.
 pub const UPLOAD_IDLE_SECS: u64 = 120;
+/// Write buffer of an upload, in bytes. Large writes keep the trips to the
+/// blocking pool few. An upload holds about twice this in memory, and each
+/// account uploads one thing at a time.
+pub const UPLOAD_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
+/// Bytes read from disk per chunk of a download.
+pub const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
 /// Devices one account may register.
 pub const MAX_DEVICES_PER_ACCOUNT: i64 = 50;
 /// Longest device id, name, platform or app version, in characters.

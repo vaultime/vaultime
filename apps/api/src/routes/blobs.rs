@@ -7,24 +7,19 @@
 //! tell what it shows.
 
 use std::collections::HashSet;
-use std::io::ErrorKind;
 
 use axum::Json;
-use axum::body::Body;
 use axum::extract::{Path as AxumPath, Request, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE};
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::StatusCode;
+use axum::http::header::CONTENT_LENGTH;
 use axum::response::Response;
-use tokio::fs::{self, File};
-use tokio_util::io::ReaderStream;
+use tokio::fs;
 use uuid::Uuid;
 
-use super::backups::{is_sha256_hex, receive_body, remove_file_if_present};
+use super::backups::{is_sha256_hex, receive_body, remove_file_if_present, stored_file_response};
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
-use crate::constants::{
-    BYTES_PER_GIB, BYTES_PER_MIB, MAX_BLOB_IDS_PER_REQUEST, UPLOAD_LOCK_WAIT_SECS,
-};
+use crate::constants::{BYTES_PER_GIB, BYTES_PER_MIB, MAX_BLOB_IDS_PER_REQUEST};
 use crate::error::{AppError, AppResult};
 use crate::models::{MissingBlobsRequest, MissingBlobsResponse, StorageResponse};
 
@@ -56,19 +51,7 @@ pub async fn upload_blob(
     request: Request,
 ) -> AppResult<StatusCode> {
     let blob_id = validate_blob_id(&blob_id)?;
-    let Some(_upload) = state
-        .limits
-        .uploads
-        .lock_within(
-            auth.account_id,
-            std::time::Duration::from_secs(UPLOAD_LOCK_WAIT_SECS),
-        )
-        .await
-    else {
-        return Err(AppError::conflict(
-            "another upload of this account is still running",
-        ));
-    };
+    let _upload = state.limits.uploads.lock(auth.account_id).await?;
     if blob_exists(&state, auth.account_id, &blob_id).await? {
         return Ok(StatusCode::OK);
     }
@@ -89,13 +72,7 @@ pub async fn upload_blob(
 
     let storage_key = format!("{}/blobs/{blob_id}.{}", auth.account_id, Uuid::new_v4());
     let final_path = state.config.backup_root.join(&storage_key);
-    let temp_path = final_path.with_file_name(format!(
-        "{}.part",
-        final_path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    ));
+    let temp_path = state.config.backup_root.join(format!("{storage_key}.part"));
     if let Some(parent) = final_path.parent() {
         fs::create_dir_all(parent).await?;
     }
@@ -157,23 +134,12 @@ pub async fn download_blob(
     .await?
     .ok_or_else(|| AppError::not_found("artwork not found"))?;
 
-    let file = match File::open(state.config.backup_root.join(&storage_key)).await {
-        Ok(file) => file,
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            return Err(AppError::not_found("artwork file is missing on disk"));
-        }
-        Err(error) => return Err(error.into()),
-    };
-
-    let mut response = Response::new(Body::from_stream(ReaderStream::new(file)));
-    let headers = response.headers_mut();
-    headers.insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
-    headers.insert(CONTENT_LENGTH, HeaderValue::from(size_bytes));
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    Ok(response)
+    stored_file_response(
+        &state.config.backup_root.join(&storage_key),
+        size_bytes,
+        "artwork file is missing on disk",
+    )
+    .await
 }
 
 pub async fn storage(

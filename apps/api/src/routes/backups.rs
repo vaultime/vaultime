@@ -25,7 +25,10 @@ use super::blobs::{
 };
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
-use crate::constants::{BYTES_PER_MIB, SECS_PER_MINUTE, UPLOAD_IDLE_SECS, UPLOAD_LOCK_WAIT_SECS};
+use crate::constants::{
+    BYTES_PER_MIB, DOWNLOAD_CHUNK_BYTES, SECS_PER_MINUTE, UPLOAD_IDLE_SECS,
+    UPLOAD_WRITE_BUFFER_BYTES,
+};
 use crate::error::{AppError, AppResult};
 use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
 
@@ -70,19 +73,7 @@ pub async fn create_backup(
 
     let blob_ids = validate_blob_ids(&payload.blob_ids)?;
 
-    let Some(_upload) = state
-        .limits
-        .uploads
-        .lock_within(
-            auth.account_id,
-            std::time::Duration::from_secs(UPLOAD_LOCK_WAIT_SECS),
-        )
-        .await
-    else {
-        return Err(AppError::conflict(
-            "another upload of this account is still running",
-        ));
-    };
+    let _upload = state.limits.uploads.lock(auth.account_id).await?;
     prune_stale_pending_backups(&state, auth.account_id).await?;
     enforce_backup_limits(&state, auth.account_id).await?;
 
@@ -160,19 +151,7 @@ pub async fn upload_backup_content(
     AxumPath(backup_id): AxumPath<Uuid>,
     request: Request,
 ) -> AppResult<Json<BackupRecordResponse>> {
-    let Some(_upload) = state
-        .limits
-        .uploads
-        .lock_within(
-            auth.account_id,
-            std::time::Duration::from_secs(UPLOAD_LOCK_WAIT_SECS),
-        )
-        .await
-    else {
-        return Err(AppError::conflict(
-            "another upload of this account is still running",
-        ));
-    };
+    let _upload = state.limits.uploads.lock(auth.account_id).await?;
     let backup = find_backup(&state, auth.account_id, backup_id).await?;
     if backup.status == "complete" {
         return Err(AppError::conflict(
@@ -289,33 +268,48 @@ pub async fn download_backup(
         ));
     }
 
-    let file_path = backup_path(&state.config.backup_root, &backup.storage_key);
-    let file = match File::open(&file_path).await {
-        Ok(file) => file,
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            return Err(AppError::not_found("backup file is missing on disk"));
-        }
-        Err(error) => return Err(error.into()),
-    };
-
-    let mut response = Response::new(Body::from_stream(ReaderStream::new(file)));
-    let headers = response.headers_mut();
-    headers.insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
-    headers.insert(CONTENT_LENGTH, HeaderValue::from(backup.size_bytes));
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    let mut response = stored_file_response(
+        &backup_path(&state.config.backup_root, &backup.storage_key),
+        backup.size_bytes,
+        "backup file is missing on disk",
+    )
+    .await?;
 
     if query.attachment.unwrap_or(true) {
         let disposition = format!("attachment; filename=\"vaultime-backup-{}.enc\"", backup.id);
-        headers.insert(
+        response.headers_mut().insert(
             CONTENT_DISPOSITION,
             HeaderValue::from_str(&disposition)
                 .map_err(|error| AppError::internal(format!("invalid filename header: {error}")))?,
         );
     }
 
+    Ok(response)
+}
+
+/// Streams a stored backup or blob of `size_bytes` to the client.
+pub(super) async fn stored_file_response(
+    path: &Path,
+    size_bytes: i64,
+    missing: &'static str,
+) -> AppResult<Response> {
+    let file = match File::open(path).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Err(AppError::not_found(missing));
+        }
+        Err(error) => return Err(error.into()),
+    };
+
+    let stream = ReaderStream::with_capacity(file, DOWNLOAD_CHUNK_BYTES);
+    let mut response = Response::new(Body::from_stream(stream));
+    let headers = response.headers_mut();
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    headers.insert(CONTENT_LENGTH, HeaderValue::from(size_bytes));
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
 
@@ -350,13 +344,14 @@ async fn find_backup(
 }
 
 /// Streams the body to `path` and returns its size and SHA-256 hex digest. Returns `None` as soon
-/// as the body grows past `max_bytes`.
+/// as the body grows past `max_bytes`. The file is on disk once this returns, so a crash after the
+/// database calls it stored cannot leave it empty.
 pub(super) async fn receive_body(
     body: Body,
     path: &Path,
     max_bytes: i64,
 ) -> AppResult<Option<(i64, String)>> {
-    let mut writer = BufWriter::new(File::create(path).await?);
+    let mut writer = BufWriter::with_capacity(UPLOAD_WRITE_BUFFER_BYTES, File::create(path).await?);
     let mut stream = body.into_data_stream();
     let mut hasher = Sha256::new();
     let mut size_bytes = 0_i64;
@@ -378,6 +373,7 @@ pub(super) async fn receive_body(
         writer.write_all(&chunk).await?;
     }
     writer.flush().await?;
+    writer.get_ref().sync_all().await?;
 
     Ok(Some((size_bytes, hex::encode(hasher.finalize()))))
 }

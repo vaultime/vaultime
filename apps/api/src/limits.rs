@@ -18,7 +18,9 @@ use crate::constants::{
     AUTH_REQUESTS_PER_WINDOW_PER_CLIENT, BETA_APPLICATIONS_PER_HOUR_PER_CLIENT,
     LOGIN_FAILURES_PER_WINDOW_PER_EMAIL, LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT,
     MAX_CONCURRENT_PASSWORD_HASHES, RATE_LIMIT_MAX_KEYS, RATE_WINDOW_SECS, SECS_PER_HOUR,
+    UPLOAD_LOCK_WAIT_SECS,
 };
+use crate::error::{AppError, AppResult};
 
 pub struct Limits {
     /// Sign-up, sign-in, refresh and password changes per client address.
@@ -65,7 +67,7 @@ impl Limits {
         }
     }
 
-    /// Forgets counts whose window has passed.
+    /// Forgets counts whose window has passed and upload locks nobody holds.
     pub fn prune(&self) {
         for limiter in [
             &self.auth_by_client,
@@ -75,6 +77,7 @@ impl Limits {
         ] {
             limiter.prune(Instant::now());
         }
+        self.uploads.prune();
     }
 }
 
@@ -188,12 +191,15 @@ impl AccountLocks {
         )
     }
 
+    /// Waits for the account's other upload to finish, or turns this one away.
+    pub async fn lock(&self, account_id: Uuid) -> AppResult<OwnedMutexGuard<()>> {
+        self.lock_within(account_id, Duration::from_secs(UPLOAD_LOCK_WAIT_SECS))
+            .await
+            .ok_or_else(|| AppError::conflict("another upload of this account is still running"))
+    }
+
     /// Waits at most `wait` for the account's other upload to finish.
-    pub async fn lock_within(
-        &self,
-        account_id: Uuid,
-        wait: Duration,
-    ) -> Option<OwnedMutexGuard<()>> {
+    async fn lock_within(&self, account_id: Uuid, wait: Duration) -> Option<OwnedMutexGuard<()>> {
         tokio::time::timeout(wait, self.lock_for(account_id).lock_owned())
             .await
             .ok()
@@ -202,6 +208,15 @@ impl AccountLocks {
     /// The lock if no upload of the account runs right now.
     pub fn try_lock(&self, account_id: Uuid) -> Option<OwnedMutexGuard<()>> {
         self.lock_for(account_id).try_lock_owned().ok()
+    }
+
+    /// Drops the locks no upload holds or waits for. Those hold the only
+    /// other references.
+    fn prune(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|_, lock| Arc::strong_count(lock) > 1);
     }
 }
 
@@ -287,7 +302,11 @@ mod tests {
         assert!(locks.try_lock(Uuid::new_v4()).is_some());
         assert!(locks.lock_within(account, wait).await.is_none());
         assert!(locks.try_lock(account).is_none());
+        locks.prune();
+        assert_eq!(locks.0.lock().unwrap().len(), 1);
         drop(first);
         assert!(locks.lock_within(account, wait).await.is_some());
+        locks.prune();
+        assert!(locks.0.lock().unwrap().is_empty());
     }
 }
