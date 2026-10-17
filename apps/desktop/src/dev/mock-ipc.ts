@@ -19,6 +19,8 @@
 // /stats?share=1 opens the year card, ?shareformat=square|story picks a
 // format and ?sharegames=0 leaves titles and covers off. ?quiet=1 leaves a
 // year with little play.
+// ?autodiscover=1 offers games the look at start found since last time, and
+// ?autodiscover=first as on the first look. They come once, as in the app.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -503,6 +505,15 @@ function discovered(title: string, path: string, source: string, alreadyAdded = 
   const installFolder = source === "folder_scan" ? null : path.slice(0, path.lastIndexOf("/"));
   return { title, executable_path: path, install_folder: installFolder, source, source_id: null, already_added: alreadyAdded };
 }
+
+/** Games the look at start found, offered once with ?autodiscover=1 or ?autodiscover=first. */
+const autoDiscover = params.get("autodiscover");
+const foundAtStart = [
+  discovered("Alan Wake 2", "C:/Epic Games/AlanWake2/AlanWake2.exe", "epic"),
+  discovered("Diablo IV", "D:/BlizzardLibrary/Diablo IV/Diablo IV.exe", "battlenet"),
+  discovered("Slay the Spire 2", "C:/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.exe", "steam"),
+];
+let foundOffered = false;
 
 /** Programs ignored in the preview, ?ignored=1 starts with one. */
 let ignoredPrograms: IgnoredProgram[] =
@@ -1463,6 +1474,13 @@ mockIPC((cmd, payload) => {
         // Inside the GOG game's folder, so the dialog leaves it out.
         discovered("StardewModdingAPI", "C:/GOG Games/Stardew Valley/StardewModdingAPI.exe", "folder_scan"),
       ];
+    case "list_found_games":
+      return autoDiscover && !foundOffered
+        ? { games: foundAtStart, since_last: autoDiscover !== "first" }
+        : { games: [], since_last: false };
+    case "remember_offered_games":
+      foundOffered = true;
+      return (args.paths as string[]).length;
     case "list_game_assets":
       return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":

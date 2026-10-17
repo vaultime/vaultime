@@ -291,6 +291,13 @@ export interface DiscoveredGame {
   already_added: boolean;
 }
 
+/** Games the look at start found that the player was never shown. */
+export interface NewGames {
+  games: DiscoveredGame[];
+  /** True when discovery showed games on this PC before, so these are new since then. */
+  since_last: boolean;
+}
+
 /** Part of an image that becomes a cover, in shares of its width and height. */
 export interface CropRect {
   x: number;

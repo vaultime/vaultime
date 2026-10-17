@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useSearchParams } from "react-router";
 import { Backdrop } from "@/features/appearance/Backdrop";
+import { DiscoverGamesDialog } from "@/features/library/components/DiscoverGamesDialog";
+import { useLibrary } from "@/features/library/library-context";
+import { useFoundGames } from "@/features/library/use-found-games";
 import { requestFind } from "@/lib/find";
+import { otherDialogOpen } from "@/lib/found-games";
 import { CommandPalette } from "./CommandPalette";
 import { LiveBar } from "./LiveBar";
 import { Rail } from "./Rail";
@@ -12,6 +16,9 @@ import { UpdateBanner } from "./UpdateBanner";
 
 export function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const { refresh } = useLibrary();
+  const { found, dismiss } = useFoundGames(otherDialogOpen(searchParams, paletteOpen));
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -43,6 +50,14 @@ export function AppLayout() {
       </main>
       <LiveBar />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <DiscoverGamesDialog
+        open={found !== null}
+        found={found}
+        onOpenChange={(open) => {
+          if (!open) dismiss();
+        }}
+        onImported={() => void refresh()}
+      />
     </div>
   );
 }

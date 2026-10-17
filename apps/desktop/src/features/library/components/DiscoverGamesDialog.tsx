@@ -14,8 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { foundGamesText, offeredPaths } from "@/lib/found-games";
 import * as api from "@/lib/tauri";
-import type { DiscoveredGame } from "@/lib/types";
+import type { DiscoveredGame, NewGames } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
@@ -42,30 +43,46 @@ function pathKey(path: string): string {
   return path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
 }
 
+/** Games found at start, by title. All of them come from launchers, so all start selected. */
+function foundResults(found: NewGames | null | undefined): DiscoveredGame[] {
+  return [...(found?.games ?? [])].sort((a, b) => a.title.localeCompare(b.title));
+}
+
 export function DiscoverGamesDialog({
   open,
   onOpenChange,
   onImported,
+  found,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: () => void;
+  /** Games the look at start found. The dialog opens with them instead of a scan. */
+  found?: NewGames | null;
 }) {
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [results, setResults] = useState<DiscoveredGame[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [scanned, setScanned] = useState(false);
+  const [results, setResults] = useState<DiscoveredGame[]>(() => foundResults(found));
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(foundResults(found).map((game) => game.executable_path)),
+  );
+  const [scanned, setScanned] = useState(Boolean(found));
+  // The found games while the dialog shows them, until a full scan. Kept
+  // while the dialog closes, so its words stay.
+  const [shownFound, setShownFound] = useState(found ?? null);
+  const showingFound = shownFound !== null;
   const [error, setError] = useState<string | null>(null);
 
-  // Start over every time the dialog opens.
+  // Start over every time the dialog opens, with the found games if there are any.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setResults([]);
-      setSelected(new Set());
-      setScanned(false);
+      const initial = foundResults(found);
+      setResults(initial);
+      setSelected(new Set(initial.map((game) => game.executable_path)));
+      setScanned(Boolean(found));
+      setShownFound(found ?? null);
       setError(null);
       setScanning(false);
       setImporting(false);
@@ -75,6 +92,7 @@ export function DiscoverGamesDialog({
   async function handleScan() {
     try {
       setScanning(true);
+      setShownFound(null);
       setError(null);
       setResults([]);
       setSelected(new Set());
@@ -112,6 +130,10 @@ export function DiscoverGamesDialog({
         a.already_added !== b.already_added ? (a.already_added ? 1 : -1) : a.title.localeCompare(b.title),
       );
       setResults(merged);
+      // What the player saw here never comes back as found at start.
+      api.rememberOfferedGames(offeredPaths(merged)).catch((rememberError) => {
+        console.warn("offered games not remembered", rememberError);
+      });
 
       // Folder scan hits are guesses, so only launcher results start selected.
       setSelected(
@@ -171,15 +193,16 @@ export function DiscoverGamesDialog({
 
   const newCount = results.filter((game) => !game.already_added).length;
   const selectedCount = selected.size;
+  const foundText = shownFound ? foundGamesText(shownFound) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Discover games</DialogTitle>
+          <DialogTitle>{foundText?.title ?? "Discover games"}</DialogTitle>
           <DialogDescription>
-            Reads what Steam, Xbox, Epic, GOG, EA, Ubisoft, Battle.net, Riot, Rockstar, Amazon, itch.io and other
-            launchers have installed, and looks through the usual install folders on every drive.
+            {foundText?.description ??
+              "Reads what Steam, Xbox, Epic, GOG, EA, Ubisoft, Battle.net, Riot, Rockstar, Amazon, itch.io and other launchers have installed, and looks through the usual install folders on every drive."}
           </DialogDescription>
         </DialogHeader>
 
@@ -198,7 +221,7 @@ export function DiscoverGamesDialog({
           <div>
             <div className="flex items-center justify-between pb-2">
               <p className="text-sm text-faint">
-                {plural(results.length, "game")} found
+                {showingFound ? plural(results.length, "new game") : `${plural(results.length, "game")} found`}
                 {newCount < results.length && `, ${results.length - newCount} already in your library`}
               </p>
               <div className="flex gap-1">
@@ -269,15 +292,20 @@ export function DiscoverGamesDialog({
                 );
               })}
             </ul>
+            {showingFound && (
+              <p className="pt-3 text-xs text-faint">
+                Games you leave out are not offered again. Discover in the library still lists everything.
+              </p>
+            )}
           </div>
         )}
 
         <DialogFooter>
-          <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
+          <DialogClose render={<Button variant="ghost" />}>{showingFound ? "Not now" : "Cancel"}</DialogClose>
           {scanned && (
             <Button variant="outline" onClick={handleScan} disabled={scanning}>
               {scanning ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-              Scan again
+              {showingFound ? "Show everything" : "Scan again"}
             </Button>
           )}
           {scanned && newCount > 0 && (

@@ -53,6 +53,8 @@ export const SETTING_KEYS = {
   cloudAutoBackup: "cloud_auto_backup_enabled",
   /** How the rail sorts the games. Same as RAIL_SORT_SETTING in constants.rs. */
   railSort: "rail_sort",
+  /** Looking for new games at start, on unless `false`. Same as AUTO_DISCOVER_SETTING in constants.rs. */
+  autoDiscover: "auto_discover_on_start",
   /** Dark, light or the system's mode. Same as APPEARANCE_MODE_SETTING in constants.rs. */
   appearanceMode: "appearance_mode",
   /** The ground tone. Same as APPEARANCE_GROUND_SETTING in constants.rs. */
@@ -70,6 +72,9 @@ export const AUTO_BACKUP_KEEP = 7;
 
 /** Event the core sends when games or covers changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
 export const LIBRARY_CHANGED_EVENT = "library-changed";
+
+/** Event the core sends when the look at start found new games. Same as FOUND_GAMES_EVENT in constants.rs. */
+export const FOUND_GAMES_EVENT = "found-games";
 
 // Updates
 

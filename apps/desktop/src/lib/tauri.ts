@@ -23,6 +23,7 @@ import type {
   LocalBackupSummary,
   MergePreview,
   MergeSummary,
+  NewGames,
   PlayBucket,
   PlayTotal,
   Session,
@@ -419,6 +420,16 @@ export async function discoverSteamGames(): Promise<DiscoveredGame[]> {
 
 export async function getDefaultScanPaths(): Promise<string[]> {
   return invoke<string[]>("get_default_scan_paths");
+}
+
+/** The games the look at start found that are still new. */
+export async function listFoundGames(): Promise<NewGames> {
+  return invoke<NewGames>("list_found_games");
+}
+
+/** Remembers that discovery showed these programs, so the look at start never offers them again. */
+export async function rememberOfferedGames(paths: string[]): Promise<number> {
+  return invoke<number>("remember_offered_games", { paths });
 }
 
 export async function importDiscoveredGames(
