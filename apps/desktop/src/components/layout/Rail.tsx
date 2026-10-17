@@ -17,7 +17,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCloudSession } from "@/features/cloud/cloud-context";
-import { useLibrary } from "@/features/library/library-context";
+import { useLibrary, usePlaying } from "@/features/library/library-context";
 import { COPYRIGHT_NOTICE, SETTING_KEYS } from "@/lib/constants";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
@@ -33,12 +33,12 @@ const PAGES = [
 ] as const;
 
 export function Rail({ onSearch }: { onSearch: () => void }) {
-  const { visible: summaries, active } = useLibrary();
+  const { visible: summaries } = useLibrary();
+  const playing = usePlaying();
   const { session } = useCloudSession();
   const location = useLocation();
   const [appVersion, setAppVersion] = useState("");
   const [sort, setSort] = useState<GameSort>("recent");
-  const playing = new Set(active.map((session) => session.game_id));
   const games = sortGames(summaries, sort);
 
   useEffect(() => {

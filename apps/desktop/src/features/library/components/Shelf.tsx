@@ -18,7 +18,7 @@ export function Shelf({
   onShowAll,
 }: {
   games: GameSummary[];
-  playing: Set<string>;
+  playing: ReadonlySet<string>;
   totalCount: number;
   onShowAll: () => void;
 }) {

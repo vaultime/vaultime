@@ -6,7 +6,7 @@ import { useNavigate } from "react-router";
 import { ActiveIdleLegend, PlayBars, type PlayPoint } from "@/components/charts/PlayBars";
 import { YearHeatmap } from "@/components/charts/YearHeatmap";
 import { useAppearance } from "@/features/appearance/appearance-context";
-import { useLibrary } from "@/features/library/library-context";
+import { usePlaying } from "@/features/library/library-context";
 import { GAME_HISTORY_DAYS, GAME_HISTORY_MONTHS, LIVE_TOTALS_REFRESH_MS } from "@/lib/constants";
 import { markColors, type GameTint } from "@/lib/game-tint";
 import { groupByBucket } from "@/lib/play-totals";
@@ -110,11 +110,8 @@ export function GameHistory({
   const navigate = useNavigate();
   const { accentHues, mode } = useAppearance();
   const color = markColors([tint.colors], accentHues, mode)[0].color;
-  const { active } = useLibrary();
-  const refreshed = useRefreshWhile(
-    active.some((session) => session.game_id === gameId),
-    LIVE_TOTALS_REFRESH_MS,
-  );
+  const playing = usePlaying().has(gameId);
+  const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
   const [range, setRange] = useState<Range>("days");
   const [loaded, setLoaded] = useState<{ range: Range; totals: PlayTotal[] } | null>(null);
   const [error, setError] = useState<string | null>(null);

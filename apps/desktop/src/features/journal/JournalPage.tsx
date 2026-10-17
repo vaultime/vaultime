@@ -9,7 +9,7 @@ import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { useAppearance } from "@/features/appearance/appearance-context";
-import { useLibrary, type GameSummary } from "@/features/library/library-context";
+import { useActiveSessions, useLibrary, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import {
   DAY_MS,
@@ -209,7 +209,8 @@ function leaningClip(box: Place, place: Place, leanStart: boolean, leanEnd: bool
 const HAS_DATE_PICKER = typeof navigator !== "undefined" && /Chrome\//.test(navigator.userAgent);
 
 export function JournalPage() {
-  const { sessions: stored, active, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
+  const { sessions: stored, summaries, statusChanges, notes, saveNote, refresh, loaded } = useLibrary();
+  const active = useActiveSessions();
   // Running sessions as of the last poll, a few seconds old at most. The
   // full list only reloads when a session starts or ends.
   const sessions = useMemo(() => {

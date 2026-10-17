@@ -14,7 +14,7 @@ import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
 import { Button } from "@/components/ui/button";
 import { useAppearance } from "@/features/appearance/appearance-context";
-import { useLibrary, type GameSummary } from "@/features/library/library-context";
+import { useLibrary, usePlaying, type GameSummary } from "@/features/library/library-context";
 import {
   SESSION_LONG_MAX_MS,
   SESSION_PLAIN_MAX_MS,
@@ -59,7 +59,8 @@ function percent(part: number, whole: number): number {
 
 /** A year of play in numbers and sentences. */
 export function StatsPage() {
-  const { sessions, active, summaries, covers, loaded } = useLibrary();
+  const { sessions, summaries, covers, loaded } = useLibrary();
+  const playing = usePlaying().size > 0;
   const { accentHues, mode } = useAppearance();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -72,7 +73,7 @@ export function StatsPage() {
   const [playError, setPlayError] = useState<string | null>(null);
   const now = new Date();
   const year = now.getFullYear() + offset;
-  const refreshed = useRefreshWhile(active.length > 0, LIVE_TOTALS_REFRESH_MS);
+  const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
 
   // Read again whenever a session starts or ends.
   useEffect(() => {

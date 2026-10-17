@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
 import { EditGameDialog, type EditableGame } from "@/features/library/components/EditGameDialog";
 import { GameLinkPicker } from "@/features/library/components/GameLinkPicker";
-import { useLibrary } from "@/features/library/library-context";
+import { useLibrary, usePlaying } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { CoverCropDialog, type CropTarget } from "@/features/game-details/CoverCropDialog";
 import { GameHistory } from "@/features/game-details/GameHistory";
@@ -57,7 +57,7 @@ export function GameDetailsPage() {
 
 function GamePage({ gameId }: { gameId: string }) {
   const navigate = useNavigate();
-  const { summaries, sessions: allSessions, active, loaded, refresh, notes, saveNote, setStatus, links, thisDeviceId } =
+  const { summaries, sessions: allSessions, loaded, refresh, notes, saveNote, setStatus, links, thisDeviceId } =
     useLibrary();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
@@ -76,7 +76,7 @@ function GamePage({ gameId }: { gameId: string }) {
         .sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall)),
     [allSessions, gameId],
   );
-  const playing = active.some((session) => session.game_id === gameId);
+  const playing = usePlaying().has(gameId);
 
   // Events explain flagged sessions. Reload them whenever the sessions change.
   useEffect(() => {

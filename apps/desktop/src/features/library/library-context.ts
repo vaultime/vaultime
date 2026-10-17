@@ -36,9 +36,6 @@ interface LibraryState {
   games: Game[];
   sessions: Session[];
   covers: Record<string, string>;
-  active: Session[];
-  /** When `active` was last polled, for ticking the live timer between polls. */
-  activePolledAt: number;
   idleThresholdSeconds: number;
   /** Every game with its totals, most recently played first. */
   summaries: GameSummary[];
@@ -55,6 +52,8 @@ interface LibraryState {
   thisDeviceId: string | null;
   /** Games of other PCs that count as games of this PC. */
   links: GameLink[];
+  /** The local day at the last poll, so pages that say today or yesterday turn over at midnight. */
+  today: string;
   loaded: boolean;
   /** Why the last load failed, null when it worked. */
   error: string | null;
@@ -70,4 +69,24 @@ export function useLibrary(): LibraryState {
   const value = useContext(LibraryContext);
   if (!value) throw new Error("useLibrary needs a LibraryProvider");
   return value;
+}
+
+// The live session has contexts of its own, so a poll renders only what shows it.
+export const ActiveContext = createContext<Session[]>([]);
+export const PlayingContext = createContext<ReadonlySet<string>>(new Set());
+export const LastPollContext = createContext(0);
+
+/** This PC's running sessions as of the last poll. The same list until they change. */
+export function useActiveSessions(): Session[] {
+  return useContext(ActiveContext);
+}
+
+/** Ids of the games running now. The same set while the same games run. */
+export function usePlaying(): ReadonlySet<string> {
+  return useContext(PlayingContext);
+}
+
+/** When the running sessions were last polled, for ticking the live timer between polls. */
+export function useLastPoll(): number {
+  return useContext(LastPollContext);
 }

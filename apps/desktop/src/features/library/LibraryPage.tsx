@@ -13,12 +13,13 @@ import { GameGrid } from "./components/GameGrid";
 import { LibraryHero } from "./components/LibraryHero";
 import { RecentStats } from "./components/RecentStats";
 import { Shelf } from "./components/Shelf";
-import { useLibrary } from "./library-context";
+import { useLibrary, usePlaying } from "./library-context";
 
 type LibraryDialog = "add" | "discover";
 
 export function LibraryPage() {
-  const { summaries, visible, sessions, active, loaded, error, refresh } = useLibrary();
+  const { summaries, visible, sessions, loaded, error, refresh } = useLibrary();
+  const playing = usePlaying();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
@@ -31,7 +32,6 @@ export function LibraryPage() {
   const openAdd = () => setDialog("add");
   const openDiscover = () => setDialog("discover");
 
-  const playing = useMemo(() => new Set(active.map((session) => session.game_id)), [active]);
   const recent = useMemo(() => summarizeRecentPlay(sessions), [sessions]);
 
   const featured =

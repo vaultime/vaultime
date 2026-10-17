@@ -35,7 +35,7 @@ export function GameGrid({
   onDelete,
 }: {
   summaries: GameSummary[];
-  playing: Set<string>;
+  playing: ReadonlySet<string>;
   onDiscover: () => void;
   onAdd: () => void;
   onEdit: (game: Game) => void;

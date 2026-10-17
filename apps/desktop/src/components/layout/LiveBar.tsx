@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ArrowUpRight, Gamepad2 } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
-import { useLibrary } from "@/features/library/library-context";
+import { useActiveSessions, useLastPoll, useLibrary } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatHoursMinutes, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
@@ -14,7 +14,9 @@ import { usePageVisible } from "@/lib/use-page-visible";
 
 /** The bar at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
-  const { active, activePolledAt, games, covers, sessions, idleThresholdSeconds } = useLibrary();
+  const { games, covers, sessions, idleThresholdSeconds } = useLibrary();
+  const active = useActiveSessions();
+  const activePolledAt = useLastPoll();
   const [now, setNow] = useState(() => Date.now());
   const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
   // The game being played rather than a launcher that steps aside for it,

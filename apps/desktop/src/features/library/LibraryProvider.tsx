@@ -12,13 +12,19 @@ import {
 } from "@/lib/constants";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
-import { countedOnce, countsAsPlay } from "@/lib/session-stats";
+import { countedOnce, countsAsPlay, toDayKey } from "@/lib/session-stats";
 import { countedSession } from "@/lib/steps-aside";
 import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { describeError } from "@/lib/utils";
-import { LibraryContext, type GameSummary } from "./library-context";
+import {
+  ActiveContext,
+  LastPollContext,
+  LibraryContext,
+  PlayingContext,
+  type GameSummary,
+} from "./library-context";
 
 /** Games, sessions, covers and the live session, shared by the shell and pages. */
 export function LibraryProvider({ children }: { children: ReactNode }) {
@@ -32,13 +38,16 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [links, setLinks] = useState<GameLink[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
-  const [activePolledAt, setActivePolledAt] = useState(() => Date.now());
+  const [lastPoll, setLastPoll] = useState(() => Date.now());
+  const [today, setToday] = useState(() => toDayKey(new Date()));
   const [idleThresholdSeconds, setIdleThresholdSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
   const [artTints, setArtTints] = useState<Record<string, GameTint>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Ids of the running sessions at the last poll. Null until the first poll.
   const activeIds = useRef<string | null>(null);
+  // The running sessions at the last poll, to keep the list while they stay the same.
+  const activeJson = useRef("[]");
   const pageVisible = usePageVisible();
 
   const refresh = useCallback(async () => {
@@ -92,8 +101,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         .getActiveSessions()
         .then((next) => {
           if (cancelled) return;
-          setActive(next.map(countedSession));
-          setActivePolledAt(Date.now());
+          const counted = next.map(countedSession);
+          const json = JSON.stringify(counted);
+          if (json !== activeJson.current) {
+            activeJson.current = json;
+            setActive(counted);
+          }
+          setLastPoll(Date.now());
+          setToday(toDayKey(new Date()));
           // The first poll, or a session started or ended: totals changed.
           const ids = next.map((s) => s.id).sort().join(",");
           if (ids !== activeIds.current) {
@@ -234,13 +249,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const visible = useMemo(() => summaries.filter((summary) => !summary.game.is_hidden), [summaries]);
 
+  const playingKey = [...new Set(active.map((session) => session.game_id))].sort().join(",");
+  const playing = useMemo(() => new Set(playingKey ? playingKey.split(",") : []), [playingKey]);
+
   const value = useMemo(
     () => ({
       games,
       sessions,
       covers,
-      active,
-      activePolledAt,
       idleThresholdSeconds,
       summaries,
       visible,
@@ -249,6 +265,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       devices,
       thisDeviceId,
       links,
+      today,
       loaded,
       error,
       refresh,
@@ -259,8 +276,6 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       games,
       sessions,
       covers,
-      active,
-      activePolledAt,
       idleThresholdSeconds,
       summaries,
       visible,
@@ -269,6 +284,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       devices,
       thisDeviceId,
       links,
+      today,
       loaded,
       error,
       refresh,
@@ -277,5 +293,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
+  return (
+    <LibraryContext.Provider value={value}>
+      <ActiveContext.Provider value={active}>
+        <PlayingContext.Provider value={playing}>
+          <LastPollContext.Provider value={lastPoll}>{children}</LastPollContext.Provider>
+        </PlayingContext.Provider>
+      </ActiveContext.Provider>
+    </LibraryContext.Provider>
+  );
 }
