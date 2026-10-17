@@ -27,7 +27,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use log::warn;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -65,9 +65,18 @@ const COUNTER_EVENTS: [&str; 4] = ["started", "heartbeat", "ended", "added_manua
 /// and a correction the player's.
 const RESTATING_EVENTS: [&str; 2] = ["recovered", "corrected"];
 
+/// A fresh install took over the PC whose backup it restored, see
+/// `Takeover`. Names that PC, the PC this one was before and the keys it
+/// counts as its own from then on.
+const ENTRY_TOOK_OVER: &str = "took_over";
+
 static KEY: OnceLock<SigningKey> = OnceLock::new();
-static DEVICE: OnceLock<String> = OnceLock::new();
-static OWN_KEYS: OnceLock<HashSet<String>> = OnceLock::new();
+/// The device id this PC's ledger names, which a takeover changes.
+#[cfg(not(test))]
+static DEVICE: Mutex<Option<String>> = Mutex::new(None);
+/// Every key this PC counts as its own besides the current one.
+#[cfg(not(test))]
+static OWN_KEYS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 /// Loads this PC's signing key from `app_dir`, or makes one on the first
 /// start, and remembers the device id its ledger names. Backups leave the
@@ -108,9 +117,15 @@ pub fn load_key(app_dir: &Path, device_id: &str) -> Result<()> {
         seed
     };
     let key = SigningKey::from_bytes(&seed);
-    let _ = OWN_KEYS.set(remember_own_key(app_dir, &key)?);
+    let own = remember_own_key(app_dir, &key)?;
     let _ = KEY.set(key);
-    let _ = DEVICE.set(device_id.to_owned());
+    #[cfg(not(test))]
+    {
+        *OWN_KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Some(own);
+        *DEVICE.lock().unwrap_or_else(PoisonError::into_inner) = Some(device_id.to_owned());
+    }
+    #[cfg(test)]
+    let _ = (own, device_id);
     Ok(())
 }
 
@@ -179,9 +194,11 @@ fn identity() -> Result<(SigningKey, String)> {
         .get()
         .ok_or_else(|| VaultimeError::Integrity("this PC's ledger key is not loaded".into()))?;
     let device = DEVICE
-        .get()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
         .ok_or_else(|| VaultimeError::Integrity("this PC's device id is not known".into()))?;
-    Ok((key.clone(), device.clone()))
+    Ok((key.clone(), device))
 }
 
 #[cfg(test)]
@@ -189,21 +206,27 @@ thread_local! {
     /// The PC a test acts as, so one test can play several PCs.
     static TEST_PC: std::cell::RefCell<Option<(SigningKey, String)>> =
         const { std::cell::RefCell::new(None) };
+    /// What test PCs took over, by their key: the device id they continue
+    /// as and the keys they count as their own.
+    static TEST_TAKEN: std::cell::RefCell<HashMap<String, (String, HashSet<String>)>> =
+        std::cell::RefCell::new(HashMap::new());
 }
 
 /// Tests share one key, made up on first use, unless they act as a PC of
 /// their own.
 #[cfg(test)]
 fn identity() -> Result<(SigningKey, String)> {
-    if let Some(pc) = TEST_PC.with(|pc| pc.borrow().clone()) {
-        return Ok(pc);
-    }
-    let key = KEY.get_or_init(|| SigningKey::from_bytes(&random_seed().unwrap()));
-    let device = DEVICE
-        .get()
-        .cloned()
-        .unwrap_or_else(|| "test-pc".to_owned());
-    Ok((key.clone(), device))
+    let (key, device) = TEST_PC.with(|pc| pc.borrow().clone()).unwrap_or_else(|| {
+        let key = KEY.get_or_init(|| SigningKey::from_bytes(&random_seed().unwrap()));
+        (key.clone(), "test-pc".to_owned())
+    });
+    let taken = TEST_TAKEN.with(|taken| {
+        taken
+            .borrow()
+            .get(&hex::encode(key.verifying_key().as_bytes()))
+            .map(|(device, _)| device.clone())
+    });
+    Ok((key, taken.unwrap_or(device)))
 }
 
 /// A PC for tests, with a key of its own.
@@ -226,23 +249,72 @@ pub fn key_id() -> Result<String> {
     Ok(hex::encode(identity()?.0.verifying_key().as_bytes()))
 }
 
-/// Every key this PC has signed with, the current one included.
+/// Every key this PC counts as its own: the ones it has signed with, the
+/// current one included, and the ones it took over.
 #[cfg(not(test))]
 pub(crate) fn own_keys() -> Result<HashSet<String>> {
-    let mut keys = OWN_KEYS.get().cloned().unwrap_or_default();
+    let mut keys = OWN_KEYS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+        .unwrap_or_default();
     keys.insert(key_id()?);
     Ok(keys)
 }
 
-/// A test PC signs with one key only.
+/// A test PC signs with one key only, and counts the ones it took over.
 #[cfg(test)]
 pub(crate) fn own_keys() -> Result<HashSet<String>> {
-    Ok(HashSet::from([key_id()?]))
+    let key = key_id()?;
+    let mut keys = TEST_TAKEN.with(|taken| {
+        taken
+            .borrow()
+            .get(&key)
+            .map(|(_, keys)| keys.clone())
+            .unwrap_or_default()
+    });
+    keys.insert(key);
+    Ok(keys)
 }
 
 /// The device id this PC's ledger names.
 pub fn this_device() -> Result<String> {
     Ok(identity()?.1)
+}
+
+/// Makes this PC continue as `device_id`, counting `keys` as its own too,
+/// for as long as this process runs. Returns what it was before.
+#[cfg(not(test))]
+fn switch_identity(device_id: &str, keys: &HashSet<String>) -> Result<(String, HashSet<String>)> {
+    let before = (this_device()?, own_keys()?);
+    let mut own = before.1.clone();
+    own.extend(keys.iter().cloned());
+    *OWN_KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Some(own);
+    *DEVICE.lock().unwrap_or_else(PoisonError::into_inner) = Some(device_id.to_owned());
+    Ok(before)
+}
+
+#[cfg(not(test))]
+fn restore_identity(before: (String, HashSet<String>)) {
+    *OWN_KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Some(before.1);
+    *DEVICE.lock().unwrap_or_else(PoisonError::into_inner) = Some(before.0);
+}
+
+#[cfg(test)]
+fn switch_identity(device_id: &str, keys: &HashSet<String>) -> Result<(String, HashSet<String>)> {
+    let before = (this_device()?, own_keys()?);
+    let mut own = before.1.clone();
+    own.extend(keys.iter().cloned());
+    let key = key_id()?;
+    TEST_TAKEN.with(|taken| taken.borrow_mut().insert(key, (device_id.to_owned(), own)));
+    Ok(before)
+}
+
+#[cfg(test)]
+fn restore_identity(before: (String, HashSet<String>)) {
+    if let Ok(key) = key_id() {
+        TEST_TAKEN.with(|taken| taken.borrow_mut().insert(key, before));
+    }
 }
 
 fn entry_hash(
@@ -690,7 +762,253 @@ pub fn this_tail(conn: &Connection) -> Result<Option<(i64, String)>> {
     tail(conn, &key_id()?)
 }
 
-/// One ledger entry as stored.
+/// Whether this PC is a fresh install with no history of its own: it holds
+/// no session at all and has merged no PC, and its ledger is sound and holds
+/// nothing but the entries that began it, signed with its own keys. Every
+/// restore and merge leaves an entry, so it was never restored or merged.
+pub(crate) fn fresh_install(conn: &Connection) -> Result<bool> {
+    let count = |sql: &str| -> Result<i64> {
+        conn.query_row(sql, [], |row| row.get(0))
+            .map_err(ledger_error)
+    };
+    if count("SELECT COUNT(*) FROM sessions")? > 0
+        || count("SELECT COUNT(*) FROM devices WHERE merged_at IS NOT NULL")? > 0
+    {
+        return Ok(false);
+    }
+    let mine = own_keys()?;
+    let entries: Vec<(String, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT key_id, entry_type FROM ledger_entries")
+            .map_err(ledger_error)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(ledger_error)?;
+        rows.collect::<rusqlite::Result<_>>()
+            .map_err(ledger_error)?
+    };
+    if entries
+        .iter()
+        .any(|(key, entry_type)| entry_type != ENTRY_BEGAN || !mine.contains(key))
+    {
+        return Ok(false);
+    }
+    Ok(!any_broken(conn, &mine)?)
+}
+
+/// A fresh install that restores a backup of a PC it is not continues as
+/// that PC: the backup's sessions of that PC are its own from then on, and
+/// the keys the backup's ledgers name for that PC count as its own beside
+/// its new key. This is the trust a fresh install gives any PC it has never
+/// seen, so a backup made up for it gains nothing more. A PC with history of
+/// its own never takes over, see `fresh_install`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Takeover {
+    pub device_id: String,
+    pub name: Option<String>,
+    #[serde(skip)]
+    keys: HashSet<String>,
+}
+
+/// The takeover a restore of a backup of `source`, whose database is
+/// `staged`, would bring this PC in `local`. None unless this PC is a fresh
+/// install, `source` is another PC and the backup holds a sound ledger that
+/// names it.
+pub(crate) fn plan_takeover(
+    local: &Connection,
+    staged: &Connection,
+    source: &str,
+) -> Result<Option<Takeover>> {
+    if source == this_device()? || !fresh_install(local)? {
+        return Ok(None);
+    }
+    let keys = claimed_keys(staged, source)?;
+    if keys.is_empty() || any_broken(staged, &keys)? {
+        return Ok(None);
+    }
+    let name: Option<String> = staged
+        .query_row("SELECT name FROM devices WHERE id = ?1", [source], |row| {
+            row.get::<_, Option<String>>(0)
+        })
+        .optional()
+        .map_err(ledger_error)?
+        .flatten()
+        .map(|name| crate::db::repo::devices::clean_name(&name))
+        .filter(|name| !name.is_empty());
+    Ok(Some(Takeover {
+        device_id: source.to_owned(),
+        name,
+        keys,
+    }))
+}
+
+/// A takeover under way. Dropped before `keep`, it puts this PC's identity
+/// and the files it wrote back as they were.
+pub(crate) struct TakingOver {
+    takeover: Takeover,
+    before: Option<(String, HashSet<String>)>,
+    written: Vec<(std::path::PathBuf, Option<String>)>,
+}
+
+impl TakingOver {
+    /// Makes this PC continue as the PC `takeover` names from now on.
+    pub(crate) fn begin(takeover: &Takeover) -> Result<Self> {
+        let before = switch_identity(&takeover.device_id, &takeover.keys)?;
+        Ok(Self {
+            takeover: takeover.clone(),
+            before: Some(before),
+            written: Vec::new(),
+        })
+    }
+
+    /// Notes the takeover in this PC's ledger in `conn`, signed with its new
+    /// key, so it shows and can be checked.
+    pub(crate) fn record(&self, conn: &Connection, backup_id: &str) -> Result<()> {
+        let mut keys: Vec<&String> = self.takeover.keys.iter().collect();
+        keys.sort();
+        append(
+            conn,
+            ENTRY_TOOK_OVER,
+            None,
+            &json!({
+                "device_id": self.takeover.device_id,
+                "from_device": self.before.as_ref().map(|(device, _)| device),
+                "key_ids": keys,
+                "backup_id": backup_id,
+            }),
+        )
+    }
+
+    /// Writes the device id and the keys taken over next to the database,
+    /// so the next start continues as that PC. The key file stays as it is.
+    pub(crate) fn write_files(&mut self, app_dir: &Path) -> Result<()> {
+        let keys_path = app_dir.join(DEVICE_KEYS_FILE);
+        let listed = read_optional(&keys_path)?;
+        let mut keys = listed.clone().unwrap_or_default();
+        let mut new: Vec<&String> = self
+            .takeover
+            .keys
+            .iter()
+            .filter(|key| !keys.lines().any(|line| line.trim() == key.as_str()))
+            .collect();
+        new.sort();
+        for key in new {
+            if !keys.is_empty() && !keys.ends_with('\n') {
+                keys.push('\n');
+            }
+            keys.push_str(key);
+            keys.push('\n');
+        }
+        let id_path = app_dir.join(crate::constants::DEVICE_ID_FILE);
+        for (path, contents) in [
+            (id_path, self.takeover.device_id.clone()),
+            (keys_path, keys),
+        ] {
+            let previous = read_optional(&path)?;
+            self.written.push((path.clone(), previous));
+            fs::write(&path, contents).map_err(|error| {
+                VaultimeError::Integrity(format!("failed to write {}: {error}", path.display()))
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Keeps the takeover.
+    pub(crate) fn keep(mut self) {
+        self.before = None;
+        self.written.clear();
+    }
+}
+
+impl Drop for TakingOver {
+    fn drop(&mut self) {
+        if let Some(before) = self.before.take() {
+            restore_identity(before);
+        }
+        for (path, previous) in self.written.drain(..).rev() {
+            let undone = match previous {
+                Some(contents) => fs::write(&path, contents),
+                None => fs::remove_file(&path),
+            };
+            if let Err(error) = undone {
+                warn!("could not put {} back: {error}", path.display());
+            }
+        }
+    }
+}
+
+fn read_optional(path: &Path) -> Result<Option<String>> {
+    match fs::read_to_string(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(VaultimeError::Integrity(format!(
+            "failed to read {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
+/// The keys this PC took over, as its own ledgers note them.
+pub(crate) fn taken_over_keys(conn: &Connection) -> Result<HashSet<String>> {
+    let mine = own_keys()?;
+    if any_broken(conn, &mine)? {
+        return Ok(HashSet::new());
+    }
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'took_over'",
+        )
+        .map_err(ledger_error)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(ledger_error)?;
+    let mut keys = HashSet::new();
+    for row in rows {
+        let (signer, payload) = row.map_err(ledger_error)?;
+        if !mine.contains(&signer) {
+            continue;
+        }
+        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
+        if let Some(listed) = payload.get("key_ids").and_then(Value::as_array) {
+            keys.extend(listed.iter().filter_map(Value::as_str).map(str::to_owned));
+        }
+    }
+    Ok(keys)
+}
+
+/// The keys the ledgers of `signers` in `conn` trust for `device_id`.
+pub(crate) fn trusted_by(
+    conn: &Connection,
+    signers: &HashSet<String>,
+    device_id: &str,
+) -> Result<HashSet<String>> {
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'trusted'",
+        )
+        .map_err(ledger_error)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(ledger_error)?;
+    let mut trusted = HashSet::new();
+    for row in rows {
+        let (signer, payload) = row.map_err(ledger_error)?;
+        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
+        if signers.contains(&signer)
+            && payload.get("device_id").and_then(Value::as_str) == Some(device_id)
+            && let Some(key) = payload.get("key_id").and_then(Value::as_str)
+        {
+            trusted.insert(key.to_owned());
+        }
+    }
+    Ok(trusted)
+}
+
+// One ledger entry as stored.
 struct LedgerRow {
     key_id: String,
     sequence: i64,
@@ -1844,6 +2162,35 @@ mod tests {
         .unwrap();
         assert_eq!(problem(&db, &open.id).as_deref(), Some("time_out_of_range"));
         assert_eq!(listed(&db, &open.id).integrity_status, STATUS_SUSPICIOUS);
+    }
+
+    #[test]
+    fn a_takeover_given_up_before_it_is_kept_leaves_this_pc_as_it_was() {
+        let pc = test_pc("before");
+        act_as(Some(&pc));
+        let dir = std::env::temp_dir().join(format!("vaultime-takeover-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let id_file = dir.join(crate::constants::DEVICE_ID_FILE);
+        fs::write(&id_file, "before").unwrap();
+        let old_key = hex::encode(&[7; 32]);
+        let takeover = Takeover {
+            device_id: "after".into(),
+            name: None,
+            keys: HashSet::from([old_key.clone()]),
+        };
+        {
+            let mut change = TakingOver::begin(&takeover).unwrap();
+            change.write_files(&dir).unwrap();
+            assert_eq!(this_device().unwrap(), "after");
+            assert!(own_keys().unwrap().contains(&old_key));
+            assert_eq!(fs::read_to_string(&id_file).unwrap(), "after");
+        }
+        assert_eq!(this_device().unwrap(), "before");
+        assert!(!own_keys().unwrap().contains(&old_key));
+        assert_eq!(fs::read_to_string(&id_file).unwrap(), "before");
+        assert!(!dir.join(DEVICE_KEYS_FILE).exists());
+        act_as(None);
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

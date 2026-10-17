@@ -1359,6 +1359,7 @@ let thisPc: ThisPc = {
     missing_sessions: ledgerProblem === "missing" ? 2 : 0,
     broken: ledgerProblem === "broken",
   },
+  fresh: false,
 };
 
 mockIPC((cmd, payload) => {

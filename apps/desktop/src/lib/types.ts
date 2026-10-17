@@ -158,6 +158,14 @@ export interface ThisPc {
   device_id: string;
   name: string;
   ledger: LedgerReport;
+  /** No history of its own yet, so restoring a backup of another PC makes it continue as that PC. */
+  fresh: boolean;
+}
+
+/** Mirrors the Rust `Takeover` struct: the PC this one continues as after a restore. */
+export interface PcTakeover {
+  device_id: string;
+  name: string | null;
 }
 
 /** What one play total covers, in local time. */
@@ -301,6 +309,8 @@ export interface LocalBackupSummary {
   backup_path: string;
   manifest_path: string;
   restart_required: boolean;
+  /** The PC this one continues as once it restores the backup, or did restore it. */
+  continues_as?: PcTakeover | null;
 }
 
 /** A game candidate found during auto-discovery. */
@@ -527,6 +537,8 @@ interface CloudBackupRestoreSummary {
   assets_count: number;
   asset_file_count: number;
   restart_required: boolean;
+  /** The PC this one continues as after the restore, if it took one over. */
+  continues_as?: PcTakeover | null;
 }
 
 export interface CloudBackupRestoreResult {

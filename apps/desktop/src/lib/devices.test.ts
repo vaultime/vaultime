@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { at, session } from "@/test/sessions";
 import type { Device } from "@/lib/types";
-import { isMergedPc, pcName, recordedElsewhere } from "./devices";
+import { continuesAs, isMergedPc, pcName, recordedElsewhere } from "./devices";
 
 function device(id: string, name: string | null, mergedAt: string | null = null): Device {
   return { id, platform: "windows", app_version: "0.4.0", key_id: null, registered_at: "", name, merged_at: mergedAt };
@@ -30,5 +30,12 @@ describe("devices", () => {
   it("knows which PCs came by merge", () => {
     expect(isMergedPc(devices, "laptop")).toBe(true);
     expect(isMergedPc(devices, "old")).toBe(false);
+  });
+
+  it("says plainly which PC this one continues as", () => {
+    expect(continuesAs({ device_id: "desktop", name: "Desktop" })).toBe("This PC continues as Desktop.");
+    expect(continuesAs({ device_id: "desktop", name: null })).toBe(
+      "This PC continues as the PC that made this backup.",
+    );
   });
 });

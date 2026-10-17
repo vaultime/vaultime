@@ -127,6 +127,9 @@ pub struct ThisPc {
     pub device_id: String,
     pub name: String,
     pub ledger: LedgerReport,
+    /// Whether this PC has no history of its own yet, so restoring a backup
+    /// of another PC makes it continue as that PC.
+    pub fresh: bool,
 }
 
 fn this_pc(db: &Database, device_id: &str) -> Result<ThisPc, VaultimeError> {
@@ -135,6 +138,7 @@ fn this_pc(db: &Database, device_id: &str) -> Result<ThisPc, VaultimeError> {
         name: device.name.unwrap_or_else(|| device.id.clone()),
         device_id: device.id,
         ledger: db.with_conn(ledger::report)?,
+        fresh: db.with_conn(ledger::fresh_install)?,
     })
 }
 
@@ -474,8 +478,11 @@ pub fn export_local_backup(
 }
 
 #[tauri::command(async)]
-pub fn inspect_local_backup(path: String) -> Result<LocalBackupSummary, VaultimeError> {
-    backup::inspect_local_backup(std::path::Path::new(&path))
+pub fn inspect_local_backup(
+    db: State<'_, Arc<Database>>,
+    path: String,
+) -> Result<LocalBackupSummary, VaultimeError> {
+    backup::inspect_local_backup(&db, std::path::Path::new(&path))
 }
 
 #[tauri::command(async)]
@@ -600,7 +607,9 @@ pub async fn restore_remote_backup(
 }
 
 /// Runs a restore with tracking paused. Refuses while a game is being tracked,
-/// because the restore replaces the session tables.
+/// because the restore replaces the session tables. After a restore that
+/// made this PC continue as another one, tracking waits for the restart, as
+/// the tracker still records with the id it started with.
 fn with_tracking_paused<T>(
     db: &Database,
     engine: &TrackingEngine,
@@ -615,7 +624,9 @@ fn with_tracking_paused<T>(
         Ok(_) => restore(),
         Err(error) => Err(error),
     };
-    engine.resume();
+    if !ledger::this_device().is_ok_and(|now| now != device_id) {
+        engine.resume();
+    }
     result
 }
 

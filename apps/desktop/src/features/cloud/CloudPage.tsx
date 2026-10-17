@@ -40,7 +40,8 @@ import {
 } from "@/lib/constants";
 import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { CloudAdminInvite, CloudBackupRecord, CloudStorage } from "@/lib/types";
-import { getDeviceId } from "@/lib/tauri";
+import { continuesAs } from "@/lib/devices";
+import { getDeviceId, getThisPc } from "@/lib/tauri";
 import { describeError } from "@/lib/utils";
 import { capitalize, plural, whichPc } from "@/lib/words";
 
@@ -169,6 +170,8 @@ export function CloudPage() {
   const [inviteExpiry, setInviteExpiry] = useState("");
   const [inviteNote, setInviteNote] = useState("");
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  // A PC without history of its own continues as the PC of the backup it restores.
+  const [freshInstall, setFreshInstall] = useState(false);
 
   useEffect(() => {
     getDeviceId()
@@ -378,7 +381,8 @@ export function CloudPage() {
       const result = await restoreRemoteBackup(restoreTarget.id);
       setRestoreDialogOpen(false);
       setRestoreTarget(null);
-      setStatusMessage("Cloud backup restored.");
+      const takeover = result.restored_summary.continues_as;
+      setStatusMessage(takeover ? `Cloud backup restored. ${continuesAs(takeover)}` : "Cloud backup restored.");
       if (result.restored_summary.restart_required) {
         setRestartRequired(true);
       }
@@ -428,6 +432,10 @@ export function CloudPage() {
   function openRestoreDialog(backup: CloudBackupRecord) {
     setRestoreTarget(backup);
     setRestoreDialogOpen(true);
+    setFreshInstall(false);
+    getThisPc()
+      .then((pc) => setFreshInstall(pc.fresh))
+      .catch(() => {});
   }
 
   function openDeleteDialog(backup: CloudBackupRecord) {
@@ -799,6 +807,13 @@ export function CloudPage() {
                   ? `${plural(restoreTarget.metadata_json.games_count, "game")}, ${plural(restoreTarget.metadata_json.sessions_count, "session")}`
                   : "Contents unknown"}
               </p>
+              {freshInstall &&
+                deviceId !== null &&
+                (restoreTarget.metadata_json?.source_device_id ?? restoreTarget.client_device_id) !== deviceId && (
+                  <p className="text-[15px]">
+                    This PC continues as the PC that made this backup, as it has no history of its own yet.
+                  </p>
+                )}
               <p className="text-[13px] leading-relaxed text-faint">
                 The download is checked against its checksum first. Close running games before you restore. Vaultime
                 asks for a restart afterwards so tracking picks up cleanly.

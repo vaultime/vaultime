@@ -350,7 +350,18 @@ fn plan(db: &Database, staged: &Staged, trust_new_keys: bool) -> Result<Plan> {
     let (trust, unknown_keys) = staged_db.with_conn(|staged_conn| {
         db.with_conn(|local| ledger::Trust::new(local, staged_conn, &source, trust_new_keys))
     })?;
-    let (device_name, candidates) = read_candidates(staged_db, &source, &trust)?;
+    // Sessions this PC recorded before it was set up again and took over its
+    // old keys may come back, when the backup's PC took them in after
+    // checking them with those keys and none other.
+    let taken_over = db.with_conn(ledger::taken_over_keys)?;
+    let this = ledger::this_device()?;
+    let checked_with_taken_over = !taken_over.is_empty()
+        && staged_db.with_conn(|conn| {
+            let theirs = ledger::trusted_by(conn, trust.source_keys(), &this)?;
+            Ok(!theirs.is_empty() && theirs.is_subset(&taken_over))
+        })?;
+    let (device_name, candidates) =
+        read_candidates(staged_db, &source, &trust, checked_with_taken_over)?;
     let mut preview = MergePreview {
         backup_path: staged.backup_dir.to_string_lossy().into_owned(),
         backup_created_at: staged.manifest.created_at.clone(),
@@ -384,12 +395,13 @@ fn plan(db: &Database, staged: &Staged, trust_new_keys: bool) -> Result<Plan> {
 }
 
 /// The sessions of other PCs in the backup, each with its event hashes, and
-/// the name of the backup's PC. Read on the backup alone, so the tracker is
-/// not held up.
+/// the name of the backup's PC. With `with_own`, also the sessions of this
+/// PC, see `plan`. Read on the backup alone, so the tracker is not held up.
 fn read_candidates(
     staged: &Database,
     source: &str,
     trust: &ledger::Trust,
+    with_own: bool,
 ) -> Result<(Option<String>, Vec<Candidate>)> {
     let this = ledger::this_device()?;
     staged.with_conn(|conn| {
@@ -404,10 +416,10 @@ fn read_candidates(
             .map(|name| crate::db::repo::devices::clean_name(&name))
             .filter(|name| !name.is_empty());
         let mut stmt = conn
-            .prepare("SELECT * FROM sessions WHERE device_id != ?1 ORDER BY started_at_wall")
+            .prepare("SELECT * FROM sessions WHERE device_id != ?1 OR ?2 ORDER BY started_at_wall")
             .map_err(map_db)?;
         let sessions = stmt
-            .query_map([&this], row_to_session)
+            .query_map(params![this, with_own], row_to_session)
             .map_err(map_db)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(map_db)?;
@@ -429,8 +441,13 @@ fn sort_candidates(
 ) -> Result<Sorted> {
     let mut wanted = Vec::new();
     let mut staying = Vec::new();
+    let this = ledger::this_device()?;
     db.with_conn(|conn| {
         for (session, theirs) in candidates {
+            // This PC's own copy of its session always stays as it is.
+            if session.device_id == this && !event_hashes(conn, &session.id)?.is_empty() {
+                continue;
+            }
             if session.ended_at_wall.is_none() {
                 preview.running_there += 1;
                 continue;
@@ -544,14 +561,26 @@ fn check_candidates(
         for (session, reason) in staying {
             preview.conflicts.push(conflict(session, reason)?);
         }
+        let this = ledger::this_device()?;
         for (session, take, hashes) in wanted {
-            let keys = trust.keys_for(&session.device_id);
+            // A session this PC recorded before it was set up again counts
+            // with the backup's PC's pins, as that PC checked it with the
+            // keys this PC took over, and comes in only when it passes.
+            let own = session.device_id == this;
+            let keys = if own {
+                trust.source_keys().clone()
+            } else {
+                trust.keys_for(&session.device_id)
+            };
             let vouched = integrity::validate_session_history_from(
                 conn,
                 &session,
                 ledger::Viewpoint::Keys(&keys),
             )?
             .is_none();
+            if own && !vouched {
+                continue;
+            }
             match take {
                 Take::Grown { .. } if !vouched => {
                     preview
@@ -842,10 +871,14 @@ fn copy_in(
     // Until the merged sessions have their quarter hours, the next start
     // builds every slice again.
     slices::mark_stale(conn)?;
+    // This PC is never merged into itself, also when its own sessions come
+    // back after it was set up again.
+    let this = ledger::this_device()?;
     let devices: HashSet<&str> = plan
         .sessions
         .iter()
         .map(|planned| planned.session.device_id.as_str())
+        .filter(|device| *device != this)
         .collect();
     copy_devices(conn, &json_list(devices), source)?;
     // From now on, only these keys count for that PC.
@@ -931,10 +964,13 @@ fn copy_games(
         )
         .map_err(map_db)?;
     expect_rows(written, plan.new_games.len())?;
+    // Games of this PC, which come along only with its own sessions after it
+    // was set up again, are its own once more.
     conn.execute(
         &format!(
             "UPDATE main.games SET origin_device_id = CASE
-                 WHEN origin_device_id IS NULL OR origin_device_id = ?3 THEN ?2
+                 WHEN origin_device_id IS NULL THEN ?2
+                 WHEN origin_device_id = ?3 THEN NULL
                  ELSE origin_device_id END
              WHERE id {IN_LIST}"
         ),
@@ -1626,11 +1662,13 @@ mod tests {
     #[test]
     fn a_session_changed_on_both_pcs_stays_as_it_is_here() {
         let desktop = Pc::new("desktop");
+        let own = desktop.game("Celeste", None);
+        desktop.play(&own, 5);
         let laptop = Pc::new("laptop");
         let game = laptop.game("Hades II", None);
         let session = laptop.play_at(&game, "2026-10-02T18:00:00Z", 60);
-        // The desktop took the laptop's history in by a restore, before merges
-        // existed, and cut the session there.
+        // The desktop, with history of its own, took the laptop's history in
+        // by a restore, before merges existed, and cut the session there.
         let earlier = laptop.back_up();
         desktop.act();
         import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &earlier).unwrap();
@@ -1748,6 +1786,8 @@ mod tests {
     #[test]
     fn a_restore_keeps_sessions_merged_there_sound() {
         let desktop = Pc::new("desktop");
+        let own = desktop.game("Celeste", None);
+        desktop.play(&own, 5);
         let laptop = Pc::new("laptop");
         let handheld = Pc::new("handheld");
         let game = handheld.game("Balatro", None);
@@ -2714,6 +2754,110 @@ mod tests {
         desktop.merge(&backup, &[]);
         assert_eq!(desktop.status(&session.id), integrity::STATUS_SUSPICIOUS);
         assert!(!desktop.adopted(&session.id));
+    }
+
+    #[test]
+    fn a_fresh_install_restoring_a_pcs_backup_continues_as_that_pc() {
+        let laptop = Pc::new("laptop");
+        let desktop = Pc::new("desktop");
+        let game = desktop.game("Hades", None);
+        let early = desktop.play(&game, 20);
+        let last_backup = desktop.back_up();
+        let later = desktop.play(&game, 30);
+        laptop.merge(&desktop.back_up(), &[]);
+        desktop.act();
+        let old_key = ledger::key_id().unwrap();
+
+        // The desktop set up again, with a new id, a new key and no history.
+        let fresh = Pc::new("reinstalled");
+        fresh.act();
+        let new_key = ledger::key_id().unwrap();
+        let preview = crate::backup::inspect_local_backup(&fresh.db, &last_backup).unwrap();
+        let continues = preview.continues_as.unwrap();
+        assert_eq!(continues.device_id, "desktop");
+        assert_eq!(continues.name.as_deref(), Some("desktop"));
+        let summary =
+            import_local_backup(&fresh.db, &fresh.assets, &fresh.context, &last_backup).unwrap();
+        assert_eq!(summary.continues_as, Some(continues));
+
+        fresh.act();
+        assert_eq!(ledger::this_device().unwrap(), "desktop");
+        assert!(ledger::own_keys().unwrap().contains(&old_key));
+        let dir = &fresh.context.app_dir;
+        let read = |file: &str| fs::read_to_string(dir.join(file)).unwrap();
+        assert_eq!(read(crate::constants::DEVICE_ID_FILE), "desktop");
+        assert!(
+            read(crate::constants::DEVICE_KEYS_FILE)
+                .lines()
+                .any(|line| line == old_key)
+        );
+        assert!(!last_backup.join(crate::constants::DEVICE_KEY_FILE).exists());
+        let (signer, payload): (String, String) = fresh
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'took_over'",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        assert_eq!(signer, new_key);
+        assert!(payload.contains(&old_key) && payload.contains("\"from_device\":\"reinstalled\""));
+        assert_eq!(fresh.status(&early), STATUS_LOCAL);
+
+        // The laptop took in the sessions played after that backup, checked
+        // with the old key, so they come back vouched for.
+        let from_laptop = laptop.back_up();
+        let preview = fresh.preview(&from_laptop).unwrap();
+        assert_eq!((preview.new_sessions, preview.failing), (1, 0));
+        fresh.merge(&from_laptop, &[]);
+        assert_eq!(fresh.status(&later), STATUS_LOCAL);
+        assert!(fresh.adopted(&later));
+        let merged_at: Option<String> = fresh
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT merged_at FROM devices WHERE id = 'desktop'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        assert_eq!(merged_at, None);
+        // After the restart, new play here is recorded as the desktop's.
+        fresh.act();
+        let again = sessions::create_session(&fresh.db, &game, "desktop").unwrap();
+        sessions::end_session(&fresh.db, &again.id, MINUTE, MINUTE, 0, STATUS_LOCAL).unwrap();
+        assert_eq!(fresh.status(&again.id), STATUS_LOCAL);
+    }
+
+    #[test]
+    fn a_pc_with_history_of_its_own_never_takes_over() {
+        let desktop = Pc::new("desktop");
+        let game = desktop.game("Hades", None);
+        desktop.play(&game, 20);
+        let backup = desktop.back_up();
+
+        // One played here, one restored before without any session.
+        let played = Pc::new("played");
+        let its_game = played.game("Celeste", None);
+        played.play(&its_game, 5);
+        let restored = Pc::new("restored");
+        let own = restored.back_up();
+        restored.act();
+        import_local_backup(&restored.db, &restored.assets, &restored.context, &own).unwrap();
+        for pc in [&played, &restored] {
+            pc.act();
+            let preview = crate::backup::inspect_local_backup(&pc.db, &backup).unwrap();
+            assert_eq!(preview.continues_as, None);
+            let summary = import_local_backup(&pc.db, &pc.assets, &pc.context, &backup).unwrap();
+            assert_eq!(summary.continues_as, None);
+            pc.act();
+            assert_eq!(ledger::this_device().unwrap(), pc.context.device_id);
+        }
     }
 
     #[test]

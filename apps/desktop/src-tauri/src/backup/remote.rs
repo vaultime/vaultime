@@ -73,6 +73,8 @@ pub struct RemoteBackupRestoreSummary {
     pub assets_count: i64,
     pub asset_file_count: usize,
     pub restart_required: bool,
+    /// The PC this one continues as after the restore, if it took one over.
+    pub continues_as: Option<crate::integrity::ledger::Takeover>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -698,6 +700,7 @@ fn restore_summary_from_local(local_summary: &LocalBackupSummary) -> RemoteBacku
         assets_count: local_summary.assets_count,
         asset_file_count: local_summary.asset_file_count,
         restart_required: local_summary.restart_required,
+        continues_as: local_summary.continues_as.clone(),
     }
 }
 

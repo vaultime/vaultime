@@ -38,6 +38,7 @@ import { formatLongDate, formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary, TrackingDiagnostics } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { useScrollToAnchor } from "@/lib/anchors";
+import { continuesAs } from "@/lib/devices";
 import { capitalize, numberWords, plural, whichPc } from "@/lib/words";
 
 
@@ -306,7 +307,7 @@ export function SettingsPage() {
       if (!restorePreview) return;
       const summary = await api.importLocalBackup(restorePreview.backup_path);
       setRestorePreview(null);
-      setBackupMessage("Backup restored.");
+      setBackupMessage(summary.continues_as ? `Backup restored. ${continuesAs(summary.continues_as)}` : "Backup restored.");
       if (summary.restart_required) setRestartRequired(true);
       setSnapshots(await api.listBackupSnapshots());
       await refresh();
@@ -535,6 +536,15 @@ export function SettingsPage() {
                 {plural(restorePreview.games_count, "game")}, {plural(restorePreview.sessions_count, "session")},{" "}
                 {plural(restorePreview.asset_file_count, "image")}
               </p>
+              {restorePreview.continues_as && (
+                <p className="mt-3 max-w-[560px] text-[15px] leading-relaxed">
+                  {continuesAs(restorePreview.continues_as)}{" "}
+                  <span className="text-[13px] text-faint">
+                    This PC has no history of its own yet, so it takes over the backup&apos;s PC: its sessions count
+                    as this PC&apos;s own, and so do sessions it played after the backup that come in by merge.
+                  </span>
+                </p>
+              )}
               <p className="mt-3 max-w-[560px] text-[13px] leading-relaxed text-faint">
                 Restoring replaces the library, sessions, event logs and covers on this PC. Close running games
                 first. Vaultime asks for a restart afterwards so tracking picks up cleanly.

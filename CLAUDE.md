@@ -139,7 +139,17 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   way or that this PC's earlier pins confirm up to their newest timing
   event. After a session's first closing event only corrections follow.
   Never extend a chain recorded by a merged PC, and keep foreign games out
-  of the tracker.
+  of the tracker. Never close or recover a session another PC recorded: a
+  running one from a restored backup stays open, out of the live views, and
+  counts up to its last event until a merge brings its end.
+- A fresh install (`ledger::fresh_install`: no sessions, no merged PC, a
+  ledger of its own `began` entries only) that restores a backup of another
+  PC with a sound ledger takes it over (`ledger::Takeover`): it continues as
+  that PC, the keys the backup names for it count as its own beside its new
+  key, written to `device-id` and `device-keys` and noted in a signed
+  `took_over` entry. A merge then takes in that PC's sessions it lacks only
+  when the backup's PC trusted only taken-over keys for it. A PC with
+  history never takes over.
 - Games are linked, never merged. `game_links` maps a game to the game it
   counts as: another install on this PC, like a copy from a second launcher,
   which stays tracked, or a game of another PC. The map stays flat: a linked

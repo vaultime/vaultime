@@ -72,6 +72,10 @@ pub struct LocalBackupSummary {
     pub backup_path: String,
     pub manifest_path: String,
     pub restart_required: bool,
+    /// The PC this one continues as, after restoring this backup or when it
+    /// would restore it, see `ledger::Takeover`.
+    #[serde(default)]
+    pub continues_as: Option<integrity::ledger::Takeover>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,10 +184,35 @@ pub(crate) fn export_backup_to(
     Ok(summary_from_manifest(&manifest, &backup_dir, false))
 }
 
-pub fn inspect_local_backup(backup_path: &Path) -> Result<LocalBackupSummary> {
+/// What a backup holds, and the PC this one would continue as when it
+/// restored it, see `ledger::Takeover`.
+pub fn inspect_local_backup(db: &Database, backup_path: &Path) -> Result<LocalBackupSummary> {
     let backup_dir = resolve_backup_dir(backup_path)?;
     let (manifest, _) = load_and_validate_manifest(&backup_dir)?;
-    Ok(summary_from_manifest(&manifest, &backup_dir, false))
+    let mut summary = summary_from_manifest(&manifest, &backup_dir, false);
+    summary.continues_as = preview_takeover(
+        db,
+        &backup_dir.join(DATABASE_FILE),
+        &manifest.source_device_id,
+    );
+    Ok(summary)
+}
+
+/// The takeover a restore of the backup database at `database_path` would
+/// bring, read without changing it. A backup the restore would refuse, or
+/// one that cannot be read here, brings none.
+fn preview_takeover(
+    db: &Database,
+    database_path: &Path,
+    source: &str,
+) -> Option<integrity::ledger::Takeover> {
+    check_plain_schema(database_path).ok()?;
+    let conn =
+        Connection::open_with_flags(database_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .ok()?;
+    db.with_conn(|local| integrity::ledger::plan_takeover(local, &conn, source))
+        .ok()
+        .flatten()
 }
 
 pub fn import_local_backup(
@@ -221,9 +250,9 @@ pub fn import_local_backup(
     } else {
         cleanup_staging_dir(&staging_dir);
     }
-    result?;
-
-    Ok(summary_from_manifest(&manifest, &backup_dir, true))
+    let mut summary = summary_from_manifest(&manifest, &backup_dir, true);
+    summary.continues_as = result?;
+    Ok(summary)
 }
 
 /// Removes a staging folder. It can hold a decrypted backup, so a failure is logged.
@@ -238,7 +267,9 @@ fn cleanup_staging_dir(staging_dir: &Path) {
 }
 
 /// Stages the backup, checks it, then swaps the artwork cache and the
-/// database. A failed database swap puts the old cache back.
+/// database. A failed database swap puts the old cache back, and this PC
+/// stays the PC it was. Returns the PC this one continues as, if it took
+/// one over.
 fn restore_from_staging(
     db: &Database,
     asset_manager: &AssetManager,
@@ -247,7 +278,7 @@ fn restore_from_staging(
     backup_dir: &Path,
     staging_dir: &Path,
     artwork: &[String],
-) -> Result<()> {
+) -> Result<Option<integrity::ledger::Takeover>> {
     let staged_assets = staging_dir.join(ASSET_CACHE_DIR);
     create_dir(&staged_assets)?;
     for relative_path in artwork {
@@ -273,9 +304,20 @@ fn restore_from_staging(
     // Everything that can still fail runs on the staged copy, so swapping the
     // artwork and the database is the last step.
     let cache_dir = asset_manager.cache_dir();
+    let takeover;
+    let mut taking_over = None;
     {
         let staged = Database::open(&staged_db)?;
-        take_in_restored(db, &staged, manifest)?;
+        // A fresh install continues as the PC whose backup it restores.
+        takeover = staged.with_conn(|staged_conn| {
+            db.with_conn(|local| {
+                integrity::ledger::plan_takeover(local, staged_conn, &manifest.source_device_id)
+            })
+        })?;
+        if let Some(plan) = &takeover {
+            taking_over = Some(integrity::ledger::TakingOver::begin(plan)?);
+        }
+        take_in_restored(db, &staged, manifest, taking_over.as_ref())?;
         rewrite_asset_cache_paths(&staged, cache_dir)?;
         // A backup made during play holds sessions that were still running.
         // Nothing tracks this PC's own here, so they are closed like after a
@@ -288,10 +330,13 @@ fn restore_from_staging(
         // The restored device list may not contain this PC yet.
         devices::ensure_device(
             &staged,
-            &app_context.device_id,
+            &this,
             std::env::consts::OS,
             &app_context.app_version,
         )?;
+    }
+    if let Some(change) = taking_over.as_mut() {
+        change.write_files(&app_context.app_dir)?;
     }
 
     let previous_cache = staging_dir.join(PREVIOUS_CACHE_DIR);
@@ -317,6 +362,9 @@ fn restore_from_staging(
         put_back();
         return Err(error);
     }
+    if let Some(change) = taking_over {
+        change.keep();
+    }
     // Checks remembered from the old history must not vouch for the new one.
     integrity::forget_checks();
     // The restored history gets its slices now, so the stats are right before
@@ -324,7 +372,7 @@ fn restore_from_staging(
     if let Err(error) = crate::playtime::slices::rebuild_all(db) {
         warn!("play slices not rebuilt after the restore: {error}");
     }
-    Ok(())
+    Ok(takeover)
 }
 
 fn create_dir(path: &Path) -> Result<()> {
@@ -342,6 +390,7 @@ fn take_in_restored(
     db: &Database,
     staged: &Database,
     manifest: &LocalBackupManifest,
+    taking_over: Option<&integrity::ledger::TakingOver>,
 ) -> Result<()> {
     let ledger_before = db.with_conn(integrity::ledger::this_tail)?;
     // What this PC vouched for before, so the restore can tell a backup of
@@ -374,6 +423,9 @@ fn take_in_restored(
         } else {
             None
         };
+        if let Some(change) = taking_over {
+            change.record(conn, &manifest.backup_id)?;
+        }
         integrity::ledger::record_restored(conn, &manifest.backup_id, ledger_before)?;
         if began.is_none() {
             integrity::adopt_sound_sessions(
@@ -1102,6 +1154,7 @@ fn summary_from_manifest(
             .to_string_lossy()
             .to_string(),
         restart_required,
+        continues_as: None,
     }
 }
 

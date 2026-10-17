@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import type { Device, Session } from "@/lib/types";
+import type { Device, PcTakeover, Session } from "@/lib/types";
 
 /** The name a PC goes by, or its id when it has none. */
 export function pcName(devices: Device[], id: string): string {
@@ -12,6 +12,11 @@ export function pcName(devices: Device[], id: string): string {
 export function recordedElsewhere(session: Session, devices: Device[], thisDeviceId: string | null): string | null {
   if (!thisDeviceId || session.device_id === thisDeviceId) return null;
   return pcName(devices, session.device_id);
+}
+
+/** "This PC continues as Desktop.", for a restore that makes this PC continue as the PC of the backup. */
+export function continuesAs(takeover: PcTakeover): string {
+  return `This PC continues as ${takeover.name ?? "the PC that made this backup"}.`;
 }
 
 /** Whether sessions of the PC came here by merge, so only that PC can correct them. */
