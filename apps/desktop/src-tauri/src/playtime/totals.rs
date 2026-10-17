@@ -197,9 +197,9 @@ pub fn fill_set_aside(
                         ]
                     })
             };
-            session.set_aside_ms = (session.runtime_ms - kept[0]).max(0);
-            session.set_aside_active_ms = (session.active_ms - kept[1]).max(0);
-            session.set_aside_idle_ms = (session.idle_ms - kept[2]).max(0);
+            session.set_aside_ms = session.runtime_ms.saturating_sub(kept[0]).max(0);
+            session.set_aside_active_ms = session.active_ms.saturating_sub(kept[1]).max(0);
+            session.set_aside_idle_ms = session.idle_ms.saturating_sub(kept[2]).max(0);
         }
         Ok(())
     })

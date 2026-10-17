@@ -84,6 +84,10 @@ pub const PLAY_SLICE_MS: i64 = 15 * 60 * 1_000;
 /// Past it the rest lands in the quarter hour it ended in, so a damaged or
 /// made up record cannot fill years with slices.
 pub const SESSION_SPREAD_MAX_MS: i64 = 366 * 24 * 60 * 60 * 1_000;
+/// Most time one session can hold, in milliseconds, about ten years. Time
+/// below zero or past it only comes from a damaged or made up record, which
+/// turns Suspicious, and slices count it as this much at most.
+pub const SESSION_TIME_MAX_MS: i64 = 10 * 366 * 24 * 60 * 60 * 1_000;
 /// How slices are worked out. Bump it when that changes, and every PC
 /// rebuilds them on its next start.
 pub const PLAY_SLICES_VERSION: i64 = 1;

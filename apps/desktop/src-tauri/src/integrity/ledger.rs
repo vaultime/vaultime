@@ -1051,8 +1051,9 @@ pub(crate) fn session_problem(
         ) else {
             return Ok(Some("ledger_mismatch"));
         };
-        let pinned = usize::try_from(sequence - 1)
-            .ok()
+        let pinned = sequence
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
             .and_then(|index| events.get(index));
         if pinned.is_none_or(|event| event.hash_self.as_deref() != Some(hash)) {
             return Ok(Some("ledger_mismatch"));
@@ -1430,6 +1431,52 @@ mod tests {
             fresh
         );
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn absurd_values_turn_a_session_suspicious_without_a_panic() {
+        let (db, game) = setup();
+        let session = played(&db, &game);
+        // A pin at a place no chain reaches, signed with this PC's key.
+        db.with_conn(|conn| {
+            append(
+                conn,
+                ENTRY_PINNED,
+                Some(&session),
+                &json!({ "sequence": i64::MIN, "hash": "x" }),
+            )
+        })
+        .unwrap();
+        integrity::forget_checks();
+        assert_eq!(problem(&db, &session).as_deref(), Some("ledger_mismatch"));
+
+        // Time far past any session, written through the chain with the row
+        // to match.
+        let open = sessions::create_session(&db, &game, DEVICE).unwrap();
+        db.with_conn(|conn| {
+            integrity::append_session_event(
+                conn,
+                &open.id,
+                "heartbeat",
+                &integrity::now_timestamp(),
+                Some(i64::MAX),
+                &json!({
+                    "runtime_ms": i64::MAX, "active_ms": i64::MAX, "idle_ms": 0,
+                    "integrity_status": "local",
+                })
+                .to_string(),
+            )?;
+            conn.execute(
+                "UPDATE sessions SET runtime_ms = ?1, elapsed_monotonic_ms = ?1, active_ms = ?1
+                 WHERE id = ?2",
+                rusqlite::params![i64::MAX, open.id],
+            )
+            .map_err(map_db)?;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(problem(&db, &open.id).as_deref(), Some("time_out_of_range"));
+        assert_eq!(listed(&db, &open.id).integrity_status, STATUS_SUSPICIOUS);
     }
 
     #[test]

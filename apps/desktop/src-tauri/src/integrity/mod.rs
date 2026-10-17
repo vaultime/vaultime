@@ -14,6 +14,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::constants::SESSION_TIME_MAX_MS;
 use crate::db::models::{Session, SessionEvent};
 use crate::db::repo::session_events::row_to_session_event;
 use crate::error::{Result, VaultimeError};
@@ -187,8 +188,9 @@ fn pins_confirm(pins: &[(i64, String)], events: &[SessionEvent], closed: bool) -
         return false;
     };
     let matches = within.iter().all(|(sequence, hash)| {
-        usize::try_from(*sequence - 1)
-            .ok()
+        sequence
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
             .and_then(|index| events.get(index))
             .is_some_and(|event| event.hash_self.as_deref() == Some(hash.as_str()))
     });
@@ -212,6 +214,10 @@ pub fn validate_session_history_from(
     }
 
     if let Some(reason) = validate_event_chain(&events) {
+        return Ok(Some(reason));
+    }
+
+    if let Some(reason) = check_time_range(session, &events) {
         return Ok(Some(reason));
     }
 
@@ -287,6 +293,36 @@ pub fn validate_session_history_from(
         ledger::session_problem(conn, session, &events, &TIMING_EVENTS, viewpoint)?
             .map(str::to_owned),
     )
+}
+
+/// Every amount of time a session and its events name lies between zero and
+/// `SESSION_TIME_MAX_MS`. Others only come from a damaged or made up record.
+fn check_time_range(session: &Session, events: &[SessionEvent]) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    #[expect(clippy::struct_field_names)]
+    struct Amounts {
+        runtime_ms: Option<i64>,
+        active_ms: Option<i64>,
+        idle_ms: Option<i64>,
+    }
+    let in_range = |value: i64| (0..=SESSION_TIME_MAX_MS).contains(&value);
+    let row = [
+        session.runtime_ms,
+        session.active_ms,
+        session.idle_ms,
+        session.elapsed_monotonic_ms,
+    ];
+    let events_in_range = events.iter().all(|event| {
+        let amounts = serde_json::from_str::<Amounts>(&event.payload_json).ok();
+        event.event_time_monotonic.is_none_or(in_range)
+            && amounts.is_none_or(|amounts| {
+                [amounts.runtime_ms, amounts.active_ms, amounts.idle_ms]
+                    .into_iter()
+                    .flatten()
+                    .all(in_range)
+            })
+    });
+    (!row.into_iter().all(in_range) || !events_in_range).then(|| "time_out_of_range".into())
 }
 
 /// Once a session closed, only corrections follow, so nothing can add time

@@ -17,7 +17,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::constants::{
     MERGE_SLICE_BATCH, PLAY_SLICE_MS, PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING,
-    SESSION_SPREAD_MAX_MS,
+    SESSION_SPREAD_MAX_MS, SESSION_TIME_MAX_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::{Session, SessionEvent};
@@ -68,8 +68,18 @@ struct Placing<'a> {
 
 impl Placing<'_> {
     fn counters(&self) -> Option<[i64; MEASURES]> {
-        Some([self.runtime_ms?, self.active_ms?, self.idle_ms?])
+        Some(within_range([
+            self.runtime_ms?,
+            self.active_ms?,
+            self.idle_ms?,
+        ]))
     }
+}
+
+/// Counters held between zero and `SESSION_TIME_MAX_MS`, so a damaged or
+/// made up record cannot overflow the sums.
+fn within_range(counters: [i64; MEASURES]) -> [i64; MEASURES] {
+    counters.map(|value| value.clamp(0, SESSION_TIME_MAX_MS))
 }
 
 /// The counters at every event that records them, in the order they were
@@ -268,10 +278,10 @@ pub fn slices_of(
     live: Option<(i64, LiveCounters)>,
     aside: &[(i64, i64)],
 ) -> Vec<Slice> {
-    let totals = match live {
+    let totals = within_range(match live {
         Some((_, counters)) => [counters.runtime_ms, counters.active_ms, counters.idle_ms],
         None => [session.runtime_ms, session.active_ms, session.idle_ms],
-    };
+    });
     let Some(start) = wall_ms(&session.started_at_wall) else {
         return Vec::new();
     };
@@ -294,7 +304,7 @@ pub fn slices_of(
     if let Some((now, counters)) = live {
         points.push(Point {
             wall_ms: now,
-            counters: [counters.runtime_ms, counters.active_ms, counters.idle_ms],
+            counters: within_range([counters.runtime_ms, counters.active_ms, counters.idle_ms]),
         });
     }
 
@@ -875,6 +885,42 @@ mod tests {
         let slices = slices_of(&session(&at(18, 0, 0), Some(end), totals), &bare, None, &[]);
         assert_eq!(slices.len(), 1);
         assert_eq!(sums(&slices), totals);
+    }
+
+    #[test]
+    fn absurd_counters_never_overflow() {
+        let events = [
+            event(1, "started", &at(18, 0, 0), &serde_json::json!({})),
+            event(
+                2,
+                "heartbeat",
+                &at(18, 10, 0),
+                &counters(i64::MIN, i64::MIN, 0),
+            ),
+            event(
+                3,
+                "heartbeat",
+                &at(18, 20, 0),
+                &counters(i64::MAX, i64::MAX, i64::MAX),
+            ),
+            event(4, "ended", &at(18, 30, 0), &counters(i64::MIN, 0, i64::MAX)),
+        ];
+        for totals in [[i64::MAX; 3], [i64::MIN; 3], [i64::MAX, i64::MIN, 0]] {
+            let session = session(&at(18, 0, 0), Some(&at(18, 30, 0)), totals);
+            let slices = slices_of(&session, &events, None, &[]);
+            assert!(
+                sums(&slices)
+                    .iter()
+                    .all(|sum| (0..=SESSION_TIME_MAX_MS).contains(sum))
+            );
+            let live = LiveCounters {
+                runtime_ms: i64::MAX,
+                active_ms: i64::MIN,
+                idle_ms: i64::MAX,
+            };
+            slices_of(&session, &events, Some((ms(&at(18, 40, 0)), live)), &[]);
+        }
+        assert!(counters_at(&events, ms(&at(18, 15, 0))).is_some());
     }
 
     #[test]
