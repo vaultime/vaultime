@@ -10,7 +10,6 @@ use log::info;
 use rusqlite::{Connection, OpenFlags};
 
 use super::DiscoveredGame;
-use crate::platform::process::path_key;
 
 /// Lutris data folders, the regular one and the Flatpak one.
 fn data_folders() -> Vec<PathBuf> {
@@ -42,28 +41,28 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
         }
         match installed_games(&database) {
             Ok(rows) => {
+                let configs = config_folders(&data);
                 for (name, slug, config) in rows {
-                    let executable = config_folders(&data)
+                    let executable = configs
                         .iter()
                         .find_map(|folder| {
                             std::fs::read_to_string(folder.join(format!("{config}.yml"))).ok()
                         })
                         .and_then(|yml| game_executable(&yml));
-                    let Some(executable_path) = executable else {
+                    let Some(executable) = executable else {
                         continue;
                     };
-                    let install_folder = Path::new(&executable_path)
-                        .parent()
-                        .map(|folder| folder.to_string_lossy().into_owned());
-                    games.push(DiscoveredGame {
-                        title: name,
-                        already_added: existing.contains(&path_key(&executable_path)),
-                        same_game: None,
-                        executable_path,
-                        install_folder,
-                        source: "lutris".into(),
-                        source_id: Some(slug),
-                    });
+                    let program = Path::new(&executable);
+                    games.push(DiscoveredGame::new(
+                        existing,
+                        name,
+                        program,
+                        program
+                            .parent()
+                            .map(|folder| folder.to_string_lossy().into_owned()),
+                        "lutris",
+                        Some(slug),
+                    ));
                 }
             }
             Err(error) => log::warn!("could not read the Lutris library: {error}"),

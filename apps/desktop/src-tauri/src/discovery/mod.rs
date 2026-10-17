@@ -65,6 +65,30 @@ pub struct DiscoveredGame {
     pub same_game: Option<SameGame>,
 }
 
+impl DiscoveredGame {
+    /// A candidate whose program was found at `program`, marked as added when
+    /// `existing`, the path keys of the library's programs, holds it.
+    pub(crate) fn new(
+        existing: &HashSet<String>,
+        title: String,
+        program: &Path,
+        install_folder: Option<String>,
+        source: &str,
+        source_id: Option<String>,
+    ) -> Self {
+        let executable_path = program.to_string_lossy().into_owned();
+        Self {
+            title,
+            already_added: existing.contains(&path_key(&executable_path)),
+            executable_path,
+            install_folder,
+            source: source.to_owned(),
+            source_id,
+            same_game: None,
+        }
+    }
+}
+
 /// A library game a candidate seems to be another install of.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SameGame {
@@ -344,10 +368,8 @@ pub(crate) fn find_main_executable(install_dir: &Path, title: &str) -> Option<Pa
             if stem.ends_with("-shipping") {
                 score += SHIPPING_BONUS_BYTES;
             }
-            if title_words
-                .iter()
-                .any(|word| normalize(stem).contains(word.as_str()))
-            {
+            let stem = normalize(stem);
+            if title_words.iter().any(|word| stem.contains(word.as_str())) {
                 score += TITLE_MATCH_BONUS_BYTES;
             }
             if entry.depth() <= 1 {

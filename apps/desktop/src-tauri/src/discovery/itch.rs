@@ -11,7 +11,6 @@ use rusqlite::{Connection, OpenFlags};
 use serde::Deserialize;
 
 use super::{DiscoveredGame, find_main_executable};
-use crate::platform::process::path_key;
 
 /// butler's name for programs that run natively here.
 #[cfg(windows)]
@@ -120,16 +119,14 @@ fn game(install: Install, existing: &HashSet<String>) -> Option<DiscoveredGame> 
         .and_then(|verdict| verdict_program(verdict, folder))
         .filter(|path| path.is_file())
         .or_else(|| find_main_executable(folder, &install.title))?;
-    let executable_path = program.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
-        title: install.title,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(install.folder),
-        source: "itch".into(),
-        source_id: Some(install.id.to_string()),
-    })
+    Some(DiscoveredGame::new(
+        existing,
+        install.title,
+        &program,
+        Some(install.folder),
+        "itch",
+        Some(install.id.to_string()),
+    ))
 }
 
 /// The program butler found for this platform, relative to its base folder.

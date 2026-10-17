@@ -262,18 +262,14 @@ fn parse_app_manifest(
     }
 
     let executable = find_main_executable(&install_folder, &name)?;
-    let executable_path = executable.to_string_lossy().into_owned();
-    let already_added = existing.contains(&path_key(&executable_path));
-
-    Some(DiscoveredGame {
-        title: name,
-        executable_path,
-        install_folder: Some(install_folder.to_string_lossy().into_owned()),
-        source: "steam".into(),
-        source_id: Some(app_id),
-        already_added,
-        same_game: None,
-    })
+    Some(DiscoveredGame::new(
+        existing,
+        name,
+        &executable,
+        Some(install_folder.to_string_lossy().into_owned()),
+        "steam",
+        Some(app_id),
+    ))
 }
 
 /// Portrait covers in Steam's library cache, newest name first.

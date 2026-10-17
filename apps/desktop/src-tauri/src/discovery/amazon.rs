@@ -10,7 +10,6 @@ use log::{info, warn};
 use rusqlite::{Connection, OpenFlags};
 
 use super::{DiscoveredGame, find_main_executable, fuel};
-use crate::platform::process::path_key;
 
 fn database() -> Option<PathBuf> {
     Some(
@@ -61,16 +60,14 @@ fn game(
     let folder_path = Path::new(folder);
     let program =
         fuel::program(folder_path).or_else(|| find_main_executable(folder_path, &title))?;
-    let executable_path = program.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
+    Some(DiscoveredGame::new(
+        existing,
         title,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(folder.to_owned()),
-        source: "amazon".into(),
-        source_id: Some(id),
-    })
+        &program,
+        Some(folder.to_owned()),
+        "amazon",
+        Some(id),
+    ))
 }
 
 #[cfg(test)]

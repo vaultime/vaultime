@@ -40,23 +40,21 @@ pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGam
 
         for entry in entries {
             let exe_path = entry.path().to_string_lossy().into_owned();
-            let key = path_key(&exe_path);
-            if !seen.insert(key.clone()) {
+            if !seen.insert(path_key(&exe_path)) {
                 continue;
             }
 
-            results.push(DiscoveredGame {
-                title: metadata::infer_title(&exe_path),
-                install_folder: entry
+            results.push(DiscoveredGame::new(
+                &existing,
+                metadata::infer_title(&exe_path),
+                entry.path(),
+                entry
                     .path()
                     .parent()
                     .map(|parent| parent.to_string_lossy().into_owned()),
-                already_added: existing.contains(&key),
-                same_game: None,
-                executable_path: exe_path,
-                source: "folder_scan".into(),
-                source_id: None,
-            });
+                "folder_scan",
+                None,
+            ));
         }
     }
 

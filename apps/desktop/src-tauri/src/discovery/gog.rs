@@ -12,7 +12,6 @@ use std::path::{MAIN_SEPARATOR_STR, Path};
 use serde::Deserialize;
 
 use super::DiscoveredGame;
-use crate::platform::process::path_key;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,16 +80,14 @@ fn parse_info(
         .and_then(|task| task.path.as_deref())?;
 
     let executable = folder.join(relative.replace(['/', '\\'], MAIN_SEPARATOR_STR));
-    let executable_path = executable.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
-        title: info.name,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(folder.to_string_lossy().into_owned()),
-        source: source.into(),
-        source_id: Some(info.game_id),
-    })
+    Some(DiscoveredGame::new(
+        existing,
+        info.name,
+        &executable,
+        Some(folder.to_string_lossy().into_owned()),
+        source,
+        Some(info.game_id),
+    ))
 }
 
 /// Games installed through GOG Galaxy.

@@ -302,16 +302,14 @@ fn resolve(candidate: Candidate, existing: &HashSet<String>) -> Option<Discovere
         .map(PathBuf::from)
         .filter(|program| program.is_file())
         .or_else(|| find_main_executable(Path::new(&candidate.folder), &candidate.title))?;
-    let executable_path = program.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
-        title: candidate.title,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(candidate.folder),
-        source: candidate.source.into(),
-        source_id: Some(candidate.source_id),
-    })
+    Some(DiscoveredGame::new(
+        existing,
+        candidate.title,
+        &program,
+        Some(candidate.folder),
+        candidate.source,
+        Some(candidate.source_id),
+    ))
 }
 
 /// Every registered game whose program exists. Games that share a program,

@@ -97,16 +97,14 @@ fn game_from_folder(
                 })
         })
         .or_else(|| find_main_executable(folder, &title))?;
-    let executable_path = program.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
+    Some(DiscoveredGame::new(
+        existing,
         title,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(folder.to_string_lossy().into_owned()),
-        source: "ea".into(),
-        source_id: data.id,
-    })
+        &program,
+        Some(folder.to_string_lossy().into_owned()),
+        "ea",
+        data.id,
+    ))
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]

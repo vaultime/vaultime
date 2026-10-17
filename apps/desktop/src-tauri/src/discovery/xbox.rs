@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 
 use super::xml::{attribute, read_text, tags};
 use super::{DiscoveredGame, find_main_executable, metadata, scanner};
-use crate::platform::process::path_key;
 
 const GAMING_ROOT: &str = ".GamingRoot";
 const GAMING_ROOT_MAGIC: &[u8] = b"RGBX";
@@ -92,16 +91,14 @@ fn game_from_folder(folder: &Path, existing: &HashSet<String>) -> Option<Discove
                 })
         })
         .or_else(|| find_main_executable(&content, &title))?;
-    let executable_path = program.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
+    Some(DiscoveredGame::new(
+        existing,
         title,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(folder.to_string_lossy().into_owned()),
-        source: "xbox".into(),
-        source_id: config.identity,
-    })
+        &program,
+        Some(folder.to_string_lossy().into_owned()),
+        "xbox",
+        config.identity,
+    ))
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]

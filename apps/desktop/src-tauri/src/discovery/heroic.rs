@@ -12,7 +12,6 @@ use log::info;
 use serde::Deserialize;
 
 use super::{DiscoveredGame, find_main_executable, fuel, gog};
-use crate::platform::process::path_key;
 
 #[derive(Deserialize)]
 struct LegendaryGame {
@@ -111,16 +110,14 @@ fn parse_legendary(content: &str, existing: &HashSet<String>) -> Vec<DiscoveredG
         .map(|game| {
             let executable = Path::new(&game.install_path)
                 .join(game.executable.replace(['/', '\\'], MAIN_SEPARATOR_STR));
-            let executable_path = executable.to_string_lossy().into_owned();
-            DiscoveredGame {
-                title: game.title,
-                already_added: existing.contains(&path_key(&executable_path)),
-                same_game: None,
-                executable_path,
-                install_folder: Some(game.install_path),
-                source: "heroic".into(),
-                source_id: Some(game.app_name),
-            }
+            DiscoveredGame::new(
+                existing,
+                game.title,
+                &executable,
+                Some(game.install_path),
+                "heroic",
+                Some(game.app_name),
+            )
         })
         .collect()
 }
@@ -144,16 +141,14 @@ fn parse_nile(
                     .unwrap_or_default()
             });
             let program = fuel::program(folder).or_else(|| find_main_executable(folder, &title))?;
-            let executable_path = program.to_string_lossy().into_owned();
-            Some(DiscoveredGame {
+            Some(DiscoveredGame::new(
+                existing,
                 title,
-                already_added: existing.contains(&path_key(&executable_path)),
-                same_game: None,
-                executable_path,
-                install_folder: Some(install.path),
-                source: "heroic".into(),
-                source_id: Some(install.id),
-            })
+                &program,
+                Some(install.path),
+                "heroic",
+                Some(install.id),
+            ))
         })
         .collect()
 }

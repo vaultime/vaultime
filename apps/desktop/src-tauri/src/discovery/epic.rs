@@ -11,7 +11,6 @@ use log::info;
 use serde::Deserialize;
 
 use super::DiscoveredGame;
-use crate::platform::process::path_key;
 
 /// The fields Vaultime needs from an Epic `.item` manifest.
 #[derive(Deserialize)]
@@ -80,16 +79,14 @@ fn parse_manifest(content: &str, existing: &HashSet<String>) -> Option<Discovere
 
     let executable = Path::new(&manifest.install_location)
         .join(manifest.launch_executable.replace('/', MAIN_SEPARATOR_STR));
-    let executable_path = executable.to_string_lossy().into_owned();
-    Some(DiscoveredGame {
-        title: manifest.display_name,
-        already_added: existing.contains(&path_key(&executable_path)),
-        same_game: None,
-        executable_path,
-        install_folder: Some(manifest.install_location),
-        source: "epic".into(),
-        source_id: Some(manifest.app_name),
-    })
+    Some(DiscoveredGame::new(
+        existing,
+        manifest.display_name,
+        &executable,
+        Some(manifest.install_location),
+        "epic",
+        Some(manifest.app_name),
+    ))
 }
 
 #[cfg(test)]
