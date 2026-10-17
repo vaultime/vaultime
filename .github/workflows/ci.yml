@@ -41,6 +41,9 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      # The site takes its fonts from node_modules, so it builds here.
+      - name: Website
+        run: python3 ../../scripts/build-site.py
 
   desktop:
     name: Desktop core (${{ matrix.platform }})
@@ -64,6 +67,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: apps/desktop/src-tauri
+          # Caches saved by a tag run only that tag could restore.
+          save-if: ${{ github.ref_type != 'tag' }}
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -88,10 +93,16 @@ jobs:
         working-directory: apps/api
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # The dev helpers and the server install script.
+      - name: Shell scripts
+        working-directory: .
+        run: shellcheck scripts/*.sh scripts/linux-check/check.sh deploy/vps/install-api.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: apps/api
+          # Caches saved by a tag run only that tag could restore.
+          save-if: ${{ github.ref_type != 'tag' }}
       - name: Format
         run: cargo fmt --check
       - name: Clippy

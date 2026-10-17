@@ -44,6 +44,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: apps/desktop/src-tauri
+          # Caches saved by a tag run only that tag could restore.
+          save-if: ${{ github.ref_type != 'tag' }}
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
@@ -123,6 +125,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: apps/desktop/src-tauri
+          # Caches saved by a tag run only that tag could restore.
+          save-if: ${{ github.ref_type != 'tag' }}
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
