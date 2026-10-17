@@ -8,13 +8,13 @@
   <title>Vaultime, a playtime tracker</title>
   <meta name="description" content="A local-first game playtime tracker for Windows and Linux. Active and idle time apart, sessions written like a journal, honest trust labels and optional encrypted cloud backup." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2221.5%22 fill=%22%231A1230%22/%3E%3Cg transform=%22translate(-1.7 -1.7) scale(1.0527)%22%3E%3Crect x=%227%22 y=%227%22 width=%2250%22 height=%2250%22 rx=%2215%22 fill=%22none%22 stroke=%22%23F1EBFA%22 stroke-width=%223.5%22/%3E%3Cpath d=%22M25.5 21.3L32 32.5L41 17%22 fill=%22none%22 stroke=%22%23F1EBFA%22 stroke-width=%225.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 44.5v3.5%22 fill=%22none%22 stroke=%22%23F1EBFA%22 stroke-width=%223.5%22 stroke-linecap=%22round%22/%3E%3Ccircle cx=%2232%22 cy=%2232.5%22 r=%223.4%22 fill=%22%239D7CFF%22/%3E%3C/g%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="site.css" />
-  <script src="site.js" defer></script>
+  <link rel="stylesheet" href="/site.css" />
+  <script src="/site.js" defer></script>
 </head>
 <body>
   <header>
     <div class="wrap">
-      <a class="brand" href="#" aria-label="Vaultime">
+      <a class="brand" href="/" aria-label="Vaultime">
         <svg width="28" height="28" viewBox="4.75 4.75 54.5 54.5" fill="none" aria-hidden="true">
           <rect x="7" y="7" width="50" height="50" rx="15" stroke="#F1EBFA" stroke-width="4.5" />
           <path d="M25.5 21.3L32 32.5L41 17" stroke="#F1EBFA" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -26,8 +26,9 @@
       <nav class="top" aria-label="Page">
         <a href="#counting">How it counts</a>
         <a href="#features">What you get</a>
-        <a href="#download">Download</a>
+        <a class="keep" href="#download">Download</a>
         <a href="#beta">Cloud beta</a>
+        <a class="keep" href="/docs/">Docs</a>
       </nav>
     </div>
   </header>
@@ -42,6 +43,9 @@
           <a class="button solid" href="#download">Download</a>
           <a class="button line" href="#counting">How it counts</a>
         </div>
+        <figure class="shot">
+          <img src="/screenshots/library.png" width="1600" height="1000" alt="The Vaultime library: the game playing now with its cover, the past week in numbers and the games to continue." />
+        </figure>
       </div>
     </section>
 
@@ -91,7 +95,7 @@
       <section class="doc" id="counting">
         <div>
           <h2 class="display">How it counts</h2>
-          <p class="lead">Three kinds of time, kept apart.</p>
+          <p class="lead">Three kinds of time, kept apart. <a href="/docs/counting/">The details in the docs</a></p>
         </div>
         <div>
           <div class="row"><div><h3>Runtime</h3><p>How long the game was open.</p></div></div>
@@ -188,6 +192,7 @@
     <div class="wrap">
       <span>&copy; 2026 Dominik Schwimmbeck. Free and open source, no ads, nothing to pay.</span>
       <nav aria-label="More">
+        <a href="/docs/">Docs</a>
         <a href="https://github.com/vaultime/vaultime">GitHub</a>
         <a href="/privacy.html">Privacy</a>
         <a href="/terms.html">Terms</a>
