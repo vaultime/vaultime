@@ -35,7 +35,7 @@ The ledger notes every restore.
 
 A restore takes in only the sessions that pass their check with the keys this PC trusts, or that this PC vouched for before in the same state. A session of this PC that was still running when the backup was made is closed as [Recovered](trust-labels.md) at its last saved time, counting at most five minutes past the last note the ledger holds. A session another PC was still running stays open as that PC recorded it, see [Several PCs](several-pcs.md#running-sessions). A backup of a PC this one has never seen is taken at its word, like a [first merge](several-pcs.md#which-sessions-count).
 
-On a fresh install with no history of its own, restoring a backup of another PC makes this PC continue as that PC. The restore preview says so, see [Several PCs](several-pcs.md#setting-a-pc-up-again).
+On a fresh install with no history of its own, restoring a backup of another PC makes this PC continue as that PC. The restore preview asks first, with a switch that is on by default. Turn it off and this PC stays the PC it is, and the backup's sessions come in as another PC's, as on a PC with history of its own. See [Several PCs](several-pcs.md#setting-a-pc-up-again).
 
 Vaultime refuses a backup that is damaged or holds database parts it never writes.
 

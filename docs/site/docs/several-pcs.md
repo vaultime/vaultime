@@ -37,7 +37,11 @@ Restoring a backup another PC made while a game ran there leaves that session op
 
 ## Setting a PC up again
 
-When you set a PC up again, Vaultime makes a new key for it. If the first thing you do on the new install is restore that PC's last backup, the new install continues as that PC. The restore says so plainly before anything changes. A local restore names that PC, and a cloud restore says this PC continues as the PC that made the backup.
+When you set a PC up again, Vaultime makes a new key for it. If the first thing you do on the new install is restore that PC's last backup, the new install continues as that PC. The restore asks first with a switch that is on by default. A local restore names that PC, like "This is Desktop, set up again", and a cloud restore asks whether this PC is the one that made the backup, set up again.
+
+Turn the switch off when this PC is not that PC, for example when you restore your desktop's backup on a new laptop just to look at its history. This PC then keeps its own id and keys, and the backup's sessions come in as the other PC's, the same as on a PC with history of its own. To set up a second PC for good, [merge](#merge-another-pc) the other PC's backup under Settings, Other PCs instead.
+
+With the switch on:
 
 - Its sessions are this PC's own again, and the keys the backup names for that PC count as this PC's own beside the new key.
 - The ledger notes the takeover with the keys it took over, so it shows and can be checked.
