@@ -147,7 +147,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     tintsFromImages(covers).then((next) => {
-      if (!cancelled) setArtTints(next);
+      if (cancelled) return;
+      // Tints are kept per image, so unchanged covers give the same objects
+      // and a reload does not draw every page a second time.
+      setArtTints((current) => {
+        const keys = Object.keys(next);
+        const same =
+          keys.length === Object.keys(current).length && keys.every((gameId) => current[gameId] === next[gameId]);
+        return same ? current : next;
+      });
     });
     return () => {
       cancelled = true;
