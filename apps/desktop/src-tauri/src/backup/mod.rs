@@ -488,7 +488,10 @@ const FOREIGN_SCHEMA: &str =
 /// before any of them could run. Any of them could show one thing to a
 /// check and another to the copy that follows it.
 fn check_plain_schema(database_path: &Path) -> Result<()> {
-    let conn = Connection::open(database_path).map_err(check_failed)?;
+    // Read only, as a restore preview runs it on the backup the player picked.
+    let conn =
+        Connection::open_with_flags(database_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(check_failed)?;
     // Virtual tables keep no pages of their own, whatever their statement says.
     let odd: i64 = conn
         .query_row(
