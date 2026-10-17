@@ -15,10 +15,10 @@ use tauri::{AppHandle, Manager, Runtime, Webview};
 use crate::constants::{CLOSE_TO_TRAY_SETTING, TRAY_STATUS_INTERVAL, TRAY_TODAY_MIN_PLAYED_MS};
 use crate::db::connection::Database;
 use crate::db::repo::sessions::{self, SessionSpan};
-use crate::db::repo::settings;
+use crate::db::repo::{map_db, settings};
 use crate::error::Result;
 use crate::integrity;
-use crate::playtime::summaries;
+use crate::playtime::{summaries, totals};
 use crate::tracking::live::LiveSessions;
 use crate::window_look::{WindowLookState, draw_icon};
 
@@ -132,12 +132,21 @@ fn status_lines(
     let since = integrity::format_timestamp(local_day_start(now));
     let mut spans = sessions::spans_since(db, &since, device_id)?;
     spans.retain(|span| span.ended_at_wall.is_none());
-    for span in &mut spans {
-        if let Some(counters) = live.get(&span.session_id) {
-            span.runtime_ms = counters.runtime_ms;
-        }
-    }
     let now_ms = now.timestamp_millis();
+    // The time the live bar shows, without what a launcher set aside.
+    let mut running = db.with_conn(|conn| {
+        spans
+            .iter()
+            .map(|span| sessions::stored_session(conn, &span.session_id).map_err(map_db))
+            .collect::<Result<Vec<_>>>()
+    })?;
+    for session in &mut running {
+        live.apply(session);
+    }
+    totals::show_counted(db, live, &mut running, now_ms)?;
+    for (span, session) in spans.iter_mut().zip(&running) {
+        span.runtime_ms = session.runtime_ms;
+    }
     let played = summaries::played_on(
         db,
         live,
@@ -341,6 +350,42 @@ mod tests {
         let spans = [running("Cyberpunk 2077", 60), running("Cyberpunk 2077", 30)];
         let (playing, _) = describe_status(&spans, 60 * MINUTE_MS);
         assert_eq!(playing, "Playing Cyberpunk 2077, 1 h 00");
+    }
+
+    #[test]
+    fn a_launcher_shows_without_the_time_it_set_aside() {
+        use crate::playtime::testing::{Mark, database, game, recorded, utc};
+        use crate::tracking::live::LiveCounters;
+
+        // The PC the tests act as.
+        let here = integrity::ledger::this_device().unwrap();
+        let db = database();
+        crate::db::repo::devices::ensure_device(&db, &here, "test", "0.1.0").unwrap();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        crate::db::repo::games::set_steps_aside(&db, &client, true).unwrap();
+        let start = utc("2026-10-02T09:00:00Z");
+        let session = sessions::create_session_at(&db, &client, &here, start).unwrap();
+        // A match beside it for the last hour of its three.
+        recorded(
+            &db,
+            &match_game,
+            &here,
+            "2026-10-02T11:00:00Z",
+            &[Mark::Check(60, 60, 60)],
+        );
+        let live = LiveSessions::default();
+        let runtime_ms = 180 * MINUTE_MS;
+        live.update(
+            &session.id,
+            LiveCounters {
+                runtime_ms,
+                active_ms: runtime_ms,
+                idle_ms: 0,
+            },
+        );
+        let (playing, _) =
+            status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
+        assert_eq!(playing, "Playing Client, 2 h 00");
     }
 
     #[test]
