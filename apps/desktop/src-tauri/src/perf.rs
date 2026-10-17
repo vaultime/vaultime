@@ -269,7 +269,7 @@ fn page_timings(
     db: &Database,
     game_ids: &[String],
     timed: &dyn Fn(&str, &mut dyn FnMut() -> String),
-) {
+) -> LiveSessions {
     use crate::playtime::{journal, summaries};
     let tz = chrono::Local;
     let now_ms = Utc::now().timestamp_millis();
@@ -364,6 +364,144 @@ fn page_timings(
             crate::playtime::beside::steps_aside_hint(db, &game_ids[3], "device", now_ms).unwrap()
         )
     });
+    live
+}
+
+/// A session of `game_id` that another PC left open `years` back after an
+/// hour of play, as a restored backup brings it.
+fn leave_open_elsewhere(db: &Database, game_id: &str, years: i64) {
+    const MINUTES: i64 = 60;
+    const STEP_MS: i64 = 30_000;
+    devices::ensure_device(db, "other", "test", "0.0.0").unwrap();
+    let start = Utc::now() - TimeDelta::days(365 * years) + TimeDelta::hours(3);
+    db.with_transaction(|conn| {
+        let id = uuid::Uuid::new_v4().to_string();
+        let started = integrity::format_timestamp(start);
+        let total_ms = MINUTES * 60_000;
+        conn.execute(
+            "INSERT INTO sessions (id, game_id, device_id, started_at_wall, elapsed_monotonic_ms,
+                 active_ms, idle_ms, runtime_ms, integrity_status, closed_cleanly)
+             VALUES (?1, ?2, 'other', ?3, ?4, ?4, 0, ?4, 'local', 0)",
+            params![id, game_id, started, total_ms],
+        )
+        .map_err(map_db)?;
+        integrity::append_session_event(
+            conn,
+            &id,
+            "started",
+            &started,
+            Some(0),
+            &json!({ "game_id": game_id, "device_id": "other", "integrity_status": "local" })
+                .to_string(),
+        )?;
+        let mut at = STEP_MS;
+        while at <= total_ms {
+            integrity::append_session_event(
+                conn,
+                &id,
+                "heartbeat",
+                &integrity::format_timestamp(start + TimeDelta::milliseconds(at)),
+                Some(at),
+                &json!({
+                    "runtime_ms": at, "active_ms": at, "idle_ms": 0,
+                    "wall_elapsed_ms": at, "drift_ms": 0, "integrity_status": "local",
+                })
+                .to_string(),
+            )?;
+            at += STEP_MS;
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// A launcher that steps aside, open around both evenings of every day of
+/// the history. Returns its id.
+fn add_launcher(db: &Database, years: i64) -> String {
+    const MINUTES: i64 = 270;
+    const STEP_SECS: i64 = 300;
+    let launcher = games::create_game(
+        db,
+        &CreateGame {
+            title: "Launcher".into(),
+            executable_path: Some("launcher.exe".into()),
+            install_folder: None,
+            launcher_source: None,
+        },
+    )
+    .unwrap()
+    .id;
+    games::set_steps_aside(db, &launcher, true).unwrap();
+    let first = Utc::now() - TimeDelta::days(365 * years);
+    for day in 0..365 * years {
+        let start = first + TimeDelta::days(day) + TimeDelta::minutes(17 * 60 + 30);
+        write_session(db, &launcher, start, MINUTES, STEP_SECS);
+    }
+    launcher
+}
+
+/// Timings with a launcher that steps aside over the whole history and a
+/// session another PC left open years back, which stays open by design.
+fn launcher_and_open_elsewhere_timings(
+    db: &Database,
+    game_ids: &[String],
+    live: &LiveSessions,
+    timed: &dyn Fn(&str, &mut dyn FnMut() -> String),
+) {
+    use crate::playtime::summaries;
+    let years = 10;
+    let launcher = add_launcher(db, years);
+    leave_open_elsewhere(db, &game_ids[2], years - 1);
+    let tz = chrono::Local;
+    timed("rebuild all slices, a launcher steps aside", &mut || {
+        format!("{} sessions", slices::rebuild_all(db).unwrap())
+    });
+    timed("rebuild for a game inside the launcher", &mut || {
+        slices::rebuild_for_game(db, &game_ids[5]).unwrap();
+        String::new()
+    });
+    timed("rebuild for the launcher", &mut || {
+        slices::rebuild_for_game(db, &launcher).unwrap();
+        String::new()
+    });
+    let now_ms = Utc::now().timestamp_millis();
+    let today = summaries::today_of(&tz, now_ms);
+    timed("live bar, open elsewhere", &mut || {
+        let mut active = sessions::get_active_sessions(db, "device").unwrap();
+        for session in &mut active {
+            live.apply(session);
+        }
+        totals::show_counted(db, live, &mut active, now_ms).unwrap();
+        let played = summaries::played_on(db, live, &tz, today, now_ms).unwrap();
+        format!("{} running, {played} ms today", active.len())
+    });
+    timed("live bar, nothing running, open elsewhere", &mut || {
+        let idle = LiveSessions::default();
+        let mut active = Vec::new();
+        totals::show_counted(db, &idle, &mut active, now_ms).unwrap();
+        let played = summaries::played_on(db, &idle, &tz, today, now_ms).unwrap();
+        format!("{played} ms today")
+    });
+    timed("year play, open elsewhere", &mut || {
+        let year =
+            summaries::year_play(db, live, &tz, chrono::Datelike::year(&today), today, now_ms)
+                .unwrap();
+        format!("streak {}", year.current_streak)
+    });
+    timed("totals for a week, open elsewhere", &mut || {
+        let rows = totals::play_totals(
+            db,
+            live,
+            &tz,
+            today - TimeDelta::days(6),
+            today + TimeDelta::days(1),
+            totals::Bucket::Day,
+            None,
+            now_ms,
+        )
+        .unwrap();
+        format!("{} rows", rows.len())
+    });
 }
 
 #[test]
@@ -456,7 +594,8 @@ fn large_history() {
         .unwrap();
         String::new()
     });
-    page_timings(&db, &game_ids, &timed);
+    let live = page_timings(&db, &game_ids, &timed);
+    launcher_and_open_elsewhere_timings(&db, &game_ids, &live, &timed);
     let bytes = std::fs::metadata(&path).map_or(0, |meta| meta.len());
     println!("database file: {} MB", bytes / 1_000_000);
     drop(db);
