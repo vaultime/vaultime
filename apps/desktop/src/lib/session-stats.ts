@@ -147,17 +147,28 @@ function toSpans(sessions: Session[], now: Date): Span[] {
   });
 }
 
-function toStretches(spans: Span[]): Stretch[] {
-  const timed = spans.filter((span) => span.end > span.start);
-  const bounds = [...new Set(timed.flatMap((span) => [span.start, span.end]))].sort((a, b) => a - b);
-  const stretches: Stretch[] = [];
+/**
+ * Calls `visit` for each stretch between two neighboring starts or ends in
+ * which spans ran, in clock order, with those spans by start. One sweep, so
+ * a year of sessions costs no more than sorting it. `running` changes after
+ * the call.
+ */
+function sweepStretches(spans: Span[], visit: (start: number, end: number, running: Span[]) => void) {
+  const byStart = spans.filter((span) => span.end > span.start).sort((a, b) => a.start - b.start);
+  const bounds = [...new Set(byStart.flatMap((span) => [span.start, span.end]))].sort((a, b) => a - b);
+  let running: Span[] = [];
+  let next = 0;
   for (let index = 0; index + 1 < bounds.length; index += 1) {
-    const [start, end] = [bounds[index], bounds[index + 1]];
-    const running = timed
-      .filter((span) => span.start <= start && span.end >= end)
-      .sort((a, b) => a.start - b.start);
-    if (running.length > 0) stretches.push({ start, end, running });
+    const start = bounds[index];
+    running = running.filter((span) => span.end > start);
+    while (next < byStart.length && byStart[next].start <= start) running.push(byStart[next++]);
+    if (running.length > 0) visit(start, bounds[index + 1], running);
   }
+}
+
+function toStretches(spans: Span[]): Stretch[] {
+  const stretches: Stretch[] = [];
+  sweepStretches(spans, (start, end, running) => stretches.push({ start, end, running: [...running] }));
   return stretches;
 }
 
@@ -172,10 +183,10 @@ export function playedMs(sessions: Session[], now = new Date()): number {
   const untimed = spans
     .filter((span) => span.end <= span.start)
     .reduce((sum, span) => sum + span.session.runtime_ms, 0);
-  const timed = toStretches(spans).reduce(
-    (sum, stretch) => sum + (stretch.end - stretch.start) * Math.max(...stretch.running.map((span) => span.density)),
-    0,
-  );
+  let timed = 0;
+  sweepStretches(spans, (start, end, running) => {
+    timed += (end - start) * Math.max(...running.map((span) => span.density));
+  });
   return untimed + Math.round(timed);
 }
 
