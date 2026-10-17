@@ -1355,12 +1355,8 @@ mod tests {
             self.f
                 .db
                 .with_conn(|conn| {
-                    conn.query_row(
-                        "SELECT * FROM sessions WHERE id = ?1",
-                        [&self.f.session_id],
-                        sessions::row_to_session,
-                    )
-                    .map_err(crate::db::repo::map_db)
+                    sessions::stored_session(conn, &self.f.session_id)
+                        .map_err(crate::db::repo::map_db)
                 })
                 .unwrap()
         }
