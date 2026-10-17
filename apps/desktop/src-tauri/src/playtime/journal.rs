@@ -10,7 +10,7 @@ use chrono::{DateTime, NaiveDate, TimeDelta, TimeZone, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
-use crate::constants::DAYS_PER_WEEK;
+use crate::constants::{DAYS_PER_WEEK, SESSION_SPREAD_MAX_MS};
 use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::sessions::row_to_session;
@@ -334,7 +334,27 @@ fn shares_of<Tz: TimeZone>(tz: &Tz, placed: &Placed) -> Vec<DayShare> {
         return Vec::new();
     };
     let by_day = runtime_by_day(tz, &placed.spans);
+    // A damaged record can span years, its time is never spread wider.
+    let reach = placed
+        .end_ms
+        .min(placed.start_ms.saturating_add(SESSION_SPREAD_MAX_MS));
     let mut shares: Vec<DayShare> = Vec::new();
+    let share = |day: NaiveDate, runtime_ms: i64, shares: &mut Vec<DayShare>| {
+        let (from, to) = (
+            day_start_ms(tz, day),
+            day_start_ms(tz, day + TimeDelta::days(1)),
+        );
+        let start_ms = placed.start_ms.max(from);
+        shares.push(DayShare {
+            day: day.format("%Y-%m-%d").to_string(),
+            start_ms,
+            end_ms: start_ms.max(placed.end_ms.min(to)),
+            runtime_ms,
+            from_before: !shares.is_empty(),
+            into_next: false,
+        });
+        to
+    };
     loop {
         let (from, to) = (
             day_start_ms(tz, day),
@@ -346,20 +366,16 @@ fn shares_of<Tz: TimeZone>(tz: &Tz, placed: &Placed) -> Vec<DayShare> {
             .iter()
             .any(|&(start, end)| touches(start, end, from, to));
         if drawn || runtime_ms > 0 || shares.is_empty() {
-            let start_ms = placed.start_ms.max(from);
-            shares.push(DayShare {
-                day: day.format("%Y-%m-%d").to_string(),
-                start_ms,
-                end_ms: start_ms.max(placed.end_ms.min(to)),
-                runtime_ms,
-                from_before: !shares.is_empty(),
-                into_next: false,
-            });
+            share(day, runtime_ms, &mut shares);
         }
-        if to >= placed.end_ms {
+        if to >= reach {
             break;
         }
         day += TimeDelta::days(1);
+    }
+    // Time placed past the reach, where such a record ended.
+    for (&later, &runtime_ms) in by_day.range(day + TimeDelta::days(1)..) {
+        share(later, runtime_ms, &mut shares);
     }
     let last = shares.len().saturating_sub(1);
     for share in &mut shares[..last] {
@@ -699,6 +715,34 @@ mod tests {
         let week = week_of(&db, &Berlin, "2026-10-19", "2026-10-26T10:00:00Z");
         assert_eq!(minutes(&week.shares[&late]), [120, 180]);
         assert_eq!(week.shares[&late][1].day, "2026-10-25");
+    }
+
+    #[test]
+    fn a_record_spanning_years_keeps_its_split_short() {
+        let db = database();
+        let one = game(&db, "One");
+        // An hour whose end was moved five years on, as a damaged record could have it.
+        let years = 5 * 365 * 24 * 60;
+        let broken = recorded(
+            &db,
+            &one,
+            "device",
+            "2026-10-05T18:00:00Z",
+            &[Mark::Check(years, 60, 60)],
+        );
+        let week = week_of(
+            &db,
+            &FixedOffset::east_opt(0).unwrap(),
+            "2026-10-05",
+            "2026-10-07T10:00:00Z",
+        );
+        let shares = &week.shares[&broken];
+        assert!(shares.len() < 400);
+        assert_eq!(
+            shares.iter().map(|share| share.runtime_ms).sum::<i64>(),
+            60 * MINUTE
+        );
+        assert_eq!(shares.last().unwrap().day, "2031-10-04");
     }
 
     #[test]
