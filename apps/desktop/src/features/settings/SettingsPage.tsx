@@ -100,6 +100,7 @@ export function SettingsPage() {
   const [autoBackup, setAutoBackup] = useState(true);
   const [autoBackupFolder, setAutoBackupFolder] = useState("");
   const [autostart, setAutostart] = useState(false);
+  const [autoDiscover, setAutoDiscover] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,6 +122,7 @@ export function SettingsPage() {
         setTrayAvailable(Boolean(tray));
         setCloseToTray(values[SETTING_KEYS.closeToTray] !== "false");
         setAutoBackup(values[SETTING_KEYS.autoBackup] !== "false");
+        setAutoDiscover(values[SETTING_KEYS.autoDiscover] !== "false");
         setAutoBackupFolder(backupFolder);
         setDeviceId(thisDevice);
         setAutostart(Boolean(startsAtLogin));
@@ -211,6 +213,16 @@ export function SettingsPage() {
       await api.setSetting(SETTING_KEYS.autoBackup, String(next));
     } catch (saveError) {
       setAutoBackup(!next);
+      setError(describeError(saveError));
+    }
+  }
+
+  async function changeAutoDiscover(next: boolean) {
+    setAutoDiscover(next);
+    try {
+      await api.setSetting(SETTING_KEYS.autoDiscover, String(next));
+    } catch (saveError) {
+      setAutoDiscover(!next);
       setError(describeError(saveError));
     }
   }
@@ -391,6 +403,17 @@ export function SettingsPage() {
             }
           >
             <Switch id="autostart" checked={autostart} onCheckedChange={(checked) => void changeAutostart(checked)} />
+          </PageRow>
+          <PageRow
+            label="Look for new games when Vaultime starts"
+            htmlFor="auto-discover"
+            hint="Reads what Steam and your other launchers installed and asks only about games it has not offered before. Discover in the library still lists everything."
+          >
+            <Switch
+              id="auto-discover"
+              checked={autoDiscover}
+              onCheckedChange={(checked) => void changeAutoDiscover(checked)}
+            />
           </PageRow>
         </PageSection>
 
