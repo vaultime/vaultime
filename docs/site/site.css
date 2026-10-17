@@ -11,6 +11,8 @@
   --ink: #0e0b14; --surface: #16121e; --raised: #1a1524; --hairline: #2a2238; --rule: #231c31;
   --text: #eee8f6; --soft: #d9d1e6; --faint: #a99fbc; --violet: #9d7cff; --violet-hover: #b39aff;
   --violet-ink: #140e22; --amber: #f0b45a;
+  /* Edges of form fields, 3:1 against the ground as WCAG asks of controls. */
+  --field-edge: #6a5e80;
   --display: "Mona Sans", system-ui, sans-serif; --sans: "Geist", system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, monospace;
   /* Marks of the sample games, as the app gives them in the journal. */
@@ -87,7 +89,7 @@ section.doc .lead { margin-top: 10px; font-size: 14px; color: var(--faint); }
 /* Beta application */
 .apply { display: flex; flex-direction: column; gap: 22px; max-width: 560px; }
 .field { display: flex; flex-direction: column; gap: 8px; border: 0; }
-.field input, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid var(--hairline); border-radius: 12px;
+.field input, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid var(--field-edge); border-radius: 12px;
   background: var(--surface); color: var(--text); font: inherit; font-size: 15px; }
 .field textarea { resize: vertical; min-height: 88px; }
 .field input:focus, .field textarea:focus { outline: 2px solid var(--violet); outline-offset: 1px; border-color: transparent; }
