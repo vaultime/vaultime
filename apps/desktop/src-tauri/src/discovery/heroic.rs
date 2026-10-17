@@ -115,6 +115,7 @@ fn parse_legendary(content: &str, existing: &HashSet<String>) -> Vec<DiscoveredG
             DiscoveredGame {
                 title: game.title,
                 already_added: existing.contains(&path_key(&executable_path)),
+                same_game: None,
                 executable_path,
                 install_folder: Some(game.install_path),
                 source: "heroic".into(),
@@ -147,6 +148,7 @@ fn parse_nile(
             Some(DiscoveredGame {
                 title,
                 already_added: existing.contains(&path_key(&executable_path)),
+                same_game: None,
                 executable_path,
                 install_folder: Some(install.path),
                 source: "heroic".into(),

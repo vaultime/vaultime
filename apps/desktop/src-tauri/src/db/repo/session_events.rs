@@ -25,8 +25,8 @@ pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> 
     })
 }
 
-/// Events of a game's sessions, also of those of games of other PCs linked
-/// to it, newest first.
+/// Events of a game's sessions, also of those of the games linked to it,
+/// newest first.
 pub fn list_events_for_game(db: &Database, game_id: &str) -> Result<Vec<SessionEvent>> {
     db.with_conn(|conn| {
         let mut stmt = conn

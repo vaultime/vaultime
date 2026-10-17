@@ -306,6 +306,7 @@ fn resolve(candidate: Candidate, existing: &HashSet<String>) -> Option<Discovere
     Some(DiscoveredGame {
         title: candidate.title,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(candidate.folder),
         source: candidate.source.into(),

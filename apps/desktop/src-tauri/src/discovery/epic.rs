@@ -84,6 +84,7 @@ fn parse_manifest(content: &str, existing: &HashSet<String>) -> Option<Discovere
     Some(DiscoveredGame {
         title: manifest.display_name,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(manifest.install_location),
         source: "epic".into(),

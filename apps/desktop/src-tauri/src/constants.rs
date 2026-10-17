@@ -384,10 +384,10 @@ pub const TRAY_TODAY_MIN_PLAYED_MS: i64 = 60_000;
 /// Name of the JSON session export, so tools can tell it apart.
 pub const EXPORT_FORMAT_NAME: &str = "vaultime-sessions";
 /// Version of the JSON session export, raised when its fields change.
-pub const EXPORT_FORMAT_VERSION: u32 = 1;
 /// Largest year card the page may hand over to be saved, in bytes. Same as
 /// `SHARE_IMAGE_MAX_BYTES` in `lib/constants.ts`.
 pub const SHARE_IMAGE_MAX_BYTES: usize = 32 * 1024 * 1024;
+pub const EXPORT_FORMAT_VERSION: u32 = 2;
 /// Bytes of the key check stored with each cloud backup, enough to tell two
 /// keys apart. Part of the backup format, changing it breaks the check.
 pub const KEY_CHECK_BYTES: usize = 16;

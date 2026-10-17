@@ -382,8 +382,8 @@ pub fn slices_of(
 }
 
 /// Games whose switch makes them step aside, read from their metadata, or
-/// from the game of this PC a game of another PC is linked to. A game whose
-/// metadata is no JSON does not step aside.
+/// from the game a linked game is linked to, as the switch belongs to the
+/// game shown. A game whose metadata is no JSON does not step aside.
 pub(crate) const STEPS_ASIDE: &str = "COALESCE((SELECT CASE WHEN json_valid(shown.metadata_json)
          THEN json_extract(shown.metadata_json, '$.steps_aside') END
      FROM games shown WHERE shown.id = COALESCE(
@@ -575,8 +575,8 @@ pub fn rebuild_merged(db: &Database, ids: &[String]) -> Result<()> {
     )
 }
 
-/// The clock spans and PCs of the sessions of a game and of the games of
-/// other PCs linked to it, open ones up to now, so the sessions that stepped
+/// The clock spans and PCs of the sessions of a game and of the games
+/// linked to it, open ones up to now, so the sessions that stepped
 /// aside for them can be built again once they are gone. Games that step
 /// aside are left out, since those never set time aside for each other.
 pub fn spans_beside(db: &Database, game_id: &str) -> Result<Vec<(String, String, String)>> {
@@ -662,7 +662,7 @@ pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
 }
 
 /// Builds again the slices that depend on whether `game_id` steps aside:
-/// its own sessions and those of games of other PCs linked to it, and those
+/// its own sessions and those of the games linked to it, and those
 /// of games that step aside around them.
 pub fn rebuild_for_game(db: &Database, game_id: &str) -> Result<()> {
     db.with_transaction(|conn| {
@@ -779,6 +779,7 @@ mod tests {
             set_aside_ms: 0,
             set_aside_active_ms: 0,
             set_aside_idle_ms: 0,
+            recorded_game_id: None,
         }
     }
 

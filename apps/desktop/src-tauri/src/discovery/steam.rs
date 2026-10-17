@@ -272,6 +272,7 @@ fn parse_app_manifest(
         source: "steam".into(),
         source_id: Some(app_id),
         already_added,
+        same_game: None,
     })
 }
 

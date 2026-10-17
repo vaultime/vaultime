@@ -30,6 +30,7 @@ pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         set_aside_ms: 0,
         set_aside_active_ms: 0,
         set_aside_idle_ms: 0,
+        recorded_game_id: None,
     })
 }
 
@@ -414,14 +415,18 @@ pub struct SessionSpan {
 }
 
 /// Sessions that ran at `since` or later, running ones included, oldest
-/// first. It skips the integrity check, so it stays cheap to call often.
+/// first, each with the title of the game it is shown as. It skips the
+/// integrity check, so it stays cheap to call often.
 pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
                 "SELECT sessions.id, games.title, sessions.started_at_wall,
                         sessions.ended_at_wall, sessions.runtime_ms
-                 FROM sessions JOIN games ON games.id = sessions.game_id
+                 FROM sessions JOIN games ON games.id = COALESCE(
+                     (SELECT linked_game_id FROM game_links
+                      WHERE game_links.game_id = sessions.game_id),
+                     sessions.game_id)
                  WHERE sessions.ended_at_wall IS NULL OR sessions.ended_at_wall > ?1
                  ORDER BY sessions.started_at_wall",
             )
@@ -441,28 +446,35 @@ pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
     })
 }
 
-/// Runtime per game id that `launcher` counted as well. A tracked session
-/// counts at the length the tracker recorded, before any correction, since
-/// the launcher saw the game run that long. A session added by hand counts
-/// only when it was played through that launcher. A game of another PC
-/// counts for the game of this PC it is linked to.
+/// Runtime of one game that a launcher may have counted as well.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LauncherRuntime {
+    /// Tracked sessions, each at the length the tracker recorded before any
+    /// correction, since the launcher saw the game run that long. They count
+    /// only for a copy of the game that launcher started.
+    pub tracked_ms: i64,
+    /// Sessions added by hand that the player said that launcher counted.
+    pub manual_ms: i64,
+}
+
+/// Runtime per game id that `launcher` may have counted as well, for each
+/// game as it was recorded, links left to the caller.
 pub fn launcher_runtime_by_game(
     db: &Database,
     launcher: &str,
-) -> Result<std::collections::HashMap<String, i64>> {
+) -> Result<std::collections::HashMap<String, LauncherRuntime>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
-                "SELECT sessions.game_id, SUM(CASE
-                     WHEN manual.id IS NOT NULL THEN sessions.runtime_ms
-                     ELSE COALESCE(
+                "SELECT sessions.game_id,
+                     SUM(CASE WHEN manual.id IS NULL THEN COALESCE(
                          (SELECT json_extract(first.payload_json, '$.previous.runtime_ms')
                           FROM session_events AS first
                           WHERE first.session_id = sessions.id
                             AND first.event_type = 'corrected'
                           ORDER BY first.sequence LIMIT 1),
-                         sessions.runtime_ms)
-                 END)
+                         sessions.runtime_ms) ELSE 0 END),
+                     SUM(CASE WHEN manual.id IS NOT NULL THEN sessions.runtime_ms ELSE 0 END)
                  FROM sessions
                  LEFT JOIN session_events AS manual
                      ON manual.session_id = sessions.id AND manual.event_type = 'added_manually'
@@ -471,19 +483,18 @@ pub fn launcher_runtime_by_game(
                  GROUP BY sessions.game_id",
             )
             .map_err(map_db)?;
-        let links = crate::db::repo::games::links_in(conn)?;
         let rows = stmt
             .query_map([launcher], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    LauncherRuntime {
+                        tracked_ms: row.get(1)?,
+                        manual_ms: row.get(2)?,
+                    },
+                ))
             })
             .map_err(map_db)?;
-        let mut runtime = std::collections::HashMap::new();
-        for row in rows {
-            let (game_id, ms) = row.map_err(map_db)?;
-            let game_id = links.get(&game_id).cloned().unwrap_or(game_id);
-            *runtime.entry(game_id).or_insert(0) += ms;
-        }
-        Ok(runtime)
+        rows.collect::<rusqlite::Result<_>>().map_err(map_db)
     })
 }
 

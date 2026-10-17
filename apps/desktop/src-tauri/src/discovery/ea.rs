@@ -101,6 +101,7 @@ fn game_from_folder(
     Some(DiscoveredGame {
         title,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(folder.to_string_lossy().into_owned()),
         source: "ea".into(),

@@ -22,7 +22,7 @@ use crate::integrity;
 const UTF8_BOM: &str = "\u{feff}";
 /// Line ending of CSV, as RFC 4180 sets it.
 const CSV_LINE_END: &str = "\r\n";
-const CSV_COLUMNS: [&str; 10] = [
+const CSV_COLUMNS: [&str; 13] = [
     "game",
     "started_at",
     "ended_at",
@@ -33,6 +33,9 @@ const CSV_COLUMNS: [&str; 10] = [
     "note",
     "session_id",
     "game_id",
+    "recorded_as",
+    "launcher",
+    "recorded_game_id",
 ];
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -45,8 +48,15 @@ pub enum ExportFormat {
 #[derive(Debug, Serialize)]
 struct ExportedSession {
     id: String,
+    /// The game the library shows it as.
     game_id: String,
     game: String,
+    /// The game that recorded it, another install or a game of another PC
+    /// when that one is linked to the game shown.
+    recorded_game_id: String,
+    recorded_as: String,
+    /// The launcher of the game that recorded it, such as `steam`.
+    launcher: Option<String>,
     started_at: String,
     ended_at: String,
     runtime_seconds: u64,
@@ -61,6 +71,9 @@ struct ExportedSession {
 struct ExportedGame {
     id: String,
     title: String,
+    launcher: Option<String>,
+    /// The game it counts as, when it is linked to one.
+    counts_as: Option<String>,
     hidden: bool,
     status: Option<String>,
     /// Playtime from before Vaultime, counted by a launcher.
@@ -110,10 +123,17 @@ pub fn export_sessions(
 }
 
 fn exported_sessions(db: &Database) -> Result<Vec<ExportedSession>> {
-    let titles: HashMap<String, String> = games::list_all_games(db)?
+    let games: HashMap<String, (String, Option<String>)> = games::list_all_games(db)?
         .into_iter()
-        .map(|game| (game.id, game.title))
+        .map(|game| (game.id, (game.title, game.launcher_source)))
         .collect();
+    let title = |id: &str| {
+        games
+            .get(id)
+            .map(|(title, _)| title.clone())
+            .unwrap_or_default()
+    };
+    let links = games::links(db)?;
     let notes: HashMap<String, String> = annotations::list_session_notes(db)?
         .into_iter()
         .map(|note| (note.session_id, note.note))
@@ -122,8 +142,18 @@ fn exported_sessions(db: &Database) -> Result<Vec<ExportedSession>> {
         .into_iter()
         .filter_map(|session| {
             let ended_at = session.ended_at_wall.as_deref().map(local_time)?;
+            let shown = links
+                .get(&session.game_id)
+                .cloned()
+                .unwrap_or_else(|| session.game_id.clone());
             Some(ExportedSession {
-                game: titles.get(&session.game_id).cloned().unwrap_or_default(),
+                game: title(&shown),
+                game_id: shown,
+                recorded_as: title(&session.game_id),
+                launcher: games
+                    .get(&session.game_id)
+                    .and_then(|(_, launcher)| launcher.clone()),
+                recorded_game_id: session.game_id,
                 started_at: local_time(&session.started_at_wall),
                 ended_at,
                 runtime_seconds: seconds(session.runtime_ms),
@@ -131,7 +161,6 @@ fn exported_sessions(db: &Database) -> Result<Vec<ExportedSession>> {
                 idle_seconds: seconds(session.idle_ms),
                 trust: session.integrity_status,
                 note: notes.get(&session.id).cloned(),
-                game_id: session.game_id,
                 id: session.id,
             })
         })
@@ -150,11 +179,14 @@ fn exported_games(db: &Database) -> Result<Vec<ExportedGame>> {
         .into_iter()
         .map(|entry| (entry.game_id, (entry.earlier_ms, entry.source)))
         .collect();
+    let links = games::links(db)?;
     Ok(games::list_all_games(db)?
         .into_iter()
         .map(|game| {
             let earlier = earlier.get(&game.id).filter(|(ms, _)| *ms > 0);
             ExportedGame {
+                counts_as: links.get(&game.id).cloned(),
+                launcher: game.launcher_source,
                 status: statuses
                     .get(&game.id)
                     .filter(|status| status.as_str() != annotations::STATUS_NONE)
@@ -201,6 +233,9 @@ fn to_csv(sessions: &[ExportedSession]) -> String {
             session.note.clone().unwrap_or_default(),
             session.id.clone(),
             session.game_id.clone(),
+            session.recorded_as.clone(),
+            session.launcher.clone().unwrap_or_default(),
+            session.recorded_game_id.clone(),
         ];
         let fields: Vec<String> = row.iter().map(|field| csv_field(field)).collect();
         csv.push_str(&fields.join(","));
@@ -306,6 +341,46 @@ mod tests {
         assert_eq!(json["sessions"][0]["runtime_seconds"], 3600);
         assert_eq!(json["sessions"][0]["trust"], "manual");
         assert!(json["sessions"][0]["note"].is_null());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_linked_install_names_the_game_shown_and_the_one_that_recorded() {
+        let (db, game_id, dir) = setup();
+        let gog = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Hades II (GOG)".into(),
+                executable_path: Some("D:/GOG/Hades II/Hades2.exe".into()),
+                install_folder: None,
+                launcher_source: Some("gog".into()),
+            },
+        )
+        .unwrap();
+        add(&db, &gog.id, 5, "");
+        games::link_game(&db, &gog.id, Some(&game_id)).unwrap();
+
+        let path = dir.join("sessions.json");
+        export_sessions(&db, &path, ExportFormat::Json, "0.1.0").unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let session = &json["sessions"][0];
+        assert_eq!(session["game_id"], game_id.as_str());
+        assert_eq!(session["recorded_game_id"], gog.id.as_str());
+        assert_eq!(session["recorded_as"], "Hades II (GOG)");
+        assert_eq!(session["launcher"], "gog");
+        let linked = json["games"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|game| game["id"] == gog.id.as_str())
+            .unwrap();
+        assert_eq!(linked["counts_as"], game_id.as_str());
+
+        let csv_path = dir.join("sessions.csv");
+        export_sessions(&db, &csv_path, ExportFormat::Csv, "0.1.0").unwrap();
+        let csv = fs::read_to_string(&csv_path).unwrap();
+        assert!(csv.contains(&format!(",Hades II (GOG),gog,{}\r\n", gog.id)));
         fs::remove_dir_all(dir).unwrap();
     }
 

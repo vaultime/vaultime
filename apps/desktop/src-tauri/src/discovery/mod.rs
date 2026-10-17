@@ -56,6 +56,93 @@ pub struct DiscoveredGame {
     pub source_id: Option<String>,
     /// True when the library already has a game with this executable.
     pub already_added: bool,
+    /// The library game this is most likely another install of, through
+    /// another launcher. Adding it links it to that game, unless the player
+    /// keeps them apart and clears this.
+    #[serde(default)]
+    pub same_game: Option<SameGame>,
+}
+
+/// A library game a candidate seems to be another install of.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SameGame {
+    /// The game the library shows, which the candidate would count as.
+    pub game_id: String,
+    pub title: String,
+    /// The launcher of the install that matched.
+    pub launcher_source: Option<String>,
+}
+
+/// Marks each new candidate that has the title of exactly one library game
+/// from another launcher as another install of it. Kept conservative: a
+/// title that a game from the candidate's own launcher has too, that fits
+/// two games, or a candidate inside the matched game's install folder, marks
+/// nothing.
+pub fn mark_same_games(
+    db: &Database,
+    mut found: Vec<DiscoveredGame>,
+) -> Result<Vec<DiscoveredGame>> {
+    let library = games::list_local_games(db)?;
+    let links = games::links(db)?;
+    let mut by_title: HashMap<String, Vec<&Game>> = HashMap::new();
+    for game in &library {
+        let key = normalize(&game.title);
+        if !key.is_empty() {
+            by_title.entry(key).or_default().push(game);
+        }
+    }
+    for candidate in found
+        .iter_mut()
+        .filter(|candidate| !candidate.already_added)
+    {
+        candidate.same_game = None;
+        let Some(matches) = by_title.get(&normalize(&candidate.title)) else {
+            continue;
+        };
+        let same_launcher = matches
+            .iter()
+            .any(|game| game.launcher_source.as_deref() == Some(candidate.source.as_str()));
+        if same_launcher || matches.iter().any(|game| holds(game, candidate)) {
+            continue;
+        }
+        let mut shown = matches
+            .iter()
+            .map(|game| links.get(&game.id).unwrap_or(&game.id));
+        let Some(shown_id) = shown.next() else {
+            continue;
+        };
+        if shown.any(|other| other != shown_id) {
+            continue;
+        }
+        let Some(shown_game) = library.iter().find(|game| game.id == *shown_id) else {
+            continue;
+        };
+        // The install shown when it matched, so the launcher named is its own.
+        let install = matches
+            .iter()
+            .find(|game| game.id == shown_game.id)
+            .unwrap_or(&matches[0]);
+        candidate.same_game = Some(SameGame {
+            game_id: shown_game.id.clone(),
+            title: shown_game.title.clone(),
+            launcher_source: install.launcher_source.clone(),
+        });
+    }
+    Ok(found)
+}
+
+/// Whether a candidate lies in a library game's install folder, which makes
+/// it part of that install rather than another one.
+fn holds(game: &Game, candidate: &DiscoveredGame) -> bool {
+    let Some(folder) = game.install_folder.as_deref().map(path_key) else {
+        return false;
+    };
+    let folder = Path::new(&folder);
+    Path::new(&path_key(&candidate.executable_path)).starts_with(folder)
+        || candidate
+            .install_folder
+            .as_deref()
+            .is_some_and(|other| Path::new(&path_key(other)) == folder)
 }
 
 /// The candidates without programs the player said are no game.
@@ -293,6 +380,7 @@ mod tests {
             source: "epic".into(),
             source_id: Some(id.into()),
             already_added: true,
+            same_game: None,
         };
 
         let stored = remember_launcher_ids(
@@ -312,6 +400,70 @@ mod tests {
         assert_eq!(id_of(&by_folder).as_deref(), Some("b-id"));
         assert_eq!(id_of(&other_launcher), None);
         assert_eq!(id_of(&known).as_deref(), Some("kept"));
+    }
+
+    #[test]
+    fn a_game_from_another_launcher_is_marked_as_the_same_game() {
+        let db = Database::open_in_memory().unwrap();
+        let add = |title: &str, folder: &str, source: &str| {
+            games::create_game(
+                &db,
+                &CreateGame {
+                    title: title.into(),
+                    executable_path: Some(format!("{folder}/game.exe")),
+                    install_folder: Some(folder.into()),
+                    launcher_source: Some(source.into()),
+                },
+            )
+            .unwrap()
+        };
+        let cyberpunk = add("Cyberpunk 2077", "/steam/cyberpunk", "steam");
+        let doom = add("DOOM", "/steam/doom", "steam");
+        let doom_epic = add("Doom", "/epic/doom", "epic");
+        let candidate = |title: &str, exe: &str, source: &str| DiscoveredGame {
+            title: title.into(),
+            executable_path: exe.into(),
+            install_folder: None,
+            source: source.into(),
+            source_id: None,
+            already_added: false,
+            same_game: None,
+        };
+        let found = || {
+            vec![
+                candidate("Cyberpunk 2077™", "/gog/cyberpunk/Cyberpunk2077.exe", "gog"),
+                candidate("Cyberpunk 2077", "/steam/cyberpunk2/game.exe", "steam"),
+                candidate(
+                    "Cyberpunk 2077",
+                    "/steam/cyberpunk/bin/game.exe",
+                    "folder_scan",
+                ),
+                candidate("Doom", "/gog/doom/doom.exe", "gog"),
+                candidate("Hades", "/gog/hades/hades.exe", "gog"),
+            ]
+        };
+        let same = |marked: &[DiscoveredGame]| -> Vec<Option<String>> {
+            marked
+                .iter()
+                .map(|game| game.same_game.as_ref().map(|same| same.game_id.clone()))
+                .collect()
+        };
+
+        let marked = mark_same_games(&db, found()).unwrap();
+        // Another launcher's copy matches, its own launcher's or one inside
+        // the install does not, and a title two games share stays unmarked.
+        assert_eq!(
+            same(&marked),
+            [Some(cyberpunk.id.clone()), None, None, None, None]
+        );
+        let first = marked[0].same_game.as_ref().unwrap();
+        assert_eq!(first.title, "Cyberpunk 2077");
+        assert_eq!(first.launcher_source.as_deref(), Some("steam"));
+
+        // Once the two Dooms are one game, a third copy matches that game.
+        games::link_game(&db, &doom_epic.id, Some(&doom.id)).unwrap();
+        let marked = mark_same_games(&db, found()).unwrap();
+        assert_eq!(same(&marked)[3], Some(doom.id.clone()));
     }
 
     /// A game folder with executables of the given sizes, in a fresh temp folder.

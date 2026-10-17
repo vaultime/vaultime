@@ -295,8 +295,9 @@ fn apply_correction(
 
 /// Refuses play added by hand to a game of another PC, and play that
 /// overlaps a session of the same game. Play of one game cannot happen twice
-/// at once, also not on two PCs whose games are linked. Sessions whose time
-/// was all taken out do not count, their slot is free again.
+/// at once, also not through two linked installs or on two PCs whose games
+/// are linked. Sessions whose time was all taken out do not count, their
+/// slot is free again.
 fn check_free_for_play(
     conn: &rusqlite::Connection,
     game_id: &str,
@@ -319,7 +320,7 @@ fn check_free_for_play(
                 .into(),
         ));
     }
-    let same_game = serde_json::to_string(&games::with_linked(conn, game_id)?)
+    let same_game = serde_json::to_string(&games::linked_set(conn, game_id)?)
         .map_err(|error| VaultimeError::Invalid(error.to_string()))?;
     let overlaps: bool = conn
         .query_row(
@@ -955,5 +956,30 @@ mod tests {
 
         discard_session(&db, &tracked.id, "The launcher only").unwrap();
         assert!(add_manual_session(&db, &game, DEVICE, &inside, 10 * MINUTE, "", None).is_ok());
+    }
+
+    #[test]
+    fn a_manual_session_cannot_overlap_play_of_a_linked_install() {
+        let (db, game) = setup();
+        let other_install = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Elden Ring".into(),
+                executable_path: Some("D:/Steam/eldenring.exe".into()),
+                install_folder: None,
+                launcher_source: Some("steam".into()),
+            },
+        )
+        .unwrap()
+        .id;
+        played(&db, &other_install, 90, 90);
+        let inside = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(60));
+        // Apart, they are two games.
+        assert!(add_manual_session(&db, &game, DEVICE, &inside, 10 * MINUTE, "", None).is_ok());
+
+        let later = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(30));
+        games::link_game(&db, &game, Some(&other_install)).unwrap();
+        // Linked, play added to the linked install meets the shown one's.
+        assert!(add_manual_session(&db, &game, DEVICE, &later, 10 * MINUTE, "", None).is_err());
     }
 }

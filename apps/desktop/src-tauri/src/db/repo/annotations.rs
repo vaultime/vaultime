@@ -35,8 +35,8 @@ fn row_to_note(row: &Row) -> rusqlite::Result<SessionNote> {
     })
 }
 
-/// Every status change, oldest first. One of a game of another PC counts
-/// for the game of this PC it is linked to.
+/// Every status change, oldest first. One of a linked game, another install
+/// or a game of another PC, counts for the game it is linked to.
 pub fn list_status_changes(db: &Database) -> Result<Vec<GameStatusChange>> {
     let links = crate::db::repo::games::links(db)?;
     let mut changes = db.with_conn(|conn| {

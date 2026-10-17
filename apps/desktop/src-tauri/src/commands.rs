@@ -64,14 +64,16 @@ pub fn list_devices(db: State<'_, Arc<Database>>) -> Result<Vec<Device>, Vaultim
     devices::list_devices(&db)
 }
 
-/// Games of other PCs and the games of this PC they count as.
+/// Linked games, other installs here and games of other PCs, with the games
+/// they count as.
 #[tauri::command(async)]
 pub fn list_game_links(db: State<'_, Arc<Database>>) -> Result<Vec<GameLink>, VaultimeError> {
     games::list_game_links(&db)
 }
 
-/// Makes a game of another PC count as a game of this PC, or as itself again,
-/// and works out where its time fell once more.
+/// Makes a game count as a game of this PC, or as itself again, and works
+/// out once more where the time of every game it now counts with fell, since
+/// whether they step aside follows the game shown.
 #[tauri::command(async)]
 pub fn link_game(
     db: State<'_, Arc<Database>>,
@@ -79,7 +81,8 @@ pub fn link_game(
     linked_game_id: Option<String>,
 ) -> Result<(), VaultimeError> {
     games::link_game(&db, &game_id, linked_game_id.as_deref())?;
-    playtime::slices::rebuild_for_game(&db, &game_id)
+    let shown = db.with_conn(|conn| games::shown_id(conn, &game_id))?;
+    playtime::slices::rebuild_for_game(&db, &shown)
 }
 
 /// What merging another PC's backup would bring in.
@@ -391,8 +394,9 @@ pub fn get_active_sessions(
     Ok(active)
 }
 
-/// Shows a session of a game of another PC as one of the game of this PC
-/// it is linked to. Only the shown game changes, the session's history keeps
+/// Shows a session of a linked game, another install here or a game of
+/// another PC, as one of the game it is linked to, and says which game
+/// recorded it. Only the shown game changes, the session's history keeps
 /// the game it was recorded with.
 fn show_linked_games(db: &Database, sessions: &mut [Session]) -> Result<(), VaultimeError> {
     let links = games::links(db)?;
@@ -401,7 +405,8 @@ fn show_linked_games(db: &Database, sessions: &mut [Session]) -> Result<(), Vaul
     }
     for session in sessions {
         if let Some(linked) = links.get(&session.game_id) {
-            session.game_id.clone_from(linked);
+            let recorded = std::mem::replace(&mut session.game_id, linked.clone());
+            session.recorded_game_id = Some(recorded);
         }
     }
     Ok(())
@@ -712,7 +717,8 @@ pub fn discover_games(
     db: State<'_, Arc<Database>>,
     paths: Vec<String>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    discovery::without_ignored(&db, discovery::scanner::scan_folders(&db, &paths)?)
+    let found = discovery::scanner::scan_folders(&db, &paths)?;
+    discovery::mark_same_games(&db, discovery::without_ignored(&db, found)?)
 }
 
 /// Saves every finished session as CSV or JSON and returns how many.
@@ -824,12 +830,12 @@ pub fn set_session_note(
     annotations::set_session_note(&db, &session_id, &note)
 }
 
-/// Playtime from before Vaultime, per game.
+/// Playtime from before Vaultime, per game the library shows.
 #[tauri::command]
 pub fn list_earlier_playtime(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<EarlierPlaytime>, VaultimeError> {
-    earlier_playtime::list_earlier_playtime(&db)
+    earlier_playtime::list_shown_earlier_playtime(&db)
 }
 
 /// What an import from Steam would add, without storing anything.
@@ -859,7 +865,7 @@ pub fn discover_steam_games(
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
     let found = discovery::steam::discover_steam_games(&db)?;
     remember_launcher_ids(&db, &found);
-    discovery::without_ignored(&db, found)
+    discovery::mark_same_games(&db, discovery::without_ignored(&db, found)?)
 }
 
 /// Games already in the library learn their launcher id from a scan. A
@@ -882,7 +888,7 @@ pub fn discover_launcher_games(
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
     let found = discovery::discover_launcher_games(&db)?;
     remember_launcher_ids(&db, &found);
-    discovery::without_ignored(&db, found)
+    discovery::mark_same_games(&db, discovery::without_ignored(&db, found)?)
 }
 
 /// The games the look at start found that are still new.
@@ -931,6 +937,8 @@ pub fn allow_program(
     ignored::allow(&db, &path_key)
 }
 
+/// Adds the picked candidates. One marked as another install of a library
+/// game counts as that game.
 #[tauri::command(async)]
 pub fn import_discovered_games(
     db: State<'_, Arc<Database>>,
@@ -955,8 +963,18 @@ pub fn import_discovered_games(
         if let Some(launcher_id) = disc.source_id.as_deref().filter(|id| !id.is_empty()) {
             game = games::set_launcher_id(&db, &game.id, launcher_id)?;
         }
+        // Its own cover too, so it looks right should it be unlinked.
         if let Err(error) = assets::scan_game_assets(&db, &asset_manager, &game.id) {
             warn!("artwork scan failed for {}: {error}", game.title);
+        }
+        if let Some(same) = &disc.same_game {
+            // The game may count as another one by now, which is then the one.
+            let link = db
+                .with_conn(|conn| games::shown_id(conn, &same.game_id))
+                .and_then(|shown| games::link_game(&db, &game.id, Some(&shown)));
+            if let Err(error) = link {
+                warn!("{} not linked to {}: {error}", game.title, same.title);
+            }
         }
 
         imported.push(game);

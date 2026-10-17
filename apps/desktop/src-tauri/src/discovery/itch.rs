@@ -124,6 +124,7 @@ fn game(install: Install, existing: &HashSet<String>) -> Option<DiscoveredGame> 
     Some(DiscoveredGame {
         title: install.title,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(install.folder),
         source: "itch".into(),

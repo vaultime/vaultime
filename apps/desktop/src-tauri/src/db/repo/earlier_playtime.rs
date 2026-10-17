@@ -3,6 +3,8 @@
 
 //! Playtime from before Vaultime, imported from a launcher.
 
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::time::Duration;
 
 use rusqlite::{Row, params};
@@ -42,6 +44,32 @@ pub fn list_earlier_playtime(db: &Database) -> Result<Vec<EarlierPlaytime>> {
         let rows = stmt.query_map([], row_to_earlier).map_err(map_db)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })
+}
+
+/// Imported playtime per game the library shows: an entry of a linked game
+/// counts for the game it is linked to, and entries that meet there add up.
+pub fn list_shown_earlier_playtime(db: &Database) -> Result<Vec<EarlierPlaytime>> {
+    let links = crate::db::repo::games::links(db)?;
+    let mut shown: BTreeMap<String, EarlierPlaytime> = BTreeMap::new();
+    for mut entry in list_earlier_playtime(db)? {
+        if let Some(linked) = links.get(&entry.game_id) {
+            entry.game_id.clone_from(linked);
+        }
+        match shown.entry(entry.game_id.clone()) {
+            Entry::Vacant(slot) => {
+                slot.insert(entry);
+            }
+            Entry::Occupied(slot) => {
+                let kept = slot.into_mut();
+                kept.launcher_minutes += entry.launcher_minutes;
+                kept.tracked_before_ms += entry.tracked_before_ms;
+                kept.earlier_ms += entry.earlier_ms;
+                kept.last_played_at = kept.last_played_at.take().max(entry.last_played_at);
+                kept.imported_at = kept.imported_at.clone().max(entry.imported_at);
+            }
+        }
+    }
+    Ok(shown.into_values().collect())
 }
 
 /// Replaces the imported playtime of the given games, in one transaction.

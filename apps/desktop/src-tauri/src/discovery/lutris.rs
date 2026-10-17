@@ -58,6 +58,7 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
                     games.push(DiscoveredGame {
                         title: name,
                         already_added: existing.contains(&path_key(&executable_path)),
+                        same_game: None,
                         executable_path,
                         install_folder,
                         source: "lutris".into(),

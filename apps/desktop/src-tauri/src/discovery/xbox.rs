@@ -96,6 +96,7 @@ fn game_from_folder(folder: &Path, existing: &HashSet<String>) -> Option<Discove
     Some(DiscoveredGame {
         title,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(folder.to_string_lossy().into_owned()),
         source: "xbox".into(),

@@ -52,6 +52,7 @@ pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGam
                     .parent()
                     .map(|parent| parent.to_string_lossy().into_owned()),
                 already_added: existing.contains(&key),
+                same_game: None,
                 executable_path: exe_path,
                 source: "folder_scan".into(),
                 source_id: None,

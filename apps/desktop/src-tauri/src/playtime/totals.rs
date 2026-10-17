@@ -9,6 +9,7 @@ use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Timelike, Utc};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
+use crate::constants::PLAY_SLICE_MS;
 use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::map_db;
@@ -203,6 +204,51 @@ pub fn fill_set_aside(
     })
 }
 
+/// Each shown game's time per quarter hour. One game cannot be played twice
+/// at once, so where two of its copies ran at the same time, like linked
+/// installs or two PCs, the quarter hour holds no more than it lasts. Their
+/// active and idle time shrink alike. A slice that holds more than a quarter
+/// hour on its own, time whose clock went backwards, has no place on the
+/// clock to share and counts in full.
+fn once_at_a_time(
+    slices: Vec<(String, Slice)>,
+    links: &HashMap<String, String>,
+) -> BTreeMap<(String, i64), [i64; 3]> {
+    // What fits a quarter hour and what does not, per game and quarter hour.
+    let mut summed: BTreeMap<(String, i64), ([i64; 3], [i64; 3])> = BTreeMap::new();
+    for (game, slice) in slices {
+        let game = links.get(&game).cloned().unwrap_or(game);
+        let (placed, unplaced) = summed.entry((game, slice.start_ms)).or_default();
+        let part = if slice.runtime_ms > PLAY_SLICE_MS {
+            unplaced
+        } else {
+            placed
+        };
+        part[0] += slice.runtime_ms;
+        part[1] += slice.active_ms;
+        part[2] += slice.idle_ms;
+    }
+    summed
+        .into_iter()
+        .map(|(key, (mut placed, unplaced))| {
+            if placed[0] > PLAY_SLICE_MS {
+                let whole = i128::from(placed[0]);
+                for value in &mut placed[1..] {
+                    *value = i64::try_from(i128::from(*value) * i128::from(PLAY_SLICE_MS) / whole)
+                        .unwrap_or(*value);
+                }
+                placed[0] = PLAY_SLICE_MS;
+            }
+            let total = [
+                placed[0] + unplaced[0],
+                placed[1] + unplaced[1],
+                placed[2] + unplaced[2],
+            ];
+            (key, total)
+        })
+        .collect()
+}
+
 /// Each game's time per bucket, from the local day `from` up to but not
 /// including `to`, oldest bucket first. Running sessions count up to the
 /// tracker's latest tick, at `now_ms`.
@@ -255,17 +301,17 @@ pub fn play_totals<Tz: TimeZone>(
     })?;
 
     let mut totals: BTreeMap<(String, String), [i64; 3]> = BTreeMap::new();
-    // A game of another PC counts as the game of this PC it is linked to.
+    // A linked game, another install here or a game of another PC, counts
+    // as the game it is linked to.
     let links = crate::db::repo::games::links(db)?;
-    for (game, slice) in slices {
-        let game = links.get(&game).cloned().unwrap_or(game);
-        let Some(key) = bucket_of(tz, slice.start_ms, bucket) else {
+    for ((game, start_ms), [runtime_ms, active_ms, idle_ms]) in once_at_a_time(slices, &links) {
+        let Some(key) = bucket_of(tz, start_ms, bucket) else {
             continue;
         };
         let total = totals.entry((key, game)).or_default();
-        total[0] += slice.runtime_ms;
-        total[1] += slice.active_ms;
-        total[2] += slice.idle_ms;
+        total[0] += runtime_ms;
+        total[1] += active_ms;
+        total[2] += idle_ms;
     }
     Ok(totals
         .into_iter()
@@ -587,6 +633,41 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn a_linked_install_counts_for_the_game_shown_and_once_at_a_time() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (steam, gog) = (game(&db, "Steam copy"), game(&db, "GOG copy"));
+        played_game(&db, &gog, "2026-10-02T15:00:00Z", 60);
+        assert_eq!(day_minutes(&db, &steam), 0);
+
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        assert_eq!(day_minutes(&db, &steam), 60);
+        // Both copies left running at once count as one game playing.
+        played_game(&db, &steam, "2026-10-02T18:00:00Z", 60);
+        played_game(&db, &gog, "2026-10-02T18:30:00Z", 60);
+        assert_eq!(day_minutes(&db, &steam), 60 + 90);
+        let all = play_totals(
+            &db,
+            &LiveSessions::default(),
+            &FixedOffset::east_opt(0).unwrap(),
+            date("2026-10-02"),
+            date("2026-10-03"),
+            Bucket::Day,
+            None,
+            0,
+        )
+        .unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].game_id, steam);
+        assert_eq!(all[0].active_ms, all[0].runtime_ms);
+
+        // Apart again, each has its own.
+        games::link_game(&db, &gog, None).unwrap();
+        assert_eq!(day_minutes(&db, &steam), 60);
+        assert_eq!(day_minutes(&db, &gog), 120);
     }
 
     #[test]

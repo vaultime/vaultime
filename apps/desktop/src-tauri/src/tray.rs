@@ -154,10 +154,16 @@ fn describe_status(
     now: DateTime<Utc>,
     day_start: DateTime<Utc>,
 ) -> (String, String) {
-    let running: Vec<&SessionSpan> = spans
-        .iter()
-        .filter(|span| span.ended_at_wall.is_none())
-        .collect();
+    // Two linked installs of one game running at once show as one game.
+    let mut running: Vec<&SessionSpan> = Vec::new();
+    for span in spans.iter().filter(|span| span.ended_at_wall.is_none()) {
+        if !running
+            .iter()
+            .any(|shown| shown.game_title == span.game_title)
+        {
+            running.push(span);
+        }
+    }
     let playing = match running.as_slice() {
         [] => NOTHING_RUNNING.to_string(),
         [only] => format!(
@@ -401,6 +407,16 @@ mod tests {
         let (playing, today) = describe_status(&spans, at(19, 0), at(0, 0));
         assert_eq!(playing, "Playing Elden Ring, Balatro and Celeste");
         assert_eq!(today, "1 h 00 played today");
+    }
+
+    #[test]
+    fn two_installs_of_one_game_show_once() {
+        let spans = [
+            span("Cyberpunk 2077", at(18, 0), None, 60),
+            span("Cyberpunk 2077", at(18, 30), None, 30),
+        ];
+        let (playing, _) = describe_status(&spans, at(19, 0), at(0, 0));
+        assert_eq!(playing, "Playing Cyberpunk 2077, 1 h 00");
     }
 
     #[test]

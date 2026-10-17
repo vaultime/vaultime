@@ -65,6 +65,7 @@ fn game(
     Some(DiscoveredGame {
         title,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(folder.to_owned()),
         source: "amazon".into(),

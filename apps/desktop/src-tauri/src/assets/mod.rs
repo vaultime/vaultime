@@ -94,8 +94,7 @@ pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
     Ok(views)
 }
 
-/// Deletes a game with the games of other PCs linked to it, and their
-/// cached artwork.
+/// Deletes a game with the games linked to it, and their cached artwork.
 pub fn delete_game(db: &Database, asset_manager: &AssetManager, game_id: &str) -> Result<bool> {
     let ids = db.with_conn(|conn| games::with_linked(conn, game_id))?;
     let deleted = games::delete_game(db, game_id)?;

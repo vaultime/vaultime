@@ -38,9 +38,8 @@ pub fn list_local_games(db: &Database) -> Result<Vec<Game>> {
         .collect())
 }
 
-/// The games the library shows: this PC's own and those of other PCs that
-/// are not linked to one of them. A linked game counts as the game of this
-/// PC it is linked to.
+/// The games the library shows: every game that is not linked to another
+/// one. A linked game counts as the game it is linked to.
 pub fn list_shown_games(db: &Database) -> Result<Vec<Game>> {
     let linked = links(db)?;
     Ok(list_all_games(db)?
@@ -49,7 +48,8 @@ pub fn list_shown_games(db: &Database) -> Result<Vec<Game>> {
         .collect())
 }
 
-/// Games of other PCs and the game of this PC each counts as.
+/// Each linked game and the game it counts as. Links never chain, so one
+/// lookup gives the game shown.
 pub fn links(db: &Database) -> Result<HashMap<String, String>> {
     db.with_conn(links_in)
 }
@@ -64,7 +64,22 @@ pub(crate) fn links_in(conn: &rusqlite::Connection) -> Result<HashMap<String, St
     rows.collect::<rusqlite::Result<_>>().map_err(map_db)
 }
 
-/// A game and the games of other PCs linked to it.
+/// The game a game is shown as: the one it is linked to, or itself.
+pub(crate) fn shown_id(conn: &rusqlite::Connection, game_id: &str) -> Result<String> {
+    use rusqlite::OptionalExtension;
+    Ok(conn
+        .prepare_cached("SELECT linked_game_id FROM game_links WHERE game_id = ?1")
+        .and_then(|mut stmt| stmt.query_row([game_id], |row| row.get(0)).optional())
+        .map_err(map_db)?
+        .unwrap_or_else(|| game_id.to_owned()))
+}
+
+/// Every game that counts as the same game as `game_id`, the shown one first.
+pub(crate) fn linked_set(conn: &rusqlite::Connection, game_id: &str) -> Result<Vec<String>> {
+    with_linked(conn, &shown_id(conn, game_id)?)
+}
+
+/// A game and the games linked to it.
 pub(crate) fn with_linked(conn: &rusqlite::Connection, game_id: &str) -> Result<Vec<String>> {
     let mut ids = vec![game_id.to_owned()];
     let mut stmt = conn
@@ -79,23 +94,28 @@ pub(crate) fn with_linked(conn: &rusqlite::Connection, game_id: &str) -> Result<
     Ok(ids)
 }
 
-/// A game of another PC linked to a game of this PC.
+/// A game linked to another game: a game of another PC, or another install
+/// of a game on this PC, like a copy from a second launcher.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct GameLink {
     pub game_id: String,
     pub title: String,
     pub origin_device_id: Option<String>,
     pub linked_game_id: String,
+    pub launcher_source: Option<String>,
+    pub executable_path: Option<String>,
+    pub install_folder: Option<String>,
 }
 
-/// Every link, with the title the game has on its PC.
+/// Every link, with what the linked game has of its own.
 pub fn list_game_links(db: &Database) -> Result<Vec<GameLink>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
-                "SELECT g.id, g.title, g.origin_device_id, l.linked_game_id
+                "SELECT g.id, g.title, g.origin_device_id, l.linked_game_id,
+                        g.launcher_source, g.executable_path, g.install_folder
                  FROM game_links l JOIN games g ON g.id = l.game_id
-                 ORDER BY g.title COLLATE NOCASE",
+                 ORDER BY g.title COLLATE NOCASE, g.launcher_source",
             )
             .map_err(map_db)?;
         let rows = stmt
@@ -105,6 +125,9 @@ pub fn list_game_links(db: &Database) -> Result<Vec<GameLink>> {
                     title: row.get(1)?,
                     origin_device_id: row.get(2)?,
                     linked_game_id: row.get(3)?,
+                    launcher_source: row.get(4)?,
+                    executable_path: row.get(5)?,
+                    install_folder: row.get(6)?,
                 })
             })
             .map_err(map_db)?;
@@ -112,41 +135,73 @@ pub fn list_game_links(db: &Database) -> Result<Vec<GameLink>> {
     })
 }
 
-/// Makes a game of another PC count as a game of this PC, or as itself again
-/// with `None`.
+/// Makes a game count as a game of this PC, or as itself again with `None`.
+/// The game may be another install of the same game here, or a game of
+/// another PC. Both keep their own sessions, only what is shown changes.
 pub fn link_game(db: &Database, game_id: &str, linked_game_id: Option<&str>) -> Result<()> {
-    db.with_transaction(|conn| {
-        let origin = |id: &str| -> Result<Option<Option<String>>> {
-            use rusqlite::OptionalExtension;
-            conn.query_row(
-                "SELECT origin_device_id FROM games WHERE id = ?1",
-                [id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(map_db)
-        };
-        if !matches!(origin(game_id)?, Some(Some(_))) {
-            return Err(VaultimeError::Invalid(
-                "Only a game from another PC can be linked.".into(),
-            ));
-        }
-        conn.execute("DELETE FROM game_links WHERE game_id = ?1", [game_id])
-            .map_err(map_db)?;
-        if let Some(linked) = linked_game_id {
-            if !matches!(origin(linked)?, Some(None)) {
-                return Err(VaultimeError::Invalid(
-                    "A game can only be linked to a game of this PC.".into(),
-                ));
-            }
-            conn.execute(
-                "INSERT INTO game_links (game_id, linked_game_id) VALUES (?1, ?2)",
-                params![game_id, linked],
-            )
-            .map_err(map_db)?;
-        }
-        Ok(())
-    })
+    db.with_transaction(|conn| link_in(conn, game_id, linked_game_id))
+}
+
+/// `link_game` inside the caller's transaction. Links never chain: a game
+/// that counts as another one cannot be linked to, and games that counted as
+/// `game_id` move along to the game it now counts as.
+pub(crate) fn link_in(
+    conn: &rusqlite::Connection,
+    game_id: &str,
+    linked_game_id: Option<&str>,
+) -> Result<()> {
+    use rusqlite::OptionalExtension;
+    let this = integrity::ledger::this_device().ok();
+    let game = |id: &str| -> Result<Option<(String, Option<String>)>> {
+        conn.query_row(
+            "SELECT title, origin_device_id FROM games WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(map_db)
+    };
+    if game(game_id)?.is_none() {
+        return Err(VaultimeError::Invalid(
+            "This game is not in the library.".into(),
+        ));
+    }
+    conn.execute("DELETE FROM game_links WHERE game_id = ?1", [game_id])
+        .map_err(map_db)?;
+    let Some(linked) = linked_game_id else {
+        return Ok(());
+    };
+    if linked == game_id {
+        return Err(VaultimeError::Invalid(
+            "A game cannot count as itself.".into(),
+        ));
+    }
+    let Some((title, origin)) = game(linked)? else {
+        return Err(VaultimeError::Invalid(
+            "That game is not in the library.".into(),
+        ));
+    };
+    if origin.is_some() && origin != this {
+        return Err(VaultimeError::Invalid(
+            "A game can only count as a game of this PC.".into(),
+        ));
+    }
+    if shown_id(conn, linked)? != linked {
+        return Err(VaultimeError::Invalid(format!(
+            "{title} counts as another game already. Pick that game instead."
+        )));
+    }
+    conn.execute(
+        "UPDATE game_links SET linked_game_id = ?2 WHERE linked_game_id = ?1",
+        params![game_id, linked],
+    )
+    .map_err(map_db)?;
+    conn.execute(
+        "INSERT INTO game_links (game_id, linked_game_id) VALUES (?1, ?2)",
+        params![game_id, linked],
+    )
+    .map_err(map_db)?;
+    Ok(())
 }
 
 pub fn create_game(db: &Database, input: &CreateGame) -> Result<Game> {
@@ -233,9 +288,10 @@ pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> 
     })
 }
 
-/// Returns `false` when there was no such game. Games of other PCs linked
-/// to it go too, as the library showed their sessions as its own. The ledger
-/// notes each session as removed by the player.
+/// Returns `false` when there was no such game. Games linked to it go too,
+/// other installs and games of other PCs, as the library showed their
+/// sessions as its own. The ledger notes each session as removed by the
+/// player.
 pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
     db.with_transaction(|conn| {
         let ids = with_linked(conn, id)?;
@@ -445,5 +501,84 @@ mod tests {
 
         assert!(delete_game(&db, &game.id).unwrap());
         assert!(!delete_game(&db, &game.id).unwrap());
+    }
+
+    fn titled(db: &Database, title: &str, launcher: &str) -> String {
+        create_game(
+            db,
+            &CreateGame {
+                title: title.into(),
+                executable_path: Some(format!("/{launcher}/{title}.exe")),
+                install_folder: None,
+                launcher_source: Some(launcher.into()),
+            },
+        )
+        .unwrap()
+        .id
+    }
+
+    fn shown(db: &Database) -> Vec<String> {
+        list_shown_games(db)
+            .unwrap()
+            .into_iter()
+            .map(|game| game.id)
+            .collect()
+    }
+
+    #[test]
+    fn two_installs_count_as_one_game_until_unlinked() {
+        let db = test_db();
+        let steam = titled(&db, "Cyberpunk 2077", "steam");
+        let gog = titled(&db, "Cyberpunk 2077", "gog");
+
+        link_game(&db, &gog, Some(&steam)).unwrap();
+        assert_eq!(shown(&db), std::slice::from_ref(&steam));
+        assert_eq!(links(&db).unwrap()[&gog], steam);
+        // Both stay games of this PC, so the tracker keeps watching both.
+        assert_eq!(list_local_games(&db).unwrap().len(), 2);
+        let set = db.with_conn(|conn| linked_set(conn, &gog)).unwrap();
+        assert_eq!(set, [steam.clone(), gog.clone()]);
+
+        link_game(&db, &gog, None).unwrap();
+        assert_eq!(shown(&db).len(), 2);
+        assert!(links(&db).unwrap().is_empty());
+    }
+
+    #[test]
+    fn links_never_chain_and_move_along() {
+        let db = test_db();
+        let steam = titled(&db, "Cyberpunk 2077", "steam");
+        let gog = titled(&db, "Cyberpunk 2077", "gog");
+        let xbox = titled(&db, "Cyberpunk 2077", "xbox");
+        let laptop = titled(&db, "Cyberpunk 2077", "steam");
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE games SET origin_device_id = 'laptop' WHERE id = ?1",
+                [&laptop],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+
+        assert!(link_game(&db, &steam, Some(&steam)).is_err());
+        link_game(&db, &gog, Some(&steam)).unwrap();
+        link_game(&db, &laptop, Some(&steam)).unwrap();
+        // A game that counts as another one is no target.
+        let refused = link_game(&db, &xbox, Some(&gog)).unwrap_err();
+        assert!(
+            refused
+                .to_string()
+                .contains("counts as another game already")
+        );
+        // Nor is a game of another PC.
+        assert!(link_game(&db, &xbox, Some(&laptop)).is_err());
+
+        // The target counts as another game now, and what counted as it
+        // follows, so the map stays flat.
+        link_game(&db, &steam, Some(&xbox)).unwrap();
+        let map = links(&db).unwrap();
+        assert_eq!(map.len(), 3);
+        assert!(map.values().all(|target| *target == xbox));
+        assert_eq!(shown(&db), std::slice::from_ref(&xbox));
     }
 }

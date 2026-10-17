@@ -85,6 +85,7 @@ fn parse_info(
     Some(DiscoveredGame {
         title: info.name,
         already_added: existing.contains(&path_key(&executable_path)),
+        same_game: None,
         executable_path,
         install_folder: Some(folder.to_string_lossy().into_owned()),
         source: source.into(),
