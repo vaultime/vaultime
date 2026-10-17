@@ -350,13 +350,15 @@ fn plan(db: &Database, staged: &Staged, trust_new_keys: bool) -> Result<Plan> {
     })?;
     // Sessions this PC recorded before it was set up again and took over its
     // old keys may come back, when the backup's PC took them in after
-    // checking them with those keys and none other.
+    // checking them with keys this PC counts as its own and none other. That
+    // PC may have confirmed this PC's new key already.
     let taken_over = db.with_conn(ledger::taken_over_keys)?;
     let this = ledger::this_device()?;
+    let own_keys = ledger::own_keys()?;
     let checked_with_taken_over = !taken_over.is_empty()
         && staged_db.with_conn(|conn| {
             let theirs = ledger::trusted_by(conn, trust.source_keys(), &this)?;
-            Ok(!theirs.is_empty() && theirs.is_subset(&taken_over))
+            Ok(!theirs.is_empty() && theirs.is_subset(&own_keys))
         })?;
     let (device_name, candidates) =
         read_candidates(staged_db, &source, &trust, checked_with_taken_over)?;
@@ -2868,6 +2870,44 @@ mod tests {
         let again = sessions::create_session(&fresh.db, &game, "desktop").unwrap();
         sessions::end_session(&fresh.db, &again.id, MINUTE, MINUTE, 0, STATUS_LOCAL).unwrap();
         assert_eq!(fresh.status(&again.id), STATUS_LOCAL);
+    }
+
+    #[test]
+    fn a_pc_set_up_again_gets_its_sessions_back_after_the_other_pc_confirmed_its_new_key() {
+        let laptop = Pc::new("laptop");
+        let desktop = Pc::new("desktop");
+        let game = desktop.game("Hades", None);
+        desktop.play(&game, 20);
+        let last_backup = desktop.back_up();
+        let later = desktop.play(&game, 30);
+        laptop.merge(&desktop.back_up(), &[]);
+
+        let fresh = Pc::new("reinstalled");
+        fresh.act();
+        import_local_backup(&fresh.db, &fresh.assets, &fresh.context, &last_backup).unwrap();
+        fresh.act();
+        let again = sessions::create_session(&fresh.db, &game, "desktop").unwrap();
+        sessions::end_session(&fresh.db, &again.id, MINUTE, MINUTE, 0, STATUS_LOCAL).unwrap();
+        // The laptop merges the desktop's new backup first and confirms its
+        // new key.
+        let from_fresh = fresh.back_up();
+        laptop.act();
+        apply(
+            &laptop.db,
+            &laptop.assets,
+            &laptop.context,
+            &from_fresh,
+            &[],
+            true,
+        )
+        .unwrap();
+
+        let from_laptop = laptop.back_up();
+        let preview = fresh.preview(&from_laptop).unwrap();
+        assert_eq!((preview.new_sessions, preview.own_failing), (1, 0));
+        fresh.merge(&from_laptop, &[]);
+        assert_eq!(fresh.status(&later), STATUS_LOCAL);
+        assert!(fresh.adopted(&later));
     }
 
     #[test]
