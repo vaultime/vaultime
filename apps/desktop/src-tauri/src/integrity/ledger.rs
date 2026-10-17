@@ -806,7 +806,9 @@ pub(crate) fn seen_pcs(conn: &Connection) -> Result<Vec<SeenPc>> {
 }
 
 /// Keeps `seen` PCs seen in `conn`, a database that may not know them, as
-/// after a restore of an older backup. Rows it has stay as they are.
+/// after a restore of an older backup. Rows it has stay as they are, but a
+/// PC merged here stays merged, also when the backup is that PC's own, so
+/// its sessions are still corrected only there.
 pub(crate) fn keep_seen(conn: &Connection, seen: &[SeenPc]) -> Result<()> {
     let now = super::now_timestamp();
     for (id, platform, app_version, name, merged_at) in seen {
@@ -814,6 +816,12 @@ pub(crate) fn keep_seen(conn: &Connection, seen: &[SeenPc]) -> Result<()> {
             "INSERT OR IGNORE INTO devices (id, platform, app_version, name, merged_at)
              VALUES (?1, ?2, ?3, ?4, COALESCE(?5, ?6))",
             rusqlite::params![id, platform, app_version, name, merged_at, now],
+        )
+        .map_err(ledger_error)?;
+        conn.execute(
+            "UPDATE devices SET merged_at = ?2
+             WHERE id = ?1 AND merged_at IS NULL AND ?2 IS NOT NULL",
+            rusqlite::params![id, merged_at],
         )
         .map_err(ledger_error)?;
     }

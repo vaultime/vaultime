@@ -2450,4 +2450,26 @@ mod tests {
         desktop.merge(&stranger.back_up(), &[]);
         assert_eq!(desktop.status(&as_laptop.id), integrity::STATUS_SUSPICIOUS);
     }
+
+    #[test]
+    fn a_merged_pc_stays_merged_after_restoring_its_own_backup() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        let session = laptop.play_at(&game, "2026-10-02T18:00:00Z", 60);
+        desktop.merge(&laptop.back_up(), &[]);
+        let backup = laptop.back_up();
+        desktop.act();
+        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        assert_eq!(desktop.status(&session), STATUS_LOCAL);
+        // The laptop's own row says nothing about merges, this PC still knows.
+        let refused = corrections::trim_session(
+            &desktop.db,
+            &session,
+            "2026-10-02T18:30:00.000Z",
+            "Left it on",
+        )
+        .unwrap_err();
+        assert!(refused.to_string().contains("laptop"));
+    }
 }
