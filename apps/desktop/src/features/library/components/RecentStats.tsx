@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { StatTiles, type StatTile } from "@/components/layout/StatTiles";
-import type { GameSummary } from "@/features/library/library-context";
+import { useActiveSessions, type GameSummary } from "@/features/library/library-context";
 import { RECENT_DAYS } from "@/lib/constants";
 import { formatDayPart, formatHoursMinutes } from "@/lib/time";
 import type { RecentPlay, Session } from "@/lib/types";
@@ -19,7 +19,9 @@ export function RecentStats({
   sessions: Session[];
 }) {
   const gamesCount = recent.games.length;
-  const longest = sessions.find((session) => session.id === recent.longest_session_id) ?? null;
+  // A running session as of the last poll, as the stored list only reloads when one starts or ends.
+  const active = useActiveSessions();
+  const longest = [...active, ...sessions].find((session) => session.id === recent.longest_session_id) ?? null;
   const longestTitle = longest
     ? summaries.find((summary) => summary.game.id === longest.game_id)?.game.title
     : undefined;
