@@ -5,9 +5,20 @@
 // game's client. The core sets their time beside other games aside and says
 // how much per session. This file presents that.
 
-import { clipToWindow, countsAsPlay, playedMs } from "@/lib/session-stats";
+import { clipToWindow, clockSpan, countsAsPlay, playedMs, touchesWindow } from "@/lib/session-stats";
 import { parseVaultimeDate } from "@/lib/time";
 import type { Game, Session } from "@/lib/types";
+
+/** The first index of a list sorted so that `before` holds for a leading run of it, past that run. */
+function firstNotBefore<T>(list: T[], before: (item: T) => boolean): number {
+  let [low, high] = [0, list.length];
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (before(list[middle])) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
 
 /** Whether a game counts only while no other game runs. */
 export function stepsAside(game: Game): boolean {
@@ -37,18 +48,13 @@ export function countedSession(session: Session): Session {
  */
 export function stepAside(sessions: Session[], stepping: Set<string>, now = new Date()): Session[] {
   if (stepping.size === 0) return sessions;
-  const spanOf = (session: Session) => {
-    const start = parseVaultimeDate(session.started_at_wall).getTime();
-    const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
-    return { start, end };
-  };
   // Where games that do not step aside ran on each PC, joined and sorted
   // once, so each session that steps aside finds its overlaps by a binary
   // search. A launcher steps aside only for games on its own PC.
   const coveredByPc = new Map<string, [number, number][]>();
   const others = sessions
     .filter((session) => !stepping.has(session.game_id) && countsAsPlay(session))
-    .map((session) => ({ device: session.device_id, ...spanOf(session) }))
+    .map((session) => ({ device: session.device_id, ...clockSpan(session, now) }))
     .filter(({ start, end }) => end > start)
     .sort((a, b) => a.start - b.start);
   for (const { device, start, end } of others) {
@@ -58,24 +64,16 @@ export function stepAside(sessions: Session[], stepping: Set<string>, now = new 
     if (last && start <= last[1]) last[1] = Math.max(last[1], end);
     else covered.push([start, end]);
   }
-  const firstEndingAfter = (covered: [number, number][], moment: number) => {
-    let [low, high] = [0, covered.length];
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (covered[middle][1] <= moment) low = middle + 1;
-      else high = middle;
-    }
-    return low;
-  };
   return sessions.flatMap((session) => {
     if (!stepping.has(session.game_id)) return [session];
-    const { start, end } = spanOf(session);
+    const { start, end } = clockSpan(session, now);
     if (end <= start) return [session];
     // The parts of the span no other game on the same PC covered.
     const covered = coveredByPc.get(session.device_id) ?? [];
     const parts: [number, number][] = [];
     let cursor = start;
-    for (let index = firstEndingAfter(covered, start); index < covered.length && covered[index][0] < end; index += 1) {
+    const first = firstNotBefore(covered, ([, to]) => to <= start);
+    for (let index = first; index < covered.length && covered[index][0] < end; index += 1) {
       const [from, to] = covered[index];
       if (from > cursor) parts.push([cursor, from]);
       cursor = Math.max(cursor, to);
@@ -111,8 +109,7 @@ export function besideOthers(
 ): { besideMs: number; share: number; openedFirstShare: number } {
   const own = sessions.filter((session) => session.game_id === gameId && countsAsPlay(session));
   const ownMs = own.reduce((sum, session) => {
-    const start = parseVaultimeDate(session.started_at_wall).getTime();
-    const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
+    const { start, end } = clockSpan(session, now);
     return sum + Math.max(0, end - start);
   }, 0);
   const alone = stepAside(
@@ -132,30 +129,21 @@ export function besideOthers(
 
   // Time beside games that started during one of its sessions, each session
   // looking only at those, found by a binary search over their starts.
-  const spanOf = (session: Session) => ({
-    start: parseVaultimeDate(session.started_at_wall).getTime(),
-    end: session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime(),
-  });
   const laterByPc = new Map<string, { start: number; end: number }[]>();
   for (const session of sessions) {
     if (session.game_id === gameId || stepping.has(session.game_id) || !countsAsPlay(session)) continue;
     const list = laterByPc.get(session.device_id) ?? [];
     laterByPc.set(session.device_id, list);
-    list.push(spanOf(session));
+    list.push(clockSpan(session, now));
   }
   for (const list of laterByPc.values()) list.sort((a, b) => a.start - b.start);
   let openedFirstMs = 0;
   for (const session of own) {
-    const { start, end } = spanOf(session);
+    const { start, end } = clockSpan(session, now);
     const later = laterByPc.get(session.device_id) ?? [];
-    let [low, high] = [0, later.length];
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (later[middle].start < start) low = middle + 1;
-      else high = middle;
-    }
     let cursor = start;
-    for (let index = low; index < later.length && later[index].start < end; index += 1) {
+    const first = firstNotBefore(later, (span) => span.start < start);
+    for (let index = first; index < later.length && later[index].start < end; index += 1) {
       const to = Math.min(later[index].end, end);
       openedFirstMs += Math.max(0, to - Math.max(cursor, later[index].start));
       cursor = Math.max(cursor, to);
@@ -182,12 +170,12 @@ export function stepAsideWithin(
   to: Date,
   now = new Date(),
 ): Session[] {
-  const touching = sessions.filter((session) => clipToWindow(session, from, to, now) !== null);
+  const touching = sessions.filter((session) => touchesWindow(session, from, to, now));
   const earliest = touching.reduce(
     (first, session) => Math.min(first, parseVaultimeDate(session.started_at_wall).getTime()),
     from.getTime(),
   );
-  const nearby = sessions.filter((session) => clipToWindow(session, new Date(earliest), to, now) !== null);
+  const nearby = sessions.filter((session) => touchesWindow(session, new Date(earliest), to, now));
   return stepAside(nearby, stepping, now);
 }
 

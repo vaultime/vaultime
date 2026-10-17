@@ -38,20 +38,36 @@ export function toDayKey(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** Whether a span on the clock falls between `from` and `to`. A span without length counts where it starts. */
+function spanTouches(start: number, end: number, from: Date, to: Date): boolean {
+  if (end <= start) return start >= from.getTime() && start < to.getTime();
+  return Math.max(start, from.getTime()) < Math.min(end, to.getTime());
+}
+
+/** Where a session starts and ends on the clock, in epoch milliseconds. A running session runs up to `now`. */
+export function clockSpan(session: Session, now = new Date()): { start: number; end: number } {
+  const start = parseVaultimeDate(session.started_at_wall).getTime();
+  const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
+  return { start, end };
+}
+
+/** Whether `clipToWindow` finds a part of the session, without making that part. */
+export function touchesWindow(session: Session, from: Date, to: Date, now = new Date()): boolean {
+  const { start, end } = clockSpan(session, now);
+  return spanTouches(start, end, from, to);
+}
+
 /**
  * The part of a session that fell between `from` and `to`, with its time
  * spread evenly over its span on the clock, so time the PC slept stays out.
  * A running session runs up to `now`. Null when nothing of it falls inside.
  */
 export function clipToWindow(session: Session, from: Date, to: Date, now = new Date()): Session | null {
-  const start = parseVaultimeDate(session.started_at_wall).getTime();
-  const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
-  if (end <= start) {
-    return start >= from.getTime() && start < to.getTime() ? session : null;
-  }
+  const { start, end } = clockSpan(session, now);
+  if (!spanTouches(start, end, from, to)) return null;
+  if (end <= start) return session;
   const clippedStart = Math.max(start, from.getTime());
   const clippedEnd = Math.min(end, to.getTime());
-  if (clippedEnd <= clippedStart) return null;
   const share = (clippedEnd - clippedStart) / (end - start);
   return {
     ...session,
@@ -141,8 +157,7 @@ interface Stretch {
 
 function toSpans(sessions: Session[], now: Date): Span[] {
   return sessions.filter(countsAsPlay).map((session) => {
-    const start = parseVaultimeDate(session.started_at_wall).getTime();
-    const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall).getTime() : now.getTime();
+    const { start, end } = clockSpan(session, now);
     return { session, start, end, density: end > start ? session.runtime_ms / (end - start) : 0 };
   });
 }

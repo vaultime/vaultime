@@ -16,6 +16,7 @@ import {
   splitByDay,
   summarizeRecentPlay,
   toDayKey,
+  touchesWindow,
 } from "./session-stats";
 
 describe("clipToWindow", () => {
@@ -34,6 +35,23 @@ describe("clipToWindow", () => {
     const live = session(at(2026, 9, 29, 20, 0), 60, { ended_at_wall: null });
     const clipped = clipToWindow(live, new Date(2026, 8, 29), new Date(2026, 8, 30), new Date(2026, 8, 29, 21, 0));
     expect(clipped?.ended_at_wall).toBe(new Date(2026, 8, 29, 21, 0).toISOString());
+  });
+});
+
+describe("touchesWindow", () => {
+  it("agrees with clipToWindow, also for a session without time on the clock", () => {
+    const late = session(at(2026, 9, 28, 23, 0), 180);
+    const empty = session(at(2026, 9, 29, 12, 0), 0);
+    const windows: [Date, Date][] = [
+      [new Date(2026, 8, 29), new Date(2026, 8, 30)],
+      [new Date(2026, 8, 30), new Date(2026, 9, 1)],
+      [new Date(2026, 8, 29, 2), new Date(2026, 8, 29, 12)],
+      [new Date(2026, 8, 29, 12), new Date(2026, 8, 29, 13)],
+    ];
+    for (const [from, to] of windows) {
+      for (const one of [late, empty]) expect(touchesWindow(one, from, to)).toBe(clipToWindow(one, from, to) !== null);
+    }
+    expect(windows.map(([from, to]) => touchesWindow(empty, from, to))).toEqual([true, false, false, true]);
   });
 });
 
