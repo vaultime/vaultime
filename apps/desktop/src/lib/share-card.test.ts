@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
-import { phraseString } from "@/lib/sentences";
+import { phraseString } from "@/test/phrases";
 import { yearStats } from "@/lib/stats";
 import { estimatePlayTotals } from "@/test/play-totals";
 import { at, session } from "@/test/sessions";

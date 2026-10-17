@@ -29,13 +29,6 @@ import {
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { yearRange } from "@/lib/play-totals";
-import {
-  busiestMonthSentence,
-  rhythmSentence,
-  shapesSentence,
-  streakSentence,
-  yearSentence,
-} from "@/lib/sentences";
 import { countsAsPlay, toDayKey } from "@/lib/session-stats";
 import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape, type YearPlay } from "@/lib/stats";
 import * as api from "@/lib/tauri";
@@ -49,6 +42,7 @@ import {
 } from "@/lib/time";
 import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
+import { busiestMonthSentence, rhythmSentence, shapesSentence, streakSentence, yearSentence } from "@/lib/year-sentences";
 import { ShareYearDialog } from "./ShareYearDialog";
 
 const SHAPES: Record<SessionShape, { label: string; range: string }> = {

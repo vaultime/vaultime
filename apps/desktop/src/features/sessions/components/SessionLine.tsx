@@ -12,7 +12,7 @@ import { CorrectSessionDialog } from "@/features/sessions/components/CorrectSess
 import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import { isMergedPc, recordedElsewhere } from "@/lib/devices";
 import { recordedThrough } from "@/lib/links";
-import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/sentences";
+import { describeSession, sessionAmounts, sessionTrustNote } from "@/lib/session-lines";
 import { formatHoursMinutes, formatSessionStart } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";

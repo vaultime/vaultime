@@ -107,6 +107,24 @@ export function parseIntegrityPayload(
   }
 }
 
+/** The reason the player gave for a correction or a session added by hand, or "". */
+export function playerReason(payload: Record<string, unknown> | null): string {
+  return typeof payload?.reason === "string" ? payload.reason.trim() : "";
+}
+
+/** The player's words in quotes after a space, so they never run into a time, or "" without any. */
+export function quotedReason(reason: string): string {
+  return reason ? ` (“${reason}”)` : "";
+}
+
+/** The runtime a correction replaced, null when the event does not say. */
+export function previousRuntimeMs(payload: Record<string, unknown> | null): number | null {
+  const previous = payload?.previous;
+  return typeof previous === "object" && previous !== null && "runtime_ms" in previous && typeof previous.runtime_ms === "number"
+    ? previous.runtime_ms
+    : null;
+}
+
 export function getIntegrityEventDetail(event: SessionEvent): string {
   const payload = parseIntegrityPayload(event.payload_json);
   const reason =
@@ -122,16 +140,14 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
     case "started":
       return "First entry in the session's record";
     case "corrected": {
-      const previous = payload?.previous as Record<string, unknown> | undefined;
-      const before = typeof previous?.runtime_ms === "number" ? formatHoursMinutes(previous.runtime_ms) : null;
+      const previousMs = previousRuntimeMs(payload);
+      const before = previousMs === null ? null : formatHoursMinutes(previousMs);
       const after = typeof payload?.runtime_ms === "number" ? formatHoursMinutes(payload.runtime_ms) : null;
-      const why = typeof payload?.reason === "string" && payload.reason.trim() ? ` (“${payload.reason.trim()}”)` : "";
+      const why = quotedReason(playerReason(payload));
       return before && after ? `Changed from ${before} to ${after}${why}` : `Corrected${why}`;
     }
     case "added_manually":
-      return typeof payload?.reason === "string" && payload.reason.trim()
-        ? `Added by you (“${payload.reason.trim()}”)`
-        : "Added by you";
+      return `Added by you${quotedReason(playerReason(payload))}`;
     case "ended":
       return "Session closed cleanly";
     case "tracking_gap": {

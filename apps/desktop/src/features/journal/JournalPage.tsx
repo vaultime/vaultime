@@ -20,15 +20,8 @@ import {
   JOURNAL_TICK_HOURS,
 } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
-import {
-  afterMidnightLead,
-  continuedAmounts,
-  continuedPhrase,
-  sessionAmounts,
-  sideBySideSentence,
-  statusSentence,
-  weekSentence,
-} from "@/lib/sentences";
+import { sideBySideSentence, statusSentence, weekSentence } from "@/lib/sentences";
+import { afterMidnightLead, continuedAmounts, continuedPhrase, sessionAmounts } from "@/lib/session-lines";
 import {
   clipToWindow,
   countedOnce,
