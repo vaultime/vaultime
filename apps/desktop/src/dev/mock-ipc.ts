@@ -14,6 +14,7 @@
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
 // fills the three days before today with games that ran side by side.
 // ?update=1 offers a new version. ?ignored=1 lists an ignored program.
+// ?posters=1 draws a poster for every game, for screenshots of the README.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -838,6 +839,274 @@ function posterArt(ground: string, ink: string, word: string): MockArt {
   return mockArt(element, 600, 900, true);
 }
 
+// ?posters=1 gives every game a drawn poster as its cover, so screenshots
+// show artwork without third-party covers.
+const showPosters = params.get("posters") === "1";
+
+interface PosterRidge {
+  color: string;
+  base: number;
+  height: number;
+  steps: number;
+  smooth?: boolean;
+}
+
+interface PosterStyle {
+  sky: string[];
+  glow: [x: number, y: number, radius: number, color: string];
+  disc?: [x: number, y: number, radius: number, color: string];
+  ring?: [x: number, y: number, radius: number, color: string];
+  peak?: [x: number, y: number, color: string];
+  stars: number;
+  ridges: PosterRidge[];
+  lines: string[];
+  font: string;
+  ink: string;
+  cards?: boolean;
+  planets?: boolean;
+}
+
+const POSTER_STYLES: Record<string, PosterStyle> = {
+  "Elden Ring": {
+    sky: ["#07060a", "#231b0c", "#4d3a12"],
+    glow: [300, 330, 360, "rgba(255, 190, 80, 0.5)"],
+    ring: [300, 330, 160, "#f3d27a"],
+    stars: 30,
+    ridges: [
+      { color: "#2a2010", base: 620, height: 120, steps: 9 },
+      { color: "#120e07", base: 720, height: 90, steps: 12 },
+    ],
+    lines: ["ELDEN RING"],
+    font: "600 70px Georgia, serif",
+    ink: "#f4e2ad",
+  },
+  "Hades II": {
+    sky: ["#0d0518", "#33104a", "#6b1a4d"],
+    glow: [400, 250, 300, "rgba(120, 255, 190, 0.32)"],
+    disc: [400, 250, 74, "#dcffe9"],
+    stars: 60,
+    ridges: [
+      { color: "#2a0d36", base: 600, height: 160, steps: 7 },
+      { color: "#13061c", base: 700, height: 120, steps: 10 },
+    ],
+    lines: ["HADES II"],
+    font: "700 92px 'Trebuchet MS', sans-serif",
+    ink: "#e6ffd8",
+  },
+  Balatro: {
+    sky: ["#2a0910", "#6f1222", "#1d4f58"],
+    glow: [300, 420, 320, "rgba(255, 90, 90, 0.35)"],
+    stars: 0,
+    ridges: [{ color: "#0f2a30", base: 780, height: 40, steps: 6, smooth: true }],
+    lines: ["BALATRO"],
+    font: "400 104px Impact, sans-serif",
+    ink: "#ffe9d2",
+    cards: true,
+  },
+  "Hollow Knight": {
+    sky: ["#050a14", "#16304c", "#3a5f86"],
+    glow: [300, 320, 340, "rgba(190, 225, 255, 0.42)"],
+    stars: 90,
+    ridges: [
+      { color: "#16263a", base: 560, height: 200, steps: 6 },
+      { color: "#070d16", base: 690, height: 140, steps: 8 },
+    ],
+    lines: ["HOLLOW", "KNIGHT"],
+    font: "600 72px Georgia, serif",
+    ink: "#e9f0f8",
+  },
+  Celeste: {
+    sky: ["#170e33", "#5c2a6e", "#ee8aa0"],
+    glow: [300, 520, 320, "rgba(255, 170, 200, 0.4)"],
+    stars: 120,
+    peak: [330, 250, "#4a2670"],
+    ridges: [{ color: "#1d1035", base: 720, height: 140, steps: 9 }],
+    lines: ["CELESTE"],
+    font: "300 86px 'Segoe UI', sans-serif",
+    ink: "#ffffff",
+  },
+  "Stardew Valley": {
+    sky: ["#2f7fd0", "#7cc3f0", "#d8f1ff"],
+    glow: [450, 190, 220, "rgba(255, 236, 150, 0.55)"],
+    disc: [450, 190, 58, "#fff0a0"],
+    stars: 0,
+    ridges: [
+      { color: "#4f9d45", base: 560, height: 90, steps: 4, smooth: true },
+      { color: "#2f6f34", base: 660, height: 70, steps: 5, smooth: true },
+    ],
+    lines: ["STARDEW", "VALLEY"],
+    font: "700 76px 'Trebuchet MS', sans-serif",
+    ink: "#fff6d4",
+  },
+  "Outer Wilds": {
+    sky: ["#03020a", "#0b1230", "#24143f"],
+    glow: [300, 430, 330, "rgba(255, 140, 60, 0.45)"],
+    disc: [300, 430, 130, "#ff9440"],
+    stars: 160,
+    ridges: [],
+    lines: ["OUTER", "WILDS"],
+    font: "600 76px 'Segoe UI', sans-serif",
+    ink: "#ffe2c6",
+    planets: true,
+  },
+};
+
+/** A poster in the spirit of the game, drawn for ?posters=1. */
+function drawPoster(title: string, index: number): string {
+  const style = POSTER_STYLES[title] ?? POSTER_STYLES["Elden Ring"];
+  const { element, context } = canvas(600, 900);
+  let state = 97 + index * 131;
+  const next = () => {
+    state = (state * 16807) % 2147483647;
+    return state / 2147483647;
+  };
+  const sky = context.createLinearGradient(0, 0, 0, 900);
+  style.sky.forEach((color, stop) => sky.addColorStop(stop / (style.sky.length - 1), color));
+  context.fillStyle = sky;
+  context.fillRect(0, 0, 600, 900);
+  for (let star = 0; star < style.stars; star += 1) {
+    context.fillStyle = `rgba(255, 255, 255, ${0.25 + next() * 0.6})`;
+    context.beginPath();
+    context.arc(next() * 600, next() * 620, 0.6 + next() * 1.6, 0, Math.PI * 2);
+    context.fill();
+  }
+  const [glowX, glowY, glowRadius, glowColor] = style.glow;
+  const glow = context.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowRadius);
+  glow.addColorStop(0, glowColor);
+  glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+  context.fillStyle = glow;
+  context.fillRect(0, 0, 600, 900);
+  if (style.disc) {
+    const [x, y, radius, color] = style.disc;
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+  }
+  if (style.ring) {
+    const [x, y, radius, color] = style.ring;
+    context.strokeStyle = color;
+    context.lineWidth = 7;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.stroke();
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(x, y + radius);
+    context.lineTo(x, 640);
+    context.stroke();
+  }
+  if (style.planets) {
+    for (const [x, y, radius, color] of [
+      [470, 170, 34, "#5fb3a8"],
+      [130, 300, 18, "#c9a46b"],
+      [520, 420, 12, "#8d7cd6"],
+    ] as const) {
+      context.fillStyle = color;
+      context.beginPath();
+      context.arc(x, y, radius, 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+  if (style.cards) {
+    for (const [x, y, angle, color] of [
+      [190, 360, -0.32, "#f3e6d0"],
+      [300, 330, 0, "#ffffff"],
+      [410, 360, 0.32, "#f3e6d0"],
+    ] as const) {
+      context.save();
+      context.translate(x, y);
+      context.rotate(angle);
+      context.fillStyle = color;
+      context.beginPath();
+      context.roundRect(-70, -100, 140, 200, 14);
+      context.fill();
+      context.fillStyle = "#c8243a";
+      context.font = "400 64px Impact, sans-serif";
+      context.textAlign = "center";
+      context.fillText(x === 300 ? "A" : "7", 0, 22);
+      context.restore();
+    }
+  }
+  if (style.peak) {
+    const [x, y, color] = style.peak;
+    context.fillStyle = color;
+    context.beginPath();
+    context.moveTo(-40, 800);
+    context.lineTo(x - 60, y + 140);
+    context.lineTo(x, y);
+    context.lineTo(x + 50, y + 90);
+    context.lineTo(x + 90, y + 70);
+    context.lineTo(660, 760);
+    context.fill();
+    context.fillStyle = "rgba(255, 236, 245, 0.85)";
+    context.beginPath();
+    context.moveTo(x - 30, y + 70);
+    context.lineTo(x, y);
+    context.lineTo(x + 50, y + 90);
+    context.lineTo(x + 20, y + 75);
+    context.lineTo(x - 5, y + 95);
+    context.fill();
+  }
+  for (const ridge of style.ridges) {
+    context.fillStyle = ridge.color;
+    context.beginPath();
+    context.moveTo(0, 900);
+    const points = Array.from({ length: ridge.steps + 1 }, (_, step) => [
+      (step / ridge.steps) * 600,
+      ridge.base - next() * ridge.height,
+    ]);
+    context.lineTo(points[0][0], points[0][1]);
+    points.slice(1).forEach(([x, y], step) => {
+      const [previousX, previousY] = points[step];
+      if (ridge.smooth) context.quadraticCurveTo(previousX + (x - previousX) / 2, previousY, x, y);
+      else context.lineTo(x, y);
+    });
+    context.lineTo(600, 900);
+    context.fill();
+  }
+  const shade = context.createLinearGradient(0, 600, 0, 900);
+  shade.addColorStop(0, "rgba(0, 0, 0, 0)");
+  shade.addColorStop(1, "rgba(0, 0, 0, 0.55)");
+  context.fillStyle = shade;
+  context.fillRect(0, 600, 600, 300);
+  context.fillStyle = style.ink;
+  context.font = style.font;
+  context.textAlign = "center";
+  context.letterSpacing = "4px";
+  context.shadowColor = "rgba(0, 0, 0, 0.45)";
+  context.shadowBlur = 18;
+  const lineHeight = parseInt(style.font.split(" ")[1], 10) * 1.05;
+  style.lines.forEach((line, row) => {
+    context.fillText(line, 300, 820 - (style.lines.length - 1 - row) * lineHeight);
+  });
+  return element.toDataURL("image/jpeg", 0.9);
+}
+
+const posterAssets = new Map<string, GameAssetView>();
+
+function posterAsset(gameId: string): GameAssetView[] {
+  const index = allGames.findIndex((game) => game.id === gameId);
+  if (!showPosters || index < 0) return [];
+  let asset = posterAssets.get(gameId);
+  if (!asset) {
+    asset = {
+      id: `poster-${gameId}`,
+      game_id: gameId,
+      asset_type: "cover",
+      source: "scanned_local",
+      file_path: `C:/Games/${allGames[index].title}/poster.jpg`,
+      cache_path: null,
+      hash: null,
+      created_at: iso(now),
+      preview_data_url: drawPoster(allGames[index].title, index),
+      is_preferred: true,
+    };
+    posterAssets.set(gameId, asset);
+  }
+  return [asset];
+}
+
 function sampleCovers(gameId: string): GameAssetView[] {
   if (!coverMix) return [];
   let covers = mixedCovers.get(gameId);
@@ -870,7 +1139,7 @@ function sampleCovers(gameId: string): GameAssetView[] {
 
 function gameAssets(gameId: string): GameAssetView[] {
   const picked = pickedCovers.get(gameId)?.asset;
-  const covers = scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === gameId) : [];
+  const covers = scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === gameId) : posterAsset(gameId);
   const listed = picked ? [picked, ...covers.map((asset) => ({ ...asset, is_preferred: false }))] : covers;
   const all = [...listed, ...sampleCovers(gameId)].filter((asset) => !deletedAssets.has(asset.id));
   // As in the core, one image is always the cover.

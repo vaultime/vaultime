@@ -11,6 +11,10 @@
 # WIDTH and HEIGHT set the window, 1440 by 900 by default. The app's smallest
 # window is 900 by 600. PORT is the preview port, 4173 by default.
 # Uses the Microsoft Edge that ships with Windows, in headless mode.
+#
+# The screenshots in assets/screenshots are taken at 1600 by 1000 with drawn
+# posters instead of real covers: library?posters=1 stats?posters=1
+# journal?posters=1 library/game-1?posters=1.
 set -euo pipefail
 
 out=${1:?usage: ui-screenshots.sh <output-folder> [page ...]}
