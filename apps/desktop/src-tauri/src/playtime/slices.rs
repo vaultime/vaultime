@@ -634,6 +634,89 @@ pub fn aside_stretches(
     session: &Session,
     now_ms: i64,
 ) -> Result<Vec<(i64, i64)>> {
+    aside_stretches_within(conn, session, now_ms, None)
+}
+
+/// The sessions a game that steps aside makes room for on one PC, as far as
+/// they bound which of them can reach a moment: the longest a closed one
+/// lasted on the clock and the earliest start of an open one. None when a
+/// time of theirs is not in the stored form, so text order is no clock order.
+#[derive(Debug, Clone, Copy, Default)]
+struct Reach {
+    longest_closed_ms: i64,
+    first_open_ms: Option<i64>,
+}
+
+/// `Reach` per PC, read once for a batch of rebuilds, during which the
+/// sessions stay as they are.
+#[derive(Debug, Default)]
+struct LongestBeside(std::collections::HashMap<String, Option<Reach>>);
+
+impl LongestBeside {
+    fn on(&mut self, conn: &Connection, device: &str) -> Result<Option<Reach>> {
+        if let Some(reach) = self.0.get(device) {
+            return Ok(*reach);
+        }
+        let reach = reach_on(conn, device)?;
+        self.0.insert(device.to_owned(), reach);
+        Ok(reach)
+    }
+}
+
+/// `Reach` of the sessions on `device` that `aside_stretches` reads.
+fn reach_on(conn: &Connection, device: &str) -> Result<Option<Reach>> {
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT sessions.started_at_wall, sessions.ended_at_wall
+             FROM sessions JOIN games ON games.id = sessions.game_id
+             WHERE sessions.device_id = ?1 AND NOT ({STEPS_ASIDE})
+               AND (sessions.ended_at_wall IS NULL OR sessions.runtime_ms > 0)"
+        ))
+        .map_err(map_db)?;
+    let rows = stmt
+        .query_map([device], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })
+        .map_err(map_db)?;
+    let stored = |text: &str| {
+        wall_ms(text).filter(|ms| {
+            DateTime::from_timestamp_millis(*ms)
+                .is_some_and(|time| integrity::format_timestamp(time) == text)
+        })
+    };
+    let mut reach = Reach::default();
+    for row in rows {
+        let (start, end) = row.map_err(map_db)?;
+        let Some(start_ms) = stored(&start) else {
+            return Ok(None);
+        };
+        match end {
+            Some(end) => {
+                let Some(end_ms) = stored(&end) else {
+                    return Ok(None);
+                };
+                reach.longest_closed_ms = reach.longest_closed_ms.max(end_ms - start_ms);
+            }
+            None => {
+                reach.first_open_ms = Some(
+                    reach
+                        .first_open_ms
+                        .map_or(start_ms, |first| first.min(start_ms)),
+                );
+            }
+        }
+    }
+    Ok(Some(reach))
+}
+
+/// `aside_stretches`, with `longest` to read only the sessions that started
+/// late enough to reach the session.
+fn aside_stretches_within(
+    conn: &Connection,
+    session: &Session,
+    now_ms: i64,
+    longest: Option<&mut LongestBeside>,
+) -> Result<Vec<(i64, i64)>> {
     if !steps_aside(conn, &session.game_id)? {
         return Ok(Vec::new());
     }
@@ -661,14 +744,25 @@ pub fn aside_stretches(
         Some(end) => end,
         None => open_end(&session.id)?,
     };
+    // A closed session that started before `start` minus the longest one
+    // ended before `start`. An empty bound leaves out nothing.
+    let earliest = match longest {
+        Some(longest) => longest.on(conn, &session.device_id)?.map(|reach| {
+            let closed = start.saturating_sub(reach.longest_closed_ms);
+            reach.first_open_ms.map_or(closed, |open| open.min(closed))
+        }),
+        None => None,
+    };
+    // The PC is left out of the index choice, so the bounds on the start
+    // pick the sessions.
     let mut stmt = conn
         .prepare_cached(&format!(
             "SELECT sessions.id, sessions.started_at_wall, sessions.ended_at_wall
              FROM sessions JOIN games ON games.id = sessions.game_id
              WHERE sessions.game_id != ?1 AND NOT ({STEPS_ASIDE})
-               AND sessions.device_id = ?4
+               AND +sessions.device_id = ?4
                AND (sessions.ended_at_wall IS NULL OR sessions.runtime_ms > 0)
-               AND sessions.started_at_wall < ?3
+               AND sessions.started_at_wall >= ?5 AND sessions.started_at_wall < ?3
                AND (sessions.ended_at_wall IS NULL OR sessions.ended_at_wall > ?2)
              ORDER BY sessions.started_at_wall"
         ))
@@ -683,7 +777,8 @@ pub fn aside_stretches(
                 session.game_id,
                 format(start),
                 format(end),
-                session.device_id
+                session.device_id,
+                earliest.map_or_else(String::new, format)
             ],
             |row| {
                 Ok((
@@ -899,6 +994,23 @@ pub fn rebuild_aside_around_spans(db: &Database, spans: &[(String, String, Strin
 /// Works out the slices of a session again. An open session keeps none, its
 /// time is placed when it is asked for.
 pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
+    rebuild_session_within(conn, session_id, None)
+}
+
+/// `rebuild_session` in a batch that shares `longest`.
+fn rebuild_session_with(
+    conn: &Connection,
+    session_id: &str,
+    longest: &mut LongestBeside,
+) -> Result<()> {
+    rebuild_session_within(conn, session_id, Some(longest))
+}
+
+fn rebuild_session_within(
+    conn: &Connection,
+    session_id: &str,
+    longest: Option<&mut LongestBeside>,
+) -> Result<()> {
     for table in ["play_slices", "play_spans"] {
         conn.execute(
             &format!("DELETE FROM {table} WHERE session_id = ?1"),
@@ -913,7 +1025,12 @@ pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
         return Ok(());
     };
     let events = placing_events(conn, session_id)?;
-    let aside = aside_stretches(conn, &session, chrono::Utc::now().timestamp_millis())?;
+    let aside = aside_stretches_within(
+        conn,
+        &session,
+        chrono::Utc::now().timestamp_millis(),
+        longest,
+    )?;
     let spans = spans_of(&session, &events, None, &aside);
     let mut insert_span = conn
         .prepare_cached(
@@ -975,9 +1092,18 @@ pub fn rebuild_for_game(db: &Database, game_id: &str) -> Result<()> {
                 spans.push(row.map_err(map_db)?);
             }
         }
+        // A launcher session around several of them is built once.
+        let mut longest = LongestBeside::default();
+        let mut around = std::collections::BTreeSet::new();
         for (id, start, end, device) in &spans {
-            rebuild_session(conn, id)?;
-            rebuild_aside_around(conn, start, end, device)?;
+            rebuild_session_with(conn, id, &mut longest)?;
+            around.extend(aside_sessions_around(conn, start, end, device)?);
+        }
+        for (id, ..) in &spans {
+            around.remove(id);
+        }
+        for id in &around {
+            rebuild_session_with(conn, id, &mut longest)?;
         }
         Ok(())
     })
@@ -996,8 +1122,9 @@ pub fn rebuild_all(db: &Database) -> Result<usize> {
             let rows = stmt.query_map([], |row| row.get(0)).map_err(map_db)?;
             rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
         };
+        let mut longest = LongestBeside::default();
         for id in &ids {
-            rebuild_session(conn, id)?;
+            rebuild_session_with(conn, id, &mut longest)?;
         }
         conn.execute(
             "INSERT INTO settings (key, value, updated_at)
