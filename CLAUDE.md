@@ -151,8 +151,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   PC with a sound ledger takes it over (`ledger::Takeover`): it continues as
   that PC, the keys the backup names for it count as its own beside its new
   key, written to `device-id` and `device-keys` and noted in a signed
-  `took_over` entry. A merge then takes in that PC's sessions it lacks only
-  when the backup's PC trusted only keys this PC counts as its own for it. A PC with
+  `took_over` entry. The player may decline it in the restore preview,
+  where it is on by default, and the restore then runs as on a PC with
+  history. A merge then takes in that PC's sessions it lacks only when the
+  backup's PC trusted only keys this PC counts as its own for it. A PC with
   history never takes over.
 - Games are linked, never merged. `game_links` maps a game to the game it
   counts as: another install on this PC, like a copy from a second launcher,
