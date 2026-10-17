@@ -753,13 +753,13 @@ if (signUpStep) {
 }
 
 // ?scan=1 presses "Start the scan" in the discover dialog, open it with ?discover=1.
-if (new URLSearchParams(window.location.search).get("scan") === "1") {
+if (params.get("scan") === "1") {
   setTimeout(() => {
     const start = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Start the scan"));
     start?.click();
   }, 800);
   // ?same=1 then scrolls to the game marked as another install of a library game.
-  if (new URLSearchParams(window.location.search).get("same") === "1") {
+  if (params.get("same") === "1") {
     setTimeout(() => {
       const marked = [...document.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Same game as"));
       marked?.scrollIntoView({ block: "center" });
@@ -768,7 +768,7 @@ if (new URLSearchParams(window.location.search).get("scan") === "1") {
 }
 
 // ?palette=1 opens the command palette once the app has rendered.
-if (new URLSearchParams(window.location.search).get("palette") === "1") {
+if (params.get("palette") === "1") {
   setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })), 500);
 }
 
@@ -1348,7 +1348,7 @@ if (coverStep) {
 }
 
 // ?ledger=missing or ?ledger=broken shows the ledger with a problem.
-const ledgerProblem = new URLSearchParams(window.location.search).get("ledger");
+const ledgerProblem = params.get("ledger");
 let thisPc: ThisPc = {
   device_id: "preview",
   name: "Desktop",
