@@ -184,6 +184,8 @@ pub fn new_games(db: &Database, found: &FoundGames) -> Result<NewGames> {
     let since_last = !known.offered.is_empty();
     let games = filter_new(pending, &known);
     found.set(games.clone());
+    // Marked as they are shown, against the library of that moment.
+    let games = super::mark_same_games(db, games)?;
     Ok(NewGames { games, since_last })
 }
 
@@ -201,6 +203,7 @@ mod tests {
             source: "steam".into(),
             source_id: None,
             already_added: false,
+            same_game: None,
         }
     }
 
