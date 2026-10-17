@@ -570,6 +570,23 @@ impl TailLimit {
 /// A pin as stored: the key that signed it, its entry type and payload.
 pub(crate) type StoredPin = (String, String, String);
 
+/// The event a pin's payload names, by its sequence and hash.
+pub(crate) fn pin_point(payload: &Value) -> Option<(i64, &str)> {
+    Some((
+        payload.get("sequence")?.as_i64()?,
+        payload.get("hash")?.as_str()?,
+    ))
+}
+
+/// Whether `events`, in order, hold the event at `sequence` with `hash`.
+pub(crate) fn pin_matches(events: &[SessionEvent], sequence: i64, hash: &str) -> bool {
+    sequence
+        .checked_sub(1)
+        .and_then(|index| usize::try_from(index).ok())
+        .and_then(|index| events.get(index))
+        .is_some_and(|event| event.hash_self.as_deref() == Some(hash))
+}
+
 /// The newest event of `events` that `pins` vouch for, other than by a
 /// recovery or a correction. A pin at an event vouches for every event
 /// before it, as each event's hash covers the one before.
@@ -580,10 +597,7 @@ fn vouched_through<'a>(
     let mut newest = 0;
     for (_, entry_type, payload_json) in pins {
         let payload: Value = serde_json::from_str(payload_json).unwrap_or(Value::Null);
-        let (Some(sequence), Some(hash)) = (
-            payload.get("sequence").and_then(Value::as_i64),
-            payload.get("hash").and_then(Value::as_str),
-        ) else {
+        let Some((sequence, hash)) = pin_point(&payload) else {
             continue;
         };
         let restating = entry_type == ENTRY_PINNED
@@ -591,12 +605,7 @@ fn vouched_through<'a>(
                 .get("event_type")
                 .and_then(Value::as_str)
                 .is_some_and(|event_type| RESTATING_EVENTS.contains(&event_type));
-        let matches = sequence
-            .checked_sub(1)
-            .and_then(|index| usize::try_from(index).ok())
-            .and_then(|index| events.get(index))
-            .is_some_and(|event| event.hash_self.as_deref() == Some(hash));
-        if matches && !restating {
+        if pin_matches(events, sequence, hash) && !restating {
             newest = newest.max(sequence);
         }
     }
@@ -955,28 +964,50 @@ pub(crate) fn taken_over_keys(conn: &Connection) -> Result<HashSet<String>> {
     if any_broken(conn, &mine)? {
         return Ok(HashSet::new());
     }
+    Ok(signed_payloads(conn, ENTRY_TOOK_OVER, &mine)?
+        .iter()
+        .filter_map(|payload| payload.get("key_ids")?.as_array())
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The payloads of the entries of `entry_type` that `signers` signed.
+fn signed_payloads(
+    conn: &Connection,
+    entry_type: &str,
+    signers: &HashSet<String>,
+) -> Result<Vec<Value>> {
     let mut stmt = conn
-        .prepare_cached(
-            "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'took_over'",
-        )
+        .prepare_cached("SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = ?1")
         .map_err(ledger_error)?;
     let rows = stmt
-        .query_map([], |row| {
+        .query_map([entry_type], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(ledger_error)?;
-    let mut keys = HashSet::new();
+    let mut payloads = Vec::new();
     for row in rows {
         let (signer, payload) = row.map_err(ledger_error)?;
-        if !mine.contains(&signer) {
-            continue;
-        }
-        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
-        if let Some(listed) = payload.get("key_ids").and_then(Value::as_array) {
-            keys.extend(listed.iter().filter_map(Value::as_str).map(str::to_owned));
+        if signers.contains(&signer) {
+            payloads.push(serde_json::from_str(&payload).unwrap_or(Value::Null));
         }
     }
-    Ok(keys)
+    Ok(payloads)
+}
+
+/// Every key the ledgers of `signers` trust, with the PC they trust it for.
+fn trust_entries(conn: &Connection, signers: &HashSet<String>) -> Result<Vec<(String, String)>> {
+    Ok(signed_payloads(conn, ENTRY_TRUSTED, signers)?
+        .iter()
+        .filter_map(|payload| {
+            Some((
+                payload.get("device_id")?.as_str()?.to_owned(),
+                payload.get("key_id")?.as_str()?.to_owned(),
+            ))
+        })
+        .collect())
 }
 
 /// The keys the ledgers of `signers` in `conn` trust for `device_id`.
@@ -985,31 +1016,14 @@ pub(crate) fn trusted_by(
     signers: &HashSet<String>,
     device_id: &str,
 ) -> Result<HashSet<String>> {
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'trusted'",
-        )
-        .map_err(ledger_error)?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(ledger_error)?;
-    let mut trusted = HashSet::new();
-    for row in rows {
-        let (signer, payload) = row.map_err(ledger_error)?;
-        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
-        if signers.contains(&signer)
-            && payload.get("device_id").and_then(Value::as_str) == Some(device_id)
-            && let Some(key) = payload.get("key_id").and_then(Value::as_str)
-        {
-            trusted.insert(key.to_owned());
-        }
-    }
-    Ok(trusted)
+    Ok(trust_entries(conn, signers)?
+        .into_iter()
+        .filter(|(device, _)| device == device_id)
+        .map(|(_, key)| key)
+        .collect())
 }
 
-// One ledger entry as stored.
+/// One ledger entry as stored.
 struct LedgerRow {
     key_id: String,
     sequence: i64,
@@ -1221,28 +1235,7 @@ pub(crate) fn trusted_keys(conn: &Connection, device_id: &str) -> Result<HashSet
     if any_broken(conn, &mine)? {
         return Ok(HashSet::new());
     }
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'trusted'",
-        )
-        .map_err(ledger_error)?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(ledger_error)?;
-    let mut trusted = HashSet::new();
-    for row in rows {
-        let (signer, payload) = row.map_err(ledger_error)?;
-        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
-        if mine.contains(&signer)
-            && payload.get("device_id").and_then(Value::as_str) == Some(device_id)
-            && let Some(key) = payload.get("key_id").and_then(Value::as_str)
-        {
-            trusted.insert(key.to_owned());
-        }
-    }
-    Ok(trusted)
+    trusted_by(conn, &mine, device_id)
 }
 
 /// Every PC this PC's own ledgers trust keys of, with those keys.
@@ -1251,31 +1244,9 @@ pub(crate) fn all_trusted(conn: &Connection) -> Result<HashMap<String, HashSet<S
     if any_broken(conn, &mine)? {
         return Ok(HashMap::new());
     }
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT key_id, payload_json FROM ledger_entries WHERE entry_type = 'trusted'",
-        )
-        .map_err(ledger_error)?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(ledger_error)?;
     let mut trusted: HashMap<String, HashSet<String>> = HashMap::new();
-    for row in rows {
-        let (signer, payload) = row.map_err(ledger_error)?;
-        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
-        if mine.contains(&signer)
-            && let (Some(device), Some(key)) = (
-                payload.get("device_id").and_then(Value::as_str),
-                payload.get("key_id").and_then(Value::as_str),
-            )
-        {
-            trusted
-                .entry(device.to_owned())
-                .or_default()
-                .insert(key.to_owned());
-        }
+    for (device, key) in trust_entries(conn, &mine)? {
+        trusted.entry(device).or_default().insert(key);
     }
     Ok(trusted)
 }
@@ -1528,30 +1499,29 @@ pub(crate) fn session_problem(
         return Ok(Some("not_in_ledger"));
     }
     let state = ledger_state(conn)?;
+    let own;
     let counted = match viewpoint {
-        Viewpoint::ThisPc => own_keys()?,
-        Viewpoint::Keys(keys) => keys.clone(),
+        Viewpoint::ThisPc => {
+            own = own_keys()?;
+            &own
+        }
+        Viewpoint::Keys(keys) => keys,
     };
+    let counted_pins: Vec<StoredPin> = pins
+        .into_iter()
+        .filter(|(key, _, _)| counted.contains(key))
+        .collect();
     let mut covered_from_start = false;
     let mut newest_pinned = 0;
-    for (key_id, entry_type, payload_json) in
-        pins.iter().filter(|(key, _, _)| counted.contains(key))
-    {
+    for (key_id, entry_type, payload_json) in &counted_pins {
         if state.broken.contains(key_id) {
             return Ok(Some("ledger_broken"));
         }
         let payload: Value = serde_json::from_str(payload_json).unwrap_or(Value::Null);
-        let (Some(sequence), Some(hash)) = (
-            payload.get("sequence").and_then(Value::as_i64),
-            payload.get("hash").and_then(Value::as_str),
-        ) else {
+        let Some((sequence, hash)) = pin_point(&payload) else {
             return Ok(Some("ledger_mismatch"));
         };
-        let pinned = sequence
-            .checked_sub(1)
-            .and_then(|index| usize::try_from(index).ok())
-            .and_then(|index| events.get(index));
-        if pinned.is_none_or(|event| event.hash_self.as_deref() != Some(hash)) {
+        if !pin_matches(events, sequence, hash) {
             return Ok(Some("ledger_mismatch"));
         }
         covered_from_start |= sequence == 1 || entry_type != ENTRY_PINNED;
@@ -1571,10 +1541,6 @@ pub(crate) fn session_problem(
     }
     // Time past the newest pinned checkpoint counts up to one interval,
     // also when a recovery or a correction restates it later.
-    let counted_pins: Vec<StoredPin> = pins
-        .into_iter()
-        .filter(|(key, _, _)| counted.contains(key))
-        .collect();
     let counters = [session.runtime_ms, session.active_ms, session.idle_ms];
     if !pins_vouch_for_time(&counted_pins, events, counters) {
         return Ok(Some("unpinned_time_too_long"));

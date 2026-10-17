@@ -186,10 +186,7 @@ fn pins_confirm(pins: &[ledger::StoredPin], session: &Session, events: &[Session
     let mut points = Vec::new();
     for pin in pins {
         let payload = parse_payload(&pin.2).unwrap_or(Value::Null);
-        let (Some(sequence), Some(hash)) = (
-            payload_i64(&payload, "sequence"),
-            payload_str(&payload, "hash"),
-        ) else {
+        let Some((sequence, hash)) = ledger::pin_point(&payload) else {
             continue;
         };
         if usize::try_from(sequence).is_ok_and(|n| n >= 1 && n <= events.len()) {
@@ -200,13 +197,9 @@ fn pins_confirm(pins: &[ledger::StoredPin], session: &Session, events: &[Session
     let Some(newest_pinned) = points.iter().map(|(sequence, _)| *sequence).max() else {
         return false;
     };
-    let matches = points.iter().all(|(sequence, hash)| {
-        sequence
-            .checked_sub(1)
-            .and_then(|index| usize::try_from(index).ok())
-            .and_then(|index| events.get(index))
-            .is_some_and(|event| event.hash_self.as_deref() == Some(hash.as_str()))
-    });
+    let matches = points
+        .iter()
+        .all(|(sequence, hash)| ledger::pin_matches(events, *sequence, hash));
     let newest_timing = events
         .iter()
         .rev()
