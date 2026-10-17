@@ -1,0 +1,19 @@
+// SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { createContext, useContext } from "react";
+
+export interface SettingsState {
+  /** The stored settings by key, as read at start and saved since. */
+  values: Record<string, string>;
+  /** Saves a setting and keeps its value for everything that reads it. */
+  save: (key: string, value: string) => Promise<void>;
+}
+
+export const SettingsContext = createContext<SettingsState | null>(null);
+
+export function useSettings(): SettingsState {
+  const value = useContext(SettingsContext);
+  if (!value) throw new Error("useSettings needs a SettingsProvider");
+  return value;
+}

@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppearanceContext, type AppearanceState } from "@/features/appearance/appearance-context";
+import { useSettings } from "@/features/settings/settings-context";
 import {
   APPEARANCE_CACHE_KEY,
   APPEARANCE_SAVE_DELAY_MS,
@@ -11,14 +12,12 @@ import {
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import {
-  DEFAULT_APPEARANCE,
   accentHues,
   appearanceFromSettings,
   appearanceSettings,
   resolveMode,
   themeTokens,
   windowLook,
-  withChanges,
   type Appearance,
   type ThemeMode,
 } from "@/lib/theme";
@@ -34,19 +33,6 @@ interface CachedLook {
   tokens: Record<ThemeMode, Record<string, string>>;
 }
 
-/** The look of the last run, so the first render already has it. */
-function cachedAppearance(): Appearance {
-  try {
-    const cached = JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY) ?? "null") as CachedLook | null;
-    if (!cached?.appearance) return DEFAULT_APPEARANCE;
-    const { mode, ground, accent, dim, blur } = cached.appearance;
-    return appearanceFromSettings(
-      Object.fromEntries(appearanceSettings({ mode, ground, accent, dim, blur })),
-    );
-  } catch {
-    return DEFAULT_APPEARANCE;
-  }
-}
 
 function systemIsDark(): boolean {
   try {
@@ -71,24 +57,15 @@ function applyLook(mode: ThemeMode, tokens: Record<string, string>) {
 
 /** Dark or light, a ground tone, an accent and a background picture, for the whole app. */
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const [appearance, setAppearance] = useState<Appearance>(cachedAppearance);
+  const { values, save } = useSettings();
+  const [appearance, setAppearance] = useState<Appearance>(() => appearanceFromSettings(values));
   const [systemDark, setSystemDark] = useState(systemIsDark);
   const [background, setBackground] = useState<string | null>(null);
   // Drags wait a moment before they are saved, so a slider saves once.
   const pending = useRef(new Map<string, { value: string; timer: number }>());
-  // Parts the player changed, which stored settings loaded later must not undo.
-  const changed = useRef(new Set<keyof Appearance>());
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .listSettings()
-      .then((settings) => {
-        if (cancelled) return;
-        const loaded = appearanceFromSettings(Object.fromEntries(settings.map((setting) => [setting.key, setting.value])));
-        setAppearance((current) => withChanges(loaded, current, changed.current));
-      })
-      .catch(() => {});
     api
       .getBackgroundImage()
       .then((picture) => {
@@ -113,11 +90,11 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     return () => {
       for (const [key, { value, timer }] of waiting) {
         window.clearTimeout(timer);
-        api.setSetting(key, value).catch(() => {});
+        save(key, value).catch(() => {});
       }
       waiting.clear();
     };
-  }, []);
+  }, [save]);
 
   const mode = resolveMode(appearance.mode, systemDark);
   const tokens = useMemo(
@@ -167,21 +144,23 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     );
   }, [background]);
 
-  const change = useCallback((next: Partial<Appearance>, { gradual = false }: { gradual?: boolean } = {}) => {
-    setAppearance((current) => ({ ...current, ...next }));
-    for (const part of Object.keys(next) as (keyof Appearance)[]) changed.current.add(part);
-    for (const [key, value] of appearanceSettings(next)) {
-      const waiting = pending.current.get(key);
-      if (waiting) window.clearTimeout(waiting.timer);
-      pending.current.delete(key);
-      const save = () => {
+  const change = useCallback(
+    (next: Partial<Appearance>, { gradual = false }: { gradual?: boolean } = {}) => {
+      setAppearance((current) => ({ ...current, ...next }));
+      for (const [key, value] of appearanceSettings(next)) {
+        const waiting = pending.current.get(key);
+        if (waiting) window.clearTimeout(waiting.timer);
         pending.current.delete(key);
-        api.setSetting(key, value).catch(() => {});
-      };
-      if (gradual) pending.current.set(key, { value, timer: window.setTimeout(save, APPEARANCE_SAVE_DELAY_MS) });
-      else save();
-    }
-  }, []);
+        const saveNow = () => {
+          pending.current.delete(key);
+          save(key, value).catch(() => {});
+        };
+        if (gradual) pending.current.set(key, { value, timer: window.setTimeout(saveNow, APPEARANCE_SAVE_DELAY_MS) });
+        else saveNow();
+      }
+    },
+    [save],
+  );
 
   const chooseBackground = useCallback(async (path: string) => {
     setBackground(await api.setBackgroundImage(path));

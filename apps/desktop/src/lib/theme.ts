@@ -96,19 +96,6 @@ export function appearanceFromSettings(values: Record<string, string | undefined
   };
 }
 
-/**
- * The look from stored settings that arrive after the player already changed
- * parts of it. The player's changes win.
- */
-export function withChanges(loaded: Appearance, current: Appearance, changed: Iterable<keyof Appearance>): Appearance {
-  const merged = { ...loaded };
-  const keep = <Part extends keyof Appearance>(part: Part) => {
-    merged[part] = current[part];
-  };
-  for (const part of changed) keep(part);
-  return merged;
-}
-
 /** The stored value of each appearance setting. */
 export function appearanceSettings(appearance: Partial<Appearance>): [string, string][] {
   return (Object.keys(appearance) as (keyof Appearance)[]).map((part) => [

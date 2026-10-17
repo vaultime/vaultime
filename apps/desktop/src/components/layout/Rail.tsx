@@ -18,6 +18,7 @@ import { Cover } from "@/components/media/Cover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary, usePlaying } from "@/features/library/library-context";
+import { useSettings } from "@/features/settings/settings-context";
 import { COPYRIGHT_NOTICE, SETTING_KEYS } from "@/lib/constants";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
@@ -37,24 +38,21 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
   const playing = usePlaying();
   const { session } = useCloudSession();
   const location = useLocation();
+  const { values, save } = useSettings();
   const [appVersion, setAppVersion] = useState("");
-  const [sort, setSort] = useState<GameSort>("recent");
+  const [sort, setSort] = useState<GameSort>(() => {
+    const saved = values[SETTING_KEYS.railSort];
+    return isGameSort(saved) ? saved : "recent";
+  });
   const games = sortGames(summaries, sort);
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(() => {});
-    api
-      .listSettings()
-      .then((settings) => {
-        const saved = settings.find((setting) => setting.key === SETTING_KEYS.railSort)?.value;
-        if (isGameSort(saved)) setSort(saved);
-      })
-      .catch(() => {});
   }, []);
 
   function changeSort(next: GameSort) {
     setSort(next);
-    api.setSetting(SETTING_KEYS.railSort, next).catch(() => {});
+    save(SETTING_KEYS.railSort, next).catch(() => {});
   }
 
   return (

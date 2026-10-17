@@ -8,6 +8,7 @@ import { Notice, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
+import { useSettings } from "@/features/settings/settings-context";
 import { AUTO_BACKUP_KEEP, SETTING_KEYS } from "@/lib/constants";
 import { continuesAs } from "@/lib/devices";
 import * as api from "@/lib/tauri";
@@ -36,6 +37,7 @@ export function LocalBackupsSection({
   onRestartRequired: () => void;
 }) {
   const { refresh, thisDeviceId } = useLibrary();
+  const { save } = useSettings();
   const [autoBackup, setAutoBackup] = useState(initial.autoBackup);
   const [folder, setFolder] = useState(initial.folder);
   const [snapshots, setSnapshots] = useState(initial.snapshots);
@@ -46,7 +48,7 @@ export function LocalBackupsSection({
   async function changeAutoBackup(next: boolean) {
     setAutoBackup(next);
     try {
-      await api.setSetting(SETTING_KEYS.autoBackup, String(next));
+      await save(SETTING_KEYS.autoBackup, String(next));
     } catch (saveError) {
       setAutoBackup(!next);
       onError(describeError(saveError));
@@ -89,7 +91,7 @@ export function LocalBackupsSection({
     run(async () => {
       const picked = await chooseFolder("Choose where automatic backups go");
       if (!picked) return;
-      await api.setSetting(SETTING_KEYS.autoBackupFolder, picked);
+      await save(SETTING_KEYS.autoBackupFolder, picked);
       setFolder(await api.getAutoBackupFolder());
     });
 

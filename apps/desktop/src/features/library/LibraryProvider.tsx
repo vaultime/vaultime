@@ -10,6 +10,7 @@ import {
   SETTING_KEYS,
   TRUST_BADGE_RECENT_DAYS,
 } from "@/lib/constants";
+import { useSettings } from "@/features/settings/settings-context";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/sessions";
@@ -42,7 +43,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [lastPoll, setLastPoll] = useState(() => Date.now());
   const [playedToday, setPlayedToday] = useState(0);
   const [today, setToday] = useState(() => toDayKey(new Date()));
-  const [idleThresholdSeconds, setIdleThresholdSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
+  const { values: settings } = useSettings();
+  const savedThreshold = Number(settings[SETTING_KEYS.idleThreshold]);
+  const idleThresholdSeconds =
+    Number.isFinite(savedThreshold) && savedThreshold > 0 ? savedThreshold : DEFAULT_IDLE_THRESHOLD_SECS;
   const [artTints, setArtTints] = useState<Record<string, GameTint>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,12 +58,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextGames, nextSessions, assets, settings, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
+      const [nextGames, nextSessions, assets, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
         await Promise.all([
           api.listGames(),
           api.listSessions(),
           api.listPreferredGameAssets(),
-          api.listSettings(),
           api.listEarlierPlaytime(),
           api.listStatusChanges(),
           api.listSessionNotes(),
@@ -82,8 +85,6 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             .map((asset) => [asset.game_id, asset.preview_data_url as string]),
         ),
       );
-      const threshold = Number(settings.find((s) => s.key === SETTING_KEYS.idleThreshold)?.value);
-      if (Number.isFinite(threshold) && threshold > 0) setIdleThresholdSeconds(threshold);
       setError(null);
     } catch (loadError) {
       setError(describeError(loadError));

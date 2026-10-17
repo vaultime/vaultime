@@ -16,7 +16,6 @@ import {
   resolveMode,
   themeTokens,
   windowLook,
-  withChanges,
   type ThemeMode,
 } from "./theme";
 
@@ -217,14 +216,5 @@ describe("windowLook", () => {
     const channels = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
     const drawn = channels(windowLook("dark", "vault", "violet", "dark").iconAccent);
     for (const [index, channel] of channels("#9d7cff").entries()) expect(Math.abs(drawn[index] - channel)).toBeLessThanOrEqual(2);
-  });
-});
-
-describe("withChanges", () => {
-  it("keeps what the player changed before the stored look arrived", () => {
-    const loaded = { ...DEFAULT_APPEARANCE, mode: "light" as const, ground: "moss" as const, dim: 60 };
-    const current = { ...DEFAULT_APPEARANCE, ground: "umber" as const };
-    expect(withChanges(loaded, current, new Set(["ground"] as const))).toEqual({ ...loaded, ground: "umber" });
-    expect(withChanges(loaded, current, [])).toEqual(loaded);
   });
 });

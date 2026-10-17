@@ -28,9 +28,7 @@ import {
   clearCloudBackupKeySecure,
   getAppVersion,
   hasCloudBackupKeySecure,
-  listSettings,
   setCloudSignedIn,
-  setSetting,
   restoreRemoteBackup as restoreRemoteBackupCommand,
   uploadRemoteBackup as uploadRemoteBackupCommand,
 } from "@/lib/tauri";
@@ -45,6 +43,7 @@ import type {
 } from "@/lib/types";
 import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError } from "@/lib/utils";
+import { useSettings } from "@/features/settings/settings-context";
 import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
 import {
   backupsForKeyCheck,
@@ -68,7 +67,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
-  const [autoBackup, setAutoBackupState] = useState(true);
+  const { values, save } = useSettings();
+  const [autoBackup, setAutoBackupState] = useState(() => values[SETTING_KEYS.cloudAutoBackup] !== "false");
   const [autoBackupError, setAutoBackupError] = useState<string | null>(null);
   const sessionRef = useRef<CloudAuthSession | null>(null);
   // Counts sign-outs, so a refresh that finishes after one cannot sign back in.
@@ -97,14 +97,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     sessionRef.current = session;
   }, [session]);
 
-  useEffect(() => {
-    listSettings()
-      .then((settings) => {
-        const value = settings.find((setting) => setting.key === SETTING_KEYS.cloudAutoBackup)?.value;
-        setAutoBackupState(value !== "false");
-      })
-      .catch(() => {});
-  }, []);
 
   // Uploads a backup when the newest one on the server is a day old. Runs
   // while this PC is signed in with its backups unlocked.
@@ -146,7 +138,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   async function setAutoBackup(enabled: boolean) {
     setAutoBackupState(enabled);
     try {
-      await setSetting(SETTING_KEYS.cloudAutoBackup, String(enabled));
+      await save(SETTING_KEYS.cloudAutoBackup, String(enabled));
     } catch (error) {
       setAutoBackupState(!enabled);
       throw error;

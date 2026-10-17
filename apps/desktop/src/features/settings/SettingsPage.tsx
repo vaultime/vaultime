@@ -15,6 +15,7 @@ import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Pa
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
+import { useSettings } from "@/features/settings/settings-context";
 import { AppearanceSection } from "@/features/settings/AppearanceSection";
 import { DetectionSection } from "@/features/settings/DetectionSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
@@ -50,16 +51,28 @@ const PLATFORM_NAMES: Record<string, string> = { windows: "Windows", linux: "Lin
 
 export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
+  const { values, save } = useSettings();
+  // Read once when the page opens, as the switches keep their own state.
+  const [initial] = useState(() => {
+    const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
+    return {
+      idleSeconds: Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS,
+      closeToTray: values[SETTING_KEYS.closeToTray] !== "false",
+      autoDiscover: values[SETTING_KEYS.autoDiscover] !== "false",
+      autoBackup: values[SETTING_KEYS.autoBackup] !== "false",
+      backgroundActive: values[SETTING_KEYS.backgroundActive] === "true",
+    };
+  });
   const [loaded, setLoaded] = useState(false);
   // What the command palette asked for, like ?do=backup, once the page is there.
   const [params, setParams] = useSearchParams();
   const intent = loaded ? params.get("do") : null;
   const [error, setError] = useState<string | null>(null);
-  const [idleSeconds, setIdleSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
+  const [idleSeconds, setIdleSeconds] = useState(initial.idleSeconds);
   // The idle time saved last, and a change still waiting to be saved.
-  const savedIdle = useRef(DEFAULT_IDLE_THRESHOLD_SECS);
+  const savedIdle = useRef(initial.idleSeconds);
   const pendingIdle = useRef<{ seconds: number; timer: number } | null>(null);
-  const [backgroundActive, setBackgroundActive] = useState(false);
+  const [backgroundActive, setBackgroundActive] = useState(initial.backgroundActive);
   const [diagnostics, setDiagnostics] = useState<TrackingDiagnostics | null>(null);
   const [backups, setBackups] = useState<{ autoBackup: boolean; folder: string; snapshots: BackupSnapshot[] }>({
     autoBackup: true,
@@ -69,14 +82,13 @@ export function SettingsPage() {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
   const [trayAvailable, setTrayAvailable] = useState(false);
-  const [closeToTray, setCloseToTray] = useState(true);
+  const [closeToTray, setCloseToTray] = useState(initial.closeToTray);
   const [autostart, setAutostart] = useState(false);
-  const [autoDiscover, setAutoDiscover] = useState(true);
+  const [autoDiscover, setAutoDiscover] = useState(initial.autoDiscover);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      api.listSettings(),
       api.getTrackingDiagnostics(),
       api.listBackupSnapshots(),
       api.getAppVersion(),
@@ -85,22 +97,11 @@ export function SettingsPage() {
       autostartEnabled().catch(() => false),
       api.getAutoBackupFolder().catch(() => ""),
     ])
-      .then(([settings, nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder]) => {
+      .then(([nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder]) => {
         if (cancelled) return;
-        const values = Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
         setTrayAvailable(Boolean(tray));
-        setCloseToTray(values[SETTING_KEYS.closeToTray] !== "false");
-        setAutoDiscover(values[SETTING_KEYS.autoDiscover] !== "false");
-        setBackups({
-          autoBackup: values[SETTING_KEYS.autoBackup] !== "false",
-          folder: backupFolder,
-          snapshots: nextSnapshots,
-        });
+        setBackups({ autoBackup: initial.autoBackup, folder: backupFolder, snapshots: nextSnapshots });
         setAutostart(Boolean(startsAtLogin));
-        const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
-        savedIdle.current = Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS;
-        setIdleSeconds(savedIdle.current);
-        setBackgroundActive(values[SETTING_KEYS.backgroundActive] === "true");
         setDiagnostics(nextDiagnostics);
         setAppVersion(version);
       })
@@ -113,12 +114,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const refreshLibrary = useRef(refresh);
-  useEffect(() => {
-    refreshLibrary.current = refresh;
-  }, [refresh]);
+  }, [initial.autoBackup]);
 
   // A change still waiting when the page closes is saved right away.
   useEffect(
@@ -127,11 +123,9 @@ export function SettingsPage() {
       if (!pending) return;
       pendingIdle.current = null;
       window.clearTimeout(pending.timer);
-      void api
-        .setSetting(SETTING_KEYS.idleThreshold, String(pending.seconds))
-        .then(() => refreshLibrary.current(), () => {});
+      save(SETTING_KEYS.idleThreshold, String(pending.seconds)).catch(() => {});
     },
-    [],
+    [save],
   );
 
   /** Saves the idle time shortly after the last change, so stepping through values saves once. */
@@ -140,13 +134,10 @@ export function SettingsPage() {
     if (pendingIdle.current) window.clearTimeout(pendingIdle.current.timer);
     const timer = window.setTimeout(() => {
       pendingIdle.current = null;
-      api
-        .setSetting(SETTING_KEYS.idleThreshold, String(next))
+      save(SETTING_KEYS.idleThreshold, String(next))
         .then(() => {
           savedIdle.current = next;
           setError(null);
-          // The live bar shows the idle threshold, so the library reloads it.
-          refresh().catch(() => {});
         })
         .catch((saveError) => {
           // A newer change still waiting stays in the field.
@@ -167,7 +158,7 @@ export function SettingsPage() {
       setError(describeError(saveError));
     }
   }
-  const saveSetting = (key: string, next: boolean) => () => api.setSetting(key, String(next));
+  const saveSetting = (key: string, next: boolean) => () => save(key, String(next));
 
   useScrollToAnchor(loaded);
   // A request from the palette runs once the page is there, also when

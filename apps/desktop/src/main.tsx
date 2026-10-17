@@ -7,6 +7,7 @@ import { BrowserRouter } from "react-router";
 import { AppearanceProvider } from "@/features/appearance/AppearanceProvider";
 import { CloudSessionProvider } from "@/features/cloud/CloudSessionProvider";
 import { LibraryProvider } from "@/features/library/LibraryProvider";
+import { SettingsProvider } from "@/features/settings/SettingsProvider";
 import { UpdateProvider } from "@/features/updates/UpdateProvider";
 import { App } from "@/App";
 import "./index.css";
@@ -18,15 +19,17 @@ if (import.meta.env.VITE_MOCK_IPC === "1") {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <AppearanceProvider>
-        <CloudSessionProvider>
-          <LibraryProvider>
-            <UpdateProvider>
-              <App />
-            </UpdateProvider>
-          </LibraryProvider>
-        </CloudSessionProvider>
-      </AppearanceProvider>
+      <SettingsProvider>
+        <AppearanceProvider>
+          <CloudSessionProvider>
+            <LibraryProvider>
+              <UpdateProvider>
+                <App />
+              </UpdateProvider>
+            </LibraryProvider>
+          </CloudSessionProvider>
+        </AppearanceProvider>
+      </SettingsProvider>
     </BrowserRouter>
   </StrictMode>,
 );
