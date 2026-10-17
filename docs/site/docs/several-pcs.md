@@ -41,7 +41,7 @@ When you set a PC up again, Vaultime makes a new key for it. If the first thing 
 
 - Its sessions are this PC's own again, and the keys the backup names for that PC count as this PC's own beside the new key.
 - The ledger notes the takeover with the keys it took over, so it shows and can be checked.
-- Sessions the PC played after that backup, which another PC took in, come back as this PC's own with the next merge of that PC, as long as that PC checked them with the old keys.
+- Sessions the PC played after that backup, which another PC took in, come back as this PC's own with the next merge of that PC, as long as that PC checked them only with keys this PC counts as its own, the old ones or the new one.
 
 Only a fresh install takes over: one without sessions, merges or restores of its own. A PC with history of its own restores another PC's backup as described under [Backups](backups.md#restoring). Restart Vaultime after the restore to finish. Until then it does not track. Automatic backups still run and already carry the PC it continues as.
 
