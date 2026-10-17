@@ -12,7 +12,7 @@ use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path, PathBuf};
 
 use windows_registry::{CURRENT_USER, Key, LOCAL_MACHINE};
 
-use super::{DiscoveredGame, find_main_executable, metadata};
+use super::{DiscoveredGame, find_main_executable, look_up_all, metadata};
 use crate::constants::REGISTRY_SEARCH_DEPTH;
 use crate::platform::process::path_key;
 
@@ -296,32 +296,32 @@ fn folder_title(folder: &str) -> String {
 
 /// Looks up the game program on disk. A program the launcher named wins,
 /// otherwise the most likely one in the install folder.
-fn resolve(candidate: Candidate, existing: &HashSet<String>) -> Option<DiscoveredGame> {
+fn resolve(candidate: &Candidate, existing: &HashSet<String>) -> Option<DiscoveredGame> {
     let program = candidate
         .program
+        .as_deref()
         .map(PathBuf::from)
         .filter(|program| program.is_file())
         .or_else(|| find_main_executable(Path::new(&candidate.folder), &candidate.title))?;
     Some(DiscoveredGame::new(
         existing,
-        candidate.title,
+        candidate.title.clone(),
         &program,
-        Some(candidate.folder),
+        Some(candidate.folder.clone()),
         candidate.source,
-        Some(candidate.source_id),
+        Some(candidate.source_id.clone()),
     ))
 }
 
 /// Every registered game whose program exists. Games that share a program,
 /// like League of Legends and Teamfight Tactics, are listed once.
 pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
-    let candidates = candidates();
     let mut seen = HashSet::new();
-    let games: Vec<DiscoveredGame> = candidates
-        .into_iter()
-        .filter_map(|candidate| resolve(candidate, existing))
-        .filter(|game| seen.insert(path_key(&game.executable_path)))
-        .collect();
+    let games: Vec<DiscoveredGame> =
+        look_up_all(&candidates(), |candidate| resolve(candidate, existing))
+            .into_iter()
+            .filter(|game| seen.insert(path_key(&game.executable_path)))
+            .collect();
     log::info!("registered launcher games found: {}", games.len());
     games
 }

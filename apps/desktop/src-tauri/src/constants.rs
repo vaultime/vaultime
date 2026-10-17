@@ -178,6 +178,9 @@ pub const DISCOVERY_SCAN_DEPTH: usize = 4;
 pub const REGISTRY_SEARCH_DEPTH: usize = 6;
 /// Folder depth searched for the main executable of a launcher game.
 pub const EXECUTABLE_SCAN_DEPTH: usize = 5;
+/// Most threads that look up the programs of launcher games at once. The
+/// lookups mostly wait on the disk.
+pub const PROGRAM_LOOKUP_THREADS_MAX: usize = 8;
 /// Size head start for executables in the top folder of a launcher game.
 pub const TOP_LEVEL_BONUS_BYTES: u64 = 100_000_000;
 /// Head start for an executable named like the game, bigger than any top

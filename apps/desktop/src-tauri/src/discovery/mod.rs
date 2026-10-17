@@ -29,6 +29,8 @@ mod xml;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use log::warn;
 use serde::{Deserialize, Serialize};
@@ -36,8 +38,8 @@ use serde::{Deserialize, Serialize};
 use crate::assets::{self, AssetManager};
 use crate::constants::{
     EXECUTABLE_SCAN_DEPTH, LAUNCHER_IDS_BACKFILL_SETTING, LAUNCHER_IDS_BACKFILL_VERSION,
-    SHIPPING_BONUS_BYTES, STEAM_SOURCE, TITLE_MATCH_BONUS_BYTES, TITLE_WORD_MIN_CHARS,
-    TOP_LEVEL_BONUS_BYTES,
+    PROGRAM_LOOKUP_THREADS_MAX, SHIPPING_BONUS_BYTES, STEAM_SOURCE, TITLE_MATCH_BONUS_BYTES,
+    TITLE_WORD_MIN_CHARS, TOP_LEVEL_BONUS_BYTES,
 };
 use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game};
@@ -338,6 +340,36 @@ pub fn backfill_launcher_ids(db: &Database) -> Result<usize> {
     Ok(stored)
 }
 
+/// Runs `look_up` for every item on a few threads, as finding the program of
+/// a game mostly waits on the disk. The results keep the order of `items`.
+pub(crate) fn look_up_all<T: Sync, U: Send + Sync>(
+    items: &[T],
+    look_up: impl Fn(&T) -> Option<U> + Sync,
+) -> Vec<U> {
+    let threads = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(PROGRAM_LOOKUP_THREADS_MAX)
+        .min(items.len());
+    let next = AtomicUsize::new(0);
+    let found: Vec<OnceLock<U>> = items.iter().map(|_| OnceLock::new()).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(item) = items.get(index) else {
+                        break;
+                    };
+                    if let Some(result) = look_up(item) {
+                        let _ = found[index].set(result);
+                    }
+                }
+            });
+        }
+    });
+    found.into_iter().filter_map(OnceLock::into_inner).collect()
+}
+
 /// Path keys of every executable already in the library.
 fn library_executables(db: &Database) -> Result<HashSet<String>> {
     Ok(games::list_local_games(db)?
@@ -549,6 +581,14 @@ mod tests {
         games::link_game(&db, &doom_epic.id, Some(&doom.id)).unwrap();
         let marked = mark_same_games(&db, found()).unwrap();
         assert_eq!(same(&marked)[3], Some(doom.id.clone()));
+    }
+
+    #[test]
+    fn looks_up_everything_and_keeps_the_order() {
+        let items: Vec<u32> = (0..100).collect();
+        let odd = look_up_all(&items, |item| (item % 2 == 1).then_some(item * 10));
+        assert_eq!(odd, (0..50).map(|n| (2 * n + 1) * 10).collect::<Vec<_>>());
+        assert!(look_up_all(&[] as &[u32], |item| Some(*item)).is_empty());
     }
 
     #[test]

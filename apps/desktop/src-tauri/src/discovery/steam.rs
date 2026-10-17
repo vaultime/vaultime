@@ -18,7 +18,7 @@ use crate::error::Result;
 use crate::platform::process::path_key;
 
 use super::vdf::{self, Vdf};
-use super::{DiscoveredGame, find_main_executable, library_executables};
+use super::{DiscoveredGame, find_main_executable, library_executables, look_up_all};
 
 /// Difference between a 64 bit Steam id and the account id that names the
 /// `userdata` folders, fixed by Steam's id format.
@@ -127,16 +127,18 @@ pub fn discover_steam_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     info!("found Steam root: {}", root.display());
 
     let existing = library_executables(db)?;
-    let mut results = Vec::new();
-
-    for library in find_library_folders(&root) {
-        let steamapps = library.join("steamapps");
-        for manifest in find_app_manifests(&steamapps) {
-            if let Some(game) = parse_app_manifest(&manifest, &steamapps, &existing) {
-                results.push(game);
-            }
-        }
-    }
+    let manifests: Vec<(PathBuf, PathBuf)> = find_library_folders(&root)
+        .into_iter()
+        .flat_map(|library| {
+            let steamapps = library.join("steamapps");
+            find_app_manifests(&steamapps)
+                .into_iter()
+                .map(move |manifest| (manifest, steamapps.clone()))
+        })
+        .collect();
+    let results = look_up_all(&manifests, |(manifest, steamapps)| {
+        parse_app_manifest(manifest, steamapps, &existing)
+    });
 
     info!("Steam discovery found {} game(s)", results.len());
     Ok(results)
