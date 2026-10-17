@@ -31,7 +31,7 @@ Vaultime notices when a game starts, from any launcher, and keeps the time it wa
 
 - **Automatic tracking.** Add a game once, then start it however you like. No launcher integration needed.
 - **Real playtime.** Runtime, active and idle time counted apart. Sleep never counts.
-- **Finds your games.** Steam, Xbox, Epic, GOG, EA, Ubisoft, Battle.net, Riot, Heroic, Lutris and more, new installs at every start, or any game by hand. A game you own in two launchers counts as one.
+- **Finds your games.** Steam, Xbox, Epic, GOG, EA, Ubisoft, Battle.net, Riot, Heroic, Lutris and more, new installs at every start, or any game by hand. A game you own in two launchers can count as one.
 - **A journal of your play.** Every session written as a sentence, week by week.
 - **Stats for every year.** A calendar of every day, the hours you play and your games month by month, and a picture of your year to share.
 - **Your artwork, your look.** Covers from your own game folders, framed the way you like, and any accent color.
