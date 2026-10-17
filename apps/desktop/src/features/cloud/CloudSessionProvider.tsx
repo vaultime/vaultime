@@ -10,6 +10,7 @@ import {
 } from "react";
 import { info, warn } from "@tauri-apps/plugin-log";
 import {
+  BACKUP_PASSPHRASE_TOO_SHORT,
   CLOUD_API_BASE_URL,
   CloudApiError,
   cloudDelete,
@@ -19,26 +20,18 @@ import {
 import {
   CLOUD_AUTO_BACKUP_CHECK_MS,
   CLOUD_AUTO_BACKUP_INTERVAL_MS,
-  CLOUD_DEVICE_ID_STORAGE_KEY,
-  CLOUD_SESSION_STORAGE_KEY,
-  FALLBACK_DEVICE_ID_CHARS,
   MIN_BACKUP_PASSPHRASE_CHARS,
   SETTING_KEYS,
   TOKEN_REFRESH_MARGIN_MS,
 } from "@/lib/constants";
-import { BACKUP_PASSPHRASE_TOO_SHORT } from "@/lib/cloud-api";
 import {
   clearCloudBackupKeySecure,
-  clearCloudSessionSecure,
   getAppVersion,
   hasCloudBackupKeySecure,
   listSettings,
-  loadCloudSessionSecure,
   setCloudSignedIn,
   setSetting,
   restoreRemoteBackup as restoreRemoteBackupCommand,
-  storeCloudBackupKeySecure,
-  storeCloudSessionSecure,
   uploadRemoteBackup as uploadRemoteBackupCommand,
 } from "@/lib/tauri";
 import type {
@@ -53,6 +46,21 @@ import type {
 import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError } from "@/lib/utils";
 import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
+import {
+  backupsForKeyCheck,
+  clearPersistedSessionStorage,
+  detectPlatform,
+  ensureBackupKeyForSession,
+  forgetStoredSession,
+  getDeviceName,
+  getOrCreateClientDeviceId,
+  isExpired,
+  loadPersistedSession,
+  persistBackupPassphrase,
+  persistCloudSession,
+  revokeLateSession,
+  shouldClearPersistedSession,
+} from "./session-store";
 
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
@@ -606,165 +614,4 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       {children}
     </CloudSessionContext.Provider>
   );
-}
-
-async function loadPersistedSession(): Promise<CloudAuthSession | null> {
-  try {
-    const secureRaw = await loadCloudSessionSecure();
-    if (secureRaw) {
-      return parseStoredSession(secureRaw);
-    }
-  } catch {
-    // Falls through to the older storage.
-  }
-
-  // Older builds kept the session in localStorage.
-  const legacyRaw = window.localStorage.getItem(CLOUD_SESSION_STORAGE_KEY);
-  if (!legacyRaw) {
-    return null;
-  }
-
-  return parseStoredSession(legacyRaw);
-}
-
-async function persistCloudSession(session: CloudAuthSession): Promise<void> {
-  await storeCloudSessionSecure(JSON.stringify(session));
-  window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
-}
-
-/**
- * Forgets the session when the server ended it. The backup key stays, so
- * signing in again does not ask for the passphrase. Signing out removes both.
- */
-async function forgetStoredSession(): Promise<void> {
-  await clearCloudSessionSecure();
-  window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
-}
-
-/** Ends a session a refresh returned after the player signed out. */
-function revokeLateSession(late: CloudAuthSession) {
-  void cloudPostJson("/v1/auth/logout", { refresh_token: late.refresh_token }).catch(() => {});
-}
-
-async function clearPersistedSessionStorage(accountId?: string): Promise<void> {
-  await Promise.all([
-    clearCloudSessionSecure(),
-    accountId ? clearCloudBackupKeySecure(accountId) : Promise.resolve(true),
-  ]);
-  window.localStorage.removeItem(CLOUD_SESSION_STORAGE_KEY);
-}
-
-/**
- * The backups a new passphrase is checked against. Without a connection the
- * list is empty and the upload checks the key before it sends anything.
- */
-async function backupsForKeyCheck(list: () => Promise<CloudBackupRecord[]>): Promise<CloudBackupRecord[]> {
-  try {
-    return await list();
-  } catch (error) {
-    if (error instanceof CloudApiError && error.status === 0) {
-      return [];
-    }
-    throw error;
-  }
-}
-
-/**
- * Stores the passphrase's key after checking it against the newest cloud
- * backup, so a typo cannot start backups nobody can open.
- */
-async function persistBackupPassphrase(
-  session: CloudAuthSession,
-  backupPassphrase: string,
-  backups: CloudBackupRecord[],
-): Promise<void> {
-  const newest = backups
-    .filter((backup) => backup.status === "complete")
-    .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))[0];
-  await storeCloudBackupKeySecure(session.user.id, backupPassphrase.trim(), newest?.metadata_json?.key_check ?? null);
-}
-
-async function ensureBackupKeyForSession(
-  session: CloudAuthSession,
-): Promise<void> {
-  const ready = await hasCloudBackupKeySecure(session.user.id);
-  if (!ready) {
-    throw new Error(
-      "Set or unlock your backup passphrase on this PC before using cloud backups.",
-    );
-  }
-}
-
-function parseStoredSession(raw: string): CloudAuthSession | null {
-  try {
-    const parsed = JSON.parse(raw) as CloudAuthSession;
-    if (
-      !parsed ||
-      typeof parsed.access_token !== "string" ||
-      typeof parsed.refresh_token !== "string" ||
-      !parsed.user
-    ) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function shouldClearPersistedSession(error: unknown): boolean {
-  return error instanceof CloudApiError && error.status === 401;
-}
-
-function getOrCreateClientDeviceId() {
-  const existing = window.localStorage.getItem(CLOUD_DEVICE_ID_STORAGE_KEY);
-  if (existing) {
-    return existing;
-  }
-
-  // The fallback skips the "0." that Math.random().toString(36) starts with.
-  const created =
-    typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `vaultime-${Math.random().toString(36).slice(2, 2 + FALLBACK_DEVICE_ID_CHARS)}`;
-  window.localStorage.setItem(CLOUD_DEVICE_ID_STORAGE_KEY, created);
-  return created;
-}
-
-function detectPlatform() {
-  const userAgent = navigator.userAgent.toLowerCase();
-  const platform = navigator.platform.toLowerCase();
-
-  if (platform.includes("win") || userAgent.includes("windows")) {
-    return "windows";
-  }
-  if (platform.includes("mac") || userAgent.includes("mac os")) {
-    return "macos";
-  }
-  if (platform.includes("linux") || userAgent.includes("linux")) {
-    return "linux";
-  }
-  return "unknown";
-}
-
-function getDeviceName() {
-  switch (detectPlatform()) {
-    case "windows":
-      return "Vaultime Windows Desktop";
-    case "macos":
-      return "Vaultime macOS Desktop";
-    case "linux":
-      return "Vaultime Linux Desktop";
-    default:
-      return "Vaultime Desktop";
-  }
-}
-
-function isExpired(timestamp: string, skewMs: number) {
-  const value = Date.parse(timestamp);
-  if (Number.isNaN(value)) {
-    return true;
-  }
-
-  return value <= Date.now() + skewMs;
 }
