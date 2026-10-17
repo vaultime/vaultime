@@ -22,11 +22,11 @@ Every game gets a mark in the main color of its artwork, and its title takes tha
 
 ### Games side by side
 
-When two games ran at the same time, the strip shows the shared stretch hatched in both colors and a sentence says which games ran together. The day total counts that time once.
+When two games ran at the same time, the strip shows the shared stretch hatched in both colors and a sentence says which games ran together. The day total counts that time once, as the hours played on the stats page do.
 
 ### Past midnight
 
-Time counts on the day it happened, so a session from 22:40 to 02:15 adds 1 h 20 to the first day and 2 h 15 to the second. It is still one session, and the journal shows it as one:
+Time counts on the day it happened, so a session from 22:40 to 02:15 adds 1 h 20 to the first day and 2 h 15 to the second. Time the PC slept counts nowhere, so each day gets the time that really fell on it. It is still one session, and the journal shows it as one:
 
 - The entry stays under the day it started, with the whole session's time, and its time reads *22:40 to Sun 02:15*. It adds how much counted after midnight and on which day.
 - The bar runs out over the right edge of the first day's strip and back in at the left edge of the next.

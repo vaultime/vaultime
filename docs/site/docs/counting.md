@@ -43,7 +43,7 @@ Ignored programs never count, and games that came from [another PC](several-pcs.
 
 ## Several games at once
 
-Each game that runs gets a session of its own. The journal's day and week totals count clock time once, so two games side by side for an hour add one hour to the day.
+Each game that runs gets a session of its own. Time played counts clock time once, so two games side by side for an hour add one hour to the day: in the journal's day and week totals, the hours played on the stats page, the library's last seven days and today's time in the live bar and the tray. Each game's own totals still count all of its time.
 
 ### One game, two installs
 
@@ -55,7 +55,7 @@ Some launchers and game clients stay open while you play the game they started, 
 
 ## Midnight
 
-Time counts on the day it happened. A session from 23:00 to 02:00 counts one hour on the first day and two on the next, in the stats and in the journal's day totals. The journal lists the session under the day it started and shows it as one session that runs on, see [Past midnight](journal-and-stats.md#past-midnight).
+Time counts on the day it happened. A session from 23:00 to 02:00 counts one hour on the first day and two on the next, in the stats, the journal's day totals, the library and the live bar. It counts where it happened on the clock, from the session's own notes: a session from 23:00 to 02:00 that slept from 23:30 to 01:30 counts half an hour on each day, not an even share of its span. Days played and streaks count every day with time on it. The journal lists the session under the day it started and shows it as one session that runs on, see [Past midnight](journal-and-stats.md#past-midnight).
 
 ## Checkpoints and crashes
 

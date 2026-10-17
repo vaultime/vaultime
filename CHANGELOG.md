@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Journal
 
+- **Counted where it happened.** The journal now counts each session exactly where it happened on the clock, like the stats always did, so a day in the journal and the same day in the stats show the same time. A session that slept through midnight, or went idle for an hour, puts its time on the day and the hours it really fell in instead of spreading it evenly over its span. The library's last seven days, the live bar and the tray count today the same way, and days played and streaks count every day with play on it, also the day after midnight.
 - **One session past midnight reads as one.** Play still counts on the day it happened, but a session that runs past midnight no longer looks like two. Its bar runs out at the right edge of the first day and in from the left edge of the next, and the next day shows a quiet line like "Still in Elden Ring from Saturday night" instead of a second entry. The entry reads "22:40 to Sun 02:15" with the whole session's time and how much of it counts after midnight, the line says how much of the whole falls on its day, and each leads to the other, also into the next or last week. Pointing at either marks every part of the session, and pointing at a bar shows each day's part and the whole. A week that opens with the end of a session from the week before says so.
 
 ### Stats
