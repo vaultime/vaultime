@@ -54,6 +54,53 @@ export function daysTouched(session: Session, now = new Date()): string[] {
   return days;
 }
 
+/** The part of a session that ran on one local day. */
+export interface DayShare {
+  /** Local midnight at the start of the day. */
+  day: Date;
+  /** Where the part starts and ends on the clock, inside the day. */
+  start: Date;
+  end: Date;
+  runtimeMs: number;
+  /** The session counted time on an earlier day. */
+  fromBefore: boolean;
+  /** The session counts time on a later day. */
+  intoNext: boolean;
+}
+
+/**
+ * A session cut at local midnights, first day first, so one session that ran
+ * past midnight can be shown as one on every day it touched. `parts` are the
+ * pieces it is drawn as, a game that steps aside can come in several, and
+ * their runtime is what each day counts. The start day is always there, a
+ * later day only with time in it.
+ */
+export function splitByDay(session: Session, parts: Session[] = [session], now = new Date()): DayShare[] {
+  const start = parseVaultimeDate(session.started_at_wall);
+  const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
+  const shares: DayShare[] = [];
+  let day = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  do {
+    const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    const clipped = parts.flatMap((part) => clipToWindow(part, day, next, now) ?? []);
+    if (clipped.length > 0 || shares.length === 0) {
+      const from = Math.max(start.getTime(), day.getTime());
+      const to = Math.max(from, Math.min(end.getTime(), next.getTime()));
+      shares.push({
+        day,
+        start: new Date(from),
+        end: new Date(to),
+        runtimeMs: clipped.reduce((sum, part) => sum + part.runtime_ms, 0),
+        fromBefore: shares.length > 0,
+        intoNext: false,
+      });
+    }
+    day = next;
+  } while (day < end);
+  for (const share of shares.slice(0, -1)) share.intoNext = true;
+  return shares;
+}
+
 /** A session placed on the clock. */
 interface Span {
   session: Session;

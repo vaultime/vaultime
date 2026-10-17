@@ -11,8 +11,10 @@ import {
   formatDayPart,
   formatHoursMinutes,
   formatHoursShort,
+  formatNearDay,
   formatRelativeDay,
   formatSessionStart,
+  formatSpanOnDay,
   fromLocalInput,
   isoWeekNumber,
   parseVaultimeDate,
@@ -137,6 +139,48 @@ describe("daylight saving", () => {
     expect(clockPercent(new Date(2026, 9, 25, 23, 0), day)).toBeCloseTo((23 / 24) * 100);
     expect(clockPercent(new Date(2026, 9, 24, 23, 0), day)).toBe(0);
     expect(clockPercent(new Date(2026, 9, 26, 0, 30), day)).toBe(100);
+  });
+});
+
+describe("formatSpanOnDay", () => {
+  const saturday = new Date(2026, 9, 17);
+  const sunday = new Date(2026, 9, 18);
+  const start = new Date(2026, 9, 17, 22, 40);
+  const end = new Date(2026, 9, 18, 2, 15);
+
+  it("names the other day of a session past midnight", () => {
+    expect(formatSpanOnDay(start, end, saturday)).toBe("22:40 to Sun 02:15");
+    expect(formatSpanOnDay(start, end, sunday)).toBe("Sat 22:40 to 02:15");
+  });
+
+  it("keeps a session within its day plain", () => {
+    expect(formatSpanOnDay(new Date(2026, 9, 17, 20, 0), new Date(2026, 9, 17, 21, 5), saturday)).toBe(
+      "20:00 to 21:05",
+    );
+    expect(formatSpanOnDay(new Date(2026, 9, 17, 23, 0), sunday, saturday)).toBe("23:00 to midnight");
+  });
+
+  it("reads a day a session ran through as since its start", () => {
+    const wednesday = new Date(2026, 9, 14, 19, 0);
+    const friday = new Date(2026, 9, 16, 1, 0);
+    expect(formatSpanOnDay(wednesday, friday, new Date(2026, 9, 15))).toBe("since Wed 19:00");
+    expect(formatSpanOnDay(wednesday, friday, new Date(2026, 9, 16))).toBe("Wed 19:00 to 01:00");
+  });
+
+  it("runs a live session to now", () => {
+    expect(formatSpanOnDay(start, null, saturday)).toBe("22:40 to now");
+    expect(formatSpanOnDay(start, null, sunday)).toBe("Sat 22:40 to now");
+  });
+
+  it("names a day more than a week away by its date", () => {
+    expect(formatNearDay(new Date(2026, 9, 3), new Date(2026, 9, 12))).toBe("3 Oct");
+    expect(formatNearDay(new Date(2026, 9, 11), new Date(2026, 9, 12))).toBe("Sun");
+  });
+
+  it("counts calendar days across the night the clocks go back", () => {
+    expect(formatSpanOnDay(new Date(2026, 9, 24, 23, 0), new Date(2026, 9, 25, 2, 30), new Date(2026, 9, 25))).toBe(
+      "Sat 23:00 to 02:30",
+    );
   });
 });
 

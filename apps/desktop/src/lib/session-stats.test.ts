@@ -11,7 +11,9 @@ import {
   playRuns,
   sideBySide,
   sideBySideGroups,
+  splitByDay,
   summarizeRecentPlay,
+  toDayKey,
 } from "./session-stats";
 
 describe("clipToWindow", () => {
@@ -46,6 +48,73 @@ describe("daysTouched", () => {
   it("counts the night the clocks go back as one day", () => {
     // 25 October 2026 has 25 hours in Europe.
     expect(daysTouched(session(at(2026, 10, 25, 0, 30), 120))).toEqual(["2026-10-25"]);
+  });
+});
+
+describe("splitByDay", () => {
+  it("cuts a session at midnight, each day with its own part", () => {
+    // Saturday 22:40 to Sunday 02:15.
+    const late = session(at(2026, 10, 17, 22, 40), 215);
+    const [saturday, sunday, ...rest] = splitByDay(late);
+    expect(rest).toEqual([]);
+    expect(saturday.day).toEqual(new Date(2026, 9, 17));
+    expect(saturday.start).toEqual(new Date(2026, 9, 17, 22, 40));
+    expect(saturday.end).toEqual(new Date(2026, 9, 18));
+    expect(saturday.runtimeMs).toBe(80 * MINUTE_MS);
+    expect([saturday.fromBefore, saturday.intoNext]).toEqual([false, true]);
+    expect(sunday.day).toEqual(new Date(2026, 9, 18));
+    expect(sunday.end).toEqual(new Date(2026, 9, 18, 2, 15));
+    expect(sunday.runtimeMs).toBe(135 * MINUTE_MS);
+    expect([sunday.fromBefore, sunday.intoNext]).toEqual([true, false]);
+  });
+
+  it("carries a session from Sunday into the Monday of the next week", () => {
+    const shares = splitByDay(session(at(2026, 10, 11, 22, 40), 190));
+    expect(shares.map((share) => toDayKey(share.day))).toEqual(["2026-10-11", "2026-10-12"]);
+    expect(shares[1].runtimeMs).toBe(110 * MINUTE_MS);
+  });
+
+  it("gives a session over more than a day a whole middle day", () => {
+    // Wednesday 19:00 to Friday 01:00.
+    const shares = splitByDay(session(at(2026, 10, 14, 19, 0), 30 * 60));
+    expect(shares.map((share) => share.runtimeMs / MINUTE_MS)).toEqual([5 * 60, 24 * 60, 60]);
+    expect(shares[1].start).toEqual(new Date(2026, 9, 15));
+    expect(shares[1].end).toEqual(new Date(2026, 9, 16));
+    expect([shares[1].fromBefore, shares[1].intoNext]).toEqual([true, true]);
+  });
+
+  it("keeps a session that ends at midnight on one day", () => {
+    const shares = splitByDay(session(at(2026, 10, 17, 23, 0), 60));
+    expect(shares).toHaveLength(1);
+    expect(shares[0].intoNext).toBe(false);
+  });
+
+  it("runs a live session up to now", () => {
+    const live = session(at(2026, 10, 17, 23, 0), 0, { ended_at_wall: null, runtime_ms: 90 * MINUTE_MS });
+    const shares = splitByDay(live, [live], new Date(2026, 9, 18, 0, 30));
+    expect(shares.map((share) => share.runtimeMs)).toEqual([60 * MINUTE_MS, 30 * MINUTE_MS]);
+  });
+
+  it("counts only the parts a game that steps aside is drawn as", () => {
+    // A launcher from 22:00 to 02:00, set aside after midnight while a game ran.
+    const launcher = session(at(2026, 10, 17, 22, 0), 240);
+    const alone = { ...launcher, ended_at_wall: at(2026, 10, 18, 0, 0), runtime_ms: 120 * MINUTE_MS };
+    const shares = splitByDay(launcher, [alone]);
+    expect(shares).toHaveLength(1);
+    expect(shares[0].runtimeMs).toBe(120 * MINUTE_MS);
+    expect(shares[0].intoNext).toBe(false);
+  });
+
+  it("splits at local midnight on the night the clocks go back", () => {
+    // 24 to 25 October 2026, a 25 hour day in Europe.
+    const start = new Date(2026, 9, 24, 22, 0);
+    const midnight = new Date(2026, 9, 25);
+    const late = session(start.toISOString(), 5 * 60);
+    const [first, second] = splitByDay(late);
+    const firstMs = midnight.getTime() - start.getTime();
+    expect(first.runtimeMs).toBe(firstMs);
+    expect(second.start).toEqual(midnight);
+    expect(first.runtimeMs + second.runtimeMs).toBe(late.runtime_ms);
   });
 });
 

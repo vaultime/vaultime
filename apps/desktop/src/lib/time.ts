@@ -60,7 +60,7 @@ export function formatLongDate(value: string): string {
 }
 
 /** Whole calendar days between two dates, 0 for the same day. */
-function calendarDaysAgo(date: Date, now: Date): number {
+export function calendarDaysAgo(date: Date, now: Date): number {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   return Math.round((startOfToday.getTime() - startOfDay.getTime()) / DAY_MS);
@@ -187,6 +187,30 @@ export function formatDayRange(start: Date, end: Date): string {
 /** "14:10", in the regional clock. */
 export function formatClockTime(value: Date): string {
   return value.toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
+}
+
+/** "Sun" for a day within a week of `day`, "3 Oct" further away. */
+export function formatNearDay(date: Date, day: Date): string {
+  return Math.abs(calendarDaysAgo(date, day)) < WEEKDAY_NAME_DAYS
+    ? date.toLocaleDateString(UI_LOCALE, { weekday: "short" })
+    : date.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" });
+}
+
+/**
+ * When a session ran, as read from the journal page of `day`: "22:40 to
+ * 23:10", "22:40 to Sun 02:15" on the day it began, "Sat 22:40 to 02:15" on
+ * the day it ended, "since Wed 19:00" on a day it ran through. A running
+ * session runs "to now".
+ */
+export function formatSpanOnDay(start: Date, end: Date | null, day: Date): string {
+  const onDay = (moment: Date) => calendarDaysAgo(moment, day) === 0;
+  const at = (moment: Date) =>
+    onDay(moment) ? formatClockTime(moment) : `${formatNearDay(moment, day)} ${formatClockTime(moment)}`;
+  if (!end) return `${at(start)} to now`;
+  const nextDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  if (!onDay(start) && end > nextDay) return `since ${at(start)}`;
+  if (end.getTime() === nextDay.getTime()) return `${at(start)} to midnight`;
+  return `${at(start)} to ${at(end)}`;
 }
 
 /**
