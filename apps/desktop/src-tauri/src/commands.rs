@@ -3,9 +3,12 @@
 
 //! Tauri IPC command handlers.
 //!
-//! Commands that touch the disk or many rows use `#[tauri::command(async)]` so
-//! they run off the main thread and never freeze the window. Cloud transfers
-//! run on the blocking pool, see `on_blocking_pool`.
+//! Commands that read the database or the disk use `#[tauri::command(async)]`,
+//! so they run off the main thread and never freeze the window, not even while
+//! another thread holds the database. Small writes stay on the main thread,
+//! which runs them in the order the page sent them, so the last of two quick
+//! changes wins. Cloud transfers and the OS credential store run on the
+//! blocking pool, see `on_blocking_pool`.
 
 use std::sync::Arc;
 
@@ -161,8 +164,8 @@ pub fn rename_this_pc(
 }
 
 #[tauri::command]
-pub fn load_cloud_session_secure() -> Result<Option<String>, VaultimeError> {
-    secure_storage::load_cloud_session()
+pub async fn load_cloud_session_secure() -> Result<Option<String>, VaultimeError> {
+    on_blocking_pool(secure_storage::load_cloud_session).await
 }
 
 #[tauri::command]
@@ -178,21 +181,25 @@ pub fn clear_cloud_session_secure() -> Result<bool, VaultimeError> {
 }
 
 #[tauri::command]
-pub fn has_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
-    secure_storage::has_cloud_backup_key(&account_id)
+pub async fn has_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
+    on_blocking_pool(move || secure_storage::has_cloud_backup_key(&account_id)).await
 }
 
+/// Derives the key from the passphrase, which takes a while on purpose.
 #[tauri::command]
-pub fn store_cloud_backup_key_secure(
+pub async fn store_cloud_backup_key_secure(
     account_id: String,
     passphrase: String,
     expected_key_check: Option<String>,
 ) -> Result<bool, VaultimeError> {
-    secure_storage::store_cloud_backup_key(
-        &account_id,
-        &passphrase,
-        expected_key_check.as_deref(),
-    )?;
+    on_blocking_pool(move || {
+        secure_storage::store_cloud_backup_key(
+            &account_id,
+            &passphrase,
+            expected_key_check.as_deref(),
+        )
+    })
+    .await?;
     Ok(true)
 }
 
@@ -206,7 +213,7 @@ pub fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, Vaultim
 /// tracked and their sessions count, only the library views leave them out.
 /// Games of other PCs that are linked to a game of this PC count as that
 /// game and are left out.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_games(db: State<'_, Arc<Database>>) -> Result<Vec<Game>, VaultimeError> {
     games::list_shown_games(&db)
 }
@@ -435,7 +442,7 @@ pub fn set_cloud_signed_in(app: tauri::AppHandle, signed_in: bool) {
 }
 
 /// The folder automatic backups go to right now.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_auto_backup_folder(
     db: State<'_, Arc<Database>>,
     app_context: State<'_, AppContext>,
@@ -445,7 +452,7 @@ pub fn get_auto_backup_folder(
         .into_owned()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_backup_snapshots(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<BackupSnapshot>, VaultimeError> {
@@ -523,14 +530,14 @@ fn cloud_api_base_url(requested: &str) -> &str {
     }
 }
 
-/// Runs cloud work on the blocking pool. reqwest's blocking client must not
-/// run on the async runtime, where debug builds panic and release builds hold
-/// up a worker for the whole transfer.
+/// Runs cloud work and the OS credential store on the blocking pool.
+/// reqwest's blocking client must not run on the async runtime, where debug
+/// builds panic and release builds hold up a worker for the whole transfer.
+/// The credential store may wait for the desktop's keyring service.
 async fn on_blocking_pool<T: Send + 'static>(
-    app: AppHandle,
-    work: impl FnOnce(&AppHandle) -> Result<T, VaultimeError> + Send + 'static,
+    work: impl FnOnce() -> Result<T, VaultimeError> + Send + 'static,
 ) -> Result<T, VaultimeError> {
-    tauri::async_runtime::spawn_blocking(move || work(&app))
+    tauri::async_runtime::spawn_blocking(work)
         .await
         .map_err(|error| VaultimeError::Cloud(format!("the cloud task stopped: {error}")))?
 }
@@ -544,7 +551,7 @@ pub async fn upload_remote_backup(
     client_device_id: Option<String>,
     label: Option<String>,
 ) -> Result<RemoteBackupUploadResult, VaultimeError> {
-    on_blocking_pool(app, move |app| {
+    on_blocking_pool(move || {
         let db = app.state::<Arc<Database>>();
         let result = backup::remote::upload_remote_backup(
             &db,
@@ -578,7 +585,7 @@ pub async fn restore_remote_backup(
     account_id: String,
     backup_id: String,
 ) -> Result<RemoteBackupRestoreResult, VaultimeError> {
-    on_blocking_pool(app, move |app| {
+    on_blocking_pool(move || {
         let db = app.state::<Arc<Database>>();
         let device_id = app.state::<AppContext>().device_id.clone();
         let result = with_tracking_paused(&db, &app.state::<TrackingEngine>(), &device_id, || {
@@ -643,7 +650,7 @@ fn record_snapshot(db: &Database, device_id: &str, checksum: &str, location: &st
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_settings(db: State<'_, Arc<Database>>) -> Result<Vec<Setting>, VaultimeError> {
     settings::list_settings(&db)
 }
@@ -713,7 +720,7 @@ pub fn set_window_size(
     Ok(window_size::apply(&main_window(&app)?, &choice, false))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_tracking_diagnostics(
     engine: State<'_, TrackingEngine>,
 ) -> Result<TrackingDiagnostics, VaultimeError> {
@@ -814,7 +821,7 @@ pub fn add_manual_session(
 }
 
 /// Every status change of every game, oldest first.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_status_changes(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<GameStatusChange>, VaultimeError> {
@@ -831,7 +838,7 @@ pub fn set_game_status(
     annotations::set_game_status(&db, &game_id, &status)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_session_notes(db: State<'_, Arc<Database>>) -> Result<Vec<SessionNote>, VaultimeError> {
     annotations::list_session_notes(&db)
 }
@@ -847,7 +854,7 @@ pub fn set_session_note(
 }
 
 /// Playtime from before Vaultime, per game the library shows.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_earlier_playtime(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<EarlierPlaytime>, VaultimeError> {
