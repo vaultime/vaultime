@@ -26,7 +26,7 @@ import {
   WORKING_DAYS_PER_WEEK,
 } from "@/lib/constants";
 import { normalizeIntegrityStatus, parseIntegrityPayload } from "@/lib/integrity";
-import { countsAsPlay, type SideBySideGroup } from "@/lib/session-stats";
+import { countedOnce, countsAsPlay, type SideBySideGroup } from "@/lib/session-stats";
 import { shapeOf, type SessionShape, type Streak } from "@/lib/stats";
 import {
   calendarDaysAgo,
@@ -98,7 +98,7 @@ export function gamePlaytime(allSessions: Session[]): Phrase {
   if (sessions.length === 0) {
     return { before: "Not played yet. Start it however you usually do and the clock starts on its own." };
   }
-  const runtimeMs = sessions.reduce((sum, session) => sum + session.runtime_ms, 0);
+  const runtimeMs = sessions.reduce((sum, session) => sum + countedOnce(session).runtimeMs, 0);
   const lead =
     sessions.length === 1
       ? `${capitalize(amount(runtimeMs))} in one session.`
@@ -115,8 +115,8 @@ function habitOf(sessions: Session[]): DayPart | null {
   let total = 0;
   for (const session of sessions) {
     const part = dayPartOf(parseVaultimeDate(session.started_at_wall));
-    byPart.set(part, (byPart.get(part) ?? 0) + session.runtime_ms);
-    total += session.runtime_ms;
+    byPart.set(part, (byPart.get(part) ?? 0) + countedOnce(session).runtimeMs);
+    total += countedOnce(session).runtimeMs;
   }
   const [part, runtime] = [...byPart.entries()].sort((a, b) => b[1] - a[1])[0];
   return total > 0 && runtime / total >= HABIT_MIN_SHARE ? part : null;

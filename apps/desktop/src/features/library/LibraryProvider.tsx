@@ -12,7 +12,7 @@ import {
 } from "@/lib/constants";
 import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
-import { countsAsPlay } from "@/lib/session-stats";
+import { countedOnce, countsAsPlay } from "@/lib/session-stats";
 import { countedSession } from "@/lib/steps-aside";
 import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
@@ -173,8 +173,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     for (const session of sessions) {
       const summary = byGame.get(session.game_id);
       if (!summary || !countsAsPlay(session)) continue;
-      summary.runtimeMs += session.runtime_ms;
-      summary.activeMs += session.active_ms;
+      // Two installs of the game running at once count once, as in the stats.
+      const counted = countedOnce(session);
+      summary.runtimeMs += counted.runtimeMs;
+      summary.activeMs += counted.activeMs;
       summary.sessionsCount += 1;
       const trust = normalizeIntegrityStatus(session.integrity_status);
       const recent = session.started_at_wall >= recentSinceWall;

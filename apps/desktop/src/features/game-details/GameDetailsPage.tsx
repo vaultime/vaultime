@@ -41,7 +41,7 @@ import { pcName } from "@/lib/devices";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
 import { launchersOf, linkTargets, linkedTo, whereFrom } from "@/lib/links";
 import { gamePlaytime } from "@/lib/sentences";
-import { countsAsPlay } from "@/lib/session-stats";
+import { countedOnce, countsAsPlay } from "@/lib/session-stats";
 import { besideOthers, stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes, formatSessionStart } from "@/lib/time";
@@ -124,7 +124,7 @@ function GamePage({ gameId }: { gameId: string }) {
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
   const firstPlayed = sessions.filter(countsAsPlay).at(-1)?.started_at_wall;
   const longest = sessions.reduce((best, session) => Math.max(best, session.runtime_ms), 0);
-  const idleMs = sessions.reduce((sum, session) => sum + session.idle_ms, 0);
+  const idleMs = sessions.reduce((sum, session) => sum + countedOnce(session).idleMs, 0);
 
   function onAssetsChanged(next: GameAssetView[]) {
     setAssets(next);

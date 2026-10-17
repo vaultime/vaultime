@@ -6,7 +6,9 @@ import { MINUTE_MS } from "@/lib/constants";
 import { at, session } from "@/test/sessions";
 import {
   clipToWindow,
+  countedOnce,
   daysTouched,
+  playedByGame,
   playedMs,
   playRuns,
   sideBySide,
@@ -146,6 +148,58 @@ describe("summarizeRecentPlay", () => {
     expect(recent.runtimeMs).toBe(440 * MINUTE_MS);
     expect(recent.playedMs).toBe(340 * MINUTE_MS);
   });
+
+  it("counts two installs of one game running at once once, as the core shares them", () => {
+    // Steam and GOG copies from 18:00 and 18:30, an hour each, the core
+    // splitting the half hour both ran between them.
+    const sessions = [
+      session(at(2026, 9, 29, 18, 0), 60, { id: "steam", copy_overlap_ms: 15 * MINUTE_MS, copy_overlap_active_ms: 15 * MINUTE_MS }),
+      session(at(2026, 9, 29, 18, 30), 60, {
+        id: "gog",
+        recorded_game_id: "gog-copy",
+        copy_overlap_ms: 15 * MINUTE_MS,
+        copy_overlap_active_ms: 15 * MINUTE_MS,
+      }),
+    ];
+    const recent = summarizeRecentPlay(sessions, 7, now);
+    expect(recent.runtimeMs).toBe(90 * MINUTE_MS);
+    expect(recent.activeMs).toBe(90 * MINUTE_MS);
+    expect(recent.runtimeByGame.get("game-1")).toBe(90 * MINUTE_MS);
+    expect(recent.playedMs).toBe(90 * MINUTE_MS);
+  });
+});
+
+describe("countedOnce", () => {
+  it("takes out what another copy of the game ran through as well", () => {
+    const shared = session(at(2026, 9, 29, 18, 0), 60, {
+      idle_ms: 20 * MINUTE_MS,
+      active_ms: 40 * MINUTE_MS,
+      copy_overlap_ms: 30 * MINUTE_MS,
+      copy_overlap_active_ms: 20 * MINUTE_MS,
+      copy_overlap_idle_ms: 10 * MINUTE_MS,
+    });
+    expect(countedOnce(shared)).toEqual({ runtimeMs: 30 * MINUTE_MS, activeMs: 20 * MINUTE_MS, idleMs: 10 * MINUTE_MS });
+    expect(countedOnce(session(at(2026, 9, 29, 18, 0), 60)).runtimeMs).toBe(60 * MINUTE_MS);
+  });
+});
+
+describe("playedByGame", () => {
+  const now = new Date(2026, 8, 29, 23, 0);
+
+  it("counts a game's copies at the same time once and games beside it in full", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 18, 0), 60, { id: "steam" }),
+      session(at(2026, 9, 29, 18, 30), 60, { id: "gog", recorded_game_id: "gog-copy" }),
+      session(at(2026, 9, 29, 18, 0), 90, { game_id: "b" }),
+      session(at(2026, 9, 29, 20, 0), 30, { game_id: "c", runtime_ms: 0 }),
+    ];
+    expect(playedByGame(sessions, now)).toEqual(
+      new Map([
+        ["game-1", 90 * MINUTE_MS],
+        ["b", 90 * MINUTE_MS],
+      ]),
+    );
+  });
 });
 
 describe("playedMs", () => {
@@ -265,6 +319,17 @@ describe("playRuns", () => {
   it("keeps sessions that only touch apart", () => {
     const sessions = [session(at(2026, 9, 29, 10, 0), 60), session(at(2026, 9, 29, 11, 0), 60, { game_id: "b" })];
     expect(playRuns(sessions, now).map((run) => run.pieces.map((piece) => piece.gameIds.join("")))).toEqual([["game-1"], ["b"]]);
+  });
+
+  it("draws two installs of one game running at once as one game, not side by side", () => {
+    const sessions = [
+      session(at(2026, 9, 29, 18, 0), 60, { id: "steam" }),
+      session(at(2026, 9, 29, 18, 30), 60, { id: "gog", recorded_game_id: "gog-copy" }),
+    ];
+    const runs = playRuns(sessions, now);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].pieces.map((piece) => piece.gameIds)).toEqual([["game-1"]]);
+    expect(sideBySide(sessions, now)).toEqual([]);
   });
 
   it("gives a session without time on the clock a piece", () => {

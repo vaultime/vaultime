@@ -199,6 +199,15 @@ describe("gamePlaytime", () => {
     });
   });
 
+  it("counts two installs running at once once", () => {
+    const shared = { copy_overlap_ms: 30 * MINUTE_MS, copy_overlap_active_ms: 30 * MINUTE_MS };
+    const copies = [
+      session(at(2026, 9, 20, 9, 0), 60, { id: "steam", ...shared }),
+      session(at(2026, 9, 20, 9, 0), 60, { id: "gog", recorded_game_id: "gog", ...shared }),
+    ];
+    expect(gamePlaytime(copies)).toEqual({ before: "One hour across two sessions." });
+  });
+
   it("skips the habit without a clear one", () => {
     const mixed = [session(at(2026, 9, 20, 9, 0), 60), session(at(2026, 9, 21, 20, 0), 60)];
     expect(gamePlaytime(mixed)).toEqual({ before: "Two hours across two sessions." });

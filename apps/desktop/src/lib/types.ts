@@ -193,6 +193,13 @@ export interface Session {
   set_aside_ms?: number;
   set_aside_active_ms?: number;
   set_aside_idle_ms?: number;
+  /**
+   * Runtime another copy of the same game ran through as well, like a linked
+   * install, which counts once, shared between the copies. The core works it out.
+   */
+  copy_overlap_ms?: number;
+  copy_overlap_active_ms?: number;
+  copy_overlap_idle_ms?: number;
   /** The game that recorded it, when that game is linked to the one in `game_id`. */
   recorded_game_id?: string;
 }

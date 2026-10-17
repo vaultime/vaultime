@@ -10,6 +10,28 @@ export function countsAsPlay(session: Session): boolean {
   return !session.ended_at_wall || session.runtime_ms > 0;
 }
 
+/** A session's time as it adds up to a total. */
+export interface CountedTime {
+  runtimeMs: number;
+  activeMs: number;
+  idleMs: number;
+}
+
+/**
+ * A session's time without what another copy of its game ran through as
+ * well, like a linked install running at the same time. One game is played
+ * once at a time, so sums of these match the core's totals. Counts by the
+ * clock, like `playedMs`, take sessions as they are, since they count every
+ * moment once anyway.
+ */
+export function countedOnce(session: Session): CountedTime {
+  return {
+    runtimeMs: Math.max(0, session.runtime_ms - (session.copy_overlap_ms ?? 0)),
+    activeMs: Math.max(0, session.active_ms - (session.copy_overlap_active_ms ?? 0)),
+    idleMs: Math.max(0, session.idle_ms - (session.copy_overlap_idle_ms ?? 0)),
+  };
+}
+
 /** The local calendar day, "2026-09-29". */
 export function toDayKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -157,6 +179,21 @@ export function playedMs(sessions: Session[], now = new Date()): number {
   return untimed + Math.round(timed);
 }
 
+/**
+ * Each game's time with it running, as `playedMs` counts it, so two copies
+ * of one game running at the same time count once while other games beside
+ * it do not take from it.
+ */
+export function playedByGame(sessions: Session[], now = new Date()): Map<string, number> {
+  const byGame = new Map<string, Session[]>();
+  for (const session of sessions.filter(countsAsPlay)) {
+    const own = byGame.get(session.game_id);
+    if (own) own.push(session);
+    else byGame.set(session.game_id, [session]);
+  }
+  return new Map([...byGame].map(([gameId, own]) => [gameId, playedMs(own, now)]));
+}
+
 /** A stretch of clock time in which more than one game ran. */
 export interface SideBySide {
   start: Date;
@@ -287,6 +324,7 @@ export function sideBySideGroups(shared: SideBySide[]): SideBySideGroup[] {
 export interface RecentPlay {
   /** Time with a game running, games side by side counted once. */
   playedMs: number;
+  /** Two copies of one game running at the same time count once here and below. */
   runtimeMs: number;
   activeMs: number;
   sessionsCount: number;
@@ -315,13 +353,11 @@ export function summarizeRecentPlay(sessions: Session[], days = RECENT_DAYS, now
 
   for (const session of recent) {
     const started = parseVaultimeDate(session.started_at_wall);
-    summary.runtimeMs += session.runtime_ms;
-    summary.activeMs += session.active_ms;
+    const counted = countedOnce(session);
+    summary.runtimeMs += counted.runtimeMs;
+    summary.activeMs += counted.activeMs;
     summary.sessionsCount += 1;
-    summary.runtimeByGame.set(
-      session.game_id,
-      (summary.runtimeByGame.get(session.game_id) ?? 0) + session.runtime_ms,
-    );
+    summary.runtimeByGame.set(session.game_id, (summary.runtimeByGame.get(session.game_id) ?? 0) + counted.runtimeMs);
     playedDays.add(toDayKey(started));
     if (!summary.longest || session.runtime_ms > summary.longest.runtime_ms) {
       summary.longest = session;

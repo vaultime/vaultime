@@ -31,7 +31,9 @@ import {
 } from "@/lib/sentences";
 import {
   clipToWindow,
+  countedOnce,
   countsAsPlay,
+  playedByGame,
   playedMs,
   playRuns,
   sideBySideGroups,
@@ -326,7 +328,7 @@ export function JournalPage() {
   const playedBefore = (gameId: string, moment: string) =>
     sessions
       .filter((session) => session.game_id === gameId && session.started_at_wall < moment)
-      .reduce((sum, session) => sum + session.runtime_ms, byGame.get(gameId)?.earlier?.earlier_ms ?? 0);
+      .reduce((sum, session) => sum + countedOnce(session).runtimeMs, byGame.get(gameId)?.earlier?.earlier_ms ?? 0);
 
   // Events explain flagged sessions and skipped sleep. Only the games of this week are loaded.
   const gameIds = [...new Set(days.flatMap((day) => day.spans.map((session) => session.game_id)))].sort().join(",");
@@ -351,11 +353,9 @@ export function JournalPage() {
   if (!loaded) return null;
 
   const longestDay = [...days].sort((a, b) => b.playedMs - a.playedMs)[0];
-  // Each game's own time in the week, so games side by side both count.
-  const weekRuntime = new Map<string, number>();
-  for (const span of days.flatMap((day) => day.spans).filter(countsAsPlay)) {
-    weekRuntime.set(span.game_id, (weekRuntime.get(span.game_id) ?? 0) + span.runtime_ms);
-  }
+  // Each game's own time in the week, so games side by side both count, and
+  // two installs of one game running at once count once.
+  const weekRuntime = playedByGame(days.flatMap((day) => day.spans), now);
   const gamesMs = [...weekRuntime.values()].reduce((sum, ms) => sum + ms, 0);
   const [topGameId, topMs] = [...weekRuntime.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
   const title = offset === 0 ? "This week" : offset === -1 ? "Last week" : `Week of ${weekStart.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })}`;
