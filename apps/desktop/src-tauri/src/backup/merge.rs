@@ -2159,6 +2159,50 @@ mod tests {
         assert_eq!(minutes(&other), 60);
     }
 
+    #[test]
+    fn a_launcher_steps_aside_for_another_pcs_running_game_up_to_its_last_event() {
+        let desktop = Pc::new("desktop");
+        let mine = desktop.game("Celeste", None);
+        desktop.play(&mine, 5);
+        let laptop = Pc::new("laptop");
+        let client = laptop.game("Client", None);
+        laptop.act();
+        games::set_steps_aside(&laptop.db, &client, true).unwrap();
+        let launcher = laptop.play_at(&client, "2026-10-02T18:00:00Z", 180);
+        let game = laptop.game("Match", None);
+        laptop.act();
+        let started = DateTime::parse_from_rfc3339("2026-10-02T19:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let running = sessions::create_session_at(&laptop.db, &game, "laptop", started).unwrap();
+        let last = started + TimeDelta::minutes(30);
+        sessions::record_checkpoint(&laptop.db, &running.id, &after(30), STATUS_LOCAL, last)
+            .unwrap();
+        let backup = laptop.back_up();
+
+        desktop.act();
+        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        desktop.act();
+        let stretches = desktop
+            .db
+            .with_conn(|conn| {
+                let session = conn
+                    .query_row(
+                        "SELECT * FROM sessions WHERE id = ?1",
+                        [&launcher],
+                        sessions::row_to_session,
+                    )
+                    .map_err(map_db)?;
+                let much_later = (last + TimeDelta::days(30)).timestamp_millis();
+                crate::playtime::slices::aside_stretches(conn, &session, much_later)
+            })
+            .unwrap();
+        assert_eq!(
+            stretches,
+            [(started.timestamp_millis(), last.timestamp_millis())]
+        );
+    }
+
     /// Writes a two hour end at `sequence` in place of the events from there
     /// on, hashed the way the tracker hashes, with the row to match.
     fn end_early(conn: &Connection, session_id: &str, sequence: i64) {

@@ -414,7 +414,8 @@ pub fn steps_aside(conn: &Connection, game_id: &str) -> Result<bool> {
 
 /// The stretches of `session`'s time in which a game that does not step
 /// aside ran beside it on the same PC, sorted and joined, up to `now_ms` for
-/// running ones. A launcher on one PC never steps aside for a game on
+/// running ones of this PC and up to their last event for those another PC
+/// left running. A launcher on one PC never steps aside for a game on
 /// another. Empty unless the session's game steps aside.
 pub fn aside_stretches(
     conn: &Connection,
@@ -427,14 +428,30 @@ pub fn aside_stretches(
     let Some(start) = wall_ms(&session.started_at_wall) else {
         return Ok(Vec::new());
     };
-    let end = session
-        .ended_at_wall
-        .as_deref()
-        .and_then(wall_ms)
-        .unwrap_or(now_ms);
+    // Sessions another PC left running end at their last event here.
+    let elsewhere = integrity::ledger::this_device().is_ok_and(|me| me != session.device_id);
+    let open_end = |id: &str| -> Result<i64> {
+        if !elsewhere {
+            return Ok(now_ms);
+        }
+        let last: Option<String> = conn
+            .query_row(
+                "SELECT event_time_wall FROM session_events
+                 WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(map_db)?;
+        Ok(last.as_deref().and_then(wall_ms).unwrap_or(start))
+    };
+    let end = match session.ended_at_wall.as_deref().and_then(wall_ms) {
+        Some(end) => end,
+        None => open_end(&session.id)?,
+    };
     let mut stmt = conn
         .prepare_cached(&format!(
-            "SELECT sessions.started_at_wall, sessions.ended_at_wall
+            "SELECT sessions.id, sessions.started_at_wall, sessions.ended_at_wall
              FROM sessions JOIN games ON games.id = sessions.game_id
              WHERE sessions.game_id != ?1 AND NOT ({STEPS_ASIDE})
                AND sessions.device_id = ?4
@@ -456,16 +473,25 @@ pub fn aside_stretches(
                 format(end),
                 session.device_id
             ],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
         )
         .map_err(map_db)?;
     let mut stretches: Vec<(i64, i64)> = Vec::new();
     for row in rows {
-        let (other_start, other_end) = row.map_err(map_db)?;
+        let (other_id, other_start, other_end) = row.map_err(map_db)?;
         let Some(other_start) = wall_ms(&other_start) else {
             continue;
         };
-        let other_end = other_end.as_deref().and_then(wall_ms).unwrap_or(now_ms);
+        let other_end = match other_end.as_deref().and_then(wall_ms) {
+            Some(end) => end,
+            None => open_end(&other_id)?,
+        };
         let (from, to) = (other_start.max(start), other_end.min(end));
         if to <= from {
             continue;
