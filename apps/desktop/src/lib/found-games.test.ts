@@ -23,9 +23,11 @@ describe("offeredPaths", () => {
 });
 
 describe("otherDialogOpen", () => {
-  it("waits for the add and discover dialogs and the palette", () => {
+  it("waits for the dialogs in the address and the palette", () => {
     expect(otherDialogOpen(new URLSearchParams("discover=1"), false)).toBe(true);
     expect(otherDialogOpen(new URLSearchParams("add=1"), false)).toBe(true);
+    expect(otherDialogOpen(new URLSearchParams("share=1"), false)).toBe(true);
+    expect(otherDialogOpen(new URLSearchParams("do=backup"), false)).toBe(true);
     expect(otherDialogOpen(new URLSearchParams(""), true)).toBe(true);
     expect(otherDialogOpen(new URLSearchParams("tab=all"), false)).toBe(false);
   });

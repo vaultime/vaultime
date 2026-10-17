@@ -10,7 +10,13 @@ export function offeredPaths(games: DiscoveredGame[]): string[] {
 
 /** Whether a dialog that comes from the address, or the palette, is open, so found games wait. */
 export function otherDialogOpen(search: URLSearchParams, paletteOpen: boolean): boolean {
-  return paletteOpen || search.get("discover") === "1" || search.get("add") === "1";
+  return (
+    paletteOpen ||
+    search.get("discover") === "1" ||
+    search.get("add") === "1" ||
+    search.get("share") === "1" ||
+    search.has("do")
+  );
 }
 
 /** Heading and sentence of the discover dialog when it offers the games found at start. */
