@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::admin::require_admin;
 use crate::AppState;
 use crate::auth::{AuthenticatedAccount, normalize_email};
-use crate::constants::{BETA_APPLICATIONS_PER_HOUR, BETA_NOTE_MAX_CHARS, EMAIL_MAX_CHARS};
+use crate::constants::{BETA_APPLICATIONS_PER_HOUR, BETA_NOTE_MAX_CHARS};
 use crate::error::AppResult;
 use crate::limits::client_key;
 use crate::models::BetaApplicationResponse;
@@ -111,11 +111,8 @@ fn validate(form: &BetaApplicationForm) -> Result<Application, String> {
     }
     let email = normalize_email(&form.email).map_err(|error| error.to_string())?;
     let (local, domain) = email.split_once('@').unwrap_or_default();
-    if email.chars().count() > EMAIL_MAX_CHARS
-        || local.is_empty()
-        || !domain.contains('.')
-        || email.chars().any(char::is_whitespace)
-    {
+    // normalize_email already checked the length.
+    if local.is_empty() || !domain.contains('.') || email.chars().any(char::is_whitespace) {
         return Err("the email address is not valid".into());
     }
     let platform = form.platform.trim().to_ascii_lowercase();
