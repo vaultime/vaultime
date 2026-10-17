@@ -108,10 +108,14 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   totals, which have to match its newest timing event. The tracker writes a
   checkpoint on every change between active and idle and at least every
   30 s, so the time between two checkpoints is all of one kind.
-- Stats come from play slices, quarter hours worked out from the events. They
-  are a cache: rebuild them when counting rules change, never edit history to
+- Stats come from play slices, quarter hours worked out from the events, and
+  play spans, each session's stretches between checkpoints that the slices
+  are spread from and that clock time counted once comes from. Both are a
+  cache: rebuild them when counting rules change, never edit history to
   match a rule. Time counts on the day it happened, and time a launcher set
-  aside for another game stays in the record but counts nowhere.
+  aside for another game stays in the record but counts nowhere. The core
+  works out every play time the pages show, so the journal and the stats
+  agree.
 - Each PC keeps a ledger, a hash chain signed with a key in `device-key`
   next to the database, which backups leave out. `device-keys` lists every
   public key the PC has signed with. It pins a session's chain at every
