@@ -55,7 +55,8 @@ export function AddSessionDialog({
   const [error, setError] = useState<string | null>(null);
 
   const start = fromLocalInput(startInput);
-  const runtimeMs = (Number(hours) || 0) * HOUR_MS + (Number(minutes) || 0) * MINUTE_MS;
+  // The core takes whole milliseconds, and decimal hours need not give them.
+  const runtimeMs = Math.round((Number(hours) || 0) * HOUR_MS + (Number(minutes) || 0) * MINUTE_MS);
   const endsInFuture = start !== null && start.getTime() + runtimeMs > openedAt;
   const valid = start !== null && runtimeMs > 0 && runtimeMs <= MANUAL_SESSION_MAX_HOURS * HOUR_MS && !endsInFuture;
 
