@@ -159,7 +159,7 @@ export interface ThisPc {
   device_id: string;
   name: string;
   ledger: LedgerReport;
-  /** No history of its own yet, so restoring a backup of another PC makes it continue as that PC. */
+  /** No history of its own yet, so restoring a backup of another PC can make it continue as that PC. */
   fresh: boolean;
 }
 

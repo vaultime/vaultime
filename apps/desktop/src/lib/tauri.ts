@@ -360,10 +360,12 @@ export async function inspectLocalBackup(
   return invoke<LocalBackupSummary>("inspect_local_backup", { path });
 }
 
+/** Restores a backup. With `takeOver`, a fresh install continues as the PC that made it. */
 export async function importLocalBackup(
   path: string,
+  takeOver: boolean,
 ): Promise<LocalBackupSummary> {
-  return invoke<LocalBackupSummary>("import_local_backup", { path });
+  return invoke<LocalBackupSummary>("import_local_backup", { path, takeOver });
 }
 
 export async function uploadRemoteBackup(
@@ -387,12 +389,14 @@ export async function restoreRemoteBackup(
   accessToken: string,
   accountId: string,
   backupId: string,
+  takeOver: boolean,
 ): Promise<CloudBackupRestoreResult> {
   return invoke<CloudBackupRestoreResult>("restore_remote_backup", {
     apiBaseUrl,
     accessToken,
     accountId,
     backupId,
+    takeOver,
   });
 }
 

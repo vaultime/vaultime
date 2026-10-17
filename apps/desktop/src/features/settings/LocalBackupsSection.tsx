@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
+import { TakeoverChoice } from "@/features/settings/TakeoverChoice";
 import { AUTO_BACKUP_KEEP, SETTING_KEYS } from "@/lib/constants";
 import { continuesAs } from "@/lib/devices";
 import * as api from "@/lib/tauri";
@@ -44,6 +45,8 @@ export function LocalBackupsSection({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [restorePreview, setRestorePreview] = useState<LocalBackupSummary | null>(null);
+  // Taking over the backup's PC is right when this PC is that one set up again.
+  const [takeOver, setTakeOver] = useState(true);
 
   async function changeAutoBackup(next: boolean) {
     setAutoBackup(next);
@@ -100,12 +103,13 @@ export function LocalBackupsSection({
       const picked = await chooseFolder("Choose a Vaultime backup folder");
       if (!picked) return;
       setRestorePreview(await api.inspectLocalBackup(picked));
+      setTakeOver(true);
     });
 
   const restore = () =>
     run(async () => {
       if (!restorePreview) return;
-      const summary = await api.importLocalBackup(restorePreview.backup_path);
+      const summary = await api.importLocalBackup(restorePreview.backup_path, takeOver);
       setRestorePreview(null);
       setMessage(summary.continues_as ? `Backup restored. ${continuesAs(summary.continues_as)}` : "Backup restored.");
       if (summary.restart_required) onRestartRequired();
@@ -166,14 +170,24 @@ export function LocalBackupsSection({
             {plural(restorePreview.asset_file_count, "image")}
           </p>
           {restorePreview.continues_as && (
-            <p className="mt-3 max-w-[560px] text-[15px] leading-relaxed">
-              {continuesAs(restorePreview.continues_as)}{" "}
-              <span className="text-[13px] text-faint">
-                This PC has no history of its own yet, so it takes over the backup&apos;s PC: its sessions count as
-                this PC&apos;s own, and so do sessions it played after the backup that come in by merge, as long as
-                that PC checked them only with this PC&apos;s keys.
-              </span>
-            </p>
+            <div className="mt-3">
+              <TakeoverChoice
+                id="take-over"
+                takeover={restorePreview.continues_as}
+                checked={takeOver}
+                disabled={busy}
+                onCheckedChange={setTakeOver}
+              >
+                <p className="text-[15px] leading-relaxed">
+                  {continuesAs(restorePreview.continues_as)}{" "}
+                  <span className="text-[13px] text-faint">
+                    This PC has no history of its own yet, so it takes over the backup&apos;s PC: its sessions count
+                    as this PC&apos;s own, and so do sessions it played after the backup that come in by merge, as
+                    long as that PC checked them only with this PC&apos;s keys.
+                  </span>
+                </p>
+              </TakeoverChoice>
+            </div>
           )}
           <p className="mt-3 max-w-[560px] text-[13px] leading-relaxed text-faint">
             Restoring replaces the library, sessions, event logs and covers on this PC. Close running games first.

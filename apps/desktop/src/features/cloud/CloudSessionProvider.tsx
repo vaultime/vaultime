@@ -394,7 +394,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  async function restoreRemoteBackup(backupId: string) {
+  async function restoreRemoteBackup(backupId: string, takeOver: boolean) {
     return withAuthenticatedSession(async (current) => {
       await ensureBackupKeyForSession(current);
       return restoreRemoteBackupCommand(
@@ -402,6 +402,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         current.access_token,
         current.user.id,
         backupId,
+        takeOver,
       );
     });
   }

@@ -49,7 +49,8 @@ export interface CloudSessionContextValue {
   listBetaApplications: () => Promise<BetaApplication[]>;
   deleteBetaApplication: (applicationId: string) => Promise<void>;
   uploadRemoteBackup: (label?: string | null) => Promise<CloudBackupUploadResult>;
-  restoreRemoteBackup: (backupId: string) => Promise<CloudBackupRestoreResult>;
+  /** With `takeOver`, a fresh install continues as the PC that made the backup. */
+  restoreRemoteBackup: (backupId: string, takeOver: boolean) => Promise<CloudBackupRestoreResult>;
   deleteBackup: (backupId: string) => Promise<void>;
   createAdminInvite: (
     input: CloudCreateAdminInviteInput,

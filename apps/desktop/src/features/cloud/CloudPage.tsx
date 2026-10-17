@@ -71,6 +71,7 @@ export function CloudPage() {
   const [restartRequired, setRestartRequired] = useState(false);
   // A PC without history of its own continues as the PC of the backup it restores.
   const [freshInstall, setFreshInstall] = useState(false);
+  const [takeOver, setTakeOver] = useState(true);
 
   function requestBackups(accountId: string) {
     getStorage()
@@ -228,7 +229,7 @@ export function CloudPage() {
     setStatusMessage(null);
 
     try {
-      const result = await restoreRemoteBackup(restoreTarget.id);
+      const result = await restoreRemoteBackup(restoreTarget.id, takeOver);
       setRestoreDialogOpen(false);
       setRestoreTarget(null);
       const takeover = result.restored_summary.continues_as;
@@ -285,6 +286,7 @@ export function CloudPage() {
     setRestoreTarget(backup);
     setRestoreDialogOpen(true);
     setFreshInstall(false);
+    setTakeOver(true);
     getThisPc()
       .then((pc) => setFreshInstall(pc.fresh))
       .catch(() => {});
@@ -548,6 +550,8 @@ export function CloudPage() {
           backupSource(restoreTarget) !== null &&
           backupSource(restoreTarget) !== deviceId
         }
+        takeOver={takeOver}
+        onTakeOverChange={setTakeOver}
         busy={remoteBackupBusy}
         onRestore={() => void handleRestoreRemoteBackup()}
         onCancel={() => setRestoreDialogOpen(false)}

@@ -23,6 +23,8 @@
 // ?autodiscover=first as on the first look. They come once, as in the app.
 // The fourth game has a GOG install linked to it, and ?discover=1&scan=1&same=1
 // shows a discovered Xbox copy of it marked as the same game.
+// ?takeover=1 makes this PC a fresh install, so restoring the Laptop's backup,
+// a local one or one in the cloud, asks whether this PC is the Laptop set up again.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -43,6 +45,7 @@ import type {
   GameLink,
   GameStatusChange,
   IgnoredProgram,
+  LocalBackupSummary,
   MergePreview,
   PlayBucket,
   SameGame,
@@ -60,6 +63,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const params = new URLSearchParams(window.location.search);
 const scenario = params.get("mock");
 const signedIn = params.get("cloud") === "1" || params.has("password");
+const takeoverPreview = params.get("takeover") === "1";
 
 const titles =
   scenario === "covers"
@@ -658,7 +662,7 @@ function cloudBackup(id: string, label: string, daysAgo: number, games: number, 
       backup_version: 1,
       created_at: uploaded,
       app_version: "0.1.0",
-      source_device_id: "preview",
+      source_device_id: takeoverPreview ? "laptop" : "preview",
       overall_checksum: "preview",
       games_count: games,
       sessions_count: sessionCount,
@@ -1393,8 +1397,29 @@ let thisPc: ThisPc = {
     missing_sessions: ledgerProblem === "missing" ? 2 : 0,
     broken: ledgerProblem === "broken",
   },
-  fresh: false,
+  fresh: takeoverPreview,
 };
+
+/** The Laptop's backup, which a fresh install would take over unless asked not to. */
+function laptopBackup(takeOver: boolean, restored: boolean): LocalBackupSummary {
+  return {
+    backup_id: "laptop-backup",
+    backup_version: 1,
+    created_at: iso(now - 3 * HOUR_MS),
+    app_version: "0.4.0",
+    source_device_id: "laptop",
+    schema_migrations: [],
+    overall_checksum: "preview",
+    games_count: 7,
+    sessions_count: 52,
+    assets_count: 7,
+    asset_file_count: 7,
+    backup_path: "D:\\Backups\\Laptop\\vaultime-backup-20261003T120000Z",
+    manifest_path: "D:\\Backups\\Laptop\\vaultime-backup-20261003T120000Z\\manifest.json",
+    restart_required: restored,
+    continues_as: thisPc.fresh && takeOver ? { device_id: "laptop", name: "Laptop" } : null,
+  };
+}
 
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
@@ -1430,6 +1455,14 @@ mockIPC((cmd, payload) => {
         });
       }
       return null;
+    }
+    case "inspect_local_backup":
+      return laptopBackup(true, false);
+    case "import_local_backup":
+      return laptopBackup(Boolean(args.takeOver), true);
+    case "restore_remote_backup": {
+      const summary = laptopBackup(Boolean(args.takeOver), true);
+      return { backup: cloudBackup(String(args.backupId), "Backup", 2, 7, 52), restored_summary: summary };
     }
     case "preview_merge":
       return mergePreview;

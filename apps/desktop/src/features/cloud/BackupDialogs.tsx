@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TakeoverChoice } from "@/features/settings/TakeoverChoice";
 import { formatSessionStart } from "@/lib/time";
 import type { CloudBackupRecord } from "@/lib/types";
 import { plural, whichPc } from "@/lib/words";
@@ -76,6 +77,8 @@ export function RestoreBackupDialog({
   onOpenChange,
   target,
   takesOver,
+  takeOver,
+  onTakeOverChange,
   busy,
   onRestore,
   onCancel,
@@ -85,6 +88,9 @@ export function RestoreBackupDialog({
   target: CloudBackupRecord | null;
   /** This PC has no history yet and the backup names another PC, which this one continues as if its ledger is sound. */
   takesOver: boolean;
+  /** The player keeps the takeover, checked by default. */
+  takeOver: boolean;
+  onTakeOverChange: (takeOver: boolean) => void;
   busy: boolean;
   onRestore: () => void;
   /** Closes the dialog and keeps the backup in it while it fades. */
@@ -109,10 +115,18 @@ export function RestoreBackupDialog({
                 : "Contents unknown"}
             </p>
             {takesOver && (
-              <p className="text-[15px]">
-                This PC has no history of its own yet, so it continues as the PC that made this backup, as long as
-                the backup&apos;s ledger is sound.
-              </p>
+              <TakeoverChoice
+                id="cloud-take-over"
+                takeover={null}
+                checked={takeOver}
+                disabled={busy}
+                onCheckedChange={onTakeOverChange}
+              >
+                <p className="text-[15px]">
+                  This PC has no history of its own yet, so it continues as the PC that made this backup, as long as
+                  the backup&apos;s ledger is sound.
+                </p>
+              </TakeoverChoice>
             )}
             <p className="text-[13px] leading-relaxed text-faint">
               The download is checked against its checksum first. Close running games before you restore. Vaultime
