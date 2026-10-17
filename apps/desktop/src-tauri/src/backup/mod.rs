@@ -386,16 +386,19 @@ fn take_in_restored(
         trust.record(conn, true)?;
         integrity::ledger::keep_seen(conn, &seen)?;
         // This PC's own games and sessions stay its own, also in a backup
-        // of a PC that merged them.
+        // of a PC that merged them. Their links to games of that PC go.
+        // Links between games of this PC, like two installs of one game,
+        // stay, and so do links of other games to them.
         conn.execute(
-            "UPDATE games SET origin_device_id = NULL WHERE origin_device_id = ?1",
+            "DELETE FROM game_links
+             WHERE game_id IN (SELECT id FROM games WHERE origin_device_id = ?1)
+               AND linked_game_id NOT IN (SELECT id FROM games WHERE origin_device_id = ?1)",
             [&this],
         )
         .map_err(crate::db::repo::map_db)?;
         conn.execute(
-            "DELETE FROM game_links WHERE game_id IN
-                 (SELECT id FROM games WHERE origin_device_id IS NULL)",
-            [],
+            "UPDATE games SET origin_device_id = NULL WHERE origin_device_id = ?1",
+            [&this],
         )
         .map_err(crate::db::repo::map_db)?;
         conn.execute("UPDATE devices SET merged_at = NULL WHERE id = ?1", [&this])

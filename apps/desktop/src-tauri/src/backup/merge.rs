@@ -14,7 +14,8 @@
 //! backup, sessions removed here never come back, and a session that grew
 //! there replaces the copy here only when that copy is the start of it.
 //! Games that come along are never tracked here. Each can be linked to a
-//! game of this PC, which it then counts as.
+//! game of this PC, which it then counts as. A game that counts as another
+//! one on its PC, like a second install there, follows that game here.
 //!
 //! The other PC's keys are the ones its ledgers name. This PC trusts them
 //! when it has never seen that PC, the way any new PC is taken at its word,
@@ -67,6 +68,12 @@ pub struct MergeGame {
     /// Why: `launcher` for the same launcher and launcher id, `title` for
     /// the same title.
     pub suggested_because: Option<String>,
+    /// The game it counts as on its PC, like the Steam copy for a copy from
+    /// another launcher there, when that game comes along too or is here
+    /// already. It then counts as whatever that game counts as here, and
+    /// needs no choice of its own.
+    pub counts_as: Option<String>,
+    pub counts_as_title: Option<String>,
 }
 
 /// A session that stays as it is here.
@@ -620,13 +627,15 @@ fn event_hashes(conn: &Connection, session_id: &str) -> Result<Hashes> {
 }
 
 /// The games of the incoming sessions that are not here yet, each with the
-/// game of this PC it most likely is.
+/// game of this PC it most likely is, or the game it counts as there.
 fn games_coming(
     local: &Database,
     staged: &Database,
     sessions: &[Planned],
 ) -> Result<(Vec<MergeGame>, HashSet<String>)> {
     let ours = games::list_local_games(local)?;
+    let local_links = games::links(local)?;
+    let shown_here = |id: &String| local_links.get(id).unwrap_or(id).clone();
     let known: HashSet<String> = games::list_all_games(local)?
         .into_iter()
         .map(|game| game.id)
@@ -653,25 +662,41 @@ fn games_coming(
         .map(|game| (comparable_title(&game.title), game.id.clone()))
         .collect();
     let theirs = games::list_all_games(staged)?;
+    let their_titles: HashMap<String, String> = theirs
+        .iter()
+        .map(|game| (game.id.clone(), game.title.clone()))
+        .collect();
+    let their_links = games::links(staged)?;
     let mut games = Vec::new();
     for game in theirs
         .into_iter()
         .filter(|game| coming.contains_key(&game.id))
     {
         let (sessions, runtime_ms) = coming[&game.id];
+        let counts_as = their_links
+            .get(&game.id)
+            .filter(|there| coming.contains_key(*there) || known.contains(*there))
+            .cloned();
         let launcher_match = game
             .launcher_source
             .clone()
             .zip(games::launcher_id(&game))
             .and_then(|key| by_launcher.get(&key));
+        // A match may be an install that counts as another game here, which
+        // is then the game to suggest.
         let (suggested_game_id, suggested_because) = match launcher_match {
-            Some(id) => (Some(id.clone()), Some("launcher".to_owned())),
+            _ if counts_as.is_some() => (None, None),
+            Some(id) => (Some(shown_here(id)), Some("launcher".to_owned())),
             None => match by_title.get(&comparable_title(&game.title)) {
-                Some(id) => (Some(id.clone()), Some("title".to_owned())),
+                Some(id) => (Some(shown_here(id)), Some("title".to_owned())),
                 None => (None, None),
             },
         };
         games.push(MergeGame {
+            counts_as_title: counts_as
+                .as_ref()
+                .and_then(|there| their_titles.get(there).cloned()),
+            counts_as,
             game_id: game.id,
             title: game.title,
             launcher_source: game.launcher_source,
@@ -696,27 +721,52 @@ fn comparable_title(title: &str) -> String {
 }
 
 /// The links the player chose, checked: each from a game that comes in to a
-/// game of this PC.
+/// game of this PC that counts as no other game. A game that counts as
+/// another one on its PC follows that game: it counts as what that game
+/// counts as here, or as that game itself, so both PCs show one game.
 fn chosen_links(
     db: &Database,
     plan: &Plan,
     choices: &[GameChoice],
 ) -> Result<Vec<(String, String)>> {
+    let local_links = games::links(db)?;
     let ours: HashSet<String> = games::list_local_games(db)?
         .into_iter()
         .map(|game| game.id)
+        .filter(|id| !local_links.contains_key(id))
         .collect();
-    let mut links = Vec::new();
+    let following: HashMap<&str, &str> = plan
+        .preview
+        .games
+        .iter()
+        .filter_map(|game| Some((game.game_id.as_str(), game.counts_as.as_deref()?)))
+        .collect();
+    let mut chosen: HashMap<&str, &str> = HashMap::new();
     for choice in choices {
         let Some(linked) = &choice.linked_game_id else {
             continue;
         };
+        if following.contains_key(choice.game_id.as_str()) {
+            continue;
+        }
         if !plan.new_games.contains(&choice.game_id) || !ours.contains(linked) {
             return Err(VaultimeError::Invalid(
                 "A game can only be linked to a game of this PC.".into(),
             ));
         }
-        links.push((choice.game_id.clone(), linked.clone()));
+        chosen.insert(&choice.game_id, linked);
+    }
+    let mut links: Vec<(String, String)> = chosen
+        .iter()
+        .map(|(game, linked)| ((*game).to_owned(), (*linked).to_owned()))
+        .collect();
+    for (game, there) in following {
+        let target = if plan.new_games.contains(there) {
+            chosen.get(there).copied().unwrap_or(there)
+        } else {
+            local_links.get(there).map_or(there, String::as_str)
+        };
+        links.push((game.to_owned(), target.to_owned()));
     }
     Ok(links)
 }
@@ -2471,5 +2521,106 @@ mod tests {
         )
         .unwrap_err();
         assert!(refused.to_string().contains("laptop"));
+    }
+
+    impl Pc {
+        /// The same game installed through another launcher, linked to `to`.
+        fn other_install(&self, title: &str, launcher: &str, to: &str) -> String {
+            self.act();
+            let game = games::create_game(
+                &self.db,
+                &CreateGame {
+                    title: title.into(),
+                    executable_path: Some(format!("/{launcher}/{title}.exe")),
+                    install_folder: None,
+                    launcher_source: Some(launcher.into()),
+                },
+            )
+            .unwrap();
+            games::link_game(&self.db, &game.id, Some(to)).unwrap();
+            game.id
+        }
+
+        fn shown(&self) -> Vec<String> {
+            self.act();
+            games::list_shown_games(&self.db)
+                .unwrap()
+                .into_iter()
+                .map(|game| game.id)
+                .collect()
+        }
+
+        fn links(&self) -> HashMap<String, String> {
+            self.act();
+            games::links(&self.db).unwrap()
+        }
+    }
+
+    #[test]
+    fn two_installs_linked_on_their_pc_stay_one_game_here() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let ours = desktop.game("Cyberpunk 2077", Some("1091500"));
+        let steam_copy = laptop.game("Cyberpunk 2077", Some("1091500"));
+        let gog_copy = laptop.other_install("Cyberpunk 2077", "gog", &steam_copy);
+        laptop.play(&steam_copy, 30);
+        laptop.play(&gog_copy, 45);
+        let backup = laptop.back_up();
+
+        let preview = desktop.preview(&backup).unwrap();
+        let gog = preview
+            .games
+            .iter()
+            .find(|game| game.game_id == gog_copy)
+            .unwrap();
+        assert_eq!(gog.counts_as.as_deref(), Some(steam_copy.as_str()));
+        assert_eq!(gog.counts_as_title.as_deref(), Some("Cyberpunk 2077"));
+        assert_eq!(gog.suggested_game_id, None);
+
+        // A choice for the GOG copy is left aside, it follows the Steam copy.
+        let summary = desktop.merge(
+            &backup,
+            &[link(&steam_copy, Some(&ours)), link(&gog_copy, None)],
+        );
+        assert_eq!(summary.games_linked, 2);
+        assert_eq!(desktop.shown(), std::slice::from_ref(&ours));
+        let links = desktop.links();
+        assert_eq!(links[&steam_copy], ours);
+        assert_eq!(links[&gog_copy], ours);
+    }
+
+    #[test]
+    fn a_copy_follows_its_pcs_game_kept_apart_and_moves_along_later() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let ours = desktop.game("Cyberpunk 2077", None);
+        let steam_copy = laptop.game("Cyberpunk 2077", Some("1091500"));
+        let gog_copy = laptop.other_install("Cyberpunk 2077", "gog", &steam_copy);
+        laptop.play(&steam_copy, 30);
+        laptop.play(&gog_copy, 45);
+
+        desktop.merge(&laptop.back_up(), &[]);
+        // The laptop's game stays apart, its two copies still one game.
+        assert_eq!(desktop.shown().len(), 2);
+        assert_eq!(desktop.links()[&gog_copy], steam_copy);
+
+        desktop.act();
+        games::link_game(&desktop.db, &steam_copy, Some(&ours)).unwrap();
+        assert_eq!(desktop.shown(), std::slice::from_ref(&ours));
+        assert!(desktop.links().values().all(|target| *target == ours));
+    }
+
+    #[test]
+    fn restoring_this_pcs_backup_keeps_its_linked_installs() {
+        let desktop = Pc::new("desktop");
+        let steam_copy = desktop.game("Cyberpunk 2077", Some("1091500"));
+        let gog_copy = desktop.other_install("Cyberpunk 2077", "gog", &steam_copy);
+        let backup = desktop.back_up();
+        desktop.act();
+        games::link_game(&desktop.db, &gog_copy, None).unwrap();
+
+        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        assert_eq!(desktop.links()[&gog_copy], steam_copy);
+        assert_eq!(desktop.shown(), [steam_copy]);
     }
 }
