@@ -5,13 +5,14 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{Row, params};
+use rusqlite::{OptionalExtension, Row, params};
 
 use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game, GameMetadata, UpdateGame};
 use crate::db::repo::map_db;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
+use crate::platform::process::path_key;
 
 fn row_to_game(row: &Row) -> rusqlite::Result<Game> {
     Ok(Game {
@@ -291,12 +292,32 @@ pub fn update_game(db: &Database, id: &str, input: &UpdateGame) -> Result<Game> 
 /// Returns `false` when there was no such game. Games linked to it go too,
 /// other installs and games of other PCs, as the library showed their
 /// sessions as its own. The ledger notes each session as removed by the
-/// player.
+/// player, and the look for new games at start leaves their programs out.
 pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
     db.with_transaction(|conn| {
         let ids = with_linked(conn, id)?;
+        let this = integrity::ledger::this_device().ok();
         let mut deleted = false;
         for game_id in &ids {
+            let found: Option<(Option<String>, Option<String>)> = conn
+                .query_row(
+                    "SELECT executable_path, origin_device_id FROM games WHERE id = ?1",
+                    [game_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()
+                .map_err(map_db)?;
+            // A game of another PC names a path on that PC.
+            let program = found
+                .filter(|(_, origin)| origin.is_none() || *origin == this)
+                .and_then(|(program, _)| program);
+            if let Some(program) = program.filter(|path| !path.trim().is_empty()) {
+                conn.execute(
+                    "INSERT OR IGNORE INTO offered_programs (path_key) VALUES (?1)",
+                    [path_key(program.trim())],
+                )
+                .map_err(map_db)?;
+            }
             let sessions: Vec<String> = {
                 let mut stmt = conn
                     .prepare("SELECT id FROM sessions WHERE game_id = ?1 ORDER BY started_at_wall")
@@ -492,7 +513,7 @@ mod tests {
             &db,
             &CreateGame {
                 title: "Doomed".into(),
-                executable_path: None,
+                executable_path: Some("C:/Games/Doomed/doomed.exe".into()),
                 install_folder: None,
                 launcher_source: None,
             },
@@ -501,6 +522,11 @@ mod tests {
 
         assert!(delete_game(&db, &game.id).unwrap());
         assert!(!delete_game(&db, &game.id).unwrap());
+        assert!(
+            crate::db::repo::offered::keys(&db)
+                .unwrap()
+                .contains(&path_key("C:/Games/Doomed/doomed.exe"))
+        );
     }
 
     fn titled(db: &Database, title: &str, launcher: &str) -> String {
