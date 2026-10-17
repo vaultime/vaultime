@@ -78,9 +78,8 @@ pub const MAINTENANCE_INTERVAL_SECS: u64 = 60 * 60;
 /// Redemptions of an admin invite when the request sets none.
 pub const DEFAULT_INVITE_MAX_REDEMPTIONS: i32 = 1;
 
-// Invite codes. `deploy/vps/generate-cloud-invite.py` and
-// `bootstrap-admin-account.py` use the same values. Changing the scrypt
-// settings breaks every stored invite hash.
+// Invite codes. `deploy/vps/generate-cloud-invite.py` uses the same values.
+// Changing the scrypt settings breaks every stored invite hash.
 
 /// Prefix of invite codes when the request sets none. Also in
 /// `lib/cloud-api.ts` of the desktop app and in `scripts/cloud-e2e.sh`.

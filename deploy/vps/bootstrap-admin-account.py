@@ -6,32 +6,17 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import getpass
-import hashlib
+import importlib.util
 import json
-import os
-import secrets
-import subprocess
 import sys
 import urllib.error
 import urllib.request
-from urllib.parse import unquote, urlparse
+from pathlib import Path
+from types import ModuleType
 
 
 DEFAULT_ENV_FILE = "/etc/vaultime/api.env"
-# Invite codes, same as INVITE_* in apps/api/src/constants.rs. Changing the
-# scrypt settings breaks every stored invite hash.
-INVITE_PREFIX = "VTLINV"
-INVITE_BODY_RANDOM_BYTES = 18
-INVITE_BODY_CHARS = 24
-INVITE_LOOKUP_KEY_CHARS = 12
-INVITE_CODE_GROUP_CHARS = 4
-INVITE_SALT_BYTES = 16
-INVITE_SCRYPT_N = 2**14
-INVITE_SCRYPT_R = 8
-INVITE_SCRYPT_P = 1
-INVITE_HASH_BYTES = 64
 # Same as MIN_PASSWORD_CHARS in apps/api/src/constants.rs.
 MIN_PASSWORD_CHARS = 10
 # Same as api_addr in install-api.sh, where the API listens.
@@ -53,40 +38,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_env_file(path: str) -> dict[str, str]:
-    result: dict[str, str] = {}
-    with open(path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            result[key] = value
-    return result
+def load_invite_tool() -> ModuleType:
+    """generate-cloud-invite.py, which install-api.sh puts next to this
+    script. Invites and database access work the same way in both."""
+    path = Path(__file__).resolve().with_name("generate-cloud-invite.py")
+    spec = importlib.util.spec_from_file_location("generate_cloud_invite", path)
+    if not path.is_file() or spec is None or spec.loader is None:
+        raise SystemExit(f"{path} is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def sql_literal(value: str | None) -> str:
-    if value is None:
-        return "NULL"
-    return "'" + value.replace("'", "''") + "'"
-
-
-def run_psql(database_url: str, sql: str) -> str:
-    """Runs SQL through psql. The password goes in the environment and the SQL
-    on stdin, so neither shows up in the process list."""
-    parsed = urlparse(database_url)
-    port = f":{parsed.port}" if parsed.port else ""
-    target = f"{parsed.scheme}://{parsed.username or ''}@{parsed.hostname or 'localhost'}{port}{parsed.path}"
-    env = dict(os.environ, PGPASSWORD=unquote(parsed.password or ""))
-    result = subprocess.run(
-        ["psql", target, "-v", "ON_ERROR_STOP=1", "-At"],
-        input=sql,
-        env=env,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    return result.stdout.strip()
+invite_tool = load_invite_tool()
+load_env_file = invite_tool.load_env_file
+run_psql = invite_tool.run_psql
+sql_literal = invite_tool.sql_literal
 
 
 def normalize_email(raw: str) -> str:
@@ -94,44 +61,6 @@ def normalize_email(raw: str) -> str:
     if not email or "@" not in email:
         raise SystemExit("email must be valid")
     return email
-
-
-def chunk_token(token: str) -> str:
-    return "-".join(
-        token[index : index + INVITE_CODE_GROUP_CHARS]
-        for index in range(0, len(token), INVITE_CODE_GROUP_CHARS)
-    )
-
-
-def generate_body_token() -> str:
-    while True:
-        raw = base64.urlsafe_b64encode(secrets.token_bytes(INVITE_BODY_RANDOM_BYTES)).decode("ascii").rstrip("=")
-        body = "".join(ch for ch in raw if ch.isalnum()).upper()
-        if len(body) >= INVITE_BODY_CHARS:
-            return body[:INVITE_BODY_CHARS]
-
-
-def hash_invite(code: str, salt: str) -> str:
-    return hashlib.scrypt(
-        code.encode("utf-8"),
-        salt=salt.encode("utf-8"),
-        n=INVITE_SCRYPT_N,
-        r=INVITE_SCRYPT_R,
-        p=INVITE_SCRYPT_P,
-        dklen=INVITE_HASH_BYTES,
-    ).hex()
-
-
-def generate_bootstrap_invite() -> dict[str, str]:
-    body = generate_body_token()
-    code = f"{INVITE_PREFIX}-{chunk_token(body)}"
-    salt = secrets.token_hex(INVITE_SALT_BYTES)
-    return {
-        "code": code,
-        "lookup_key": body[:INVITE_LOOKUP_KEY_CHARS],
-        "salt": salt,
-        "code_hash": hash_invite(code, salt),
-    }
 
 
 def http_post_json(url: str, payload: dict[str, str]) -> dict[str, object]:
@@ -192,25 +121,10 @@ def main() -> int:
             print("If you need a known password, delete that account and rerun this script.")
             return 1
 
-    invite = generate_bootstrap_invite()
-    run_psql(
-        database_url,
-        f"""
-        INSERT INTO cloud_invites (
-            lookup_key,
-            salt,
-            code_hash,
-            max_redemptions,
-            note
-        ) VALUES (
-            {sql_literal(invite['lookup_key'])},
-            {sql_literal(invite['salt'])},
-            {sql_literal(invite['code_hash'])},
-            1,
-            'temporary bootstrap invite for admin account'
-        );
-        """,
+    invite = invite_tool.generate_invite(
+        invite_tool.INVITE_PREFIX, 1, None, "temporary bootstrap invite for admin account"
     )
+    invite_tool.insert_invite(database_url, invite)
 
     http_post_json(
         args.api_base_url.rstrip("/") + "/v1/auth/signup",
