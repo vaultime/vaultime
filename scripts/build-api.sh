@@ -8,7 +8,7 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-repo_mount="$(cd "$repo" && pwd -W 2>/dev/null || pwd)"
+repo_mount="$(cd "$repo" && { pwd -W 2>/dev/null || pwd; })"
 mkdir -p "$repo/dist-api"
 
 docker build -q -t vaultime-linux-check "$repo/scripts/linux-check" >/dev/null

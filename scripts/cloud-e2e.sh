@@ -12,7 +12,7 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-repo_mount="$(cd "$repo" && pwd -W 2>/dev/null || pwd)"
+repo_mount="$(cd "$repo" && { pwd -W 2>/dev/null || pwd; })"
 network=vaultime-e2e
 db=vaultime-e2e-db
 api=vaultime-e2e-api
@@ -42,21 +42,7 @@ trap cleanup EXIT
 cleanup
 
 echo "== building the API"
-mkdir -p "$repo/dist-api"
-docker build -q -t vaultime-linux-check "$repo/scripts/linux-check" >/dev/null
-MSYS_NO_PATHCONV=1 docker run --rm \
-  --mount "type=bind,source=$repo_mount,target=/src,readonly" \
-  --mount "type=bind,source=$repo_mount/dist-api,target=/out" \
-  -e CARGO_TARGET_DIR=/target \
-  -v vaultime-api-target:/target \
-  -v vaultime-linux-registry:/opt/cargo/registry \
-  -v vaultime-linux-toolchains:/opt/rustup \
-  vaultime-linux-check bash -c '
-    cd /src/apps/api
-    rustup toolchain install >/dev/null
-    cargo build --release --locked -q
-    cp /target/release/vaultime-api /out/
-  '
+bash "$repo/scripts/build-api.sh"
 
 echo "== starting PostgreSQL and the API"
 docker network create "$network" >/dev/null
@@ -67,29 +53,38 @@ docker run -d --name "$db" --network "$network" \
 until docker exec "$db" pg_isready -h 127.0.0.1 -U vaultime -q; do sleep 1; done
 
 secret() { "$python" -c "import secrets; print(secrets.token_hex($secret_bytes))"; }
-# The test needs two kept backups, no pause between backups and cleanup of
-# unused artwork at once.
-MSYS_NO_PATHCONV=1 docker run -d --name "$api" --network "$network" \
-  -p "127.0.0.1:$port:$api_port" \
-  --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
-  -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
-  -e VAULTIME_PUBLIC_BASE_URL="$url" \
-  -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
-  -e VAULTIME_BACKUP_ROOT=/tmp/backups \
-  -e VAULTIME_ACCESS_TOKEN_SECRET="$(secret)" \
-  -e VAULTIME_REFRESH_TOKEN_PEPPER="$(secret)" \
-  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=2 \
-  -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
-  -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
-  vaultime-linux-check /app/vaultime-api >/dev/null
-for _ in $(seq 1 "$health_wait_secs"); do
-  curl -fsS "$url/healthz" >/dev/null 2>&1 && break
-  sleep 1
-done
-curl -fsS "$url/healthz" >/dev/null || { docker logs "$api" | tail -"$log_tail_lines"; exit 1; }
 
-echo "== creating a test account"
-code=$("$python" - "$repo/deploy/vps/generate-cloud-invite.py" "$db" <<'EOF'
+# Starts an API container on a host port and waits for its health check.
+# Further arguments go to docker run. Every API takes backups without a pause
+# between them and cleans up unused artwork at once.
+start_api() {
+  local name=$1 host_port=$2
+  shift 2
+  MSYS_NO_PATHCONV=1 docker run -d --name "$name" --network "$network" \
+    -p "127.0.0.1:$host_port:$api_port" \
+    --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
+    -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
+    -e VAULTIME_PUBLIC_BASE_URL="http://127.0.0.1:$host_port" \
+    -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
+    -e VAULTIME_BACKUP_ROOT=/tmp/backups \
+    -e VAULTIME_ACCESS_TOKEN_SECRET="$(secret)" \
+    -e VAULTIME_REFRESH_TOKEN_PEPPER="$(secret)" \
+    -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
+    -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
+    "$@" vaultime-linux-check /app/vaultime-api >/dev/null
+  for _ in $(seq 1 "$health_wait_secs"); do
+    curl -fsS "http://127.0.0.1:$host_port/healthz" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  docker logs "$name" 2>&1 | tail -"$log_tail_lines"
+  echo "$name did not come up" >&2
+  return 1
+}
+
+# Prints the code of a new single use invite, stored with the server's own
+# invite tool.
+make_invite() {
+  "$python" - "$repo/deploy/vps/generate-cloud-invite.py" "$db" <<'EOF'
 import importlib.util
 import subprocess
 import sys
@@ -111,7 +106,13 @@ created = invite.generate_invite(invite.INVITE_PREFIX, 1, None, "e2e")
 invite.insert_invite("", created)
 print(created["code"])
 EOF
-)
+}
+
+# The round trip needs two kept backups.
+start_api "$api" "$port" -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=2
+
+echo "== creating a test account"
+code=$(make_invite)
 session=$(curl -fsS -X POST "$url/v1/auth/signup" -H "content-type: application/json" \
   -d "{\"email\":\"e2e@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}")
 field() { "$python" -c "import json, sys; print(json.load(sys.stdin)['$1'])"; }
@@ -130,6 +131,8 @@ second=$(curl -fsS -X POST "$url/v1/auth/refresh" -H "content-type: application/
   || { echo "an unknown account did not get 401"; exit 1; }
 
 echo "== running the desktop round trip"
+# The Tauri build script needs the frontend folder to exist.
+mkdir -p "$repo/apps/desktop/dist"
 cd "$repo/apps/desktop/src-tauri"
 if ! VAULTIME_E2E_API="$url" VAULTIME_E2E_TOKEN="$token" \
   cargo test --lib artwork_is_uploaded_once_and_restores -- --ignored --nocapture; then
@@ -148,50 +151,45 @@ stored=$(docker exec "$db" psql -U vaultime -d vaultime -tAc "SELECT COUNT(*) FR
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $token" "$url/v1/admin/beta-applications")" = 403 ] \
   || { echo "a normal account could list applications"; exit 1; }
 
-echo "== old backups make room"
-small_url="http://127.0.0.1:$small_port"
-MSYS_NO_PATHCONV=1 docker run -d --name "$small_api" --network "$network" \
-  -p "127.0.0.1:$small_port:$api_port" \
-  --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
-  -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
-  -e VAULTIME_PUBLIC_BASE_URL="$small_url" \
-  -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
-  -e VAULTIME_BACKUP_ROOT=/tmp/backups \
-  -e VAULTIME_ACCESS_TOKEN_SECRET="$(secret)" \
-  -e VAULTIME_REFRESH_TOKEN_PEPPER="$(secret)" \
-  -e VAULTIME_MAX_ACCOUNT_BYTES="$small_account_bytes" \
-  -e VAULTIME_MAX_BACKUP_BYTES="$small_backup_bytes" \
-  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=3 \
-  -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
-  -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
-  vaultime-linux-check /app/vaultime-api >/dev/null
-for _ in $(seq 1 "$health_wait_secs"); do
-  curl -fsS "$small_url/healthz" >/dev/null 2>&1 && break
-  sleep 1
-done
-code=$("$python" - "$repo/deploy/vps/generate-cloud-invite.py" "$db" <<'EOF'
+echo "== admin account"
+"$python" - "$repo/deploy/vps/bootstrap-admin-account.py" "$db" "$url" <<'EOF'
 import importlib.util
 import subprocess
 import sys
 
-spec = importlib.util.spec_from_file_location("invite", sys.argv[1])
-invite = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(invite)
+tool, container, url = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("bootstrap", tool)
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
 run = subprocess.run
 
 
 def psql_in_container(command, *args, **kwargs):
     if command[0] == "psql":
-        command = ["docker", "exec", "-i", sys.argv[2], "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
+        command = ["docker", "exec", "-i", container, "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
     return run(command, *args, **kwargs)
 
 
-invite.subprocess.run = psql_in_container
-created = invite.generate_invite(invite.INVITE_PREFIX, 1, None, "e2e")
-invite.insert_invite("", created)
-print(created["code"])
+subprocess.run = psql_in_container
+sys.argv = ["bootstrap", "--email", "admin@example.com", "--password", "e2e-admin-password",
+            "--api-base-url", url, "--db-url", "postgres://vaultime@db/vaultime"]
+sys.exit(bootstrap.main())
 EOF
-)
+admin_token=$(curl -fsS -X POST "$url/v1/auth/login" -H "content-type: application/json" \
+  -d '{"email":"admin@example.com","password":"e2e-admin-password"}' | field access_token)
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $admin_token" "$url/v1/admin/beta-applications")" = 200 ] \
+  || { echo "the admin could not list applications"; exit 1; }
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $admin_token" \
+  -H "content-type: application/json" -d '{"note":"e2e"}' "$url/v1/admin/invites")" = 201 ] \
+  || { echo "the admin could not create an invite"; exit 1; }
+
+echo "== old backups make room"
+small_url="http://127.0.0.1:$small_port"
+start_api "$small_api" "$small_port" \
+  -e VAULTIME_MAX_ACCOUNT_BYTES="$small_account_bytes" \
+  -e VAULTIME_MAX_BACKUP_BYTES="$small_backup_bytes" \
+  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=3
+code=$(make_invite)
 small_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \
   -d "{\"email\":\"rotation@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
   | field access_token)
