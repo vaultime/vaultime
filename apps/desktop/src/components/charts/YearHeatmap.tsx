@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import type { BucketPlay } from "@/lib/play-totals";
 import { toDayKey } from "@/lib/session-stats";
@@ -34,12 +34,18 @@ function weeksOf(year: number): Date[][] {
 
 const cellId = (day: Date) => `heatmap-${toDayKey(day)}`;
 
+// Made once, since a year of cells formats hundreds of dates on every render.
+const DAY_NAME = new Intl.DateTimeFormat(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" });
+const MONTH_SHORT = new Intl.DateTimeFormat(UI_LOCALE, { month: "short" });
+const MONTH_NARROW = new Intl.DateTimeFormat(UI_LOCALE, { month: "narrow" });
+const dayName = (day: Date) => DAY_NAME.format(day);
+
 /**
  * The year as a calendar, one square per day, brighter the more active time
  * it had. Pointing at a day, or moving to it with the arrow keys, shows what
  * was played. A click or Enter opens its week in the journal.
  */
-export function YearHeatmap({
+export const YearHeatmap = memo(function YearHeatmap({
   year,
   days,
   now,
@@ -52,7 +58,7 @@ export function YearHeatmap({
   labelOf: (gameId: string) => GameLabel;
   onOpenDay: (day: Date) => void;
 }) {
-  const weeks = weeksOf(year);
+  const weeks = useMemo(() => weeksOf(year), [year]);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const first = new Date(year, 0, 1);
   const last = new Date(year, 11, 31) < today ? new Date(year, 11, 31) : today;
@@ -60,12 +66,11 @@ export function YearHeatmap({
   const [focused, setFocused] = useState<Date | null>(null);
   const [shown, setShown] = useState<{ day: Date; style: CSSProperties; byKeyboard: boolean } | null>(null);
 
-  const name = (day: Date) => day.toLocaleDateString(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" });
-  const show = (day: Date, byKeyboard: boolean, anchor?: Element | null) => {
+  const show = useCallback((day: Date, byKeyboard: boolean, anchor?: Element | null) => {
     const cell = anchor ?? document.getElementById(cellId(day));
     if (!cell || !frame.current) return;
     setShown({ day, byKeyboard, style: cardPosition(cell.getBoundingClientRect(), frame.current.getBoundingClientRect()) });
-  };
+  }, []);
   const moveTo = (day: Date) => {
     const clamped = day < first ? first : day > last ? last : day;
     setFocused(clamped);
@@ -109,72 +114,20 @@ export function YearHeatmap({
           className="grid gap-[3px] rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-violet/50 focus-visible:ring-offset-4 focus-visible:ring-offset-ink"
           style={{ gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))` }}
         >
-          <div role="row" className="contents">
-            <span role="columnheader" />
-            {weeks.map((week) => {
-              const firstOfMonth = week.find((day) => day.getDate() === 1 && day.getFullYear() === year);
-              return (
-                <span
-                  key={week[0].getTime()}
-                  role="columnheader"
-                  className="h-4 font-mono text-[10px] whitespace-nowrap text-faint"
-                >
-                  {/* Single letters where the weeks are too narrow for names. */}
-                  <span className="@max-[420px]:hidden">
-                    {firstOfMonth?.toLocaleDateString(UI_LOCALE, { month: "short" })}
-                  </span>
-                  <span className="hidden @max-[420px]:inline">
-                    {firstOfMonth?.toLocaleDateString(UI_LOCALE, { month: "narrow" })}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-          {WEEKDAY_LABELS.map((label, weekday) => (
-            <div key={weekday} role="row" className="contents">
-              {/* Out of the flow, so a label never makes its row taller than the days. */}
-              <span role="rowheader" className="relative w-8">
-                <span className="absolute inset-y-0 left-0 flex items-center text-[10px] leading-none text-faint">
-                  {label}
-                </span>
-              </span>
-              {weeks.map((week) => {
-                const day = week[weekday];
-                const inYear = day.getFullYear() === year;
-                const played = day <= today;
-                if (!inYear || !played) {
-                  return (
-                    <span
-                      key={day.getTime()}
-                      role="presentation"
-                      className={cn("aspect-square rounded-[2px]", inYear ? "bg-raised/40" : "invisible")}
-                    />
-                  );
-                }
-                const play = days.get(toDayKey(day));
-                const isFocused = focused !== null && toDayKey(focused) === toDayKey(day);
-                return (
-                  <span
-                    key={day.getTime()}
-                    id={cellId(day)}
-                    role="gridcell"
-                    aria-label={describePlay(name(day), play, labelOf)}
-                    onMouseEnter={(event) => show(day, false, event.currentTarget)}
-                    onClick={() => onOpenDay(day)}
-                    className={cn(
-                      "aspect-square cursor-pointer rounded-[2px] transition-shadow",
-                      LEVELS[heatLevel(play?.activeMs ?? 0)],
-                      isFocused && shown?.byKeyboard && "ring-2 ring-text ring-offset-1 ring-offset-ink",
-                    )}
-                  />
-                );
-              })}
-            </div>
-          ))}
+          <HeatmapRows
+            weeks={weeks}
+            year={year}
+            today={today.getTime()}
+            days={days}
+            labelOf={labelOf}
+            ringed={focused && shown?.byKeyboard ? toDayKey(focused) : null}
+            onPoint={show}
+            onOpenDay={onOpenDay}
+          />
         </div>
         {shown && (
           <PlayCard
-            label={name(shown.day)}
+            label={dayName(shown.day)}
             play={days.get(toDayKey(shown.day))}
             labelOf={labelOf}
             hint={shown.byKeyboard ? "Enter opens this week in the journal" : "Click to open this week in the journal"}
@@ -191,4 +144,94 @@ export function YearHeatmap({
       </figcaption>
     </figure>
   );
-}
+});
+
+/** The month names and the days, apart from the card so pointing at a day does not draw them again. */
+const HeatmapRows = memo(function HeatmapRows({
+  weeks,
+  year,
+  today,
+  days,
+  labelOf,
+  ringed,
+  onPoint,
+  onOpenDay,
+}: {
+  weeks: Date[][];
+  year: number;
+  /** Midnight of today, in milliseconds. Later days are blank. */
+  today: number;
+  days: Map<string, BucketPlay>;
+  labelOf: (gameId: string) => GameLabel;
+  /** The day the keyboard is on, by `toDayKey`. */
+  ringed: string | null;
+  onPoint: (day: Date, byKeyboard: boolean, anchor: Element) => void;
+  onOpenDay: (day: Date) => void;
+}) {
+  return (
+    <>
+      <div role="row" className="contents">
+        <span role="columnheader" />
+        {weeks.map((week) => {
+          const firstOfMonth = week.find((day) => day.getDate() === 1 && day.getFullYear() === year);
+          return (
+            <span
+              key={week[0].getTime()}
+              role="columnheader"
+              className="h-4 font-mono text-[10px] whitespace-nowrap text-faint"
+            >
+              {/* Single letters where the weeks are too narrow for names. */}
+              <span className="@max-[420px]:hidden">
+                {firstOfMonth && MONTH_SHORT.format(firstOfMonth)}
+              </span>
+              <span className="hidden @max-[420px]:inline">
+                {firstOfMonth && MONTH_NARROW.format(firstOfMonth)}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+      {WEEKDAY_LABELS.map((label, weekday) => (
+        <div key={weekday} role="row" className="contents">
+          {/* Out of the flow, so a label never makes its row taller than the days. */}
+          <span role="rowheader" className="relative w-8">
+            <span className="absolute inset-y-0 left-0 flex items-center text-[10px] leading-none text-faint">
+              {label}
+            </span>
+          </span>
+          {weeks.map((week) => {
+            const day = week[weekday];
+            const inYear = day.getFullYear() === year;
+            const played = day.getTime() <= today;
+            if (!inYear || !played) {
+              return (
+                <span
+                  key={day.getTime()}
+                  role="presentation"
+                  className={cn("aspect-square rounded-[2px]", inYear ? "bg-raised/40" : "invisible")}
+                />
+              );
+            }
+            const key = toDayKey(day);
+            const play = days.get(key);
+            return (
+              <span
+                key={day.getTime()}
+                id={cellId(day)}
+                role="gridcell"
+                aria-label={describePlay(dayName(day), play, labelOf)}
+                onMouseEnter={(event) => onPoint(day, false, event.currentTarget)}
+                onClick={() => onOpenDay(day)}
+                className={cn(
+                  "aspect-square cursor-pointer rounded-[2px] transition-shadow",
+                  LEVELS[heatLevel(play?.activeMs ?? 0)],
+                  key === ringed && "ring-2 ring-text ring-offset-1 ring-offset-ink",
+                )}
+              />
+            );
+          })}
+        </div>
+      ))}
+    </>
+  );
+});
