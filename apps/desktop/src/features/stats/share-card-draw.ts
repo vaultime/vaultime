@@ -104,7 +104,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 }
 
 /** Waits for the card's fonts, so the first drawing does not use a fallback. */
-export async function cardFontsReady(): Promise<void> {
+async function cardFontsReady(): Promise<void> {
   if (typeof document === "undefined" || !document.fonts) return;
   await Promise.all(
     [`500 64px ${MONA}`, `italic 450 64px ${MONA}`, `400 64px ${GEIST}`, `400 64px ${MONO}`].map((font) =>
