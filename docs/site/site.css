@@ -21,6 +21,8 @@
 html { background: var(--ink); color-scheme: dark; }
 body { font-family: var(--sans); color: var(--text); background: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
+/* One focus ring for every link, button and control a keyboard reaches. */
+:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
 /* Mona Sans at full width for titles, at normal width for sentences, as in the app. */
 .display { font-family: var(--display); font-stretch: 125%; font-weight: 500; letter-spacing: -0.015em; }
@@ -41,7 +43,7 @@ nav a:hover { color: var(--text); }
 .hero h1 { margin-top: 18px; max-width: 820px; font-size: clamp(40px, 8vw, 96px); line-height: 0.97; }
 .hero p { margin-top: 24px; max-width: 620px; font-size: clamp(19px, 2.4vw, 24px); line-height: 1.35; color: var(--soft); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-.button { display: inline-flex; align-items: center; height: 44px; padding: 0 22px; border-radius: 22px; font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.button { display: inline-flex; align-items: center; height: 44px; padding: 0 22px; border: 0; border-radius: 22px; font-family: inherit; font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .button.solid { background: var(--violet); color: var(--violet-ink); }
 .button.solid:hover { background: var(--violet-hover); }
 .button.line { border: 1px solid var(--hairline); color: var(--text); font-weight: 500; }
@@ -96,7 +98,6 @@ section.doc .lead { margin-top: 10px; font-size: 14px; color: var(--faint); }
 .consent a { color: var(--violet); }
 input[type="radio"], input[type="checkbox"] { accent-color: var(--violet); width: 16px; height: 16px; }
 .bot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-.button { border: 0; cursor: pointer; font-family: inherit; }
 
 /* Text pages: the legal pages and the changelog. */
 .page { padding: 64px 0 80px; border-bottom: 1px solid var(--rule); }
@@ -120,8 +121,8 @@ nav a[aria-current="page"] { color: var(--text); }
 /* The app as it looks, under the hero. */
 .shot { margin-top: 56px; }
 .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--hairline); border-radius: 14px; }
-.doc .lead a, .more { color: var(--violet); text-decoration: none; }
-.doc .lead a:hover, .more:hover { color: var(--violet-hover); }
+.doc .lead a { color: var(--violet); text-decoration: none; }
+.doc .lead a:hover { color: var(--violet-hover); }
 
 /* Documentation: sidebar, text and the sections of the page. */
 .docs { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 64px; max-width: 1280px; margin: 0 auto; padding: 0 32px; }
@@ -154,9 +155,8 @@ nav a[aria-current="page"] { color: var(--text); }
 .docs-article a { color: var(--violet); text-decoration: none; }
 .docs-article a:hover { color: var(--violet-hover); text-decoration: underline; text-underline-offset: 3px; }
 .docs-article strong { color: var(--text); font-weight: 600; }
-.docs-article em { font-style: italic; }
 .docs-article .anchor { margin-left: 6px; color: var(--hairline); font-weight: 400; opacity: 0; }
-.docs-article .anchor:hover { color: var(--violet); text-decoration: none; }
+.docs-article .anchor:is(:hover, :focus-visible) { color: var(--violet); text-decoration: none; }
 .docs-article :is(h2, h3, h4):hover .anchor, .docs-article .anchor:focus-visible { opacity: 1; }
 .docs-article code { padding: 1px 6px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); font-family: var(--mono); font-size: 0.84em; color: var(--text); overflow-wrap: anywhere; }
 .docs-article pre { padding: 16px 18px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); overflow-x: auto; }
