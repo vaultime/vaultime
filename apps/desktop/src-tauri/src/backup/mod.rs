@@ -13,6 +13,7 @@ use std::fmt::Write;
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use log::warn;
 use rusqlite::Connection;
@@ -300,10 +301,6 @@ fn restore_from_staging(
     fs::copy(backup_dir.join(DATABASE_FILE), &staged_db).map_err(|error| {
         VaultimeError::Backup(format!("failed to stage backup database: {error}"))
     })?;
-    check_plain_schema(&staged_db)?;
-    check_integrity(&staged_db)?;
-    check_same_schema(&Database::open(&staged_db)?)?;
-    check_restored_ids(&staged_db)?;
 
     // Everything that can still fail runs on the staged copy, so swapping the
     // artwork and the database is the last step.
@@ -311,7 +308,7 @@ fn restore_from_staging(
     let takeover;
     let mut taking_over = None;
     {
-        let staged = Database::open(&staged_db)?;
+        let staged = open_staged_database(&staged_db)?;
         // A fresh install continues as the PC whose backup it restores.
         takeover = staged.with_conn(|staged_conn| {
             db.with_conn(|local| {
@@ -467,6 +464,22 @@ fn take_in_restored(
     Ok(())
 }
 
+/// Opens the staged copy of a backup database at `path` once it passed
+/// every check: no parts of its own, intact, the schema this version
+/// creates once migrated, and game ids that are plain names.
+pub(crate) fn open_staged_database(path: &Path) -> Result<Database> {
+    check_plain_schema(path)?;
+    check_integrity(path)?;
+    let staged = Database::open(path)?;
+    check_same_schema(&staged)?;
+    check_restored_ids(path)?;
+    Ok(staged)
+}
+
+fn check_failed(error: rusqlite::Error) -> VaultimeError {
+    VaultimeError::Backup(format!("failed to check the backup database: {error}"))
+}
+
 /// Why a backup with database parts of its own is refused.
 const FOREIGN_SCHEMA: &str =
     "this backup holds database parts Vaultime never writes, so it was not used";
@@ -474,11 +487,8 @@ const FOREIGN_SCHEMA: &str =
 /// Refuses a backup database that holds views, triggers or virtual tables,
 /// before any of them could run. Any of them could show one thing to a
 /// check and another to the copy that follows it.
-pub(crate) fn check_plain_schema(database_path: &Path) -> Result<()> {
-    let refused = |error: rusqlite::Error| {
-        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
-    };
-    let conn = Connection::open(database_path).map_err(refused)?;
+fn check_plain_schema(database_path: &Path) -> Result<()> {
+    let conn = Connection::open(database_path).map_err(check_failed)?;
     // Virtual tables keep no pages of their own, whatever their statement says.
     let odd: i64 = conn
         .query_row(
@@ -487,7 +497,7 @@ pub(crate) fn check_plain_schema(database_path: &Path) -> Result<()> {
             [],
             |row| row.get(0),
         )
-        .map_err(refused)?;
+        .map_err(check_failed)?;
     if odd > 0 {
         return Err(VaultimeError::Backup(FOREIGN_SCHEMA.into()));
     }
@@ -497,14 +507,11 @@ pub(crate) fn check_plain_schema(database_path: &Path) -> Result<()> {
 /// Refuses a backup database that fails SQLite's own check. One whose
 /// indexes disagree with its tables could show a check other rows than the
 /// copy that follows it.
-pub(crate) fn check_integrity(database_path: &Path) -> Result<()> {
-    let refused = |error: rusqlite::Error| {
-        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
-    };
-    let conn = Connection::open(database_path).map_err(refused)?;
+fn check_integrity(database_path: &Path) -> Result<()> {
+    let conn = Connection::open(database_path).map_err(check_failed)?;
     let verdict: String = conn
         .query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))
-        .map_err(refused)?;
+        .map_err(check_failed)?;
     if verdict != "ok" {
         return Err(VaultimeError::Backup(
             "this backup database is damaged, so it was not used".into(),
@@ -516,9 +523,16 @@ pub(crate) fn check_integrity(database_path: &Path) -> Result<()> {
 /// Refuses a migrated backup database whose tables, indexes and other parts
 /// differ from the ones this version creates. A column compared another way
 /// or a key left out could let a copy take rows its check never saw.
-pub(crate) fn check_same_schema(staged: &Database) -> Result<()> {
-    let expected = Database::open_in_memory()?.with_conn(schema_of)?;
-    if staged.with_conn(schema_of)? != expected {
+fn check_same_schema(staged: &Database) -> Result<()> {
+    // The schema a fresh database gets never changes while the app runs.
+    static EXPECTED: OnceLock<Vec<SchemaPart>> = OnceLock::new();
+    let expected = if let Some(expected) = EXPECTED.get() {
+        expected
+    } else {
+        let fresh = Database::open_in_memory()?.with_conn(schema_of)?;
+        EXPECTED.get_or_init(|| fresh)
+    };
+    if staged.with_conn(schema_of)? != *expected {
         return Err(VaultimeError::Backup(FOREIGN_SCHEMA.into()));
     }
     Ok(())
@@ -531,16 +545,13 @@ type SchemaPart = (String, String, String, Option<String>);
 /// a moved line break can end a comment elsewhere. Statistics SQLite may
 /// keep are left out.
 fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
-    let refused = |error: rusqlite::Error| {
-        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
-    };
     let mut stmt = conn
         .prepare(
             "SELECT type, name, tbl_name, sql FROM sqlite_master
              WHERE NOT (type = 'table' AND name IN ('sqlite_stat1', 'sqlite_stat4'))
              ORDER BY type, name",
         )
-        .map_err(refused)?;
+        .map_err(check_failed)?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
@@ -550,24 +561,21 @@ fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
                 row.get::<_, Option<String>>(3)?,
             ))
         })
-        .map_err(refused)?;
-    rows.collect::<rusqlite::Result<_>>().map_err(refused)
+        .map_err(check_failed)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(check_failed)
 }
 
 /// Game ids become folder names in the artwork cache, so a backup with an id
 /// that is not a plain name is refused before anything changes.
 fn check_restored_ids(database_path: &Path) -> Result<()> {
-    let refused = |error: rusqlite::Error| {
-        VaultimeError::Backup(format!("failed to check the backup database: {error}"))
-    };
-    let conn = Connection::open(database_path).map_err(refused)?;
+    let conn = Connection::open(database_path).map_err(check_failed)?;
     let mut stmt = conn
         .prepare("SELECT id FROM games UNION SELECT game_id FROM game_assets")
-        .map_err(refused)?;
+        .map_err(check_failed)?;
     let ids = stmt
         .query_map([], |row| row.get::<_, String>(0))
         .and_then(Iterator::collect::<rusqlite::Result<Vec<_>>>)
-        .map_err(refused)?;
+        .map_err(check_failed)?;
     if ids.iter().any(|id| !is_plain_name(id)) {
         return Err(VaultimeError::Backup(
             "this backup holds a game id Vaultime cannot use, so it was not restored".into(),

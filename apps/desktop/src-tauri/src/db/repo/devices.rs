@@ -121,6 +121,26 @@ pub(crate) fn clean_name(name: &str) -> String {
         .collect()
 }
 
+/// The name of a PC in `conn`, cleaned as `clean_name` does. None when it
+/// has none or nothing of it is left.
+pub(crate) fn clean_name_of(
+    conn: &rusqlite::Connection,
+    device_id: &str,
+) -> Result<Option<String>> {
+    use rusqlite::OptionalExtension;
+    Ok(conn
+        .query_row(
+            "SELECT name FROM devices WHERE id = ?1",
+            [device_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(map_db)?
+        .flatten()
+        .map(|name| clean_name(&name))
+        .filter(|name| !name.is_empty()))
+}
+
 /// Cleans every PC name in `conn` the way a rename does, for names a backup
 /// brought along. A name with nothing left goes.
 pub(crate) fn clean_names(conn: &rusqlite::Connection) -> Result<()> {

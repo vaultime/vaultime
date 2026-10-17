@@ -836,18 +836,9 @@ pub(crate) fn plan_takeover(
     if keys.is_empty() || any_broken(staged, &keys)? {
         return Ok(None);
     }
-    let name: Option<String> = staged
-        .query_row("SELECT name FROM devices WHERE id = ?1", [source], |row| {
-            row.get::<_, Option<String>>(0)
-        })
-        .optional()
-        .map_err(ledger_error)?
-        .flatten()
-        .map(|name| crate::db::repo::devices::clean_name(&name))
-        .filter(|name| !name.is_empty());
     Ok(Some(Takeover {
         device_id: source.to_owned(),
-        name,
+        name: crate::db::repo::devices::clean_name_of(staged, source)?,
         keys,
     }))
 }

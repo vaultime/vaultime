@@ -35,9 +35,8 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use serde::{Deserialize, Serialize};
 
 use super::{
-    LocalBackupManifest, auto, check_integrity, check_plain_schema, check_restored_ids,
-    check_same_schema, cleanup_staging_dir, create_dir, ensure_schema_supported,
-    load_and_validate_manifest, resolve_backup_dir, table_columns,
+    LocalBackupManifest, auto, cleanup_staging_dir, create_dir, ensure_schema_supported,
+    load_and_validate_manifest, open_staged_database, resolve_backup_dir, table_columns,
 };
 use crate::AppContext;
 use crate::assets::{AssetManager, is_plain_name};
@@ -216,11 +215,7 @@ impl Staged {
         fs::copy(staged.backup_dir.join(DATABASE_FILE), &staged.db_path).map_err(|error| {
             VaultimeError::Backup(format!("failed to stage the backup database: {error}"))
         })?;
-        check_plain_schema(&staged.db_path)?;
-        check_integrity(&staged.db_path)?;
-        staged.db = Some(Database::open(&staged.db_path)?);
-        check_same_schema(staged.db()?)?;
-        check_restored_ids(&staged.db_path)?;
+        staged.db = Some(open_staged_database(&staged.db_path)?);
         Ok(staged)
     }
 
@@ -410,15 +405,7 @@ fn read_candidates(
     let this = ledger::this_device()?;
     staged.with_conn(|conn| {
         refuse_unmergeable(conn, source, &this, trust.source_keys())?;
-        let device_name: Option<String> = conn
-            .query_row("SELECT name FROM devices WHERE id = ?1", [source], |row| {
-                row.get::<_, Option<String>>(0)
-            })
-            .optional()
-            .map_err(map_db)?
-            .flatten()
-            .map(|name| crate::db::repo::devices::clean_name(&name))
-            .filter(|name| !name.is_empty());
+        let device_name = crate::db::repo::devices::clean_name_of(conn, source)?;
         let mut stmt = conn
             .prepare("SELECT * FROM sessions WHERE device_id != ?1 OR ?2 ORDER BY started_at_wall")
             .map_err(map_db)?;
@@ -448,8 +435,9 @@ fn sort_candidates(
     let this = ledger::this_device()?;
     db.with_conn(|conn| {
         for (session, theirs) in candidates {
+            let ours = event_hashes(conn, &session.id)?;
             // This PC's own copy of its session always stays as it is.
-            if session.device_id == this && !event_hashes(conn, &session.id)?.is_empty() {
+            if session.device_id == this && !ours.is_empty() {
                 continue;
             }
             if session.ended_at_wall.is_none() {
@@ -460,7 +448,6 @@ fn sort_candidates(
                 preview.removed_here += 1;
                 continue;
             }
-            let ours = event_hashes(conn, &session.id)?;
             if ours.is_empty() {
                 wanted.push((session, Take::New, theirs));
             } else if ours == theirs {
@@ -1024,32 +1011,31 @@ fn copy_sessions(conn: &Connection, plan: &Plan) -> Result<()> {
         new.iter().map(|planned| planned.hashes.len()).sum(),
     )?;
     let session_columns = table_columns(conn, "main", "sessions")?.join(", ");
+    let copy_newer_events = copy_statement(
+        conn,
+        "session_events",
+        "",
+        "session_id = ?1 AND sequence >= ?2",
+    )?;
+    let update_session = format!(
+        "UPDATE main.sessions SET ({session_columns}) =
+             (SELECT {session_columns} FROM {SOURCE}.sessions WHERE id = ?1)
+         WHERE id = ?1"
+    );
     for planned in &plan.sessions {
         let Take::Grown { from_sequence } = planned.take else {
             continue;
         };
         let written = conn
             .execute(
-                &copy_statement(
-                    conn,
-                    "session_events",
-                    "",
-                    "session_id = ?1 AND sequence >= ?2",
-                )?,
+                &copy_newer_events,
                 params![planned.session.id, from_sequence],
             )
             .map_err(map_db)?;
         let kept = usize::try_from(from_sequence - 1).unwrap_or(usize::MAX);
         expect_rows(written, planned.hashes.len().saturating_sub(kept))?;
         let written = conn
-            .execute(
-                &format!(
-                    "UPDATE main.sessions SET ({session_columns}) =
-                         (SELECT {session_columns} FROM {SOURCE}.sessions WHERE id = ?1)
-                     WHERE id = ?1"
-                ),
-                [&planned.session.id],
-            )
+            .execute(&update_session, [&planned.session.id])
             .map_err(map_db)?;
         expect_rows(written, 1)?;
     }
