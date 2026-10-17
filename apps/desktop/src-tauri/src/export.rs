@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::{EXPORT_FORMAT_NAME, EXPORT_FORMAT_VERSION};
 use crate::db::connection::Database;
+use crate::db::models::Game;
 use crate::db::repo::{annotations, games, sessions};
 use crate::earlier;
 use crate::error::{Result, VaultimeError};
@@ -100,7 +101,9 @@ pub fn export_sessions(
     format: ExportFormat,
     app_version: &str,
 ) -> Result<usize> {
-    let sessions = exported_sessions(db)?;
+    let games = games::list_all_games(db)?;
+    let links = games::links(db)?;
+    let sessions = exported_sessions(db, &games, &links)?;
     let count = sessions.len();
     let contents = match format {
         ExportFormat::Csv => to_csv(&sessions),
@@ -110,7 +113,7 @@ pub fn export_sessions(
                 version: EXPORT_FORMAT_VERSION,
                 exported_at: local_time(&integrity::now_timestamp()),
                 app_version: app_version.to_string(),
-                games: exported_games(db)?,
+                games: exported_games(db, games, &links)?,
                 sessions,
             };
             serde_json::to_string_pretty(&export).map_err(|error| {
@@ -123,18 +126,19 @@ pub fn export_sessions(
     Ok(count)
 }
 
-fn exported_sessions(db: &Database) -> Result<Vec<ExportedSession>> {
-    let games: HashMap<String, (String, Option<String>)> = games::list_all_games(db)?
-        .into_iter()
-        .map(|game| (game.id, (game.title, game.launcher_source)))
-        .collect();
+/// Each finished session, with `games` and `links` as the library has them.
+fn exported_sessions(
+    db: &Database,
+    games: &[Game],
+    links: &HashMap<String, String>,
+) -> Result<Vec<ExportedSession>> {
+    let games: HashMap<&str, &Game> = games.iter().map(|game| (game.id.as_str(), game)).collect();
     let title = |id: &str| {
         games
             .get(id)
-            .map(|(title, _)| title.clone())
+            .map(|game| game.title.clone())
             .unwrap_or_default()
     };
-    let links = games::links(db)?;
     let notes: HashMap<String, String> = annotations::list_session_notes(db)?
         .into_iter()
         .map(|note| (note.session_id, note.note))
@@ -152,8 +156,8 @@ fn exported_sessions(db: &Database) -> Result<Vec<ExportedSession>> {
                 game_id: shown,
                 recorded_as: title(&session.game_id),
                 launcher: games
-                    .get(&session.game_id)
-                    .and_then(|(_, launcher)| launcher.clone()),
+                    .get(session.game_id.as_str())
+                    .and_then(|game| game.launcher_source.clone()),
                 recorded_game_id: session.game_id,
                 started_at: local_time(&session.started_at_wall),
                 ended_at,
@@ -170,7 +174,11 @@ fn exported_sessions(db: &Database) -> Result<Vec<ExportedSession>> {
     Ok(exported)
 }
 
-fn exported_games(db: &Database) -> Result<Vec<ExportedGame>> {
+fn exported_games(
+    db: &Database,
+    games: Vec<Game>,
+    links: &HashMap<String, String>,
+) -> Result<Vec<ExportedGame>> {
     // Changes come oldest first, so the last one per game is its status.
     let mut statuses = HashMap::new();
     for change in annotations::list_status_changes(db)? {
@@ -180,8 +188,7 @@ fn exported_games(db: &Database) -> Result<Vec<ExportedGame>> {
         .into_iter()
         .map(|entry| (entry.game_id, (entry.earlier_ms, entry.source)))
         .collect();
-    let links = games::links(db)?;
-    Ok(games::list_all_games(db)?
+    Ok(games
         .into_iter()
         .map(|game| {
             let earlier = earlier.get(&game.id).filter(|(ms, _)| *ms > 0);
@@ -223,22 +230,28 @@ fn to_csv(sessions: &[ExportedSession]) -> String {
     csv.push_str(&CSV_COLUMNS.join(","));
     csv.push_str(CSV_LINE_END);
     for session in sessions {
+        let [runtime, active, idle] = [
+            session.runtime_seconds,
+            session.active_seconds,
+            session.idle_seconds,
+        ]
+        .map(|seconds| seconds.to_string());
         let row = [
-            session.game.clone(),
-            session.started_at.clone(),
-            session.ended_at.clone(),
-            session.runtime_seconds.to_string(),
-            session.active_seconds.to_string(),
-            session.idle_seconds.to_string(),
-            session.trust.clone(),
-            session.note.clone().unwrap_or_default(),
-            session.id.clone(),
-            session.game_id.clone(),
-            session.recorded_as.clone(),
-            session.launcher.clone().unwrap_or_default(),
-            session.recorded_game_id.clone(),
+            session.game.as_str(),
+            &session.started_at,
+            &session.ended_at,
+            &runtime,
+            &active,
+            &idle,
+            &session.trust,
+            session.note.as_deref().unwrap_or_default(),
+            &session.id,
+            &session.game_id,
+            &session.recorded_as,
+            session.launcher.as_deref().unwrap_or_default(),
+            &session.recorded_game_id,
         ];
-        let fields: Vec<String> = row.iter().map(|field| csv_field(field)).collect();
+        let fields: Vec<String> = row.into_iter().map(csv_field).collect();
         csv.push_str(&fields.join(","));
         csv.push_str(CSV_LINE_END);
     }
