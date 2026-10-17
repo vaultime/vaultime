@@ -93,9 +93,12 @@ pub const SESSION_SPREAD_MAX_MS: i64 = 366 * 24 * 60 * 60 * 1_000;
 /// below zero or past it only comes from a damaged or made up record, which
 /// turns Suspicious, and slices count it as this much at most.
 pub const SESSION_TIME_MAX_MS: i64 = 10 * 366 * 24 * 60 * 60 * 1_000;
-/// How slices are worked out. Bump it when that changes, and every PC
-/// rebuilds them on its next start.
-pub const PLAY_SLICES_VERSION: i64 = 1;
+/// How slices and stretches are worked out. Bump it when that changes, and
+/// every PC rebuilds them on its next start.
+pub const PLAY_SLICES_VERSION: i64 = 2;
+/// Two neighboring stretches of a session become one when their runtime per
+/// millisecond on the clock differs by at most this, in parts per thousand.
+pub const SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE: i64 = 10;
 /// Setting with the `PLAY_SLICES_VERSION` the slices were built with. A
 /// restore drops it, so the slices are built again for the restored history.
 pub const PLAY_SLICES_VERSION_SETTING: &str = "play_slices_version";

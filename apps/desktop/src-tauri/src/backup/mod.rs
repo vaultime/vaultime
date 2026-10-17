@@ -680,10 +680,12 @@ fn restore_statements(conn: &Connection) -> Result<String> {
         .map(|key| format!("'{}'", sqlite_string_literal(key)))
         .collect::<Vec<_>>()
         .join(", ");
-    // Slices belong to the history they were built from. The next start
-    // builds them for the restored one, since the version setting goes too.
+    // Slices and stretches belong to the history they were built from. The
+    // next start builds them for the restored one, since the version setting
+    // goes too.
     statements.push_str(
         "DELETE FROM play_slices;
+DELETE FROM play_spans;
 ",
     );
     for table in RESTORE_TABLES.iter().rev() {

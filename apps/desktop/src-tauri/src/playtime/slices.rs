@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Where each session's time fell on the clock, a quarter hour at a time.
+//! Where each session's time fell on the clock, as stretches and a quarter
+//! hour at a time.
 //!
-//! Slices are worked out from the session events, which stay the record.
+//! Both are worked out from the session events, which stay the record.
 //! Between two checkpoints a session's time is all active or all idle, so
-//! spreading each stretch over the quarter hours it covers places both
-//! exactly. Sessions from before checkpoints, and sessions added by hand,
-//! spread the same way over the points they have.
+//! each stretch between them places both exactly. Sessions from before
+//! checkpoints, and sessions added by hand, spread the same way over the
+//! points they have. Slices are the stretches spread over the quarter hours
+//! they cover, so the two always agree.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -17,11 +19,11 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::constants::{
     MERGE_SLICE_BATCH, PLAY_SLICE_MS, PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING,
-    SESSION_SPREAD_MAX_MS, SESSION_TIME_MAX_MS,
+    SESSION_SPREAD_MAX_MS, SESSION_TIME_MAX_MS, SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE,
 };
 use crate::db::connection::Database;
 use crate::db::models::{Session, SessionEvent};
-use crate::db::repo::sessions::row_to_session;
+use crate::db::repo::sessions::stored_session;
 use crate::db::repo::{map_db, settings};
 use crate::error::Result;
 use crate::integrity;
@@ -356,17 +358,78 @@ fn split_by(from: i64, to: i64, aside: &[(i64, i64)]) -> Vec<(i64, i64, bool)> {
     pieces
 }
 
-/// Where `session`'s time fell, from its events. For a running session,
-/// `live` holds the time of the latest tick and the counters at it. Time in
-/// the stretches of `aside`, when other games ran beside a game that steps
-/// aside for them, is left out. The slices and the time left out add up to
-/// the session's totals exactly.
-pub fn slices_of(
+/// A stretch of a session's time on the clock, all of one kind, its time
+/// spread evenly over it. One without length holds time whose clock went
+/// backwards, at the moment it ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    /// Milliseconds since 1970 in UTC.
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub runtime_ms: i64,
+    pub active_ms: i64,
+    pub idle_ms: i64,
+}
+
+impl Span {
+    fn new(from: i64, to: i64, amounts: [i64; MEASURES]) -> Self {
+        // Time whose clock went backwards lands where it ended.
+        Self {
+            start_ms: from.min(to),
+            end_ms: to,
+            runtime_ms: amounts[0],
+            active_ms: amounts[1],
+            idle_ms: amounts[2],
+        }
+    }
+
+    pub(crate) fn amounts(&self) -> [i64; MEASURES] {
+        [self.runtime_ms, self.active_ms, self.idle_ms]
+    }
+
+    /// Its length on the clock, zero for time without a place on it.
+    pub(crate) fn length_ms(&self) -> i64 {
+        self.end_ms - self.start_ms
+    }
+
+    /// Whether `next` goes on from it in the same way, so the two can be one.
+    fn joins(&self, next: &Self) -> bool {
+        if self.end_ms != next.start_ms {
+            return false;
+        }
+        let (length, next_length) = (self.length_ms(), next.length_ms());
+        if length == 0 || next_length == 0 {
+            return length == next_length;
+        }
+        let kind = |span: &Self| (span.active_ms > 0, span.idle_ms > 0);
+        if kind(self) != kind(next) || kind(self) == (true, true) {
+            return false;
+        }
+        // Runtime per millisecond on the clock, compared without division.
+        let gap = (i128::from(self.runtime_ms) * i128::from(next_length)
+            - i128::from(next.runtime_ms) * i128::from(length))
+        .abs();
+        gap * i128::from(PER_MILLE)
+            <= i128::from(SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE)
+                * i128::from(length)
+                * i128::from(next_length)
+    }
+}
+
+/// Parts per thousand.
+const PER_MILLE: i64 = 1_000;
+
+/// Where `session`'s time fell, from its events, as stretches in clock order.
+/// For a running session, `live` holds the time of the latest tick and the
+/// counters at it. Time in the stretches of `aside`, when other games ran
+/// beside a game that steps aside for them, is left out. The stretches and
+/// the time left out add up to the session's totals exactly.
+pub fn spans_of(
     session: &Session,
     events: &[impl TimedEvent],
     live: Option<(i64, LiveCounters)>,
     aside: &[(i64, i64)],
-) -> Vec<Slice> {
+) -> Vec<Span> {
     let live = live.map(|(now, counters)| {
         (
             now,
@@ -398,11 +461,11 @@ pub fn slices_of(
         points.push(Point { wall_ms, counters });
     }
 
-    let mut placed: BTreeMap<i64, [i64; MEASURES]> = BTreeMap::new();
+    let mut spans: Vec<Span> = Vec::new();
     let mut set_aside = [0_i64; MEASURES];
     let mut spread_left = SESSION_SPREAD_MAX_MS;
-    // Where a stretch that ends at `to` starts spreading: at `to` itself once
-    // the session used up `spread_left`.
+    // Where a stretch that ends at `to` starts: at `to` itself once the
+    // session used up `spread_left`.
     let mut within_reach = |from: i64, to: i64| -> i64 {
         let span = to.saturating_sub(from);
         if span > spread_left {
@@ -424,7 +487,7 @@ pub fn slices_of(
         // how long each piece lasted.
         let pieces = split_by(within_reach(from.wall_ms, to.wall_ms), to.wall_ms, aside);
         if let [(piece_start, piece_end, false)] = pieces[..] {
-            spread(&mut placed, piece_start, piece_end, amounts);
+            spans.push(Span::new(piece_start, piece_end, amounts));
             continue;
         }
         let lengths: Vec<i64> = pieces
@@ -442,58 +505,103 @@ pub fn slices_of(
                     *total += part;
                 }
             } else {
-                spread(&mut placed, piece_start, piece_end, piece);
+                spans.push(Span::new(piece_start, piece_end, piece));
             }
         }
     }
     // Time the points cannot place, like a record cut short, spreads over
     // the whole session.
     for (index, total) in totals.iter().enumerate() {
-        if *total > 0 && set_aside[index] == 0 && placed.values().all(|values| values[index] <= 0) {
+        if *total > 0
+            && set_aside[index] == 0
+            && spans.iter().all(|span| span.amounts()[index] <= 0)
+        {
             let mut amounts = [0; MEASURES];
             amounts[index] = *total;
-            spread(&mut placed, within_reach(start, end), end, amounts);
+            spans.push(Span::new(within_reach(start, end), end, amounts));
         }
     }
-    scaled_to_totals(&placed, set_aside, totals)
+    joined(scaled_to_totals(spans, set_aside, totals))
 }
 
-/// The quarter hours `placed`, scaled so they and the time `set_aside` add
-/// up to `totals`.
+/// `spans` scaled so they and the time `set_aside` add up to `totals`.
 fn scaled_to_totals(
-    placed: &BTreeMap<i64, [i64; MEASURES]>,
+    mut spans: Vec<Span>,
     set_aside: [i64; MEASURES],
     totals: [i64; MEASURES],
-) -> Vec<Slice> {
-    let per_measure: Vec<Vec<i64>> = (0..MEASURES)
-        .map(|index| {
-            let weights: Vec<i64> = placed.values().map(|values| values[index]).collect();
-            // What counts keeps its share of the session's total, so a
-            // correction that cut the record short scales both alike.
-            let counted: i64 = weights.iter().sum();
-            let whole = i128::from(counted) + i128::from(set_aside[index]);
-            let target = if whole == 0 {
-                0
-            } else {
-                i64::try_from(i128::from(totals[index]) * i128::from(counted) / whole).unwrap_or(0)
-            };
-            apportion(&weights, target)
-        })
-        .collect();
+) -> Vec<Span> {
+    for index in 0..MEASURES {
+        let weights: Vec<i64> = spans.iter().map(|span| span.amounts()[index]).collect();
+        // What counts keeps its share of the session's total, so a
+        // correction that cut the record short scales both alike.
+        let counted: i64 = weights.iter().sum();
+        let whole = i128::from(counted) + i128::from(set_aside[index]);
+        let target = if whole == 0 {
+            0
+        } else {
+            i64::try_from(i128::from(totals[index]) * i128::from(counted) / whole).unwrap_or(0)
+        };
+        for (span, part) in spans.iter_mut().zip(apportion(&weights, target)) {
+            match index {
+                0 => span.runtime_ms = part,
+                1 => span.active_ms = part,
+                _ => span.idle_ms = part,
+            }
+        }
+    }
+    spans.retain(|span| span.amounts() != [0; MEASURES]);
+    spans
+}
+
+/// Neighboring stretches that go on in the same way, as one, so a session
+/// keeps a few stretches rather than one per checkpoint. Out of order ones,
+/// from a clock that went backwards, stay apart.
+fn joined(spans: Vec<Span>) -> Vec<Span> {
+    let mut joined: Vec<Span> = Vec::with_capacity(spans.len());
+    for span in spans {
+        match joined.last_mut() {
+            Some(last) if last.joins(&span) => {
+                last.end_ms = span.end_ms;
+                last.runtime_ms += span.runtime_ms;
+                last.active_ms += span.active_ms;
+                last.idle_ms += span.idle_ms;
+            }
+            _ => joined.push(span),
+        }
+    }
+    joined
+}
+
+/// The quarter hours `spans` fall in, each spread evenly over its stretch.
+pub fn slices_from(spans: &[Span]) -> Vec<Slice> {
+    let mut placed: BTreeMap<i64, [i64; MEASURES]> = BTreeMap::new();
+    for span in spans {
+        spread(&mut placed, span.start_ms, span.end_ms, span.amounts());
+    }
     placed
-        .keys()
-        .enumerate()
-        .map(|(slot, &start_ms)| Slice {
+        .into_iter()
+        .map(|(start_ms, [runtime_ms, active_ms, idle_ms])| Slice {
             start_ms,
-            runtime_ms: per_measure[0][slot],
-            active_ms: per_measure[1][slot],
-            idle_ms: per_measure[2][slot],
+            runtime_ms,
+            active_ms,
+            idle_ms,
         })
         .filter(|slice| slice.runtime_ms != 0 || slice.active_ms != 0 || slice.idle_ms != 0)
         .collect()
 }
 
-/// Games whose switch makes them step aside, read from their metadata, or
+/// Where `session`'s time fell, a quarter hour at a time, from the stretches
+/// `spans_of` places it in.
+pub fn slices_of(
+    session: &Session,
+    events: &[impl TimedEvent],
+    live: Option<(i64, LiveCounters)>,
+    aside: &[(i64, i64)],
+) -> Vec<Slice> {
+    slices_from(&spans_of(session, events, live, aside))
+}
+
+// Games whose switch makes them step aside, read from their metadata, or
 /// from the game a linked game is linked to, as the switch belongs to the
 /// game shown. A game whose metadata is no JSON does not step aside.
 pub(crate) const STEPS_ASIDE: &str = "COALESCE((SELECT CASE WHEN json_valid(shown.metadata_json)
@@ -639,9 +747,9 @@ pub fn rebuild_aside_around(conn: &Connection, from: &str, to: &str, device: &st
 }
 
 /// A session's start, end, game and PC.
-type Span = (String, Option<String>, String, String);
+type Bounds = (String, Option<String>, String, String);
 
-fn span_of(conn: &Connection, session_id: &str) -> Result<Option<Span>> {
+fn span_of(conn: &Connection, session_id: &str) -> Result<Option<Bounds>> {
     conn.query_row(
         "SELECT started_at_wall, ended_at_wall, game_id, device_id FROM sessions WHERE id = ?1",
         [session_id],
@@ -761,17 +869,14 @@ pub fn rebuild_aside_around_spans(db: &Database, spans: &[(String, String, Strin
 /// Works out the slices of a session again. An open session keeps none, its
 /// time is placed when it is asked for.
 pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
-    conn.execute(
-        "DELETE FROM play_slices WHERE session_id = ?1",
-        [session_id],
-    )
-    .map_err(map_db)?;
-    let session = conn
-        .query_row(
-            "SELECT * FROM sessions WHERE id = ?1",
+    for table in ["play_slices", "play_spans"] {
+        conn.execute(
+            &format!("DELETE FROM {table} WHERE session_id = ?1"),
             [session_id],
-            row_to_session,
         )
+        .map_err(map_db)?;
+    }
+    let session = stored_session(conn, session_id)
         .optional()
         .map_err(map_db)?;
     let Some(session) = session.filter(|session| session.ended_at_wall.is_some()) else {
@@ -779,13 +884,32 @@ pub fn rebuild_session(conn: &Connection, session_id: &str) -> Result<()> {
     };
     let events = placing_events(conn, session_id)?;
     let aside = aside_stretches(conn, &session, chrono::Utc::now().timestamp_millis())?;
+    let spans = spans_of(&session, &events, None, &aside);
+    let mut insert_span = conn
+        .prepare_cached(
+            "INSERT INTO play_spans (session_id, span_start, span_end, runtime_ms, active_ms, idle_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .map_err(map_db)?;
+    for span in &spans {
+        insert_span
+            .execute(params![
+                session_id,
+                span.start_ms,
+                span.end_ms,
+                span.runtime_ms,
+                span.active_ms,
+                span.idle_ms
+            ])
+            .map_err(map_db)?;
+    }
     let mut insert = conn
         .prepare_cached(
             "INSERT INTO play_slices (session_id, slice_start, runtime_ms, active_ms, idle_ms)
              VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .map_err(map_db)?;
-    for slice in slices_of(&session, &events, None, &aside) {
+    for slice in slices_from(&spans) {
         insert
             .execute(params![
                 session_id,
@@ -833,7 +957,7 @@ pub fn rebuild_for_game(db: &Database, game_id: &str) -> Result<()> {
 /// sessions it went through.
 pub fn rebuild_all(db: &Database) -> Result<usize> {
     db.with_transaction(|conn| {
-        conn.execute("DELETE FROM play_slices", [])
+        conn.execute_batch("DELETE FROM play_slices; DELETE FROM play_spans;")
             .map_err(map_db)?;
         let ids: Vec<String> = {
             let mut stmt = conn
@@ -976,6 +1100,60 @@ mod tests {
                     idle_ms: 10 * MINUTE
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn checkpoints_of_one_kind_join_into_one_stretch() {
+        // Active from 18:00 to 18:10, then idle until 18:20, a checkpoint
+        // every 30 seconds.
+        let mut events = vec![event(1, "started", &at(18, 0, 0), &serde_json::json!({}))];
+        for step in 1..40_u32 {
+            let (minute, second) = (step / 2, step % 2 * 30);
+            let elapsed = i64::from(step) * 30_000;
+            let active = elapsed.min(10 * MINUTE);
+            events.push(event(
+                i64::from(step) + 1,
+                "heartbeat",
+                &at(18, minute, second),
+                &counters(elapsed, active, elapsed - active),
+            ));
+        }
+        events.push(event(
+            41,
+            "ended",
+            &at(18, 20, 0),
+            &counters(20 * MINUTE, 10 * MINUTE, 10 * MINUTE),
+        ));
+        let session = session(
+            &at(18, 0, 0),
+            Some(&at(18, 20, 0)),
+            [20 * MINUTE, 10 * MINUTE, 10 * MINUTE],
+        );
+
+        let spans = spans_of(&session, &events, None, &[]);
+        assert_eq!(
+            spans,
+            vec![
+                Span {
+                    start_ms: ms(&at(18, 0, 0)),
+                    end_ms: ms(&at(18, 10, 0)),
+                    runtime_ms: 10 * MINUTE,
+                    active_ms: 10 * MINUTE,
+                    idle_ms: 0
+                },
+                Span {
+                    start_ms: ms(&at(18, 10, 0)),
+                    end_ms: ms(&at(18, 20, 0)),
+                    runtime_ms: 10 * MINUTE,
+                    active_ms: 0,
+                    idle_ms: 10 * MINUTE
+                },
+            ]
+        );
+        assert_eq!(
+            sum_of(&slices_from(&spans)),
+            [20 * MINUTE, 10 * MINUTE, 10 * MINUTE]
         );
     }
 
@@ -1242,17 +1420,29 @@ mod tests {
             })
             .unwrap()
         };
+        let stored_spans = |db: &Database| -> i64 {
+            db.with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COALESCE(SUM(runtime_ms), 0) FROM play_spans",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap()
+        };
         assert_eq!(stored(&db).1, 90_000);
+        assert_eq!(stored_spans(&db), 90_000);
 
         db.with_conn(|conn| {
-            conn.execute("DELETE FROM play_slices", [])
-                .map_err(map_db)?;
-            Ok(())
+            conn.execute_batch("DELETE FROM play_slices; DELETE FROM play_spans;")
+                .map_err(map_db)
         })
         .unwrap();
         settings::set_setting(&db, PLAY_SLICES_VERSION_SETTING, "0").unwrap();
         assert_eq!(ensure_current(&db).unwrap(), 1);
         assert_eq!(stored(&db).1, 90_000);
+        assert_eq!(stored_spans(&db), 90_000);
         // Current now, so the next start does nothing.
         assert_eq!(ensure_current(&db).unwrap(), 0);
     }
