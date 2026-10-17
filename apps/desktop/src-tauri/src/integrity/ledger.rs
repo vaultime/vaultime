@@ -901,13 +901,15 @@ impl TakingOver {
             keys.push('\n');
         }
         let id_path = app_dir.join(crate::constants::DEVICE_ID_FILE);
+        // The keys first: a start that finds them without the new id only
+        // counts more keys as its own.
         for (path, contents) in [
-            (id_path, self.takeover.device_id.clone()),
             (keys_path, keys),
+            (id_path, self.takeover.device_id.clone()),
         ] {
             let previous = read_optional(&path)?;
             self.written.push((path.clone(), previous));
-            fs::write(&path, contents).map_err(|error| {
+            replace_file(&path, &contents).map_err(|error| {
                 VaultimeError::Integrity(format!("failed to write {}: {error}", path.display()))
             })?;
         }
@@ -928,7 +930,7 @@ impl Drop for TakingOver {
         }
         for (path, previous) in self.written.drain(..).rev() {
             let undone = match previous {
-                Some(contents) => fs::write(&path, contents),
+                Some(contents) => replace_file(&path, &contents),
                 None => fs::remove_file(&path),
             };
             if let Err(error) = undone {
@@ -936,6 +938,20 @@ impl Drop for TakingOver {
             }
         }
     }
+}
+
+/// Writes a file next to `path` and moves it in place, so a crash leaves
+/// either the old contents or the new ones.
+fn replace_file(path: &Path, contents: &str) -> std::io::Result<()> {
+    let mut staged = path.as_os_str().to_owned();
+    staged.push(".new");
+    let staged = std::path::PathBuf::from(staged);
+    {
+        let mut file = fs::File::create(&staged)?;
+        std::io::Write::write_all(&mut file, contents.as_bytes())?;
+        file.sync_all()?;
+    }
+    fs::rename(&staged, path)
 }
 
 fn read_optional(path: &Path) -> Result<Option<String>> {

@@ -667,9 +667,11 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
         let detach_result = conn.execute_batch("DETACH DATABASE backup_restore;");
 
         restore_result?;
-        detach_result.map_err(|error| {
-            VaultimeError::Backup(format!("failed to detach backup database: {error}"))
-        })
+        // The restore is committed by now, so it stands.
+        if let Err(error) = detach_result {
+            warn!("could not detach the restored backup database: {error}");
+        }
+        Ok(())
     })
 }
 
