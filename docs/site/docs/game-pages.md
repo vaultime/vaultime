@@ -12,7 +12,7 @@ Every game has a page in the colors of its cover, with its history, its totals a
 
 **Recent sessions** lists the game's latest sessions with their labels. Point at one to add a note or correct it, and use **Add a session** for play Vaultime did not see.
 
-The **Event log** below lists every event in the records of the game's sessions: when tracking started, each time the times were saved, sleep left out, flags with their reason, the end, corrections and sessions added by hand. It is the place to look when a number seems off.
+The **Event log** below lists the events in the records of the game's sessions that say something: when tracking started, sleep left out, flags with their reason, the end, corrections and sessions added by hand. The times saved along the way stay out, and only the newest 12 entries show. It is the place to look when a number seems off.
 
 ## Totals
 
@@ -43,7 +43,7 @@ Vaultime keeps a copy of each image, so the original file can move or go away.
 
 ### Deleting images
 
-The cross on an image deletes it after you confirm. The file it came from is never touched, and an image Vaultime found stays out of later scans.
+The cross on an image deletes it after you confirm. The file it came from is never touched, so **Scan folder** finds an image Vaultime found there again.
 
 ### Colors from the cover
 

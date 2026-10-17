@@ -39,7 +39,7 @@ The library starts empty and says so: **Start your library**, with two buttons, 
 
 1. Pick **Discover games**.
 2. Pick **Start the scan**. Vaultime reads what your launchers installed and looks through the usual install folders.
-3. Check the games you want and pick **Add games**.
+3. Check the games you want and pick **Add**, which names how many, like **Add 3 games**.
 
 Games found through a launcher start checked. Games found in a plain folder start unchecked, because such folders also hold tools, setup programs and mod loaders. Games you already have are marked **In library**.
 
@@ -56,13 +56,13 @@ You can scan again at any time with **Discover** above the game grid, or from th
 
 ### New games find you
 
-Each time Vaultime starts, it reads what Steam and your other launchers installed, a few seconds after it opens and without holding anything up. When it finds games that are not in your library yet, it shows them in the same dialog, titled **New games found**, with all of them checked. Plain game folders are left out of this look, because folder finds are guesses and scanning every drive at each start would be slow.
+Each time Vaultime starts, it reads what Steam and your other launchers installed, a few seconds after it opens and without holding anything up. When it finds games that are not in your library yet, it shows them in the same dialog, titled **New games found**, or **A new game found** for one, with all of them checked. Plain game folders are left out of this look, because folder finds are guesses and scanning every drive at each start would be slow.
 
 Each game is offered only once on a PC. A game you leave out, or one you already saw in a full scan, stays quiet from then on, and **Discover** still lists everything. When Vaultime starts in the tray at login, the dialog waits until you open the window. The switch **Look for new games when Vaultime starts** under Settings, In the background turns it off.
 
 ### The same game from two launchers
 
-When a scan finds a game from one launcher that is in your library from another, like Cyberpunk 2077 on GOG next to your Steam copy, the list says **Same game as Cyberpunk 2077 on Steam**. Adding it links it to that game, see [One game, two installs](game-pages.md#one-game-two-installs). Untick the line to add it as a game of its own. Vaultime only suggests this when the title matches exactly one game from another launcher.
+When a scan finds a game from one launcher that is in your library from another, like Cyberpunk 2077 on GOG next to your Steam copy, the list says **Same game as Cyberpunk 2077 on Steam**. Adding it links it to that game, see [One game, two installs](game-pages.md#one-game-two-installs). Untick the line to add it as a game of its own. Titles are compared by their letters and digits alone, so case, spaces and punctuation do not matter. Vaultime only suggests this when the title matches exactly one game from another launcher, and not when a game from the same launcher has that title too.
 
 ## Add a game by hand
 
@@ -99,10 +99,10 @@ Hiding is for privacy, not for programs that are no games. A hidden game is left
 
 Closing the window keeps Vaultime running in the tray, and it starts when you log in. Both are switches under Settings, In the background: **Keep tracking when the window is closed** and **Start with Windows**, called **Start when you log in** on Linux. The tray menu shows the game that runs and how long you played today.
 
-On Linux the tray needs `libayatana-appindicator3`, and GNOME shows tray icons only with an AppIndicator extension. Ubuntu ships one.
+On Linux the tray needs `libayatana-appindicator3`, and GNOME shows tray icons only with an AppIndicator extension. Ubuntu ships one. Without the library there is no tray, and closing the window quits Vaultime.
 
 ## Make it yours
 
 Settings, Appearance picks dark, light or the system's mode, one of six ground tones, an accent color and a background picture with its own dim and blur. Settings, Window picks a fixed window size, from Compact at 1024 by 640 to Extra large at 1920 by 1200, or Free for a window you resize yourself.
 
-The look, the background picture and the window size belong to the PC you set them on. Backups leave them out.
+The look, the background picture and the window size belong to the PC you set them on. A restore keeps this PC's own, and the background picture never goes into a backup.

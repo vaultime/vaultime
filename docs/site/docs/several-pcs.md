@@ -10,7 +10,7 @@ Play on more than one PC and bring it together in one history. Each PC keeps rec
 4. Decide for each game whether it counts as the same game as one on this PC.
 5. Pick **Merge**.
 
-Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. Merge again later and only what is new comes in. Sessions you removed here never come back.
+Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. It is one of the automatic backups, so it is deleted once seven newer ones are there. Merge again later and only what is new comes in. Sessions you removed here never come back.
 
 > [!NOTE]
 > A merge is not a sync. Nothing happens on its own, and the other PC does not change.
@@ -21,7 +21,7 @@ Sessions come over exactly as the other PC recorded them, byte for byte. This PC
 
 - The first time Vaultime sees a PC, it takes that PC at its word, since it cannot know it yet. Its keys are trusted from then on.
 - A PC this one trusts also vouches for the sessions it took in from PCs this one has no keys for.
-- A backup that claims to come from this PC vouches for nothing. Only this PC's own key counts for its own sessions.
+- Only this PC's own keys count for its own sessions. A backup of this PC cannot be merged, and when you restore one, its keys vouch for nothing.
 
 ## New keys
 
@@ -37,13 +37,13 @@ Restoring a backup another PC made while a game ran there leaves that session op
 
 ## Setting a PC up again
 
-When you set a PC up again, Vaultime makes a new key for it. If the first thing you do on the new install is restore that PC's last backup, the new install continues as that PC. The restore preview says so plainly: This PC continues as, and the PC's name.
+When you set a PC up again, Vaultime makes a new key for it. If the first thing you do on the new install is restore that PC's last backup, the new install continues as that PC. The restore says so plainly before anything changes. A local restore names that PC, and a cloud restore says this PC continues as the PC that made the backup.
 
 - Its sessions are this PC's own again, and the keys the backup names for that PC count as this PC's own beside the new key.
 - The ledger notes the takeover with the keys it took over, so it shows and can be checked.
 - Sessions the PC played after that backup, which another PC took in, come back as this PC's own with the next merge of that PC, as long as that PC checked them with the old keys.
 
-Only a fresh install takes over: one without sessions, merges or restores of its own. A PC with history of its own restores another PC's backup as described under [Backups](backups.md#restoring). Restart Vaultime after the restore to finish. Until then it does not track and makes no backups.
+Only a fresh install takes over: one without sessions, merges or restores of its own. A PC with history of its own restores another PC's backup as described under [Backups](backups.md#restoring). Restart Vaultime after the restore to finish. Until then it does not track. Automatic backups still run and already carry the PC it continues as.
 
 > [!CAUTION]
 > Taking over trusts the backup the way a new PC trusts any PC it has never seen. The same goes for the first merge after it: a PC this one has never seen is taken at its word, also for the sessions it says it took in from this PC. A made up backup can therefore bring in made up play that reads as this PC's own, just as it could bring in made up play of a new PC on any install.
@@ -63,5 +63,6 @@ Only the PC that recorded a session can correct it. Correct it there, then merge
 ## What is refused
 
 - A backup of this PC itself.
+- Any merge while this PC's own ledger fails its check, as after it was changed outside Vaultime.
 - A backup of a PC without a ledger, or with a ledger that was changed.
 - A backup that is damaged, holds database parts Vaultime never writes or reads differently from one moment to the next.

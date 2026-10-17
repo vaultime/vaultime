@@ -37,7 +37,7 @@ Time while your PC sleeps is never counted. When the time between two checks is 
 
 ## How a game is recognized
 
-Vaultime knows a game by the full path of its program. Games from launchers that give every game a folder of its own (Steam, Epic, GOG, Heroic, Battle.net, Riot, HoYoPlay, Ubisoft Connect, EA, Rockstar, the Xbox app, Amazon Games and itch.io) also count when any game program in their install folder runs, since these launchers often start a game in several steps. A game's page says which of the two applies.
+Vaultime knows a game by the full path of its program. Games from launchers that give every game a folder of its own (Steam, Epic, GOG, Heroic, Battle.net, Riot, HoYoPlay, Ubisoft Connect, EA, Rockstar, the Xbox app, Amazon Games and itch.io) also count when any game program in their install folder runs, since these launchers often start a game in several steps. A game's page says which of the two applies. Vaultime goes by the file name alone only when Windows hides the full path or the game runs through Wine.
 
 Ignored programs never count, and games that came from [another PC](several-pcs.md) are never tracked here.
 
@@ -65,7 +65,7 @@ While a game runs, Vaultime notes its time whenever it switches between active a
 
 Settings, Earlier playtime, **Import from Steam** reads how long Steam says you played each of your Steam games. That time counts toward each game's total and shows as **Before Vaultime** on its page, minus the time Steam and Vaultime both counted, so nothing counts twice.
 
-- Steam's number is a snapshot of the moment it was read. Sessions of a Steam copy that ended before then come off, also ones that come in later from [another PC](several-pcs.md) with the same Steam account. Sessions after it count on top.
+- Steam's number is a snapshot of the moment it was read. Sessions of a Steam copy that ended before then come off, also ones that come in later from [another PC](several-pcs.md). Sessions after it count on top.
 - A session you corrected comes off at the length Vaultime first tracked, so a cut stays cut when you read Steam again.
 - A session you added by hand only comes off when you marked it as **Played through Steam**.
 - Imported time stays out of the journal and the stats, because Steam does not say when you played.

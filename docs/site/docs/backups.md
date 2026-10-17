@@ -24,12 +24,12 @@ Restore from a backup
 
 A backup holds your games, every session with its full log, the ledger, your settings and the cached artwork.
 
-Some things belong to the PC they were set on, and backups leave them out:
+Some things belong to the PC they were set on:
 
-- the look, the background picture and the window size,
-- the key that signs the PC's ledger.
+- The look, the window size and the folder automatic backups go to are in the backup, but a restore keeps this PC's own.
+- The background picture and the key that signs the PC's ledger are left out of backups.
 
-A restore keeps those of the PC it runs on, and the ledger notes the restore.
+The ledger notes every restore.
 
 ## Restoring
 
@@ -54,14 +54,14 @@ On the Cloud page, **Create an account** asks for your email, a password, your i
 ### How it works
 
 - Backups are encrypted on your PC with your passphrase before they are uploaded, so the server only stores data it cannot read.
-- Once unlocked, the passphrase stays in your system's keychain, so daily backups run without asking.
+- Once unlocked, a key made from the passphrase stays in your system's keychain with your sign-in, so daily backups run without asking. The passphrase itself is not kept.
 - **Back up every day** uploads a backup once a day while you are signed in. **Back up now** uploads one right away.
 - Artwork is stored once per account, so unchanged covers are not uploaded again.
 - **Restore** on a backup works like a local restore, after you confirm.
 
 ### Space and rotation
 
-Every account gets the same space, 1 GiB for backups and artwork, and keeps up to 30 backups. **Space used** on the Cloud page shows how much is taken. When there are 30 backups or the space is full, a new backup replaces the oldest ones once it is safely stored. Only a backup larger than the whole space is refused.
+Every account gets the same space, 1 GiB for backups and artwork, and keeps up to 30 backups. **Space used** on the Cloud page shows how much is taken. When there are 30 backups or the space is full, a new backup replaces the oldest ones once it is safely stored. The server refuses a backup larger than 512 MiB or one that does not fit the space even alone. It also refuses a new backup less than 15 minutes after the last one.
 
 There are no paid plans and no tiers. The limits are there to stop abuse.
 

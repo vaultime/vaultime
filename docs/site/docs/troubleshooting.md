@@ -8,7 +8,7 @@ Settings, Detection
 : Shows whether tracking runs and how Vaultime tells which window is in front, whether you are there and whether it sees controllers.
 
 The game's page
-: Under Tracking it shows the program Vaultime watches and how the game is recognized. The event log lists everything recorded for its sessions.
+: Under Tracking it shows the program Vaultime watches and how the game is recognized. The event log lists the newest events recorded for its sessions, such as flags and corrections.
 
 The log files
 : Vaultime writes what it does to log files. On Windows they are in `%LOCALAPPDATA%\com.vaultime.app\logs`, on Linux in `~/.local/share/com.vaultime.app/logs`. A file is rotated at about 2 MB and the last three are kept.
@@ -82,7 +82,7 @@ Settings, Window picks a fixed size from Compact at 1024 by 640 to Extra large a
 
 ### No tray icon on Linux
 
-Install `libayatana-appindicator3`. On GNOME you also need an AppIndicator extension. Without a tray, closing the window quits Vaultime, so tracking stops until you start it again.
+Install `libayatana-appindicator3`. Without it there is no tray, and closing the window quits Vaultime, so tracking stops until you start it again. On GNOME you also need an AppIndicator extension. Without one, Vaultime keeps running after you close the window, only its icon does not show. Start Vaultime again to bring the window back.
 
 ## Still stuck?
 

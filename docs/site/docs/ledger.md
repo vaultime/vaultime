@@ -6,7 +6,7 @@ Each session keeps a log that only grows, and each PC keeps a signed ledger over
 
 A session is not a single number that gets overwritten. It is a list of events: tracking started, the times saved along the way, sleep left out, the end, and later any correction you make. Each event carries a fingerprint of the one before it, so the events form a chain. The session's totals must match its newest event that counts time.
 
-Changing an event, removing one or editing the totals breaks the chain or the match, and the session turns [Suspicious](trust-labels.md). Corrections are events too. They name the old values and your reason, so nothing is overwritten without a trace. You can read every session's log in the event log on its game's page.
+Changing an event, removing one or editing the totals breaks the chain or the match, and the session turns [Suspicious](trust-labels.md). Corrections are events too. They name the old values and your reason, so nothing is overwritten without a trace. The event log on a game's page shows the newest events of its sessions, without the times saved along the way.
 
 ## The ledger
 
@@ -14,7 +14,7 @@ A chain inside the database can be rebuilt by someone who rewrites the whole dat
 
 Each PC keeps a ledger, a second chain that it signs with a key of its own. The key is in the file `device-key` next to the database. It never goes into a backup and never leaves the PC through Vaultime. The ledger:
 
-- pins a session's record when the session starts, every five minutes of play while it runs, when it ends and when it is corrected,
+- pins a session's record when the session starts, every five minutes while it runs, idle time included, when it ends and when it is corrected,
 - notes every session you remove, together with its game,
 - notes every restore and every session taken in from another PC,
 - notes when a new install takes over the PC whose backup it restored, see [Several PCs](several-pcs.md#setting-a-pc-up-again).
@@ -30,7 +30,7 @@ A session that was rewritten outside Vaultime, even with its own log rebuilt to 
 Settings, This PC shows the state of the ledger:
 
 In order
-: Every session matches what the ledger holds.
+: The ledger is unchanged and no session it knows is gone. A single session that no longer matches its pins still turns Suspicious.
 
 Sessions missing
 : Sessions in the ledger are gone from the history without a note that you removed them.
@@ -46,7 +46,7 @@ Changed
 - Clock changes while a game runs.
 - Time added to the last saved note of a session before a restart, beyond five minutes past what the ledger holds.
 - Times below zero or longer than ten years, which only a damaged or made up record holds.
-- Sessions that turn up without this PC or a trusted PC having recorded them.
+- Sessions that turn up without this PC or a trusted PC having recorded them. A PC this one has never seen is trusted on its first merge or restore.
 - Backups that are damaged or hold database parts Vaultime never writes. Those are refused before anything is merged or restored.
 
 ## Where the checks end
@@ -56,6 +56,7 @@ Changed
 
 - Someone with your PC and its key file can rewrite the history and the ledger together, and nothing will look wrong.
 - Removing the newest sessions together with the newest ledger entries leaves a shorter ledger that still checks out.
+- A made up backup of a PC this one has never seen can bring in made up play, since such a PC is taken at its word, see [Several PCs](several-pcs.md#which-sessions-count).
 - Up to five minutes past the last note the ledger holds can be added to a session that was cut off without anything looking wrong.
 - Vaultime only knows what happened while it ran. Play while it was closed is not recorded at all.
 - No server checks your history. That is why there is no Verified label.

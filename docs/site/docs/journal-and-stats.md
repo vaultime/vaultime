@@ -6,7 +6,7 @@ The journal tells your play week by week in plain sentences. The stats page look
 
 ## The journal
 
-The journal opens on this week. **Previous week** and **Next week** move through your history, and **Go to a day** jumps to any date. A sentence at the top sums up the week and names the game it mostly went to.
+The journal opens on this week. **Previous week** and **Next week** move through your history, and **Go to a day** jumps to any date. A sentence at the top sums up the week and names the game that took most of it, when one did.
 
 Each day shows its total and a strip of 24 hours in the colors of the games you played. Below it every session is a sentence, with its start and end time and how much of it was active and idle:
 
@@ -49,7 +49,7 @@ Count it only until a time
 Take out all its time
 : For a session that was no play at all.
 
-Give a reason under **Why**. The session is then labeled Edited, and its old times and your reason stay in its log. A correction can only take time out, never add any or move the end later. Only the PC that recorded a session can correct it, see [Several PCs](several-pcs.md).
+Give a reason under **Why**. The session is then labeled Edited, unless it was Suspicious or Manual, which keep their label. Its old times and your reason stay in its log. A correction can only take time out, never add any or move the end later. Only the PC that recorded a session can correct it, see [Several PCs](several-pcs.md).
 
 ## Add play Vaultime did not see
 
