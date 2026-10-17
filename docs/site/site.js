@@ -29,3 +29,24 @@
     // A network error or a broken latest.json leaves the version line hidden.
   }
 })();
+
+// Marks the section of a documentation page that is in view in its list of
+// sections.
+(() => {
+  const links = [...document.querySelectorAll(".docs-toc a")];
+  if (links.length === 0) return;
+  const headings = links.map((link) => document.getElementById(link.hash.slice(1))).filter(Boolean);
+  const mark = () => {
+    // A heading counts as reached once it passes the top quarter of the window.
+    const line = window.innerHeight / 4;
+    let current = headings[0];
+    for (const heading of headings) {
+      if (heading.getBoundingClientRect().top <= line) current = heading;
+    }
+    const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    if (atEnd) current = headings[headings.length - 1];
+    for (const link of links) link.classList.toggle("active", link.hash === `#${current.id}`);
+  };
+  document.addEventListener("scroll", mark, { passive: true });
+  mark();
+})();
