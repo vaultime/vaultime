@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChevronLeft, ChevronRight, Share } from "lucide-react";
 import { ActiveIdleLegend } from "@/components/charts/PlayBars";
@@ -60,7 +60,7 @@ function percent(part: number, whole: number): number {
 
 /** A year of play in numbers and sentences. */
 export function StatsPage() {
-  const { sessions, summaries, covers, loaded } = useLibrary();
+  const { sessions, summaries, covers, today, loaded } = useLibrary();
   const playing = usePlaying().size > 0;
   const visible = usePageVisible();
   const { accentHues, mode } = useAppearance();
@@ -97,8 +97,30 @@ export function StatsPage() {
     };
   }, [year, sessions, refreshed, live]);
 
-  const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
-  const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
+  const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
+  const titleOf = useCallback((gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game", [byGame]);
+  const yearPlay = play?.year === year ? play : null;
+  // Worked out again when the play or the day changes, not each time the
+  // share dialog opens or closes.
+  const shown = useMemo(() => {
+    if (!yearPlay) return null;
+    const at = new Date();
+    return { stats: yearStats(sessions, year, yearPlay, at), now: at };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new day changes the year so far
+  }, [sessions, year, yearPlay, today]);
+  // A color per game for the year, the main color of its art, nudged only
+  // where two games of the year would look alike.
+  const labelOf = useMemo(() => {
+    const games = shown?.stats.games ?? [];
+    const paletteOf = (gameId: string) => {
+      const summary = byGame.get(gameId);
+      return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).colors;
+    };
+    const yearMarks = markColors(games.map((game) => paletteOf(game.gameId)), accentHues, mode);
+    const marks = new Map(games.map((game, index) => [game.gameId, yearMarks[index].color]));
+    return (gameId: string) => ({ title: titleOf(gameId), color: marks.get(gameId) ?? "var(--soft)" });
+  }, [shown, byGame, titleOf, accentHues, mode]);
+  const openDay = useCallback((day: Date) => navigate(`/journal?week=${toDayKey(startOfWeek(day))}`), [navigate]);
 
   const earliest = sessions.filter(countsAsPlay).reduce(
     (min, session) => Math.min(min, parseVaultimeDate(session.started_at_wall).getFullYear()),
@@ -113,19 +135,9 @@ export function StatsPage() {
       </div>
     );
   }
-  if (!play || play.year !== year) return null;
+  if (!shown) return null;
 
-  const stats = yearStats(sessions, year, play, now);
-  // A color per game for the year, the main color of its art, nudged only
-  // where two games of the year would look alike.
-  const paletteOf = (gameId: string) => {
-    const summary = byGame.get(gameId);
-    return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).colors;
-  };
-  const yearMarks = markColors(stats.games.map((game) => paletteOf(game.gameId)), accentHues, mode);
-  const marks = new Map(stats.games.map((game, index) => [game.gameId, yearMarks[index].color]));
-  const labelOf = (gameId: string) => ({ title: titleOf(gameId), color: marks.get(gameId) ?? "var(--soft)" });
-  const openDay = (day: Date) => navigate(`/journal?week=${toDayKey(startOfWeek(day))}`);
+  const { stats, now: shownAt } = shown;
 
   const current = offset === 0;
   const top = stats.games[0];
@@ -169,7 +181,7 @@ export function StatsPage() {
         <PhraseText phrase={sentence} />
       </PageHeader>
 
-      <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={stats} now={now} />
+      <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={stats} now={shownAt} />
 
       {stats.sessionsCount > 0 && (
         <>
@@ -184,7 +196,7 @@ export function StatsPage() {
               {
                 label: "Days played",
                 value: String(stats.daysPlayed),
-                note: `of ${daysSoFar(year, now)} ${current ? "so far" : "days"}`,
+                note: `of ${daysSoFar(year, shownAt)} ${current ? "so far" : "days"}`,
                 accent: true,
               },
               {
@@ -204,7 +216,7 @@ export function StatsPage() {
 
           <div className="px-8 xl:px-14">
             <PageSection wide title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
-              <YearHeatmap year={year} days={stats.days} now={now} labelOf={labelOf} onOpenDay={openDay} />
+              <YearHeatmap year={year} days={stats.days} now={shownAt} labelOf={labelOf} onOpenDay={openDay} />
             </PageSection>
 
             <PageSection title="When you play" description={rhythm ? <PhraseText phrase={rhythm} /> : undefined}>
