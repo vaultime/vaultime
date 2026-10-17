@@ -11,8 +11,8 @@ import { usePageVisible } from "@/lib/use-page-visible";
 /**
  * The games the core found at start, once the window is on screen and no
  * other dialog is open. A window that started in the tray offers them the
- * next time it is shown. Offered games are remembered right away, so they
- * come once.
+ * next time it is shown. Offered games are remembered as they are shown,
+ * so they come once.
  */
 export function useFoundGames(otherDialogOpen: boolean): { found: NewGames | null; dismiss: () => void } {
   const visible = usePageVisible();
@@ -38,8 +38,8 @@ export function useFoundGames(otherDialogOpen: boolean): { found: NewGames | nul
       try {
         const next = await api.listFoundGames();
         if (!current || blocked.current || next.games.length === 0) return;
-        await api.rememberOfferedGames(next.games.map((game) => game.executable_path));
         setFound(next);
+        await api.rememberOfferedGames(next.games.map((game) => game.executable_path));
       } catch (error) {
         console.warn("found games not offered", error);
       }
