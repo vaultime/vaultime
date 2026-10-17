@@ -6,6 +6,7 @@
 
 import {
   DAYS_PER_WEEK,
+  HEATMAP_STEPS_MS,
   HOURS_PER_DAY,
   MONTHS_PER_YEAR,
   SESSION_LONG_MAX_MS,
@@ -39,7 +40,7 @@ export interface Streak {
   end: Date;
 }
 
-interface YearStats {
+export interface YearStats {
   year: number;
   /** Time with a game running, games side by side counted once. */
   playedMs: number;
@@ -70,6 +71,12 @@ export function shapeOf(session: Session): SessionShape {
   if (ms < SESSION_PLAIN_MAX_MS) return "plain";
   if (ms < SESSION_LONG_MAX_MS) return "long";
   return "marathon";
+}
+
+/** How bright a day of the year calendar is for its active time, 0 for none up to one past the last step. */
+export function heatLevel(activeMs: number): number {
+  if (activeMs <= 0) return 0;
+  return 1 + HEATMAP_STEPS_MS.filter((step) => activeMs >= step).length;
 }
 
 /** Monday is 0. */

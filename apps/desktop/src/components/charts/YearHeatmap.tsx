@@ -2,22 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { DAYS_PER_WEEK, HEATMAP_STEPS_MS } from "@/lib/constants";
+import { DAYS_PER_WEEK } from "@/lib/constants";
 import type { BucketPlay } from "@/lib/play-totals";
 import { toDayKey } from "@/lib/session-stats";
-import { weekdayOf } from "@/lib/stats";
+import { heatLevel, weekdayOf } from "@/lib/stats";
 import { UI_LOCALE } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { cardPosition, describePlay, type GameLabel } from "./play-card";
 import { PlayCard } from "./PlayCard";
 
+/** One class per heat level. The share card repeats the accent shares. */
 const LEVELS = ["bg-raised", "bg-violet/20", "bg-violet/35", "bg-violet/55", "bg-violet/75", "bg-violet"];
 const WEEKDAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""];
-
-function levelOf(ms: number): number {
-  if (ms <= 0) return 0;
-  return 1 + HEATMAP_STEPS_MS.filter((step) => ms >= step).length;
-}
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
@@ -167,7 +163,7 @@ export function YearHeatmap({
                     onClick={() => onOpenDay(day)}
                     className={cn(
                       "aspect-square cursor-pointer rounded-[2px] transition-shadow",
-                      LEVELS[levelOf(play?.activeMs ?? 0)],
+                      LEVELS[heatLevel(play?.activeMs ?? 0)],
                       isFocused && shown?.byKeyboard && "ring-2 ring-text ring-offset-1 ring-offset-ink",
                     )}
                   />

@@ -19,6 +19,7 @@ import {
   SESSION_RECORD_MIN_MS,
   SESSION_RETURN_MIN_MS,
   SESSION_WORDS_MINUTE_STEP_MS,
+  SHARE_QUIET_MAX_DAYS,
   WEEK_TOP_GAME_MIN_SHARE,
   WEEKDAY_NAME_DAYS,
   WEEKEND_DAYS_PER_WEEK,
@@ -615,6 +616,12 @@ const PART_PLURALS: Record<DayPart, string> = {
  * `weekClock` holds time by weekday, Monday first, then by hour.
  */
 export function rhythmSentence(weekClock: number[][]): Phrase | null {
+  const best = rhythmOf(weekClock);
+  return best ? { before: "Your time to play is ", em: best, after: "." } : null;
+}
+
+/** "weekend afternoons", the time of the week with the most play per day, null without play. */
+function rhythmOf(weekClock: number[][]): string | null {
   const totals = new Map<string, number>();
   weekClock.forEach((hours, weekday) => {
     const weekend = weekday >= WORKING_DAYS_PER_WEEK;
@@ -624,8 +631,49 @@ export function rhythmSentence(weekClock: number[][]): Phrase | null {
     });
   });
   const [best, ms] = [...totals.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
-  if (ms <= 0) return null;
-  return { before: "Your time to play is ", em: best, after: "." };
+  return ms > 0 ? best : null;
+}
+
+/**
+ * One line for the year card: "Weekend evenings, mostly in *Elden Ring*." or,
+ * without game titles, "A year of *weekend evenings* across seven games." A
+ * year with few days reads as a quiet one. The wording varies between years
+ * and stays the same for each one.
+ */
+export function shareSentence({
+  year,
+  topTitle,
+  gamesCount,
+  daysPlayed,
+  weekClock,
+}: {
+  year: number;
+  /** The game played most, null when titles stay off the card. */
+  topTitle: string | null;
+  gamesCount: number;
+  daysPlayed: number;
+  weekClock: number[][];
+}): Phrase {
+  const days = `${numberWords(daysPlayed)} day${daysPlayed === 1 ? "" : "s"}`;
+  const games = `${numberWords(gamesCount)} game${gamesCount === 1 ? "" : "s"}`;
+  const rhythm = rhythmOf(weekClock);
+  if (daysPlayed < SHARE_QUIET_MAX_DAYS || !rhythm) {
+    if (!topTitle) return { before: `A quiet year of ${days} across ${games}.` };
+    return { before: `A quiet year of ${days}, ${gamesCount === 1 ? "all" : "most"} of it in `, em: topTitle, after: "." };
+  }
+  const pick = stableHash(String(year));
+  if (!topTitle) {
+    return pick % 2 === 0
+      ? { before: "A year of ", em: rhythm, after: ` across ${games}.` }
+      : { before: `${capitalize(games)} on ${days}, most often on `, em: rhythm, after: "." };
+  }
+  if (gamesCount === 1) return { before: `A year of ${rhythm}, all of it in `, em: topTitle, after: "." };
+  const wordings: Phrase[] = [
+    { before: `${capitalize(rhythm)}, mostly in `, em: topTitle, after: "." },
+    { before: "", em: topTitle, after: ` led a year of ${rhythm}.` },
+    { before: `A year of ${rhythm} across ${games}, led by `, em: topTitle, after: "." },
+  ];
+  return wordings[pick % wordings.length];
 }
 
 /** "October was your busiest month, thirty-one hours." */

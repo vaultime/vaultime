@@ -16,6 +16,9 @@
 // ?midnight=1 fills the week with sessions that run past midnight.
 // ?update=1 offers a new version. ?ignored=1 lists an ignored program.
 // ?posters=1 draws a poster for every game, for screenshots of the README.
+// /stats?share=1 opens the year card, ?shareformat=square|story picks a
+// format and ?sharegames=0 leaves titles and covers off. ?quiet=1 leaves a
+// year with little play.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -107,6 +110,15 @@ for (let day = HISTORY_DAYS; day >= 1; day -= 1) {
       closed_cleanly: true,
     });
   }
+}
+
+// ?quiet=1 keeps three sessions of one game this year, for a year with little play.
+if (params.get("quiet") === "1") {
+  const thisYear = new Date(now).getFullYear();
+  const kept = sessions
+    .filter((session) => new Date(session.started_at_wall).getFullYear() === thisYear && session.game_id === games[3].id)
+    .slice(-3);
+  sessions.splice(0, sessions.length, ...kept);
 }
 
 if (params.get("sidebyside") === "1") {
@@ -666,6 +678,19 @@ if (new URLSearchParams(window.location.search).get("scan") === "1") {
 // ?palette=1 opens the command palette once the app has rendered.
 if (new URLSearchParams(window.location.search).get("palette") === "1") {
   setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true })), 500);
+}
+
+// Picks a format and switches of the year card once it is open.
+const shareFormat = params.get("shareformat");
+if (params.get("share") === "1" && (shareFormat || params.get("sharegames") === "0")) {
+  setTimeout(() => {
+    const dialog = document.querySelector("[role=dialog]");
+    const radio = [...(dialog?.querySelectorAll<HTMLElement>("[role=radio]") ?? [])].find(
+      (candidate) => candidate.textContent?.toLowerCase().startsWith(shareFormat ?? ""),
+    );
+    if (shareFormat) radio?.click();
+    if (params.get("sharegames") === "0") dialog?.querySelector<HTMLElement>("#share-games")?.click();
+  }, 900);
 }
 
 // Appearance: ?theme=dark|light|system, ?ground=vault|graphite|midnight|moss|umber|garnet,
@@ -1339,6 +1364,10 @@ mockIPC((cmd, payload) => {
       }));
     case "export_sessions":
       return allSessions.filter((session) => session.ended_at_wall).length;
+    case "save_share_image":
+      return null;
+    case "plugin:dialog|save":
+      return "C:/Users/you/Pictures/vaultime-2026.png";
     case "trim_session": {
       const session = allSessions.find((candidate) => candidate.id === args.sessionId);
       if (!session?.ended_at_wall) throw new Error("a running session cannot be corrected");

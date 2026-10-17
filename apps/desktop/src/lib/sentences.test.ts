@@ -23,6 +23,7 @@ import {
   type SessionContext,
   sessionTrustNote,
   shapesSentence,
+  shareSentence,
   sideBySideSentence,
   statusSentence,
   streakSentence,
@@ -421,6 +422,27 @@ describe("stats sentences", () => {
     clock[6][14] = 2 * HOUR_MS;
     expect(rhythmSentence(clock)?.em).toBe("weekend afternoons");
     expect(rhythmSentence(clock.map((hours) => hours.map(() => 0)))).toBeNull();
+  });
+
+  it("sums up a year for the card, the same way each time", () => {
+    const clock = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
+    clock[5][14] = 2 * HOUR_MS;
+    const base = { topTitle: "Elden Ring", gamesCount: 4, daysPlayed: 90, weekClock: clock };
+    const lines = new Set([2024, 2025, 2026, 2027, 2028, 2029].map((year) => phraseString(shareSentence({ ...base, year }))));
+    expect(lines.size).toBeGreaterThan(1);
+    for (const line of lines) expect(line).toMatch(/Elden Ring/);
+    for (const line of lines) expect(line).toMatch(/weekend afternoons/i);
+    expect(shareSentence({ ...base, year: 2026 })).toEqual(shareSentence({ ...base, year: 2026 }));
+    expect(phraseString(shareSentence({ ...base, gamesCount: 1, year: 2026 }))).toBe(
+      "A year of weekend afternoons, all of it in Elden Ring.",
+    );
+    // Without titles the time of the week leads.
+    const untitled = phraseString(shareSentence({ ...base, topTitle: null, year: 2026 }));
+    expect(untitled).not.toContain("Elden Ring");
+    expect(untitled).toMatch(/four games/i);
+    expect(phraseString(shareSentence({ ...base, topTitle: null, daysPlayed: 3, year: 2026 }))).toBe(
+      "A quiet year of three days across four games.",
+    );
   });
 
   it("names the busiest month and the most common session", () => {

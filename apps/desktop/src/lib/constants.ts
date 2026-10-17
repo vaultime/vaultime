@@ -347,6 +347,25 @@ export const STATS_IDLE_MIN_SHARE = 0.25;
 /** Games shown among those left running. */
 export const STATS_IDLE_GAMES = 3;
 
+// Share card
+
+/** Sizes of the year card in pixels, for posts, square feeds and stories. */
+export const SHARE_FORMATS = {
+  wide: { width: 1200, height: 675 },
+  square: { width: 1080, height: 1080 },
+  story: { width: 1080, height: 1920 },
+} as const;
+/** Games the year card names in each format, the most active first. */
+export const SHARE_TOP_GAMES = { wide: 3, square: 4, story: 5 } as const;
+/** A year with fewer days played reads as a quiet one on the card. */
+export const SHARE_QUIET_MAX_DAYS = 10;
+/** Largest card the core saves, in bytes. Same as SHARE_IMAGE_MAX_BYTES in constants.rs. */
+export const SHARE_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
+/** Covers on the card are blurred by drawing them this many times smaller and back up. */
+export const SHARE_BACKDROP_SHRINK = 24;
+/** How long "Copied" shows after copying the card. */
+export const SHARE_COPIED_NOTE_MS = 2_500;
+
 /** Numbers up to this are written as words in prose, larger ones as digits. */
 export const NUMBER_WORDS_MAX = 999;
 

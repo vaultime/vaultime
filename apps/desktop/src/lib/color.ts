@@ -99,6 +99,15 @@ export function contrastRatio(first: Oklch, second: Oklch): number {
   return (light + 0.05) / (dark + 0.05);
 }
 
+/** Every `oklch(l c h)` value in a CSS color or gradient, in order. */
+export function parseOklchList(css: string): Oklch[] {
+  return [...css.matchAll(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)/g)].map((match) => ({
+    lightness: Number(match[1]),
+    chroma: Number(match[2]),
+    hue: Number(match[3]),
+  }));
+}
+
 /** A CSS `oklch()` value. */
 export function formatOklch({ lightness, chroma, hue }: Oklch): string {
   return `oklch(${lightness.toFixed(3)} ${chroma.toFixed(3)} ${Math.round(hue)})`;

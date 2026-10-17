@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Journal
 
 - **One session past midnight reads as one.** Play still counts on the day it happened, but a session that runs past midnight no longer looks like two. Its bar runs out at the right edge of the first day and in from the left edge of the next, and the next day shows a quiet line like "Still in Elden Ring from Saturday night" instead of a second entry. The entry reads "22:40 to Sun 02:15" with the whole session's time and how much of it counts after midnight, the line says how much of the whole falls on its day, and each leads to the other, also into the next or last week. Pointing at either marks every part of the session, and pointing at a bar shows each day's part and the whole. A week that opens with the end of a session from the week before says so.
+### Stats
+
+- **Share your year.** Share your year, on the Stats page and in the command palette, makes a picture of the year to post: your hours of active play, the days you played, the calendar, your most played games with their covers and journal colors, the busiest month and a line about the year. It comes wide for X, Discord and Mastodon, square for feeds or tall for stories, dark or light in your ground and accent. Game titles and covers, the calendar and the name of your PC can stay off, and hidden games never show. It counts play exactly as the Stats page does. Vaultime draws the picture on your PC and uploads nothing. Save it as a PNG, or copy it to paste it straight into a post where your system allows it.
 
 ### Fixes
 

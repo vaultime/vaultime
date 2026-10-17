@@ -36,6 +36,7 @@ const FIXED: Command[] = [
   { id: "page-settings", label: "Settings", hint: "Tracking, backups and more", kind: "Page", to: "/settings" },
   { id: "action-add", label: "Add a game", hint: "Pick its program by hand", kind: "Action", to: "/library?add=1" },
   { id: "action-discover", label: "Discover games", hint: "Scan Steam and the folders of other launchers", kind: "Action", to: "/library?discover=1" },
+  { id: "action-share-year", label: "Share your year", hint: "A picture of your year in play to post", kind: "Action", to: "/stats?share=1" },
   { id: "action-backup", label: "Save a backup", hint: "Pick a folder and save everything now", kind: "Action", to: "/settings?do=backup#local-backups" },
   { id: "action-export-csv", label: "Export as CSV", hint: "Every session for a spreadsheet", kind: "Action", to: "/settings?do=export-csv#export" },
   { id: "action-export-json", label: "Export as JSON", hint: "Sessions, games, statuses and earlier playtime", kind: "Action", to: "/settings?do=export-json#export" },

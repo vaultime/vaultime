@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { ChevronLeft, ChevronRight, Share } from "lucide-react";
 import { ActiveIdleLegend } from "@/components/charts/PlayBars";
 import { MonthBars } from "@/components/charts/MonthBars";
 import { WeekClock } from "@/components/charts/WeekClock";
@@ -12,6 +12,7 @@ import { Notice, PageHeader, PageSection, StepButton } from "@/components/layout
 import { StatTiles } from "@/components/layout/StatTiles";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
+import { Button } from "@/components/ui/button";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary, type GameSummary } from "@/features/library/library-context";
 import {
@@ -48,6 +49,7 @@ import {
 } from "@/lib/time";
 import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
+import { ShareYearDialog } from "./ShareYearDialog";
 
 const SHAPES: Record<SessionShape, { label: string; range: string }> = {
   quick: { label: "Quick looks", range: `under ${formatHoursShort(SESSION_QUICK_MAX_MS)}` },
@@ -66,6 +68,10 @@ export function StatsPage() {
   const { sessions, active, summaries, covers, loaded } = useLibrary();
   const { accentHues, mode } = useAppearance();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  // Opened from the button or the command palette.
+  const sharing = params.get("share") === "1";
+  const setSharing = (open: boolean) => setParams(open ? { share: "1" } : {}, { replace: true });
   // 0 is this year, -1 the year before and so on.
   const [offset, setOffset] = useState(0);
   const [play, setPlay] = useState<(YearPlay & { year: number }) | null>(null);
@@ -148,6 +154,10 @@ export function StatsPage() {
         title={current ? "This year" : offset === -1 ? "Last year" : String(year)}
         aside={
           <>
+            <Button variant="outline" className="mr-1 h-11" onClick={() => setSharing(true)}>
+              <Share strokeWidth={1.8} />
+              Share your year
+            </Button>
             <StepButton label="Previous year" disabled={earliest >= year} onClick={() => setOffset((value) => value - 1)}>
               <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
             </StepButton>
@@ -159,6 +169,8 @@ export function StatsPage() {
       >
         <PhraseText phrase={sentence} />
       </PageHeader>
+
+      <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={stats} now={now} />
 
       {stats.sessionsCount > 0 && (
         <>
