@@ -17,6 +17,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::constants::{
     MERGE_SLICE_BATCH, PLAY_SLICE_MS, PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING,
+    SESSION_SPREAD_MAX_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::{Session, SessionEvent};
@@ -299,6 +300,17 @@ pub fn slices_of(
 
     let mut placed: BTreeMap<i64, [i64; MEASURES]> = BTreeMap::new();
     let mut set_aside = [0_i64; MEASURES];
+    let mut spread_left = SESSION_SPREAD_MAX_MS;
+    // Where a stretch that ends at `to` starts spreading: at `to` itself once
+    // the session used up `spread_left`.
+    let mut within_reach = |from: i64, to: i64| -> i64 {
+        let span = to.saturating_sub(from);
+        if span > spread_left {
+            return to;
+        }
+        spread_left -= span.max(0);
+        from
+    };
     for pair in points.windows(2) {
         let (from, to) = (pair[0], pair[1]);
         let mut amounts = [0; MEASURES];
@@ -310,7 +322,7 @@ pub fn slices_of(
         }
         // Between two points the time is all of one kind, so it splits by
         // how long each piece lasted.
-        let pieces = split_by(from.wall_ms, to.wall_ms, aside);
+        let pieces = split_by(within_reach(from.wall_ms, to.wall_ms), to.wall_ms, aside);
         let lengths: Vec<i64> = pieces
             .iter()
             .map(|&(start, end, _)| (end - start).max(1))
@@ -336,7 +348,7 @@ pub fn slices_of(
         if *total > 0 && set_aside[index] == 0 && placed.values().all(|values| values[index] <= 0) {
             let mut amounts = [0; MEASURES];
             amounts[index] = *total;
-            spread(&mut placed, start, end, amounts);
+            spread(&mut placed, within_reach(start, end), end, amounts);
         }
     }
 
@@ -832,6 +844,33 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_record_spanning_years_lands_where_it_ended() {
+        // An hour whose end was moved five years on, as a damaged or made
+        // up record could have it.
+        let end = "2031-10-02T19:00:00.000Z";
+        let totals = [60 * MINUTE, 60 * MINUTE, 0];
+        let events = [
+            event(1, "started", &at(18, 0, 0), &serde_json::json!({})),
+            event(2, "ended", end, &counters(totals[0], totals[1], totals[2])),
+        ];
+        let slices = slices_of(
+            &session(&at(18, 0, 0), Some(end), totals),
+            &events,
+            None,
+            &[],
+        );
+        assert_eq!(slices.len(), 1);
+        assert_eq!(slices[0].start_ms, slice_of(ms(end)));
+        assert_eq!(sums(&slices), totals);
+
+        // Without checkpoints, spread over the whole session, the same.
+        let bare = [event(1, "started", &at(18, 0, 0), &serde_json::json!({}))];
+        let slices = slices_of(&session(&at(18, 0, 0), Some(end), totals), &bare, None, &[]);
+        assert_eq!(slices.len(), 1);
+        assert_eq!(sums(&slices), totals);
     }
 
     #[test]
