@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { DAYS_PER_WEEK, HOUR_MS } from "@/lib/constants";
-import { toDayKey } from "@/lib/session-stats";
-import { at, session } from "@/test/sessions";
-import type { GameStatusChange } from "@/lib/types";
-import { buildWeek, weeksBack } from "./week";
+import { DAYS_PER_WEEK } from "@/lib/constants";
+import { toDayKey } from "@/lib/time";
+import { at } from "@/test/sessions";
+import type { GameStatusChange, JournalWeekPlay } from "@/lib/types";
+import { journalDays, weekStart, weeksBack } from "./week";
 
 // A Wednesday. The week runs from Monday 5 October.
 const NOW = new Date(2026, 9, 7, 12, 0);
@@ -15,51 +15,47 @@ function change(changedAt: string, status: GameStatusChange["status"]): GameStat
   return { id: `change-${changedAt}`, game_id: "game-1", status, changed_at: changedAt };
 }
 
-describe("buildWeek", () => {
-  it("lists days newest first and counts play past midnight on the day it happened", () => {
-    const late = session(at(2026, 10, 5, 23, 0), 120, { id: "late" });
-    const week = buildWeek([late], [], new Set(), 0, NOW);
-    expect(week.start).toEqual(new Date(2026, 9, 5));
-    expect(week.days.map((day) => toDayKey(day.start))).toEqual(["2026-10-06", "2026-10-05"]);
-    const [tuesday, monday] = week.days;
-    expect(monday.sessions.map((each) => each.id)).toEqual(["late"]);
-    expect(tuesday.sessions).toEqual([]);
-    expect(monday.playedMs).toBe(HOUR_MS);
-    expect(tuesday.playedMs).toBe(HOUR_MS);
-    expect(week.sharesOf(late).map((share) => share.runtimeMs)).toEqual([HOUR_MS, HOUR_MS]);
-  });
+const EMPTY_WEEK: JournalWeekPlay = {
+  days: [],
+  shares: {},
+  games: [],
+  played_ms: 0,
+  game_times: [],
+  sessions_count: 0,
+  days_played: 0,
+  longest_day: null,
+  carried_over: 0,
+};
 
-  it("counts a session from the week before as carried over", () => {
-    const sunday = session(at(2026, 10, 4, 23, 0), 120, { id: "sunday" });
-    const week = buildWeek([sunday], [], new Set(), 0, NOW);
-    expect(week.carriedOver).toBe(1);
-    expect(week.days).toHaveLength(1);
-    expect(week.days[0].sessions).toEqual([]);
-    expect(week.days[0].spans.map((span) => span.id)).toEqual(["sunday"]);
+describe("weekStart", () => {
+  it("finds the Monday of a week and goes back a week at a time", () => {
+    expect(weekStart(0, NOW)).toEqual(new Date(2026, 9, 5));
+    expect(weekStart(-1, NOW)).toEqual(new Date(2026, 8, 28));
   });
+});
 
-  it("puts status changes on their day and leaves cleared ones out", () => {
-    const changes = [change(at(2026, 10, 6, 20, 0), "finished"), change(at(2026, 10, 7, 9, 0), "none")];
-    const week = buildWeek([], changes, new Set(), 0, NOW);
-    expect(week.days).toHaveLength(1);
-    expect(week.days[0].changes.map((each) => each.status)).toEqual(["finished"]);
-  });
-
-  it("names the games in the order they first played", () => {
-    const sessions = [
-      session(at(2026, 10, 6, 18, 0), 60, { id: "b", game_id: "game-b" }),
-      session(at(2026, 10, 5, 18, 0), 60, { id: "a", game_id: "game-a" }),
-      session(at(2026, 10, 6, 20, 0), 60, { id: "a2", game_id: "game-a" }),
+describe("journalDays", () => {
+  it("keeps the core's days, newest first, and puts status changes on their day", () => {
+    const week: JournalWeekPlay = {
+      ...EMPTY_WEEK,
+      days: [
+        { day: "2026-10-06", played_ms: 1, session_ids: [], parts: [], runs: [], side_by_side: [] },
+        { day: "2026-10-05", played_ms: 2, session_ids: ["late"], parts: [], runs: [], side_by_side: [] },
+      ],
+    };
+    const changes = [
+      change(at(2026, 10, 6, 20, 0), "finished"),
+      change(at(2026, 10, 7, 9, 0), "playing"),
+      change(at(2026, 10, 7, 10, 0), "none"),
+      change(at(2026, 10, 12, 9, 0), "dropped"),
     ];
-    expect(buildWeek(sessions, [], new Set(), 0, NOW).games).toEqual(["game-a", "game-b"]);
-  });
-
-  it("goes back a week at a time", () => {
-    const earlier = session(at(2026, 9, 29, 18, 0), 60);
-    const week = buildWeek([earlier], [], new Set(), -1, NOW);
-    expect(week.start).toEqual(new Date(2026, 8, 28));
-    expect(week.days.map((day) => toDayKey(day.start))).toEqual(["2026-09-29"]);
-    expect(buildWeek([earlier], [], new Set(), 0, NOW).days).toEqual([]);
+    const days = journalDays(week, changes, weekStart(0, NOW));
+    expect(days.map((day) => toDayKey(day.start))).toEqual(["2026-10-07", "2026-10-06", "2026-10-05"]);
+    expect(days[0].changes.map((each) => each.status)).toEqual(["playing"]);
+    expect(days[0].parts).toEqual([]);
+    expect(days[1].changes.map((each) => each.status)).toEqual(["finished"]);
+    expect(days[2].sessionIds).toEqual(["late"]);
+    expect(days[2].start).toEqual(new Date(2026, 9, 5));
   });
 });
 

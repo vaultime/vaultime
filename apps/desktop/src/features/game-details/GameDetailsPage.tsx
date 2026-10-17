@@ -24,7 +24,7 @@ import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, STEAM_LAUNCHER } from "@/lib/constants";
 import { launchersOf, linkedTo, whereFrom } from "@/lib/links";
 import { gamePlaytime } from "@/lib/sentences";
-import { countedOnce, countsAsPlay } from "@/lib/session-stats";
+import { countsAsPlay } from "@/lib/sessions";
 import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay, formatHoursMinutes } from "@/lib/time";
@@ -111,11 +111,10 @@ function GamePage({ gameId }: { gameId: string }) {
   }
 
   const { game, cover, tint } = summary;
-  const stepping = new Set(summaries.filter((entry) => stepsAside(entry.game)).map((entry) => entry.game.id));
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
   const firstPlayed = sessions.filter(countsAsPlay).at(-1)?.started_at_wall;
   const longest = sessions.reduce((best, session) => Math.max(best, session.runtime_ms), 0);
-  const idleMs = sessions.reduce((sum, session) => sum + countedOnce(session).idleMs, 0);
+  const idleMs = sessions.reduce((sum, session) => sum + session.counted_idle_ms, 0);
 
   function onAssetsChanged(next: GameAssetView[]) {
     setAssets(next);
@@ -298,8 +297,8 @@ function GamePage({ gameId }: { gameId: string }) {
             )}
             <StepsAsideRow
               game={game}
+              on={stepsAside(game)}
               sessions={allSessions}
-              stepping={stepping}
               error={steppingError}
               onChange={(next) => void setStepping(next)}
             />

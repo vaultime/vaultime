@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import type { Game } from "@/lib/types";
-import { summarizeRecentPlay } from "@/lib/session-stats";
+import { LIVE_TOTALS_REFRESH_MS, RECENT_DAYS } from "@/lib/constants";
+import * as api from "@/lib/tauri";
+import type { Game, RecentPlay } from "@/lib/types";
+import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { AddGameDialog } from "./components/AddGameDialog";
 import { DeleteGameDialog } from "./components/DeleteGameDialog";
 import { DiscoverGamesDialog } from "./components/DiscoverGamesDialog";
@@ -17,8 +19,19 @@ import { useLibrary, usePlaying } from "./library-context";
 
 type LibraryDialog = "add" | "discover";
 
+/** Shown when the core cannot sum up the last days, so the page still opens. */
+const NO_RECENT_PLAY: RecentPlay = {
+  played_ms: 0,
+  runtime_ms: 0,
+  active_ms: 0,
+  sessions_count: 0,
+  days_count: 0,
+  games: [],
+  longest_session_id: null,
+};
+
 export function LibraryPage() {
-  const { summaries, visible, sessions, loaded, error, refresh } = useLibrary();
+  const { summaries, visible, sessions, today, loaded, error, refresh } = useLibrary();
   const playing = usePlaying();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editing, setEditing] = useState<Game | null>(null);
@@ -32,13 +45,30 @@ export function LibraryPage() {
   const openAdd = () => setDialog("add");
   const openDiscover = () => setDialog("discover");
 
-  const recent = useMemo(() => summarizeRecentPlay(sessions), [sessions]);
+  // Read again whenever a session starts or ends, on a new day, and while a game runs.
+  const [recent, setRecent] = useState<RecentPlay | null>(null);
+  const refreshed = useRefreshWhile(playing.size > 0, LIVE_TOTALS_REFRESH_MS);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getRecentPlay(RECENT_DAYS)
+      .then((next) => {
+        if (!cancelled) setRecent(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRecent((current) => current ?? NO_RECENT_PLAY);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessions, today, refreshed]);
 
   const featured =
     visible.find((summary) => playing.has(summary.game.id)) ?? visible.find((summary) => summary.lastPlayedAt) ?? null;
   const shelf = visible.filter((summary) => summary.lastPlayedAt && summary !== featured);
 
-  if (!loaded) return null;
+  // Waits for the last days too, so the hero's sentence does not change as it shows.
+  if (!loaded || (featured && !recent)) return null;
 
   return (
     <div className="pb-16">
@@ -49,7 +79,7 @@ export function LibraryPage() {
           kind="game"
           summary={featured}
           playing={playing.has(featured.game.id)}
-          weekRuntimeMs={recent.runtimeByGame.get(featured.game.id) ?? 0}
+          weekRuntimeMs={recent?.games.find((game) => game.game_id === featured.game.id)?.runtime_ms ?? 0}
         />
       ) : (
         <LibraryHero kind="unplayed" gameCount={visible.length} onDiscover={openDiscover} onAdd={openAdd} />
@@ -61,7 +91,7 @@ export function LibraryPage() {
         </p>
       )}
 
-      {featured && <RecentStats recent={recent} summaries={summaries} />}
+      {featured && recent && <RecentStats recent={recent} summaries={summaries} sessions={sessions} />}
 
       {shelf.length > 0 && (
         <Shelf

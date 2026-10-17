@@ -12,8 +12,8 @@ import {
 } from "@/lib/constants";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
-import { countedOnce, countsAsPlay, toDayKey } from "@/lib/session-stats";
-import { countedSession } from "@/lib/steps-aside";
+import { countsAsPlay } from "@/lib/sessions";
+import { toDayKey } from "@/lib/time";
 import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
@@ -22,6 +22,7 @@ import {
   ActiveContext,
   LastPollContext,
   LibraryContext,
+  PlayedTodayContext,
   PlayingContext,
   type GameSummary,
 } from "./library-context";
@@ -39,6 +40,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
   const [lastPoll, setLastPoll] = useState(() => Date.now());
+  const [playedToday, setPlayedToday] = useState(0);
   const [today, setToday] = useState(() => toDayKey(new Date()));
   const [idleThresholdSeconds, setIdleThresholdSeconds] = useState(DEFAULT_IDLE_THRESHOLD_SECS);
   const [artTints, setArtTints] = useState<Record<string, GameTint>>({});
@@ -69,8 +71,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setLinks(nextLinks);
       setThisDeviceId(deviceId);
       setGames(nextGames);
-      // Time a game set aside for others counts nowhere, so pages see only what counts.
-      setSessions(nextSessions.map(countedSession));
+      setSessions(nextSessions);
       setEarlier(nextEarlier);
       setStatusChanges(nextChanges);
       setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
@@ -99,14 +100,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     function poll() {
       api
         .getActiveSessions()
-        .then((next) => {
+        .then(({ sessions: next, played_today_ms }) => {
           if (cancelled) return;
-          const counted = next.map(countedSession);
-          const json = JSON.stringify(counted);
+          const json = JSON.stringify(next);
           if (json !== activeJson.current) {
             activeJson.current = json;
-            setActive(counted);
+            setActive(next);
           }
+          setPlayedToday(played_today_ms);
           setLastPoll(Date.now());
           setToday(toDayKey(new Date()));
           // The first poll, or a session started or ended: totals changed.
@@ -191,9 +192,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       const summary = byGame.get(session.game_id);
       if (!summary || !countsAsPlay(session)) continue;
       // Two installs of the game running at once count once, as in the stats.
-      const counted = countedOnce(session);
-      summary.runtimeMs += counted.runtimeMs;
-      summary.activeMs += counted.activeMs;
+      summary.runtimeMs += session.counted_runtime_ms;
+      summary.activeMs += session.counted_active_ms;
       summary.sessionsCount += 1;
       const trust = normalizeIntegrityStatus(session.integrity_status);
       const recent = session.started_at_wall >= recentSinceWall;
@@ -305,7 +305,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     <LibraryContext.Provider value={value}>
       <ActiveContext.Provider value={active}>
         <PlayingContext.Provider value={playing}>
-          <LastPollContext.Provider value={lastPoll}>{children}</LastPollContext.Provider>
+          <LastPollContext.Provider value={lastPoll}>
+            <PlayedTodayContext.Provider value={playedToday}>{children}</PlayedTodayContext.Provider>
+          </LastPollContext.Provider>
         </PlayingContext.Provider>
       </ActiveContext.Provider>
     </LibraryContext.Provider>

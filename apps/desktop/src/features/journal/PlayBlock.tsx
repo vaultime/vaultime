@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { CSSProperties } from "react";
-import type { PlayRun } from "@/lib/session-stats";
+import type { PlayRun } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { BLEED_PX, BLEND_STRETCH, hatch, leaningClip, placeOnDay, type Place } from "./strip";
 
@@ -29,7 +29,7 @@ export function PlayBlock({
   /** Play goes on past midnight, so the block runs out at the right edge. */
   openEnd: boolean;
 }) {
-  const block = placeOnDay(run.start, run.end, day);
+  const block = placeOnDay(new Date(run.start_ms), new Date(run.end_ms), day);
   const layer = (box: Place): CSSProperties => ({
     left: `${((box.left - block.left) / block.width) * 100}%`,
     width: `${(box.width / block.width) * 100}%`,
@@ -39,7 +39,7 @@ export function PlayBlock({
   // game's fill spans its sessions, so two colored art stays one gradient.
   const strip: Place = { left: 0, width: 100 };
   // Stripes go on top, so a short stretch side by side keeps its narrowest width.
-  const pieces = [...run.pieces].sort((a, b) => Number(a.gameIds.length > 1) - Number(b.gameIds.length > 1));
+  const pieces = [...run.pieces].sort((a, b) => Number(a.game_ids.length > 1) - Number(b.game_ids.length > 1));
   // At midnight the block keeps going out of the strip and fades, in the
   // colors of the games that ran on, so it reads as cut by the day, not ended.
   // A fill in two colors shows the end of its blend on that side.
@@ -63,24 +63,27 @@ export function PlayBlock({
   };
   return (
     <>
-      {openStart && bleed("left", run.pieces[0].gameIds)}
-      {openEnd && bleed("right", run.pieces[run.pieces.length - 1].gameIds)}
+      {openStart && bleed("left", run.pieces[0].game_ids)}
+      {openEnd && bleed("right", run.pieces[run.pieces.length - 1].game_ids)}
       <span
         className={cn("absolute inset-y-0 overflow-hidden", !openStart && "rounded-l-full", !openEnd && "rounded-r-full")}
         style={{ left: `${block.left}%`, width: `${block.width}%` }}
       >
         {pieces.map((piece) => {
-          const alone = piece.gameIds.length === 1;
-          const box = alone ? placeOnDay(piece.sessionsStart, piece.sessionsEnd, day) : strip;
-          const place = placeOnDay(piece.start, piece.end, day);
+          const alone = piece.game_ids.length === 1;
+          const box = alone
+            ? placeOnDay(new Date(piece.sessions_start_ms), new Date(piece.sessions_end_ms), day)
+            : strip;
+          const place = placeOnDay(new Date(piece.start_ms), new Date(piece.end_ms), day);
           return (
             <span
-              key={piece.start.getTime()}
+              key={piece.start_ms}
               className="absolute inset-y-0"
               style={{
                 ...layer(box),
-                background: alone ? fillOf(piece.gameIds[0]) : hatch(piece.gameIds.map(markOf)),
-                clipPath: leaningClip(box, place, piece.start > run.start, piece.end < run.end),
+                background: alone ? fillOf(piece.game_ids[0]) : hatch(piece.game_ids.map(markOf)),
+                clipPath: leaningClip(box, place, piece.start_ms > run.start_ms, piece.end_ms < run.end_ms),
+
               }}
             />
           );

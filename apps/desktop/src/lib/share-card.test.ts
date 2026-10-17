@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
 import { phraseString } from "@/test/phrases";
 import { yearStats } from "@/lib/stats";
-import { estimatePlayTotals } from "@/test/play-totals";
+import { estimateYearPlay } from "@/test/play-estimates";
 import { at, session } from "@/test/sessions";
 import type { Session } from "@/lib/types";
 import {
@@ -46,13 +46,9 @@ function evenings(plan: [gameId: string, hours: number][]): Session[] {
 }
 
 function cardFor(sessions: Session[], options: Partial<ShareOptions> = {}, pcName: string | null = "Desktop") {
-  const [from, to] = ["2026-01-01", "2027-01-01"];
-  const play = {
-    days: estimatePlayTotals(sessions, from, to, "day", null, now),
-    hours: estimatePlayTotals(sessions, from, to, "hour_of_week", null, now),
-  };
   return buildShareCard({
-    stats: yearStats(sessions, 2026, play, now),
+    stats: yearStats(sessions, 2026, estimateYearPlay(sessions, 2026, now.getTime())),
+
     gameInfo: (gameId) => GAMES[gameId],
     pcName,
     accentHues: [293],

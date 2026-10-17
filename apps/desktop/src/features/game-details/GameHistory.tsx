@@ -10,11 +10,9 @@ import { usePlaying } from "@/features/library/library-context";
 import { GAME_HISTORY_DAYS, GAME_HISTORY_MONTHS, LIVE_TOTALS_REFRESH_MS } from "@/lib/constants";
 import { markColors, type GameTint } from "@/lib/game-tint";
 import { groupByBucket } from "@/lib/play-totals";
-import { toDayKey } from "@/lib/session-stats";
 import * as api from "@/lib/tauri";
-import { parseVaultimeDate, startOfWeek, UI_LOCALE } from "@/lib/time";
+import { parseVaultimeDate, startOfWeek, toDayKey, UI_LOCALE } from "@/lib/time";
 import type { PlayBucket, PlayTotal, Session } from "@/lib/types";
-import { usePageVisible } from "@/lib/use-page-visible";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { cn, describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
@@ -110,10 +108,8 @@ export function GameHistory({
   const { accentHues, mode } = useAppearance();
   const color = markColors([tint.colors], accentHues, mode)[0].color;
   const playing = usePlaying().has(gameId);
-  const visible = usePageVisible();
   // Reads again while a game runs and the window is seen, and when it shows again.
-  const live = playing && visible;
-  const refreshed = useRefreshWhile(live, LIVE_TOTALS_REFRESH_MS);
+  const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
   const [range, setRange] = useState<Range>("days");
   const [loaded, setLoaded] = useState<{ range: Range; totals: PlayTotal[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +135,7 @@ export function GameHistory({
     return () => {
       cancelled = true;
     };
-  }, [range, gameId, firstYear, sessions, refreshed, live]);
+  }, [range, gameId, firstYear, sessions, refreshed]);
 
   const totals = loaded?.range === range ? loaded.totals : null;
   return (

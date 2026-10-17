@@ -5,19 +5,23 @@ import { describe, expect, it } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
 import { estimatePlayTotals } from "@/test/play-totals";
 import { at, session } from "@/test/sessions";
-import type { Session } from "@/lib/types";
+import type { Session, YearPlay } from "@/lib/types";
 import { daysSoFar, shapeOf, yearStats } from "./stats";
 
 const now = new Date(2026, 8, 30, 21, 0);
 
 /** The stats of `year` with the totals the core would give for `sessions`. */
-function statsFor(sessions: Session[], year = 2026) {
+function statsFor(sessions: Session[], year = 2026, play: Partial<YearPlay> = {}) {
   const [from, to] = [`${year}-01-01`, `${year + 1}-01-01`];
-  const play = {
+  return yearStats(sessions, year, {
     days: estimatePlayTotals(sessions, from, to, "day", null, now),
     hours: estimatePlayTotals(sessions, from, to, "hour_of_week", null, now),
-  };
-  return yearStats(sessions, year, play, now);
+    played_ms: 0,
+    days_played: 0,
+    longest_streak: null,
+    current_streak: 0,
+    ...play,
+  });
 }
 
 describe("yearStats", () => {
@@ -30,8 +34,6 @@ describe("yearStats", () => {
     ]);
     expect(stats.sessionsCount).toBe(2);
     expect(stats.runtimeMs).toBe(180 * MINUTE_MS);
-    expect(stats.playedMs).toBe(150 * MINUTE_MS);
-    expect(stats.daysPlayed).toBe(2);
     expect(stats.months[0].activeMs).toBe(60 * MINUTE_MS);
     expect(stats.months[2].activeMs).toBe(120 * MINUTE_MS);
     expect(stats.months[2].games.map((game) => game.gameId)).toEqual(["a", "b"]);
@@ -56,27 +58,19 @@ describe("yearStats", () => {
     expect(stats.weekClock[0][0]).toBe(30 * MINUTE_MS);
   });
 
-  it("finds the longest streak and the current one", () => {
-    const days = [
-      [3, 1],
-      [3, 2],
-      [3, 3],
-      [3, 5],
-      [9, 28],
-      [9, 29],
-    ];
-    const sessions = days.map(([month, day]) => session(at(2026, month, day, 20, 0), 30));
-    const stats = statsFor(sessions);
+  it("takes time played and streaks from the core", () => {
+    const stats = statsFor([], 2026, {
+      played_ms: 150 * MINUTE_MS,
+      days_played: 6,
+      longest_streak: { days: 3, start: "2026-03-01", end: "2026-03-03" },
+      current_streak: 2,
+    });
+    expect(stats.playedMs).toBe(150 * MINUTE_MS);
+    expect(stats.daysPlayed).toBe(6);
     expect(stats.longestStreak?.days).toBe(3);
     expect(stats.longestStreak?.start).toEqual(new Date(2026, 2, 1));
     expect(stats.longestStreak?.end).toEqual(new Date(2026, 2, 3));
-    // Nothing played today yet, so the streak up to yesterday counts.
     expect(stats.currentStreak).toBe(2);
-  });
-
-  it("keeps a streak across the end of March when the clocks change", () => {
-    const sessions = [28, 29, 30].map((day) => session(at(2026, 3, day, 20, 0), 30));
-    expect(statsFor(sessions).longestStreak?.days).toBe(3);
   });
 
   it("sorts sessions into lengths and finds the longest", () => {

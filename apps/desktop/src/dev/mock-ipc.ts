@@ -28,6 +28,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, DEVICE_NAME_MAX_CHARS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
+import { estimateJournalWeek, estimatePlayedToday, estimateRecentPlay, estimateYearPlay } from "@/test/play-estimates";
 import { estimatePlayTotals } from "@/test/play-totals";
 import type {
   ArtworkSource,
@@ -80,7 +81,20 @@ const games: Game[] = titles.map((title, index) => ({
 
 // Over a year of weekday evenings and weekend afternoons, weighted towards the
 // first games, with a quiet summer break and one game often left running.
-const sessions: Session[] = [];
+/** A session as stored, before the core works out what counts of it. */
+type Recorded = Omit<Session, "counted_runtime_ms" | "counted_active_ms" | "counted_idle_ms">;
+
+/** A session as the core sends it. Nothing steps aside here, so all of it counts. */
+function counted(session: Recorded): Session {
+  return {
+    ...session,
+    counted_runtime_ms: session.runtime_ms,
+    counted_active_ms: session.active_ms,
+    counted_idle_ms: session.idle_ms,
+  };
+}
+
+const sessions: Recorded[] = [];
 let seed = 7;
 const random = () => {
   seed = (seed * 16807) % 2147483647;
@@ -223,7 +237,7 @@ const recentJump = sessions.findLast((session) => session.game_id === games[2].i
 if (recentJump) recentJump.integrity_status = "suspicious";
 
 const liveRuntime = 84 * MINUTE_MS + 10 * SECOND_MS;
-const live: Session = {
+const live: Recorded = {
   id: "session-live",
   game_id: games[0].id,
   device_id: "preview",
@@ -342,8 +356,14 @@ if (scenario !== "empty") {
 function shownSessions(): Session[] {
   return allSessions.map((session) => {
     const linked = gameLinks.find((link) => link.game_id === session.game_id)?.linked_game_id;
-    return linked ? { ...session, game_id: linked, recorded_game_id: session.game_id } : { ...session };
+    return counted(linked ? { ...session, game_id: linked, recorded_game_id: session.game_id } : session);
   });
+}
+
+/** Every session, the running ones counted on to the moment asked. */
+function sessionsNow(): Session[] {
+  const ticking = new Map(runningNow().map((session) => [session.id, session]));
+  return shownSessions().map((session) => ticking.get(session.id) ?? session);
 }
 
 const mergePreview: MergePreview = {
@@ -467,7 +487,7 @@ const events: SessionEvent[] = allSessions.flatMap((session, index) => {
 });
 
 /** A correction as the core writes it: the event keeps the old times and the reason. */
-function correct(session: Session, timing: Pick<Session, "ended_at_wall" | "runtime_ms" | "active_ms" | "idle_ms">, reason: string) {
+function correct(session: Recorded, timing: Pick<Session, "ended_at_wall" | "runtime_ms" | "active_ms" | "idle_ms">, reason: string) {
   events.push({
     id: `${session.id}-corrected-${events.length}`,
     session_id: session.id,
@@ -488,12 +508,12 @@ function correct(session: Session, timing: Pick<Session, "ended_at_wall" | "runt
     elapsed_monotonic_ms: timing.runtime_ms,
     integrity_status: session.integrity_status === "suspicious" ? "suspicious" : "edited",
   });
-  return session;
+  return counted(session);
 }
 
 function addManual(gameId: string, startedAt: string, runtimeMs: number, reason: string, launcher: string | null = null): Session {
   const start = new Date(startedAt).getTime();
-  const session: Session = {
+  const session: Recorded = {
     id: `session-manual-${start}`,
     game_id: gameId,
     device_id: "preview",
@@ -525,7 +545,7 @@ function addManual(gameId: string, startedAt: string, runtimeMs: number, reason:
     hash_self: "preview",
     signature: null,
   });
-  return session;
+  return counted(session);
 }
 
 // One session cut short and one added by hand, so both labels show.
@@ -549,6 +569,19 @@ if (scenario !== "empty" && scenario !== "unplayed") {
   addManual(games[1].id, iso(now - 2 * DAY_MS - 5 * HOUR_MS), 95 * MINUTE_MS, "On the Steam Deck");
 }
 const running = scenario === "empty" || scenario === "unplayed" ? [] : [live];
+
+/** The running sessions, counted on like a running game, so every poll brings new values as in the app. */
+function runningNow(): Session[] {
+  const ran = Date.now() - now;
+  return running.map((session) =>
+    counted({
+      ...session,
+      elapsed_monotonic_ms: session.elapsed_monotonic_ms + ran,
+      runtime_ms: session.runtime_ms + ran,
+      active_ms: session.active_ms + ran,
+    }),
+  );
+}
 
 /** One cover per game for ?mock=covers, served from dist-mock/covers. */
 function coverAssets() {
@@ -1504,16 +1537,17 @@ mockIPC((cmd, payload) => {
       const ids = new Set(shownSessions().filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id));
     }
-    case "get_active_sessions": {
-      // Counts on like a running game, so every poll brings new values as in the app.
-      const ran = Date.now() - now;
-      return running.map((session) => ({
-        ...session,
-        elapsed_monotonic_ms: session.elapsed_monotonic_ms + ran,
-        runtime_ms: session.runtime_ms + ran,
-        active_ms: session.active_ms + ran,
-      }));
-    }
+    case "get_active_sessions":
+      return { sessions: runningNow(), played_today_ms: estimatePlayedToday(sessionsNow()) };
+    case "get_journal_week":
+      return estimateJournalWeek(sessionsNow(), String(args.from));
+    case "get_year_play":
+      return estimateYearPlay(sessionsNow(), Number(args.year));
+    case "get_recent_play":
+      return estimateRecentPlay(sessionsNow(), Number(args.days));
+    case "get_steps_aside_hint":
+      return null;
+
     case "list_settings":
       return [
         { key: "idle_threshold_seconds", value: "300", updated_at: iso(now) },

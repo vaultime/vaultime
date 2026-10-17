@@ -6,7 +6,7 @@ import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { Braces, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Notice, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
-import { toDayKey } from "@/lib/session-stats";
+import { toDayKey } from "@/lib/time";
 import * as api from "@/lib/tauri";
 import type { ExportFormat } from "@/lib/types";
 import { describeError } from "@/lib/utils";

@@ -18,6 +18,7 @@ use crate::db::repo::sessions::{self, SessionSpan};
 use crate::db::repo::settings;
 use crate::error::Result;
 use crate::integrity;
+use crate::playtime::summaries;
 use crate::tracking::live::LiveSessions;
 use crate::window_look::{WindowLookState, draw_icon};
 
@@ -128,15 +129,23 @@ fn status_lines(
     device_id: &str,
     now: DateTime<Utc>,
 ) -> Result<(String, String)> {
-    let day_start = local_day_start(now);
-    let since = integrity::format_timestamp(day_start);
+    let since = integrity::format_timestamp(local_day_start(now));
     let mut spans = sessions::spans_since(db, &since, device_id)?;
-    for span in spans.iter_mut().filter(|span| span.ended_at_wall.is_none()) {
+    spans.retain(|span| span.ended_at_wall.is_none());
+    for span in &mut spans {
         if let Some(counters) = live.get(&span.session_id) {
             span.runtime_ms = counters.runtime_ms;
         }
     }
-    Ok(describe_status(&spans, now, day_start))
+    let now_ms = now.timestamp_millis();
+    let played = summaries::played_on(
+        db,
+        live,
+        &Local,
+        summaries::today_of(&Local, now_ms),
+        now_ms,
+    )?;
+    Ok(describe_status(&spans, played))
 }
 
 /// The first moment of the local day `now` falls in. Where the clocks jump
@@ -149,24 +158,20 @@ fn local_day_start(now: DateTime<Utc>) -> DateTime<Utc> {
         .map_or(now, |start| start.with_timezone(&Utc))
 }
 
-/// "Playing Elden Ring, 1 h 24" and "2 h 40 played today". Time counts on
-/// the day it happened, as in the journal.
-fn describe_status(
-    spans: &[SessionSpan],
-    now: DateTime<Utc>,
-    day_start: DateTime<Utc>,
-) -> (String, String) {
+/// "Playing Elden Ring, 1 h 24" and "2 h 40 played today", from the
+/// running sessions and today's play as the journal counts it.
+fn describe_status(running: &[SessionSpan], played_today_ms: i64) -> (String, String) {
     // Two linked installs of one game running at once show as one game.
-    let mut running: Vec<&SessionSpan> = Vec::new();
-    for span in spans.iter().filter(|span| span.ended_at_wall.is_none()) {
-        if !running
+    let mut shown: Vec<&SessionSpan> = Vec::new();
+    for span in running {
+        if !shown
             .iter()
-            .any(|shown| shown.game_title == span.game_title)
+            .any(|other| other.game_title == span.game_title)
         {
-            running.push(span);
+            shown.push(span);
         }
     }
-    let playing = match running.as_slice() {
+    let playing = match shown.as_slice() {
         [] => NOTHING_RUNNING.to_string(),
         [only] => format!(
             "Playing {}, {}",
@@ -178,79 +183,12 @@ fn describe_status(
             format!("Playing {} and {}", names.join(", "), last.game_title)
         }
     };
-    let timed: Vec<(i64, i64, i64)> = spans
-        .iter()
-        .filter_map(|span| {
-            let start = parse(&span.started_at_wall)?;
-            let end = span.ended_at_wall.as_deref().map_or(Some(now), parse)?;
-            // Only the part after midnight counts, its time spread evenly
-            // over its span, as the journal splits a day.
-            // A session with no time on the clock, as when the clock was
-            // set back, counts in full on the day it started, like the
-            // journal counts it.
-            let from = start.max(day_start);
-            if end <= from {
-                return (end <= start && start >= day_start).then(|| {
-                    (
-                        start.timestamp_millis(),
-                        end.timestamp_millis(),
-                        span.runtime_ms,
-                    )
-                });
-            }
-            let span_ms = i128::from((end - start).num_milliseconds().max(1));
-            let part_ms = i128::from((end - from).num_milliseconds());
-            let runtime =
-                i64::try_from(i128::from(span.runtime_ms) * part_ms / span_ms).unwrap_or(0);
-            Some((from.timestamp_millis(), end.timestamp_millis(), runtime))
-        })
-        .collect();
-    let played = played_ms(&timed);
-    let today = if played < TRAY_TODAY_MIN_PLAYED_MS {
+    let today = if played_today_ms < TRAY_TODAY_MIN_PLAYED_MS {
         NOTHING_TODAY.to_string()
     } else {
-        format!("{} played today", format_hours_minutes(played))
+        format!("{} played today", format_hours_minutes(played_today_ms))
     };
     (playing, today)
-}
-
-fn parse(value: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value)
-        .ok()
-        .map(|time| time.with_timezone(&Utc))
-}
-
-/// Time with at least one game running, games side by side counted once,
-/// from `(start, end, runtime)` in milliseconds. Each session spreads its
-/// runtime over its time on the clock. Same rule as `playedMs` in
-/// `lib/session-stats.ts`.
-fn played_ms(spans: &[(i64, i64, i64)]) -> i64 {
-    let untimed: i64 = spans
-        .iter()
-        .filter(|(start, end, _)| end <= start)
-        .map(|(_, _, runtime)| runtime)
-        .sum();
-    let timed: Vec<&(i64, i64, i64)> = spans.iter().filter(|(start, end, _)| end > start).collect();
-    let mut bounds: Vec<i64> = timed
-        .iter()
-        .flat_map(|(start, end, _)| [*start, *end])
-        .collect();
-    bounds.sort_unstable();
-    bounds.dedup();
-    let mut played = i128::from(untimed);
-    for pair in bounds.windows(2) {
-        let (from, to) = (pair[0], pair[1]);
-        // The densest session in the stretch, compared without division.
-        let densest = timed
-            .iter()
-            .filter(|(start, end, _)| *start <= from && *end >= to)
-            .map(|(start, end, runtime)| (i128::from(*runtime), i128::from(end - start)))
-            .max_by(|a, b| (a.0 * b.1).cmp(&(b.0 * a.1)));
-        if let Some((runtime, span)) = densest {
-            played += i128::from(to - from) * runtime / span;
-        }
-    }
-    i64::try_from(played).unwrap_or(i64::MAX)
 }
 
 /// "1 h 24" or "40 min". Same as `formatHoursMinutes` in `lib/time.ts`.
@@ -366,93 +304,43 @@ mod tests {
 
     const MINUTE_MS: i64 = 60_000;
 
-    fn at(hour: u32, minute: u32) -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339(&format!("2026-09-30T{hour:02}:{minute:02}:00Z"))
-            .unwrap()
-            .with_timezone(&Utc)
-    }
-
-    fn span(
-        title: &str,
-        start: DateTime<Utc>,
-        end: Option<DateTime<Utc>>,
-        minutes: i64,
-    ) -> SessionSpan {
+    fn running(title: &str, minutes: i64) -> SessionSpan {
         SessionSpan {
-            session_id: format!("{title}-{start}"),
+            session_id: format!("{title}-{minutes}"),
             game_title: title.into(),
-            started_at_wall: integrity::format_timestamp(start),
-            ended_at_wall: end.map(integrity::format_timestamp),
+            started_at_wall: "2026-09-30T18:00:00.000Z".into(),
+            ended_at_wall: None,
             runtime_ms: minutes * MINUTE_MS,
         }
     }
 
     #[test]
     fn names_the_running_game_and_the_day() {
-        let day = at(0, 0);
-        let spans = [
-            span("Hades II", at(9, 0), Some(at(10, 0)), 60),
-            span("Elden Ring", at(18, 0), None, 84),
-        ];
-        let (playing, today) = describe_status(&spans, at(19, 24), day);
+        let (playing, today) = describe_status(&[running("Elden Ring", 84)], 144 * MINUTE_MS);
         assert_eq!(playing, "Playing Elden Ring, 1 h 24");
         assert_eq!(today, "2 h 24 played today");
+        assert_eq!(
+            describe_status(&[], 0),
+            (NOTHING_RUNNING.into(), NOTHING_TODAY.into())
+        );
     }
 
     #[test]
     fn lists_games_running_side_by_side() {
         let spans = [
-            span("Elden Ring", at(18, 0), None, 60),
-            span("Balatro", at(18, 30), None, 30),
-            span("Celeste", at(18, 50), None, 10),
+            running("Elden Ring", 60),
+            running("Balatro", 30),
+            running("Celeste", 10),
         ];
-        let (playing, today) = describe_status(&spans, at(19, 0), at(0, 0));
+        let (playing, _) = describe_status(&spans, 60 * MINUTE_MS);
         assert_eq!(playing, "Playing Elden Ring, Balatro and Celeste");
-        assert_eq!(today, "1 h 00 played today");
     }
 
     #[test]
     fn two_installs_of_one_game_show_once() {
-        let spans = [
-            span("Cyberpunk 2077", at(18, 0), None, 60),
-            span("Cyberpunk 2077", at(18, 30), None, 30),
-        ];
-        let (playing, _) = describe_status(&spans, at(19, 0), at(0, 0));
+        let spans = [running("Cyberpunk 2077", 60), running("Cyberpunk 2077", 30)];
+        let (playing, _) = describe_status(&spans, 60 * MINUTE_MS);
         assert_eq!(playing, "Playing Cyberpunk 2077, 1 h 00");
-    }
-
-    #[test]
-    fn counts_only_the_part_of_a_session_after_the_day_started() {
-        // Running since 01:00, the day here starts at 01:30.
-        let spans = [span("Elden Ring", at(1, 0), None, 60)];
-        let (playing, today) = describe_status(&spans, at(2, 0), at(1, 30));
-        assert_eq!(playing, "Playing Elden Ring, 1 h 00");
-        assert_eq!(today, "30 min played today");
-        assert_eq!(describe_status(&[], at(2, 0), at(0, 0)).0, NOTHING_RUNNING);
-    }
-
-    #[test]
-    fn a_session_that_ends_before_it_starts_counts_on_its_day() {
-        // The clock was set back while it ran.
-        let spans = [span("Hades II", at(20, 0), Some(at(19, 58)), 45)];
-        let (_, today) = describe_status(&spans, at(21, 0), at(0, 0));
-        assert_eq!(today, "45 min played today");
-    }
-
-    #[test]
-    fn played_time_counts_overlap_once() {
-        let hour = 60 * MINUTE_MS;
-        // Apart, one inside another, and one that slept half its span.
-        assert_eq!(
-            played_ms(&[(0, hour, hour), (2 * hour, 3 * hour, hour)]),
-            2 * hour
-        );
-        assert_eq!(
-            played_ms(&[(0, 2 * hour, 2 * hour), (hour, hour + 1, 1)]),
-            2 * hour
-        );
-        assert_eq!(played_ms(&[(0, 2 * hour, hour), (0, 2 * hour, hour)]), hour);
-        assert_eq!(played_ms(&[(5, 5, 42)]), 42);
     }
 
     #[test]

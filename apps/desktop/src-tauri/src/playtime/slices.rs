@@ -401,18 +401,20 @@ impl Span {
         if length == 0 || next_length == 0 {
             return length == next_length;
         }
-        let kind = |span: &Self| (span.active_ms > 0, span.idle_ms > 0);
-        if kind(self) != kind(next) || kind(self) == (true, true) {
-            return false;
-        }
-        // Runtime per millisecond on the clock, compared without division.
-        let gap = (i128::from(self.runtime_ms) * i128::from(next_length)
-            - i128::from(next.runtime_ms) * i128::from(length))
-        .abs();
-        gap * i128::from(PER_MILLE)
-            <= i128::from(SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE)
-                * i128::from(length)
-                * i128::from(next_length)
+        // Each measure per millisecond on the clock, compared without
+        // division, so active time never joins idle time.
+        self.amounts()
+            .iter()
+            .zip(next.amounts())
+            .all(|(&own, other)| {
+                let gap = (i128::from(own) * i128::from(next_length)
+                    - i128::from(other) * i128::from(length))
+                .abs();
+                gap * i128::from(PER_MILLE)
+                    <= i128::from(SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE)
+                        * i128::from(length)
+                        * i128::from(next_length)
+            })
     }
 }
 
@@ -1044,6 +1046,9 @@ mod tests {
             copy_overlap_ms: 0,
             copy_overlap_active_ms: 0,
             copy_overlap_idle_ms: 0,
+            counted_runtime_ms: 0,
+            counted_active_ms: 0,
+            counted_idle_ms: 0,
             recorded_game_id: None,
             still_running_on: None,
         }

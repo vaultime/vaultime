@@ -34,6 +34,9 @@ pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         copy_overlap_ms: 0,
         copy_overlap_active_ms: 0,
         copy_overlap_idle_ms: 0,
+        counted_runtime_ms: 0,
+        counted_active_ms: 0,
+        counted_idle_ms: 0,
         recorded_game_id: None,
         still_running_on: None,
     })

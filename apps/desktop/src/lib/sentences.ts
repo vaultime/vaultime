@@ -5,9 +5,9 @@
 // session-lines.ts, the sentences of the stats page in year-sentences.ts.
 
 import { HABIT_MIN_SESSIONS, HABIT_MIN_SHARE, HOUR_MS, MINUTE_MS, WEEK_TOP_GAME_MIN_SHARE } from "@/lib/constants";
-import { countedOnce, countsAsPlay, type SideBySideGroup } from "@/lib/session-stats";
+import { countsAsPlay } from "@/lib/sessions";
 import { dayPartOf, formatHoursMinutes, formatRelativeDay, parseVaultimeDate, type DayPart } from "@/lib/time";
-import type { GameStatus, LedgerReport, Session } from "@/lib/types";
+import type { GameStatus, LedgerReport, Session, SideBySideGroup } from "@/lib/types";
 import { amountWords, capitalize, countWords, DAY_PART_WORDS, durationWords, numberWords } from "@/lib/words";
 
 /** A sentence with an optional part set in italics. */
@@ -36,7 +36,7 @@ export function gamePlaytime(allSessions: Session[]): Phrase {
   if (sessions.length === 0) {
     return { before: "Not played yet. Start it however you usually do and the clock starts on its own." };
   }
-  const runtimeMs = sessions.reduce((sum, session) => sum + countedOnce(session).runtimeMs, 0);
+  const runtimeMs = sessions.reduce((sum, session) => sum + session.counted_runtime_ms, 0);
   const lead =
     sessions.length === 1
       ? `${capitalize(amountWords(runtimeMs))} in one session.`
@@ -53,7 +53,7 @@ function habitOf(sessions: Session[]): DayPart | null {
   let total = 0;
   for (const session of sessions) {
     const part = dayPartOf(parseVaultimeDate(session.started_at_wall));
-    const { runtimeMs } = countedOnce(session);
+    const runtimeMs = session.counted_runtime_ms;
     byPart.set(part, (byPart.get(part) ?? 0) + runtimeMs);
     total += runtimeMs;
   }
@@ -73,13 +73,13 @@ function listOf(titles: string[]): string {
  */
 export function sideBySideSentence(group: SideBySideGroup, titleOf: (gameId: string) => string): string {
   const time = formatHoursMinutes(group.ms);
-  const titles = group.gameIds.map(titleOf);
+  const titles = group.game_ids.map(titleOf);
   if (titles.length <= 2) return `${listOf(titles)} ran side by side for ${time}.`;
   if (group.alongside) {
-    const others = group.gameIds.filter((gameId) => gameId !== group.alongside).map(titleOf);
+    const others = group.game_ids.filter((gameId) => gameId !== group.alongside).map(titleOf);
     return `${titleOf(group.alongside)} ran alongside ${listOf(others)} for ${time}.`;
   }
-  const atOnce = group.mostAtOnce > 2 ? `up to ${numberWords(group.mostAtOnce)}` : "two";
+  const atOnce = group.most_at_once > 2 ? `up to ${numberWords(group.most_at_once)}` : "two";
   return `${listOf(titles)} ran side by side, ${atOnce} at a time, for ${time}.`;
 }
 

@@ -25,7 +25,7 @@ use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult}
 use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{
     BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, PLAY_SLICES_VERSION_SETTING,
-    POLL_INTERVAL, STEAM_SOURCE, WINDOW_SIZE_SETTING,
+    POLL_INTERVAL, RECENT_PLAY_MAX_DAYS, STEAM_SOURCE, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::models::{
@@ -46,6 +46,9 @@ use crate::integrity::ledger::{self, LedgerReport};
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::platform::controller;
 use crate::playtime;
+use crate::playtime::beside::StepsAsideHint;
+use crate::playtime::journal::JournalWeek;
+use crate::playtime::summaries::{RecentPlay, YearPlay};
 use crate::playtime::totals::{Bucket, PlayTotal};
 use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
@@ -353,6 +356,11 @@ pub fn list_sessions(
     Ok(all)
 }
 
+fn parse_day(text: &str) -> Result<chrono::NaiveDate, VaultimeError> {
+    chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+        .map_err(|_| VaultimeError::Invalid(format!("not a date: {text}")))
+}
+
 /// Each game's play time per day, week, month, year or hour of the week,
 /// from the local day `from` up to but not including `to`, both "2026-10-02".
 #[tauri::command(async)]
@@ -364,37 +372,121 @@ pub fn get_play_totals(
     bucket: Bucket,
     game_id: Option<String>,
 ) -> Result<Vec<PlayTotal>, VaultimeError> {
-    let parse = |text: &str| {
-        chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
-            .map_err(|_| VaultimeError::Invalid(format!("not a date: {text}")))
-    };
     playtime::totals::play_totals(
         &db,
         &live,
         &chrono::Local,
-        parse(&from)?,
-        parse(&to)?,
+        parse_day(&from)?,
+        parse_day(&to)?,
         bucket,
         game_id.as_deref(),
         chrono::Utc::now().timestamp_millis(),
     )
 }
 
-/// The running sessions as of the tracker's latest tick.
+/// The journal's week from the local day `from`, a Monday, "2026-10-05".
+#[tauri::command(async)]
+pub fn get_journal_week(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+    app_context: State<'_, AppContext>,
+    from: String,
+) -> Result<JournalWeek, VaultimeError> {
+    playtime::journal::journal_week(
+        &db,
+        &live,
+        &chrono::Local,
+        parse_day(&from)?,
+        &app_context.device_id,
+        chrono::Utc::now().timestamp_millis(),
+    )
+}
+
+/// The year `year` for the stats page.
+#[tauri::command(async)]
+pub fn get_year_play(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+    year: i32,
+) -> Result<YearPlay, VaultimeError> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    playtime::summaries::year_play(
+        &db,
+        &live,
+        &chrono::Local,
+        year,
+        playtime::summaries::today_of(&chrono::Local, now_ms),
+        now_ms,
+    )
+}
+
+/// The last `days` local days of play, today included, for the library.
+#[tauri::command(async)]
+pub fn get_recent_play(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+    days: u32,
+) -> Result<RecentPlay, VaultimeError> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    playtime::summaries::recent_play(
+        &db,
+        &live,
+        &chrono::Local,
+        days.min(RECENT_PLAY_MAX_DAYS),
+        playtime::summaries::today_of(&chrono::Local, now_ms),
+        now_ms,
+    )
+}
+
+/// Why a game's page should suggest that it counts only while no other game
+/// runs, or None.
+#[tauri::command(async)]
+pub fn get_steps_aside_hint(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    game_id: String,
+) -> Result<Option<StepsAsideHint>, VaultimeError> {
+    playtime::beside::steps_aside_hint(
+        &db,
+        &game_id,
+        &app_context.device_id,
+        chrono::Utc::now().timestamp_millis(),
+    )
+}
+
+/// This PC's running sessions and today's play, for the live bar.
+#[derive(Debug, Serialize)]
+pub struct ActiveSessions {
+    pub sessions: Vec<Session>,
+    /// Clock time with a game running today, as the journal counts it.
+    pub played_today_ms: i64,
+}
+
+/// The running sessions as of the tracker's latest tick, and today's play.
 #[tauri::command(async)]
 pub fn get_active_sessions(
     db: State<'_, Arc<Database>>,
     live: State<'_, Arc<LiveSessions>>,
     app_context: State<'_, AppContext>,
-) -> Result<Vec<Session>, VaultimeError> {
+) -> Result<ActiveSessions, VaultimeError> {
     let mut active = sessions::get_active_sessions(&db, &app_context.device_id)?;
     as_of_now(&db, &live, &mut active)?;
-    Ok(active)
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let played_today_ms = playtime::summaries::played_on(
+        &db,
+        &live,
+        &chrono::Local,
+        playtime::summaries::today_of(&chrono::Local, now_ms),
+        now_ms,
+    )?;
+    Ok(ActiveSessions {
+        sessions: active,
+        played_today_ms,
+    })
 }
 
-/// Brings sessions to the tracker's latest tick, with the time each set aside
-/// and the time it shares with another copy of its game, each shown as the
-/// game it counts as.
+/// Brings sessions to the tracker's latest tick and to what counts of them,
+/// each shown as the game it counts as.
 fn as_of_now(
     db: &Database,
     live: &LiveSessions,
@@ -404,8 +496,7 @@ fn as_of_now(
         live.apply(session);
     }
     let now_ms = chrono::Utc::now().timestamp_millis();
-    playtime::totals::fill_set_aside(db, live, sessions, now_ms)?;
-    playtime::totals::fill_copy_overlap(db, live, sessions, now_ms)?;
+    playtime::totals::show_counted(db, live, sessions, now_ms)?;
     show_linked_games(db, sessions)
 }
 

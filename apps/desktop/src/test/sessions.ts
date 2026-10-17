@@ -9,10 +9,10 @@ export function at(year: number, month: number, day: number, hour = 0, minute = 
   return new Date(year, month - 1, day, hour, minute).toISOString();
 }
 
-/** A closed session that started at `start` and ran for `minutes`. */
+/** A closed session that started at `start` and ran for `minutes`, counting all of its time unless told otherwise. */
 export function session(start: string, minutes: number, overrides: Partial<Session> = {}): Session {
   const runtime = minutes * MINUTE_MS;
-  return {
+  const merged = {
     id: `session-${start}`,
     game_id: "game-1",
     device_id: "test",
@@ -25,6 +25,12 @@ export function session(start: string, minutes: number, overrides: Partial<Sessi
     integrity_status: "local",
     closed_cleanly: true,
     ...overrides,
+  };
+  return {
+    ...merged,
+    counted_runtime_ms: overrides.counted_runtime_ms ?? merged.runtime_ms,
+    counted_active_ms: overrides.counted_active_ms ?? merged.active_ms,
+    counted_idle_ms: overrides.counted_idle_ms ?? merged.idle_ms,
   };
 }
 

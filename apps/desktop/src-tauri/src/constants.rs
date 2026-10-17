@@ -96,9 +96,27 @@ pub const SESSION_TIME_MAX_MS: i64 = 10 * 366 * 24 * 60 * 60 * 1_000;
 /// How slices and stretches are worked out. Bump it when that changes, and
 /// every PC rebuilds them on its next start.
 pub const PLAY_SLICES_VERSION: i64 = 2;
-/// Two neighboring stretches of a session become one when their runtime per
-/// millisecond on the clock differs by at most this, in parts per thousand.
+/// Two neighboring stretches of a session become one when their runtime,
+/// active and idle time per millisecond on the clock each differ by at most
+/// this, in thousandths of a millisecond.
 pub const SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE: i64 = 10;
+/// Days in a week, for the journal's weeks. Same as `DAYS_PER_WEEK` in
+/// `lib/constants.ts`.
+pub const DAYS_PER_WEEK: i64 = 7;
+/// Most days the library's recent play may look back over.
+pub const RECENT_PLAY_MAX_DAYS: u32 = 366;
+/// Days a current streak is first looked for in. A longer one is looked for
+/// in the whole history.
+pub const STREAK_FIRST_LOOK_DAYS: i64 = 400;
+/// A game's page suggests stepping aside once other games ran beside it for
+/// this share of its time on the clock.
+pub const STEPS_ASIDE_HINT_MIN_SHARE: f64 = 0.25;
+/// Share of that time that must come from games started while it was open,
+/// as games start inside a launcher.
+pub const STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE: f64 = 0.5;
+/// Time other games must run beside a game before its page suggests
+/// stepping aside, in milliseconds.
+pub const STEPS_ASIDE_HINT_MIN_MS: i64 = 60 * 60 * 1_000;
 /// Setting with the `PLAY_SLICES_VERSION` the slices were built with. A
 /// restore drops it, so the slices are built again for the restored history.
 pub const PLAY_SLICES_VERSION_SETTING: &str = "play_slices_version";

@@ -9,10 +9,9 @@ import { parseOklchList, type Oklch } from "@/lib/color";
 import { DAYS_PER_WEEK, MINUTE_MS, SHARE_CALENDAR_CELL_SHARE, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
 import { markColors, type ArtColor } from "@/lib/game-tint";
 import type { Phrase } from "@/lib/sentences";
-import { toDayKey } from "@/lib/session-stats";
 import { daysSoFar, heatLevel, type YearStats } from "@/lib/stats";
 import type { ThemeMode } from "@/lib/theme";
-import { startOfDay, weekdayOf } from "@/lib/time";
+import { startOfDay, toDayKey, weekdayOf } from "@/lib/time";
 import { stableHash } from "@/lib/utils";
 import { shareSentence } from "@/lib/year-sentences";
 

@@ -27,11 +27,9 @@ import {
   STATS_TOP_GAMES,
 } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
-import { usePageVisible } from "@/lib/use-page-visible";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
-import { yearRange } from "@/lib/play-totals";
-import { countsAsPlay, toDayKey } from "@/lib/session-stats";
-import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape, type YearPlay } from "@/lib/stats";
+import { countsAsPlay } from "@/lib/sessions";
+import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape } from "@/lib/stats";
 import * as api from "@/lib/tauri";
 import {
   formatDayAndMonth,
@@ -40,7 +38,9 @@ import {
   formatHoursShort,
   parseVaultimeDate,
   startOfWeek,
+  toDayKey,
 } from "@/lib/time";
+import type { YearPlay } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
 import { busiestMonthSentence, rhythmSentence, shapesSentence, streakSentence, yearSentence } from "@/lib/year-sentences";
@@ -62,7 +62,6 @@ function percent(part: number, whole: number): number {
 export function StatsPage() {
   const { sessions, summaries, covers, today, loaded } = useLibrary();
   const playing = usePlaying().size > 0;
-  const visible = usePageVisible();
   const { accentHues, mode } = useAppearance();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -76,17 +75,16 @@ export function StatsPage() {
   const now = new Date();
   const year = now.getFullYear() + offset;
   // Reads again while a game runs and the window is seen, and when it shows again.
-  const live = playing && visible;
-  const refreshed = useRefreshWhile(live, LIVE_TOTALS_REFRESH_MS);
+  const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
 
   // Read again whenever a session starts or ends.
   useEffect(() => {
     let cancelled = false;
-    const [from, to] = yearRange(year);
-    Promise.all([api.getPlayTotals(from, to, "day"), api.getPlayTotals(from, to, "hour_of_week")])
-      .then(([days, hours]) => {
+    api
+      .getYearPlay(year)
+      .then((next) => {
         if (cancelled) return;
-        setPlay({ year, days, hours });
+        setPlay({ ...next, year });
         setPlayError(null);
       })
       .catch((error) => {
@@ -95,7 +93,7 @@ export function StatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [year, sessions, refreshed, live]);
+  }, [year, sessions, refreshed]);
 
   const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
   const titleOf = useCallback((gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game", [byGame]);
@@ -104,8 +102,7 @@ export function StatsPage() {
   // share dialog opens or closes.
   const shown = useMemo(() => {
     if (!yearPlay) return null;
-    const at = new Date();
-    return { stats: yearStats(sessions, year, yearPlay, at), now: at };
+    return { stats: yearStats(sessions, year, yearPlay), now: new Date() };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a new day changes the year so far
   }, [sessions, year, yearPlay, today]);
   // A color per game for the year, the main color of its art, nudged only

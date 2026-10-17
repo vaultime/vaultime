@@ -44,7 +44,7 @@ describe("gamePlaytime", () => {
   });
 
   it("counts two installs running at once once", () => {
-    const shared = { copy_overlap_ms: 30 * MINUTE_MS, copy_overlap_active_ms: 30 * MINUTE_MS };
+    const shared = { counted_runtime_ms: 30 * MINUTE_MS, counted_active_ms: 30 * MINUTE_MS };
     const copies = [
       session(at(2026, 9, 20, 9, 0), 60, { id: "steam", ...shared }),
       session(at(2026, 9, 20, 9, 0), 60, { id: "gog", recorded_game_id: "gog", ...shared }),
@@ -161,25 +161,25 @@ describe("statusSentence", () => {
 describe("sideBySideSentence", () => {
   const titles: Record<string, string> = { a: "League of Legends", b: "Teamfight Tactics", c: "Balatro", d: "Celeste" };
   const titleOf = (gameId: string) => titles[gameId];
-  const group = { ms: 115 * MINUTE_MS, alongside: null, mostAtOnce: 2 };
+  const group = { ms: 115 * MINUTE_MS, alongside: null, most_at_once: 2 };
 
   it("puts two games side by side", () => {
-    expect(sideBySideSentence({ ...group, gameIds: ["a", "b"] }, titleOf)).toBe(
+    expect(sideBySideSentence({ ...group, game_ids: ["a", "b"] }, titleOf)).toBe(
       "League of Legends and Teamfight Tactics ran side by side for 1 h 55.",
     );
   });
 
   it("names a game that ran through all of it first", () => {
-    expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c"], alongside: "a", mostAtOnce: 3 }, titleOf)).toBe(
+    expect(sideBySideSentence({ ...group, game_ids: ["a", "b", "c"], alongside: "a", most_at_once: 3 }, titleOf)).toBe(
       "League of Legends ran alongside Teamfight Tactics and Balatro for 1 h 55.",
     );
   });
 
   it("says how many ran at once when no game ran through all of it", () => {
-    expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c"] }, titleOf)).toBe(
+    expect(sideBySideSentence({ ...group, game_ids: ["a", "b", "c"] }, titleOf)).toBe(
       "League of Legends, Teamfight Tactics and Balatro ran side by side, two at a time, for 1 h 55.",
     );
-    expect(sideBySideSentence({ ...group, gameIds: ["a", "b", "c", "d"], mostAtOnce: 3 }, titleOf)).toBe(
+    expect(sideBySideSentence({ ...group, game_ids: ["a", "b", "c", "d"], most_at_once: 3 }, titleOf)).toBe(
       "League of Legends, Teamfight Tactics, Balatro and Celeste ran side by side, up to three at a time, for 1 h 55.",
     );
   });

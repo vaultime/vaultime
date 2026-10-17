@@ -80,6 +80,12 @@ export function startOfDay(date: Date, plusDays = 0): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + plusDays);
 }
 
+/** The local calendar day, "2026-09-29", as the core names days. */
+export function toDayKey(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 /** Monday is 0. */
 export function weekdayOf(date: Date): number {
   return (date.getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;

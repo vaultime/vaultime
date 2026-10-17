@@ -185,6 +185,158 @@ export interface PlayTotal {
   idle_ms: number;
 }
 
+/** A game's time over some days. Mirrors the Rust `GameTime` struct. */
+export interface GameTime {
+  game_id: string;
+  runtime_ms: number;
+  active_ms: number;
+  idle_ms: number;
+}
+
+/** The part of a session that ran on one local day. Mirrors the Rust `DayShare` struct. */
+export interface DayShare {
+  /** "2026-10-05". */
+  day: string;
+  /** Where the part starts and ends on the clock, inside the day, in epoch milliseconds. */
+  start_ms: number;
+  end_ms: number;
+  /** The session's time that counts on this day, from where it happened. */
+  runtime_ms: number;
+  /** The session counted time on an earlier day. */
+  from_before: boolean;
+  /** The session counts time on a later day. */
+  into_next: boolean;
+}
+
+/** A session's part on a day's strip. Mirrors the Rust `StripPart` struct. */
+export interface StripPart {
+  session_id: string;
+  game_id: string;
+  start_ms: number;
+  end_ms: number;
+  /** The session ran in from the day before. */
+  open_start: boolean;
+  /** The session runs on past midnight. */
+  open_end: boolean;
+}
+
+/** A part of a run in which the same games ran. Mirrors the Rust `RunPiece` struct. */
+export interface RunPiece {
+  start_ms: number;
+  end_ms: number;
+  /** In the order the games joined the run, so a game keeps its place while others come and go. */
+  game_ids: string[];
+  /** The first start and last end of the parts running in it. */
+  sessions_start_ms: number;
+  sessions_end_ms: number;
+}
+
+/** Parts that overlap on the clock, with no gap in between. Mirrors the Rust `PlayRun` struct. */
+export interface PlayRun {
+  start_ms: number;
+  end_ms: number;
+  /** From start to end, split where a game joins or leaves. */
+  pieces: RunPiece[];
+}
+
+/** Games that ran side by side. Mirrors the Rust `SideBySideGroup` struct. */
+export interface SideBySideGroup {
+  /** In the order the games joined. */
+  game_ids: string[];
+  /** The game in every stretch, when more than two games are in the group. */
+  alongside: string | null;
+  /** Clock time with at least two of the games running. */
+  ms: number;
+  /** The most games running at the same time. */
+  most_at_once: number;
+}
+
+/** One day of the journal. Mirrors the Rust `JournalDay` struct. */
+export interface JournalDayPlay {
+  /** "2026-10-05". */
+  day: string;
+  /** Clock time with a game running, games side by side counted once. */
+  played_ms: number;
+  /** Sessions that started on this day, in the order they started. */
+  session_ids: string[];
+  /** Every session's parts on the strip, in the order they began. */
+  parts: StripPart[];
+  runs: PlayRun[];
+  side_by_side: SideBySideGroup[];
+}
+
+/** A week of the journal, worked out by the core. Mirrors the Rust `JournalWeek` struct. */
+export interface JournalWeekPlay {
+  /** Days with play or with sessions that started on them, newest first. */
+  days: JournalDayPlay[];
+  /** Each session with time in the week, cut at local midnights, by session id. */
+  shares: Record<string, DayShare[]>;
+  /** Games that played in the week, in the order they first showed up. */
+  games: string[];
+  /** Clock time with a game running, games side by side counted once. */
+  played_ms: number;
+  /** Each game's time in the week, the most first. */
+  game_times: GameTime[];
+  sessions_count: number;
+  days_played: number;
+  /** "2026-10-07", the day with the most time played. */
+  longest_day: string | null;
+  /** Sessions that began before the week and ran on into it. */
+  carried_over: number;
+}
+
+/** Days in a row with play. Mirrors the Rust `Streak` struct. */
+export interface Streak {
+  days: number;
+  /** "2026-03-01". */
+  start: string;
+  end: string;
+}
+
+/** A year of play for the stats page. Mirrors the Rust `YearPlay` struct. */
+export interface YearPlay {
+  /** Each game's time per day. */
+  days: PlayTotal[];
+  /** Each game's time per hour of the week. */
+  hours: PlayTotal[];
+  /** Clock time with a game running, games side by side counted once. */
+  played_ms: number;
+  days_played: number;
+  longest_streak: Streak | null;
+  /** Days in a row with play up to today, or up to yesterday while today has none yet. */
+  current_streak: number;
+}
+
+/** The last few days of play. Mirrors the Rust `RecentPlay` struct. */
+export interface RecentPlay {
+  /** Clock time with a game running, games side by side counted once. */
+  played_ms: number;
+  runtime_ms: number;
+  active_ms: number;
+  /** Sessions that started in those days. */
+  sessions_count: number;
+  /** Days with play. */
+  days_count: number;
+  /** Each game's time, the most first. */
+  games: GameTime[];
+  longest_session_id: string | null;
+}
+
+/** This PC's running sessions and today's play. Mirrors the Rust `ActiveSessions` struct. */
+export interface ActiveSessions {
+  sessions: Session[];
+  /** Clock time with a game running today, as the journal counts it. */
+  played_today_ms: number;
+}
+
+/** Why a game's page suggests stepping aside. Mirrors the Rust `StepsAsideHint` struct. */
+export interface StepsAsideHint {
+  /** How long other games ran beside it. */
+  beside_ms: number;
+  /** Which share of its time on the clock that was. */
+  share: number;
+}
+
 /** Mirrors the Rust `Session` struct. */
 export interface Session {
   id: string;
@@ -193,6 +345,7 @@ export interface Session {
   started_at_wall: string;
   ended_at_wall: string | null;
   elapsed_monotonic_ms: number;
+  /** Without the time set aside, which `set_aside_ms` holds, so the record has both added up. */
   active_ms: number;
   idle_ms: number;
   runtime_ms: number;
@@ -203,12 +356,13 @@ export interface Session {
   set_aside_active_ms?: number;
   set_aside_idle_ms?: number;
   /**
-   * Runtime another copy of the same game ran through as well, like a linked
-   * install, which counts once, shared between the copies. The core works it out.
+   * What the session adds to totals: its time, with the time another copy of
+   * the same game ran through as well, like a linked install, counted once.
+   * The core works it out.
    */
-  copy_overlap_ms?: number;
-  copy_overlap_active_ms?: number;
-  copy_overlap_idle_ms?: number;
+  counted_runtime_ms: number;
+  counted_active_ms: number;
+  counted_idle_ms: number;
   /** The game that recorded it, when that game is linked to the one in `game_id`. */
   recorded_game_id?: string;
   /**

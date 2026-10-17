@@ -1,24 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { EditGameDialog, type EditableGame } from "@/features/library/components/EditGameDialog";
 import { GameLinkPicker } from "@/features/library/components/GameLinkPicker";
 import { useLibrary } from "@/features/library/library-context";
-import {
-  STEPS_ASIDE_HINT_MIN_MS,
-  STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE,
-  STEPS_ASIDE_HINT_MIN_SHARE,
-} from "@/lib/constants";
 import { pcName } from "@/lib/devices";
 import { linkTargets, linkedTo, whereFrom } from "@/lib/links";
-import { besideOthers } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatHoursMinutes } from "@/lib/time";
-import type { Game, GameLink, Session } from "@/lib/types";
+import type { Game, GameLink, Session, StepsAsideHint } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 
 /** Why the last change in a row failed. */
@@ -50,25 +44,34 @@ function useLinkGame() {
  */
 export function StepsAsideRow({
   game,
+  on,
   sessions,
-  stepping,
   error,
   onChange,
 }: {
   game: Game;
+  /** Whether the game counts only while no other game runs. */
+  on: boolean;
+  /** Every session, so the hint is asked for again when one starts or ends. */
   sessions: Session[];
-  /** Games that count only while no other game runs. */
-  stepping: Set<string>;
   error: string | null;
   onChange: (next: boolean) => void;
 }) {
-  const on = stepping.has(game.id);
-  const { besideMs, share, openedFirstShare } = besideOthers(game.id, sessions, stepping);
-  const suggest =
-    !on &&
-    share >= STEPS_ASIDE_HINT_MIN_SHARE &&
-    besideMs >= STEPS_ASIDE_HINT_MIN_MS &&
-    openedFirstShare >= STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE;
+  // The core says when the game looks like a launcher left open.
+  const [hint, setHint] = useState<{ gameId: string; hint: StepsAsideHint | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getStepsAsideHint(game.id)
+      .then((next) => {
+        if (!cancelled) setHint({ gameId: game.id, hint: next });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [game.id, on, sessions]);
+  const suggest = !on && hint?.gameId === game.id ? hint.hint : null;
   return (
     <div className="mt-4 border-t border-rule pt-4">
       <div className="flex items-start justify-between gap-4">
@@ -83,8 +86,8 @@ export function StepsAsideRow({
       </div>
       {suggest && (
         <p className="mt-2 text-[12px] leading-relaxed text-soft">
-          Games started while it was open and ran beside it for {formatHoursMinutes(besideMs)},{" "}
-          {Math.round(share * 100)} % of its time. If it is a launcher, this stops that time from counting for it.
+          Games started while it was open and ran beside it for {formatHoursMinutes(suggest.beside_ms)},{" "}
+          {Math.round(suggest.share * 100)} % of its time. If it is a launcher, this stops that time from counting for it.
         </p>
       )}
       <RowError error={error} />

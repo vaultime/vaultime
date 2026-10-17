@@ -55,8 +55,3 @@ export function sumByGame(totals: PlayTotal[]): GamePlay[] {
   }
   return [...games.values()].sort((a, b) => b.runtimeMs - a.runtimeMs);
 }
-
-/** The first day of `year` and of the year after, as the core takes them. */
-export function yearRange(year: number): [string, string] {
-  return [`${year}-01-01`, `${year + 1}-01-01`];
-}

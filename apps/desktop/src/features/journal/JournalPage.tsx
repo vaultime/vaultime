@@ -7,17 +7,15 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useAppearance } from "@/features/appearance/appearance-context";
-import { useActiveSessions, useLibrary } from "@/features/library/library-context";
-import { JOURNAL_LINK_FLASH_MS } from "@/lib/constants";
+import { useActiveSessions, useLastPoll, useLibrary } from "@/features/library/library-context";
+import { DAYS_PER_WEEK, JOURNAL_LINK_FLASH_MS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { weekSentence } from "@/lib/sentences";
-import { countedOnce, countsAsPlay, playedByGame, toDayKey } from "@/lib/session-stats";
-import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
-import { isoWeekNumber, parseVaultimeDate, startOfWeek, UI_LOCALE } from "@/lib/time";
-import type { Session, SessionEvent } from "@/lib/types";
+import { formatDate, isoWeekNumber, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
+import type { DayShare, JournalWeekPlay, Session, SessionEvent } from "@/lib/types";
 import { DaySection } from "./DaySection";
-import { buildWeek, entryId, weeksBack, type JournalDay } from "./week";
+import { entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
 
 /**
  * Chromium, which WebView2 runs on, opens a date picker for a date field.
@@ -27,13 +25,16 @@ const HAS_DATE_PICKER = typeof navigator !== "undefined" && /Chrome\//.test(navi
 
 /** Whether a session has an entry or a part on the day. */
 function hasSession(day: JournalDay, sessionId: string): boolean {
-  return day.spans.some((span) => span.id === sessionId) || day.sessions.some((session) => session.id === sessionId);
+  return day.parts.some((part) => part.session_id === sessionId) || day.sessionIds.includes(sessionId);
 }
+
+const NO_SHARES: DayShare[] = [];
 
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
   const { sessions: stored, summaries, statusChanges, notes, saveNote, refresh, today, loaded } = useLibrary();
   const active = useActiveSessions();
+  const lastPoll = useLastPoll();
   // Running sessions as of the last poll, a few seconds old at most. The
   // full list only reloads when a session starts or ends.
   const sessions = useMemo(() => {
@@ -45,10 +46,30 @@ export function JournalPage() {
   // the week of that day, as the stats page asks for.
   const [params] = useSearchParams();
   const [offset, setOffset] = useState(() => weeksBack(params.get("week")));
+  // The week on the page as the core worked it out. It stays until the next
+  // one comes, so moving between weeks does not flash an empty page.
+  const [shown, setShown] = useState<{ offset: number; start: Date; play: JournalWeekPlay } | null>(null);
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const dateInput = useRef<HTMLInputElement>(null);
   // Shown as a field to type a day in where the webview has no date picker.
   const [typingDay, setTypingDay] = useState(false);
+
+  // Read again when a session starts or ends, on a new day, and with every
+  // poll while a game runs, as its time grows.
+  const livePoll = active.length > 0 ? lastPoll : 0;
+  useEffect(() => {
+    let cancelled = false;
+    const start = weekStart(offset, new Date());
+    api
+      .getJournalWeek(toDayKey(start))
+      .then((play) => {
+        if (!cancelled) setShown({ offset, start, play });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [offset, stored, today, livePoll]);
 
   const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
   // Kept between polls, so session lines can reuse their sentences.
@@ -62,24 +83,17 @@ export function JournalPage() {
     return byId;
   }, [sessions]);
   const sessionsById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
-  const stepping = useMemo(
-    () => new Set(summaries.filter((summary) => stepsAside(summary.game)).map((summary) => summary.game.id)),
-    [summaries],
+  const days = useMemo(
+    () => (shown ? journalDays(shown.play, statusChanges, shown.start) : []),
+    [shown, statusChanges],
   );
-  // Worked out again when the sessions change or a new day begins, not each
-  // time a line is pointed at.
-  const week = useMemo(
-    () => buildWeek(sessions, statusChanges, stepping, offset, new Date()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new day moves the week along
-    [sessions, statusChanges, stepping, offset, today],
-  );
-  const { now, start: weekStart, end: weekEnd, days, sharesOf, carriedOver, games: weekGames } = week;
+  const sharesOf = useCallback((sessionId: string) => shown?.play.shares[sessionId] ?? NO_SHARES, [shown]);
+  const weekGames = shown?.play.games;
 
   // The session whose parts are marked on every day, while one of them is
   // pointed at or focused, or for a moment after a jump between them.
   const [linked, setLinked] = useState<string | null>(null);
-  // The line a jump goes to, scrolled to once its week is on the page, which
-  // is the render right after the jump.
+  // The line a jump goes to, scrolled to once its week is on the page.
   const jumpTarget = useRef<string | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
   const jumpTo = useCallback((sessionId: string, day: Date) => {
@@ -94,7 +108,7 @@ export function JournalPage() {
     );
   }, []);
   useEffect(() => {
-    if (!jumpTarget.current) return;
+    if (!jumpTarget.current || shown?.offset !== offset) return;
     const target = document.getElementById(jumpTarget.current);
     jumpTarget.current = null;
     if (!target) return;
@@ -111,8 +125,9 @@ export function JournalPage() {
       const summary = byGame.get(gameId);
       return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).colors;
     };
-    const weekMarks = markColors(weekGames.map(paletteOf), accentHues, mode);
-    const marks = new Map(weekGames.map((gameId, index) => [gameId, weekMarks[index]]));
+    const games = weekGames ?? [];
+    const weekMarks = markColors(games.map(paletteOf), accentHues, mode);
+    const marks = new Map(games.map((gameId, index) => [gameId, weekMarks[index]]));
     const markFor = (gameId: string) => marks.get(gameId) ?? markColors([paletteOf(gameId)], [], mode)[0];
     return {
       markOf: (gameId: string) => markFor(gameId).color,
@@ -125,13 +140,13 @@ export function JournalPage() {
     (gameId: string, moment: string) =>
       sessions
         .filter((session) => session.game_id === gameId && session.started_at_wall < moment)
-        .reduce((sum, session) => sum + countedOnce(session).runtimeMs, byGame.get(gameId)?.earlier?.earlier_ms ?? 0),
+        .reduce((sum, session) => sum + session.counted_runtime_ms, byGame.get(gameId)?.earlier?.earlier_ms ?? 0),
     [sessions, byGame],
   );
   const onCorrected = useCallback(() => void refresh(), [refresh]);
 
   // Events explain flagged sessions and skipped sleep. Only the games of this week are loaded.
-  const gameIds = [...new Set(days.flatMap((day) => day.spans.map((session) => session.game_id)))].sort().join(",");
+  const gameIds = [...new Set(days.flatMap((day) => day.parts.map((part) => part.game_id)))].sort().join(",");
   useEffect(() => {
     let cancelled = false;
     Promise.all(gameIds ? gameIds.split(",").map((id) => api.getSessionEventsForGame(id)) : [])
@@ -152,35 +167,39 @@ export function JournalPage() {
       }, null),
     [stored],
   );
-  const canGoBack = earliest !== null && startOfWeek(earliest) < weekStart;
 
-  if (!loaded) return null;
+  if (!loaded || !shown) return null;
 
-  const longestDay = [...days].sort((a, b) => b.playedMs - a.playedMs)[0];
-  // Each game's own time in the week, so games side by side both count, and
-  // two installs of one game running at once count once.
-  const weekRuntime = playedByGame(days.flatMap((day) => day.spans), now);
-  const gamesMs = [...weekRuntime.values()].reduce((sum, ms) => sum + ms, 0);
-  const [topGameId, topMs] = [...weekRuntime.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
-  const title = offset === 0 ? "This week" : offset === -1 ? "Last week" : `Week of ${weekStart.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })}`;
+  const { play, start, offset: shownOffset } = shown;
+  const canGoBack = earliest !== null && startOfWeek(earliest) < start;
+  const now = new Date();
+  const weekEnd = startOfDay(start, DAYS_PER_WEEK);
+  const [top] = play.game_times;
+  const gamesMs = play.game_times.reduce((sum, game) => sum + game.runtime_ms, 0);
+  const title =
+    shownOffset === 0
+      ? "This week"
+      : shownOffset === -1
+        ? "Last week"
+        : `Week of ${formatDate(start, { day: "numeric", month: "short" })}`;
   const sentence = weekSentence({
-    sessionsCount: days.reduce((sum, day) => sum + day.sessions.filter(countsAsPlay).length, 0),
-    runtimeMs: days.reduce((sum, day) => sum + day.playedMs, 0),
-    longestDay: longestDay ? longestDay.start.toLocaleDateString(UI_LOCALE, { weekday: "long" }) : null,
-    daysPlayed: days.filter((day) => day.spans.some(countsAsPlay)).length,
-    topTitle: topGameId ? (byGame.get(topGameId)?.game.title ?? null) : null,
-    topShare: gamesMs > 0 ? topMs / gamesMs : 0,
-    gamesCount: weekGames.length,
-    weekNumber: isoWeekNumber(weekStart),
-    carriedOver,
-    current: offset === 0,
+    sessionsCount: play.sessions_count,
+    runtimeMs: play.played_ms,
+    longestDay: play.longest_day ? formatDate(parseVaultimeDate(play.longest_day), { weekday: "long" }) : null,
+    daysPlayed: play.days_played,
+    topTitle: top ? (byGame.get(top.game_id)?.game.title ?? null) : null,
+    topShare: top && gamesMs > 0 ? top.runtime_ms / gamesMs : 0,
+    gamesCount: play.games.length,
+    weekNumber: isoWeekNumber(start),
+    carriedOver: play.carried_over,
+    current: shownOffset === 0,
   });
-  const weekYear = weekEnd.getFullYear() === now.getFullYear() ? "" : `, ${weekStart.getFullYear()}`;
+  const weekYear = weekEnd.getFullYear() === now.getFullYear() ? "" : `, ${start.getFullYear()}`;
 
   return (
     <div className="pb-16">
       <PageHeader
-        overline={`Journal, week ${isoWeekNumber(weekStart)}${weekYear}`}
+        overline={`Journal, week ${isoWeekNumber(start)}${weekYear}`}
         title={title}
         aside={
           <>
@@ -218,10 +237,10 @@ export function JournalPage() {
               }}
               onBlur={() => setTypingDay(false)}
             />
-            <StepButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset((value) => value - 1)}>
+            <StepButton label="Previous week" disabled={!canGoBack} onClick={() => setOffset(shownOffset - 1)}>
               <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
             </StepButton>
-            <StepButton label="Next week" disabled={offset >= 0} onClick={() => setOffset((value) => value + 1)}>
+            <StepButton label="Next week" disabled={shownOffset >= 0} onClick={() => setOffset(shownOffset + 1)}>
               <ChevronRight className="size-[18px]" strokeWidth={1.8} />
             </StepButton>
           </>
@@ -242,7 +261,6 @@ export function JournalPage() {
             markOf={markOf}
             fillOf={fillOf}
             events={events}
-            now={now}
             notes={notes}
             onSaveNote={saveNote}
             onCorrected={onCorrected}

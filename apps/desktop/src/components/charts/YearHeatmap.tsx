@@ -4,9 +4,8 @@
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import type { BucketPlay } from "@/lib/play-totals";
-import { toDayKey } from "@/lib/session-stats";
 import { heatLevel } from "@/lib/stats";
-import { UI_LOCALE, weekdayOf } from "@/lib/time";
+import { toDayKey, UI_LOCALE, weekdayOf } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { cardPosition, describePlay, type GameLabel } from "./play-card";
 import { PlayCard } from "./PlayCard";

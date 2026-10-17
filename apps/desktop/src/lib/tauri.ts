@@ -3,6 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ActiveSessions,
   ArtworkSource,
   BackupSnapshot,
   CloudBackupRestoreResult,
@@ -20,17 +21,20 @@ import type {
   GameStatus,
   GameStatusChange,
   IgnoredProgram,
+  JournalWeekPlay,
   LocalBackupSummary,
   MergePreview,
   MergeSummary,
   NewGames,
   PlayBucket,
   PlayTotal,
+  RecentPlay,
   Session,
   SessionEvent,
   SessionNote,
   Setting,
   SteamPlaytimePreview,
+  StepsAsideHint,
   ThisPc,
   TrackingDiagnostics,
   TrimPreview,
@@ -38,6 +42,7 @@ import type {
   WindowLook,
   WindowSizeChoice,
   WindowSizeState,
+  YearPlay,
 } from "@/lib/types";
 
 /** The id of this PC, stored with its sessions and backups. */
@@ -208,8 +213,29 @@ export async function getPlayTotals(
   return invoke<PlayTotal[]>("get_play_totals", { from, to, bucket, gameId: gameId ?? null });
 }
 
-export async function getActiveSessions(): Promise<Session[]> {
-  return invoke<Session[]>("get_active_sessions");
+/** The journal's week from the local Monday `from`, "2026-10-05", worked out by the core. */
+export async function getJournalWeek(from: string): Promise<JournalWeekPlay> {
+  return invoke<JournalWeekPlay>("get_journal_week", { from });
+}
+
+/** A year of play for the stats page. */
+export async function getYearPlay(year: number): Promise<YearPlay> {
+  return invoke<YearPlay>("get_year_play", { year });
+}
+
+/** The last `days` local days of play, today included. */
+export async function getRecentPlay(days: number): Promise<RecentPlay> {
+  return invoke<RecentPlay>("get_recent_play", { days });
+}
+
+/** Why a game's page should suggest stepping aside, or null. */
+export async function getStepsAsideHint(gameId: string): Promise<StepsAsideHint | null> {
+  return invoke<StepsAsideHint | null>("get_steps_aside_hint", { gameId });
+}
+
+/** This PC's running sessions as of the tracker's latest tick, and today's play. */
+export async function getActiveSessions(): Promise<ActiveSessions> {
+  return invoke<ActiveSessions>("get_active_sessions");
 }
 
 export async function getSessionEventsForGame(

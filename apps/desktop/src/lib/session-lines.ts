@@ -28,7 +28,7 @@ import {
   quotedReason,
 } from "@/lib/integrity";
 import type { Phrase } from "@/lib/sentences";
-import { countsAsPlay } from "@/lib/session-stats";
+import { countsAsPlay } from "@/lib/sessions";
 import { shapeOf, type SessionShape } from "@/lib/stats";
 import {
   calendarDaysAgo,

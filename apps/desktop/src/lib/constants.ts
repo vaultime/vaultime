@@ -23,7 +23,7 @@ export const MINUTES_PER_HOUR = 60;
 export const SECONDS_PER_HOUR = 3_600;
 /** Hours in a day. */
 export const HOURS_PER_DAY = 24;
-/** Days in a week. */
+/** Days in a week. Same as `DAYS_PER_WEEK` in constants.rs. */
 export const DAYS_PER_WEEK = 7;
 /** Months in a year. */
 export const MONTHS_PER_YEAR = 12;
@@ -186,13 +186,6 @@ export const FOLDER_MATCH_LAUNCHERS = [
   "amazon",
   "itch",
 ];
-
-/** Share of a game's time other games must run beside it before its page suggests stepping aside. */
-export const STEPS_ASIDE_HINT_MIN_SHARE = 0.25;
-/** Share of that time that must come from games started while it was open, as games start inside a launcher. */
-export const STEPS_ASIDE_HINT_MIN_OPENED_FIRST_SHARE = 0.5;
-/** Time other games must run beside a game before its page suggests stepping aside. */
-export const STEPS_ASIDE_HINT_MIN_MS = HOUR_MS;
 
 /** Sessions listed before "Show all". */
 export const GAME_RECENT_SESSIONS = 8;

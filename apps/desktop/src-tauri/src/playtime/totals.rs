@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Play time per day, week, month or year, added up from the slices.
+//! Play time per day, week, month or year, added up from the slices, and
+//! clock time with a game running, from the stretches beside them.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Timelike, Utc};
 use rusqlite::params;
@@ -17,8 +18,8 @@ use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
 use crate::playtime::slices::{
-    STEPS_ASIDE, Slice, TimedEvent, apportion, aside_stretches, placing_events, slice_of,
-    slices_of, sum_of, wall_ms,
+    STEPS_ASIDE, Slice, Span, TimedEvent, apportion, aside_stretches, placing_events, slice_of,
+    slices_from, spans_of, sum_of, wall_ms,
 };
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
@@ -74,46 +75,30 @@ fn bucket_of<Tz: TimeZone>(tz: &Tz, start_ms: i64, bucket: Bucket) -> Option<Str
     })
 }
 
-/// The slices of running sessions, placed up to the tracker's latest tick.
-/// A session the tracker does not run, left over from a crash, counts up to
-/// its last event.
-fn running_slices(
-    conn: &rusqlite::Connection,
-    live: &LiveSessions,
-    game_id: Option<&str>,
-    now_ms: i64,
-) -> Result<Vec<(String, Slice)>> {
+/// Open sessions, or those of `game_id` and the games linked to it.
+fn open_sessions(conn: &rusqlite::Connection, game_id: Option<&str>) -> Result<Vec<Session>> {
     let mut stmt = conn
-        .prepare(
+        .prepare_cached(
             "SELECT * FROM sessions
              WHERE ended_at_wall IS NULL AND (?1 IS NULL OR game_id = ?1
                  OR game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1))",
         )
         .map_err(map_db)?;
-    let open = stmt
-        .query_map([game_id], row_to_session)
+    stmt.query_map([game_id], row_to_session)
         .map_err(map_db)?
         .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(map_db)?;
-    let mut placed = Vec::new();
-    for session in open {
-        placed.extend(
-            open_session_slices(conn, live, &session, now_ms)?
-                .into_iter()
-                .map(|slice| (session.game_id.clone(), slice)),
-        );
-    }
-    Ok(placed)
+        .map_err(map_db)
 }
 
-/// The slices of an open session, placed up to the tracker's latest tick,
-/// or up to its last event when the tracker does not run it.
-fn open_session_slices(
+/// The stretches of an open session, placed up to the tracker's latest tick,
+/// or up to its last event when the tracker does not run it, like a session
+/// left over from a crash.
+pub(crate) fn open_session_spans(
     conn: &rusqlite::Connection,
     live: &LiveSessions,
     session: &Session,
     now_ms: i64,
-) -> Result<Vec<Slice>> {
+) -> Result<Vec<Span>> {
     let events = placing_events(conn, &session.id)?;
     let latest = live
         .get(&session.id)
@@ -129,7 +114,247 @@ fn open_session_slices(
             ))
         });
     let aside = aside_stretches(conn, session, now_ms)?;
-    Ok(slices_of(session, &events, latest, &aside))
+    Ok(spans_of(session, &events, latest, &aside))
+}
+
+/// The slices of an open session, as `open_session_spans` places it.
+fn open_session_slices(
+    conn: &rusqlite::Connection,
+    live: &LiveSessions,
+    session: &Session,
+    now_ms: i64,
+) -> Result<Vec<Slice>> {
+    Ok(slices_from(&open_session_spans(
+        conn, live, session, now_ms,
+    )?))
+}
+
+/// What was played between two moments, running sessions up to the latest
+/// tick.
+struct RangePlay {
+    /// Each slice with the game that recorded it.
+    slices: Vec<(String, Slice)>,
+    /// Each stretch with the game it counts as. Empty unless asked for.
+    spans: Vec<(String, Span)>,
+}
+
+/// The slices of the quarter hours from `from_ms` up to `to_ms`, and with
+/// `with_spans` the stretches with time in them, of every game or of
+/// `game_id` and the games linked to it. One snapshot for all reads, so a
+/// session that ends in between counts once, as running or as stored.
+#[expect(clippy::too_many_arguments)]
+fn range_play(
+    db: &Database,
+    live: &LiveSessions,
+    links: &HashMap<String, String>,
+    from_ms: i64,
+    to_ms: i64,
+    game_id: Option<&str>,
+    now_ms: i64,
+    with_spans: bool,
+) -> Result<RangePlay> {
+    db.with_transaction(|conn| {
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT sessions.game_id, play_slices.slice_start, play_slices.runtime_ms,
+                        play_slices.active_ms, play_slices.idle_ms
+                 FROM play_slices JOIN sessions ON sessions.id = play_slices.session_id
+                 WHERE play_slices.slice_start >= ?1 AND play_slices.slice_start < ?2
+                   AND (?3 IS NULL OR sessions.game_id = ?3 OR sessions.game_id IN
+                        (SELECT game_id FROM game_links WHERE linked_game_id = ?3))",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(params![from_ms, to_ms, game_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    Slice {
+                        start_ms: row.get(1)?,
+                        runtime_ms: row.get(2)?,
+                        active_ms: row.get(3)?,
+                        idle_ms: row.get(4)?,
+                    },
+                ))
+            })
+            .map_err(map_db)?;
+        let mut slices: Vec<(String, Slice)> =
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?;
+        let shown = |game: String| links.get(&game).cloned().unwrap_or(game);
+        let mut spans = Vec::new();
+        if with_spans {
+            let mut stmt = conn
+                .prepare_cached(
+                    "SELECT sessions.game_id, play_spans.span_start, play_spans.span_end,
+                            play_spans.runtime_ms, play_spans.active_ms, play_spans.idle_ms
+                     FROM play_spans JOIN sessions ON sessions.id = play_spans.session_id
+                     WHERE play_spans.span_end >= ?1 AND play_spans.span_start < ?2
+                       AND (?3 IS NULL OR sessions.game_id = ?3 OR sessions.game_id IN
+                            (SELECT game_id FROM game_links WHERE linked_game_id = ?3))",
+                )
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map(params![from_ms, to_ms, game_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        Span {
+                            start_ms: row.get(1)?,
+                            end_ms: row.get(2)?,
+                            runtime_ms: row.get(3)?,
+                            active_ms: row.get(4)?,
+                            idle_ms: row.get(5)?,
+                        },
+                    ))
+                })
+                .map_err(map_db)?;
+            for row in rows {
+                let (game, span) = row.map_err(map_db)?;
+                spans.push((shown(game), span));
+            }
+        }
+        for session in open_sessions(conn, game_id)? {
+            let placed = open_session_spans(conn, live, &session, now_ms)?;
+            slices.extend(
+                slices_from(&placed)
+                    .into_iter()
+                    .filter(|slice| slice.start_ms >= from_ms && slice.start_ms < to_ms)
+                    .map(|slice| (session.game_id.clone(), slice)),
+            );
+            if with_spans {
+                let game = shown(session.game_id.clone());
+                spans.extend(
+                    placed
+                        .into_iter()
+                        .filter(|span| span.end_ms >= from_ms && span.start_ms < to_ms)
+                        .map(|span| (game.clone(), span)),
+                );
+            }
+        }
+        Ok(RangePlay { slices, spans })
+    })
+}
+
+/// Clock time with something running among `pieces`, each a start, an end
+/// and the runtime spread evenly between them, the densest piece counting
+/// at each moment. A piece without length counts in full.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "milliseconds of play fit f64 exactly"
+)]
+fn clock_once(pieces: &[(i64, i64, f64)]) -> f64 {
+    let untimed: f64 = pieces
+        .iter()
+        .filter(|(start, end, _)| end <= start)
+        .map(|(_, _, runtime)| runtime)
+        .sum();
+    let mut bounds: Vec<i64> = pieces
+        .iter()
+        .filter(|(start, end, _)| end > start)
+        .flat_map(|(start, end, _)| [*start, *end])
+        .collect();
+    bounds.sort_unstable();
+    bounds.dedup();
+    let mut timed = 0.0;
+    for pair in bounds.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        let densest = pieces
+            .iter()
+            .filter(|(start, end, _)| end > start && *start <= from && *end >= to)
+            .map(|(start, end, runtime)| runtime / (end - start) as f64)
+            .fold(0.0, f64::max);
+        timed += densest * (to - from) as f64;
+    }
+    untimed + timed
+}
+
+/// Clock time with a game running in each quarter hour, games side by side
+/// counted once. `once` holds each shown game's time per quarter hour and
+/// `spans` the stretches it was placed from. Where one game ran, that is its
+/// time in the slices exactly. Where several did, the stretches tell how
+/// much of their time overlapped on the clock, which is taken out.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "milliseconds of play fit f64 exactly"
+)]
+fn played_by_slice(
+    once: &BTreeMap<(String, i64), [i64; 3]>,
+    spans: &[(String, Span)],
+) -> BTreeMap<i64, i64> {
+    // The sum, the largest and the count of the games in each quarter hour.
+    let mut cells: BTreeMap<i64, (i64, i64, usize)> = BTreeMap::new();
+    for ((_, start_ms), [runtime_ms, _, _]) in once {
+        if *runtime_ms <= 0 {
+            continue;
+        }
+        let cell = cells.entry(*start_ms).or_default();
+        cell.0 += runtime_ms;
+        cell.1 = cell.1.max(*runtime_ms);
+        cell.2 += 1;
+    }
+    let shared: BTreeSet<i64> = cells
+        .iter()
+        .filter(|(_, (_, _, games))| *games > 1)
+        .map(|(start_ms, _)| *start_ms)
+        .collect();
+    let mut pieces: HashMap<i64, Vec<(&str, i64, i64, f64)>> = HashMap::new();
+    if !shared.is_empty() {
+        for (game, span) in spans {
+            if span.runtime_ms <= 0 {
+                continue;
+            }
+            let length = span.length_ms();
+            if length == 0 {
+                let cell = slice_of(span.start_ms);
+                if shared.contains(&cell) {
+                    pieces.entry(cell).or_default().push((
+                        game,
+                        span.start_ms,
+                        span.end_ms,
+                        span.runtime_ms as f64,
+                    ));
+                }
+                continue;
+            }
+            for &cell in shared.range(slice_of(span.start_ms)..span.end_ms) {
+                let (from, to) = (
+                    span.start_ms.max(cell),
+                    span.end_ms.min(cell + PLAY_SLICE_MS),
+                );
+                if to > from {
+                    let share = span.runtime_ms as f64 * (to - from) as f64 / length as f64;
+                    pieces
+                        .entry(cell)
+                        .or_default()
+                        .push((game, from, to, share));
+                }
+            }
+        }
+    }
+    cells
+        .into_iter()
+        .map(|(start_ms, (sum, largest, _))| {
+            let Some(cell) = pieces.get(&start_ms) else {
+                return (start_ms, sum);
+            };
+            let all: Vec<(i64, i64, f64)> = cell
+                .iter()
+                .map(|&(_, from, to, runtime)| (from, to, runtime))
+                .collect();
+            let games: BTreeSet<&str> = cell.iter().map(|(game, ..)| *game).collect();
+            let each: f64 = games
+                .iter()
+                .map(|game| {
+                    let own: Vec<(i64, i64, f64)> = cell
+                        .iter()
+                        .filter(|(other, ..)| other == game)
+                        .map(|&(_, from, to, runtime)| (from, to, runtime))
+                        .collect();
+                    clock_once(&own)
+                })
+                .sum();
+            let overlap = (each - clock_once(&all)).max(0.0).round() as i64;
+            (start_ms, (sum - overlap).clamp(largest, sum))
+        })
+        .collect()
 }
 
 /// Fills in the time set aside of sessions whose game steps aside for
@@ -239,6 +464,30 @@ fn counted_once(slices: &[(&str, Slice)]) -> Vec<Slice> {
         }
     }
     counted
+}
+
+/// Brings sessions to what pages show, which is what counts: runtime, active
+/// and idle time without the time set aside, which `set_aside_*` keeps, and
+/// in `counted_*` what each adds to totals, time shared with another copy
+/// of its game counted once. Running sessions, already brought up to the
+/// latest tick, are placed up to it.
+pub fn show_counted(
+    db: &Database,
+    live: &LiveSessions,
+    sessions: &mut [Session],
+    now_ms: i64,
+) -> Result<()> {
+    fill_set_aside(db, live, sessions, now_ms)?;
+    fill_copy_overlap(db, live, sessions, now_ms)?;
+    for session in sessions {
+        session.runtime_ms = (session.runtime_ms - session.set_aside_ms).max(0);
+        session.active_ms = (session.active_ms - session.set_aside_active_ms).max(0);
+        session.idle_ms = (session.idle_ms - session.set_aside_idle_ms).max(0);
+        session.counted_runtime_ms = (session.runtime_ms - session.copy_overlap_ms).max(0);
+        session.counted_active_ms = (session.active_ms - session.copy_overlap_active_ms).max(0);
+        session.counted_idle_ms = (session.idle_ms - session.copy_overlap_idle_ms).max(0);
+    }
+    Ok(())
 }
 
 /// Each shown game's time per quarter hour, its copies running at the same
@@ -442,6 +691,36 @@ pub fn fill_copy_overlap(
     Ok(())
 }
 
+/// Each game's time per bucket in `once`, oldest bucket first.
+fn bucketed<Tz: TimeZone>(
+    tz: &Tz,
+    once: &BTreeMap<(String, i64), [i64; 3]>,
+    bucket: Bucket,
+) -> Vec<PlayTotal> {
+    let mut totals: BTreeMap<(String, String), [i64; 3]> = BTreeMap::new();
+    for ((game, start_ms), [runtime_ms, active_ms, idle_ms]) in once {
+        let Some(key) = bucket_of(tz, *start_ms, bucket) else {
+            continue;
+        };
+        let total = totals.entry((key, game.clone())).or_default();
+        total[0] += runtime_ms;
+        total[1] += active_ms;
+        total[2] += idle_ms;
+    }
+    totals
+        .into_iter()
+        .map(
+            |((bucket, game_id), [runtime_ms, active_ms, idle_ms])| PlayTotal {
+                bucket,
+                game_id,
+                runtime_ms,
+                active_ms,
+                idle_ms,
+            },
+        )
+        .collect()
+}
+
 /// Each game's time per bucket, from the local day `from` up to but not
 /// including `to`, oldest bucket first. Running sessions count up to the
 /// tracker's latest tick, at `now_ms`.
@@ -456,68 +735,82 @@ pub fn play_totals<Tz: TimeZone>(
     game_id: Option<&str>,
     now_ms: i64,
 ) -> Result<Vec<PlayTotal>> {
-    let (from_ms, to_ms) = (day_start_ms(tz, from), day_start_ms(tz, to));
-    // One snapshot for both reads, so a session that ends in between counts
-    // once, as running or as stored.
-    let slices: Vec<(String, Slice)> = db.with_transaction(|conn| {
-        let mut stmt = conn
-            .prepare_cached(
-                "SELECT sessions.game_id, play_slices.slice_start, play_slices.runtime_ms,
-                        play_slices.active_ms, play_slices.idle_ms
-                 FROM play_slices JOIN sessions ON sessions.id = play_slices.session_id
-                 WHERE play_slices.slice_start >= ?1 AND play_slices.slice_start < ?2
-                   AND (?3 IS NULL OR sessions.game_id = ?3 OR sessions.game_id IN
-                        (SELECT game_id FROM game_links WHERE linked_game_id = ?3))",
-            )
-            .map_err(map_db)?;
-        let rows = stmt
-            .query_map(params![from_ms, to_ms, game_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    Slice {
-                        start_ms: row.get(1)?,
-                        runtime_ms: row.get(2)?,
-                        active_ms: row.get(3)?,
-                        idle_ms: row.get(4)?,
-                    },
-                ))
-            })
-            .map_err(map_db)?;
-        let mut slices: Vec<(String, Slice)> =
-            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?;
-        slices.extend(
-            running_slices(conn, live, game_id, now_ms)?
-                .into_iter()
-                .filter(|(_, slice)| slice.start_ms >= from_ms && slice.start_ms < to_ms),
-        );
-        Ok(slices)
-    })?;
-
-    let mut totals: BTreeMap<(String, String), [i64; 3]> = BTreeMap::new();
     // A linked game, another install here or a game of another PC, counts
     // as the game it is linked to.
     let links = games::links(db)?;
-    for ((game, start_ms), [runtime_ms, active_ms, idle_ms]) in once_at_a_time(&slices, &links) {
-        let Some(key) = bucket_of(tz, start_ms, bucket) else {
-            continue;
-        };
-        let total = totals.entry((key, game)).or_default();
-        total[0] += runtime_ms;
-        total[1] += active_ms;
-        total[2] += idle_ms;
+    let range = range_play(
+        db,
+        live,
+        &links,
+        day_start_ms(tz, from),
+        day_start_ms(tz, to),
+        game_id,
+        now_ms,
+        false,
+    )?;
+    Ok(bucketed(tz, &once_at_a_time(&range.slices, &links), bucket))
+}
+
+/// Each game's time per local day, and the clock time with a game running on
+/// each, games side by side counted once.
+#[derive(Debug, Clone, Default)]
+pub struct DayTotals {
+    /// By day, oldest first, as `play_totals` gives them.
+    pub games: Vec<PlayTotal>,
+    /// Clock time with a game running, by day, days without play left out.
+    pub played: BTreeMap<String, i64>,
+}
+
+impl DayTotals {
+    /// Days with time played, oldest first.
+    pub fn days_played(&self) -> BTreeSet<&str> {
+        self.games
+            .iter()
+            .filter(|total| total.runtime_ms > 0)
+            .map(|total| total.bucket.as_str())
+            .collect()
     }
-    Ok(totals
-        .into_iter()
-        .map(
-            |((bucket, game_id), [runtime_ms, active_ms, idle_ms])| PlayTotal {
-                bucket,
-                game_id,
-                runtime_ms,
-                active_ms,
-                idle_ms,
-            },
-        )
-        .collect())
+
+    /// Clock time with a game running over all the days.
+    pub fn played_ms(&self) -> i64 {
+        self.played.values().sum()
+    }
+}
+
+/// `DayTotals` from the local day `from` up to but not including `to`.
+/// Running sessions count up to the tracker's latest tick, at `now_ms`.
+pub fn day_totals<Tz: TimeZone>(
+    db: &Database,
+    live: &LiveSessions,
+    tz: &Tz,
+    from: NaiveDate,
+    to: NaiveDate,
+    now_ms: i64,
+) -> Result<DayTotals> {
+    let links = games::links(db)?;
+    let range = range_play(
+        db,
+        live,
+        &links,
+        day_start_ms(tz, from),
+        day_start_ms(tz, to),
+        None,
+        now_ms,
+        true,
+    )?;
+    let once = once_at_a_time(&range.slices, &links);
+    let mut played: BTreeMap<String, i64> = BTreeMap::new();
+    for (start_ms, ms) in played_by_slice(&once, &range.spans) {
+        if let Some(day) = bucket_of(tz, start_ms, Bucket::Day)
+            && ms > 0
+        {
+            *played.entry(day).or_default() += ms;
+        }
+    }
+    Ok(DayTotals {
+        games: bucketed(tz, &once, Bucket::Day),
+        played,
+    })
 }
 
 #[cfg(test)]
@@ -530,6 +823,7 @@ mod tests {
     use crate::db::repo::{devices, games, sessions};
     use crate::integrity;
     use crate::playtime::slices::rebuild_session_and_around;
+    use crate::playtime::testing;
 
     const MINUTE: i64 = 60_000;
 
@@ -975,5 +1269,124 @@ mod tests {
         played_game(&db, &other, "2026-10-02T18:30:00Z", 60);
         assert_eq!(day_minutes(&db, &one), 60);
         assert_eq!(day_minutes(&db, &other), 60);
+    }
+
+    /// Clock time with a game running on 2 October 2026 in UTC, in minutes,
+    /// and each game's runtime added up.
+    fn played_that_day(db: &Database) -> (i64, i64) {
+        let totals = day_totals(
+            db,
+            &LiveSessions::default(),
+            &FixedOffset::east_opt(0).unwrap(),
+            date("2026-10-02"),
+            date("2026-10-03"),
+            0,
+        )
+        .unwrap();
+        let games: i64 = totals.games.iter().map(|total| total.runtime_ms).sum();
+        (totals.played_ms() / MINUTE, games / MINUTE)
+    }
+
+    #[test]
+    fn games_side_by_side_count_once_in_the_time_played() {
+        let db = testing::database();
+        let (a, b) = (game(&db, "A"), game(&db, "B"));
+        testing::played(&db, &a, "2026-10-02T18:00:00Z", 120);
+        testing::played(&db, &b, "2026-10-02T19:00:00Z", 120);
+        assert_eq!(played_that_day(&db), (180, 240));
+    }
+
+    #[test]
+    fn games_taking_turns_in_one_quarter_hour_count_in_full() {
+        let db = testing::database();
+        let (a, b) = (game(&db, "A"), game(&db, "B"));
+        testing::played(&db, &a, "2026-10-02T18:00:00Z", 5);
+        testing::played(&db, &b, "2026-10-02T18:10:00Z", 4);
+        assert_eq!(played_that_day(&db), (9, 9));
+    }
+
+    #[test]
+    fn one_game_alone_plays_exactly_its_time() {
+        let db = testing::database();
+        let a = game(&db, "A");
+        testing::recorded(
+            &db,
+            &a,
+            "device",
+            "2026-10-02T18:07:00Z",
+            &[
+                testing::Mark::Check(20, 20, 5),
+                testing::Mark::Check(61, 60, 40),
+            ],
+        );
+        let totals = day_totals(
+            &db,
+            &LiveSessions::default(),
+            &FixedOffset::east_opt(0).unwrap(),
+            date("2026-10-02"),
+            date("2026-10-03"),
+            0,
+        )
+        .unwrap();
+        assert_eq!(totals.played_ms(), 60 * MINUTE);
+        assert_eq!(totals.games[0].runtime_ms, 60 * MINUTE);
+    }
+
+    #[test]
+    fn a_sleep_both_games_slept_through_is_left_out() {
+        let db = testing::database();
+        let (a, b) = (game(&db, "A"), game(&db, "B"));
+        // Both on the clock from 10:00 to 12:00, the PC asleep from 10:30 to 11:30.
+        let marks = [
+            testing::Mark::Check(30, 30, 30),
+            testing::Mark::Gap(90),
+            testing::Mark::Check(120, 60, 60),
+        ];
+        testing::recorded(&db, &a, "device", "2026-10-02T10:00:00Z", &marks);
+        testing::recorded(&db, &b, "device", "2026-10-02T10:00:00Z", &marks);
+        assert_eq!(played_that_day(&db), (60, 120));
+    }
+
+    #[test]
+    fn time_set_aside_counts_nowhere_in_the_time_played() {
+        let db = testing::database();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        testing::played(&db, &client, "2026-10-02T18:00:00Z", 180);
+        testing::played(&db, &match_game, "2026-10-02T19:00:00Z", 60);
+        assert_eq!(played_that_day(&db), (180, 180));
+    }
+
+    #[test]
+    fn copies_of_one_game_count_once_in_the_time_played() {
+        let db = testing::database();
+        let (steam, gog) = (game(&db, "Steam copy"), game(&db, "GOG copy"));
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        testing::played(&db, &steam, "2026-10-02T18:00:00Z", 60);
+        testing::played(&db, &gog, "2026-10-02T18:30:00Z", 60);
+        assert_eq!(played_that_day(&db), (90, 90));
+    }
+
+    #[test]
+    fn pages_get_what_counts_of_each_session() {
+        let db = testing::database();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        let copy = game(&db, "Match copy");
+        games::set_steps_aside(&db, &client, true).unwrap();
+        games::link_game(&db, &copy, Some(&match_game)).unwrap();
+        let launcher = testing::played(&db, &client, "2026-10-02T18:00:00Z", 180);
+        testing::played(&db, &match_game, "2026-10-02T19:00:00Z", 60);
+        testing::played(&db, &copy, "2026-10-02T19:30:00Z", 60);
+
+        let mut listed = sessions::list_all_sessions(&db).unwrap();
+        show_counted(&db, &LiveSessions::default(), &mut listed, 0).unwrap();
+        let client_row = listed.iter().find(|row| row.id == launcher).unwrap();
+        // The match and its copy ran from 19:00 to 20:30.
+        assert_eq!(client_row.runtime_ms, 90 * MINUTE);
+        assert_eq!(client_row.set_aside_ms, 90 * MINUTE);
+        assert_eq!(client_row.counted_runtime_ms, 90 * MINUTE);
+        let counted: i64 = listed.iter().map(|row| row.counted_runtime_ms).sum();
+        assert_eq!(counted, played_that_day(&db).1 * MINUTE);
+        assert_eq!(played_that_day(&db), (180, 180));
     }
 }

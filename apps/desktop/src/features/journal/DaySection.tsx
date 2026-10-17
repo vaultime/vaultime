@@ -10,21 +10,32 @@ import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import { sideBySideSentence, statusSentence } from "@/lib/sentences";
 import { afterMidnightLead, continuedAmounts, continuedPhrase, sessionAmounts } from "@/lib/session-lines";
-import { countsAsPlay, playRuns, sideBySideGroups, toDayKey, type DayShare, type PlayRun } from "@/lib/session-stats";
-import { formatClockTime, formatHoursMinutes, formatSpanOnDay, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
-import type { Session, SessionEvent } from "@/lib/types";
+import {
+  formatClockTime,
+  formatDate,
+  formatHoursMinutes,
+  formatSpanOnDay,
+  parseVaultimeDate,
+  toDayKey,
+} from "@/lib/time";
+import type { DayShare, PlayRun, Session, SessionEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PlayBlock } from "./PlayBlock";
 import { BLEED_PX, HIT_SLOP_PX, hatch, OUTLINE_GAP_PX, placeOnDay, TICKS, type Place } from "./strip";
-import { addDays, entryId, type JournalDay } from "./week";
+import { entryId, type JournalDay } from "./week";
 
 /** A session's part on a day's strip, with whether it runs in from or out to midnight. */
 interface StripPart {
   session: Session;
   place: Place;
+  startMs: number;
+  endMs: number;
   openStart: boolean;
   openEnd: boolean;
 }
+
+/** Local midnight at the start of the day a share is on. */
+const dayOf = (share: DayShare) => parseVaultimeDate(share.day);
 
 /**
  * What a session on the strip is, for the pointer: its game, when it ran,
@@ -48,9 +59,7 @@ function SessionCard({
   const started = parseVaultimeDate(session.started_at_wall);
   const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
   const dayName = (share: DayShare) =>
-    shares.length > DAYS_PER_WEEK
-      ? share.day.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "short" })
-      : share.day.toLocaleDateString(UI_LOCALE, { weekday: "long" });
+    formatDate(dayOf(share), shares.length > DAYS_PER_WEEK ? { day: "numeric", month: "short" } : { weekday: "long" });
   return (
     <div
       aria-hidden="true"
@@ -61,16 +70,18 @@ function SessionCard({
         <span className="size-2 shrink-0 rounded-full" style={{ background: mark }} />
         <span className="min-w-0 flex-1 truncate">{title}</span>
       </div>
-      <div className="mt-1 font-mono text-xs text-faint">{formatSpanOnDay(started, ended, shares[0].day)}</div>
+      <div className="mt-1 font-mono text-xs text-faint">
+        {formatSpanOnDay(started, ended, shares[0] ? dayOf(shares[0]) : day)}
+      </div>
       {shares.length > 1 ? (
         <>
           <ul className="mt-2.5 flex flex-col gap-1">
             {shares.map((share) => {
-              const here = share.day.getTime() === day.getTime();
+              const here = share.day === toDayKey(day);
               return (
-                <li key={share.day.getTime()} className={cn("flex items-baseline gap-2.5 text-[13px]", !here && "text-faint")}>
+                <li key={share.day} className={cn("flex items-baseline gap-2.5 text-[13px]", !here && "text-faint")}>
                   <span className="min-w-0 flex-1 truncate">{dayName(share)}</span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums">{formatHoursMinutes(share.runtimeMs)}</span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums">{formatHoursMinutes(share.runtime_ms)}</span>
                 </li>
               );
             })}
@@ -104,9 +115,9 @@ function JumpLink({ label, onClick, children }: { label: string; onClick: () => 
 /** "Thursday", "Thursday and Friday" or "Thursday to Sunday", each day a link to that day. */
 function DayLinks({ shares, onJump }: { shares: DayShare[]; onJump: (day: Date) => void }) {
   const link = (share: DayShare) => {
-    const name = share.day.toLocaleDateString(UI_LOCALE, { weekday: "long" });
+    const name = formatDate(dayOf(share), { weekday: "long" });
     return (
-      <JumpLink label={`${name}, where this session went on`} onClick={() => onJump(share.day)}>
+      <JumpLink label={`${name}, where this session went on`} onClick={() => onJump(dayOf(share))}>
         {name}
       </JumpLink>
     );
@@ -133,7 +144,6 @@ export const DaySection = memo(function DaySection({
   markOf,
   fillOf,
   events,
-  now,
   notes,
   onSaveNote,
   onCorrected,
@@ -146,14 +156,13 @@ export const DaySection = memo(function DaySection({
   byGame: Map<string, GameSummary>;
   sessionsByGame: Map<string, Session[]>;
   sessionsById: Map<string, Session>;
-  /** A session cut at midnight, each day with the time it counts there. */
-  sharesOf: (session: Session) => DayShare[];
+  /** A session cut at midnight by its id, each day with the time it counts there. */
+  sharesOf: (sessionId: string) => DayShare[];
   /** The game's color in this week. */
   markOf: (gameId: string) => string;
   /** What a game's time bars are filled with. */
   fillOf: (gameId: string) => string;
   events: SessionEvent[];
-  now: Date;
   notes: Record<string, string>;
   onSaveNote: (sessionId: string, note: string) => Promise<void>;
   onCorrected: () => void;
@@ -166,37 +175,35 @@ export const DaySection = memo(function DaySection({
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [card, setCard] = useState<{ sessionId: string; style: CSSProperties } | null>(null);
-  const nextDay = addDays(day.start, 1);
   const dayKey = toDayKey(day.start);
-  const runs = playRuns(day.spans, now);
   const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
   const fillFor = (gameId: string) => (fillOf(gameId) === markOf(gameId) ? undefined : fillOf(gameId));
 
-  // Each session's parts on the strip, and whether they run in from the day
-  // before or out past midnight.
-  const parts: StripPart[] = day.spans.filter(countsAsPlay).map((span) => {
-    const original = sessionsById.get(span.id) ?? span;
-    const start = parseVaultimeDate(span.started_at_wall);
-    const end = parseVaultimeDate(span.ended_at_wall ?? span.started_at_wall);
-    const originalEnd = original.ended_at_wall ? parseVaultimeDate(original.ended_at_wall) : null;
-    return {
-      session: original,
-      place: placeOnDay(start, end, day.start),
-      openStart: start.getTime() === day.start.getTime() && parseVaultimeDate(original.started_at_wall) < day.start,
-      openEnd: end.getTime() === nextDay.getTime() && (!originalEnd || originalEnd > nextDay),
-    };
+  // Each session's parts on the strip as the core placed them, and whether
+  // they run in from the day before or out past midnight.
+  const parts: StripPart[] = day.parts.flatMap((part) => {
+    const session = sessionsById.get(part.session_id);
+    if (!session) return [];
+    return [
+      {
+        session,
+        place: placeOnDay(new Date(part.start_ms), new Date(part.end_ms), day.start),
+        startMs: part.start_ms,
+        endMs: part.end_ms,
+        openStart: part.open_start,
+        openEnd: part.open_end,
+      },
+    ];
   });
-  const runOpenStart = (run: PlayRun) =>
-    run.start.getTime() === day.start.getTime() && parts.some((part) => part.openStart);
-  const runOpenEnd = (run: PlayRun) => run.end.getTime() === nextDay.getTime() && parts.some((part) => part.openEnd);
+  const runOpenStart = (run: PlayRun) => parts.some((part) => part.openStart && part.startMs === run.start_ms);
+  const runOpenEnd = (run: PlayRun) => parts.some((part) => part.openEnd && part.endMs === run.end_ms);
 
   // Sessions that began on an earlier day get a quiet line that leads back
   // to their entry, one per session however many parts it has here.
-  const startedToday = new Set(day.sessions.map((session) => session.id));
+  const startedToday = new Set(day.sessionIds);
   const continued = [...new Map(parts.map((part) => [part.session.id, part.session])).values()]
     .filter((session) => !startedToday.has(session.id))
     .sort((a, b) => a.started_at_wall.localeCompare(b.started_at_wall));
-  const groups = sideBySideGroups(runs.flatMap((run) => run.pieces).filter((piece) => piece.gameIds.length > 1));
 
   /** Pointing at or focusing a session's line marks all its parts, on this day and others. */
   const linkProps = (sessionId: string) => ({
@@ -221,11 +228,9 @@ export const DaySection = memo(function DaySection({
   return (
     <section className="flex flex-col gap-5 border-b border-rule py-7 xl:flex-row xl:gap-10">
       <div className="flex shrink-0 items-baseline gap-4 xl:block xl:w-[190px]">
-        <h2 className="font-display text-4xl leading-none">
-          {day.start.toLocaleDateString(UI_LOCALE, { weekday: "long" })}
-        </h2>
+        <h2 className="font-display text-4xl leading-none">{formatDate(day.start, { weekday: "long" })}</h2>
         <div className="text-xs tracking-[0.12em] text-faint uppercase xl:mt-1.5">
-          {day.start.toLocaleDateString(UI_LOCALE, { day: "numeric", month: "long" })}
+          {formatDate(day.start, { day: "numeric", month: "long" })}
         </div>
         <div className="ml-auto font-mono text-[22px] tabular-nums xl:mt-3.5 xl:ml-0">{formatHoursMinutes(day.playedMs)}</div>
       </div>
@@ -234,9 +239,9 @@ export const DaySection = memo(function DaySection({
         <div>
           <div ref={frame} className="relative">
             <div aria-hidden="true" className="relative h-2.5 rounded-full bg-raised">
-              {runs.map((run) => (
+              {day.runs.map((run) => (
                 <PlayBlock
-                  key={run.start.getTime()}
+                  key={run.start_ms}
                   run={run}
                   day={day.start}
                   fillOf={fillOf}
@@ -296,7 +301,7 @@ export const DaySection = memo(function DaySection({
             {card && cardSession && (
               <SessionCard
                 session={cardSession}
-                shares={sharesOf(cardSession)}
+                shares={sharesOf(cardSession.id)}
                 day={day.start}
                 title={titleOf(cardSession.game_id)}
                 mark={markOf(cardSession.game_id)}
@@ -304,14 +309,14 @@ export const DaySection = memo(function DaySection({
               />
             )}
           </div>
-          {groups.length > 0 && (
+          {day.groups.length > 0 && (
             <div className="mt-2.5 flex flex-col gap-1.5">
-              {groups.map((group) => (
-                <p key={group.gameIds.join()} className="flex items-center gap-2.5 text-[13px] text-faint">
+              {day.groups.map((group) => (
+                <p key={group.game_ids.join()} className="flex items-center gap-2.5 text-[13px] text-faint">
                   <span
                     aria-hidden="true"
                     className="h-2.5 w-6 shrink-0 rounded-full"
-                    style={{ backgroundImage: hatch(group.gameIds.map(markOf)) }}
+                    style={{ backgroundImage: hatch(group.game_ids.map(markOf)) }}
                   />
                   {sideBySideSentence(group, titleOf)}
                 </p>
@@ -321,10 +326,10 @@ export const DaySection = memo(function DaySection({
         </div>
 
         {continued.map((session) => {
-          const shares = sharesOf(session);
-          const share = shares.find((each) => each.day.getTime() === day.start.getTime());
+          const shares = sharesOf(session.id);
+          const share = shares.find((each) => each.day === dayKey);
           if (!share) return null;
-          const phrase = continuedPhrase(session, titleOf(session.game_id), day.start, { throughDay: share.intoNext });
+          const phrase = continuedPhrase(session, titleOf(session.game_id), day.start, { throughDay: share.into_next });
           const mark = markOf(session.game_id);
           const started = parseVaultimeDate(session.started_at_wall);
           const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
@@ -350,7 +355,7 @@ export const DaySection = memo(function DaySection({
                   <span className="whitespace-nowrap">
                     <JumpLink
                       label={`${phrase.link}, where this session began`}
-                      onClick={() => onJump(session.id, shares[0].day)}
+                      onClick={() => onJump(session.id, dayOf(shares[0]))}
                     >
                       {phrase.link}
                     </JumpLink>
@@ -359,14 +364,17 @@ export const DaySection = memo(function DaySection({
                   {phrase.after && `${phrase.after}.`}
                 </p>
                 <div className="mt-1 text-[13px] text-faint">
-                  {continuedAmounts(share.runtimeMs, session.runtime_ms, !session.ended_at_wall)}
+                  {continuedAmounts(share.runtime_ms, session.runtime_ms, !session.ended_at_wall)}
                 </div>
               </div>
             </article>
           );
         })}
         {[
-          ...day.sessions.map((session) => ({ at: session.started_at_wall, session, change: null })),
+          ...day.sessionIds.flatMap((id) => {
+            const session = sessionsById.get(id);
+            return session ? [{ at: session.started_at_wall, session, change: null }] : [];
+          }),
           ...day.changes.map((change) => ({ at: change.changed_at, session: null, change })),
         ]
           .sort((a, b) => a.at.localeCompare(b.at))
@@ -391,8 +399,9 @@ export const DaySection = memo(function DaySection({
               );
             }
             if (!session) return null;
-            const later = sharesOf(session).slice(1);
-            const laterMs = later.reduce((sum, share) => sum + share.runtimeMs, 0);
+            const later = sharesOf(session.id).slice(1);
+            const laterMs = later.reduce((sum, share) => sum + share.runtime_ms, 0);
+
             const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
             return (
               <div

@@ -179,6 +179,9 @@ fn session_in_memory(
         copy_overlap_ms: 0,
         copy_overlap_active_ms: 0,
         copy_overlap_idle_ms: 0,
+        counted_runtime_ms: 0,
+        counted_active_ms: 0,
+        counted_idle_ms: 0,
         recorded_game_id: None,
         still_running_on: None,
     };
@@ -221,6 +224,127 @@ fn slice_building() {
             placed / ROUNDS as usize
         );
     }
+}
+
+/// A session of `game_id` running for the last three hours, with a
+/// checkpoint every 30 s, at the latest tick in `live`.
+fn start_running(db: &Database, game_id: &str, live: &LiveSessions) {
+    const MINUTES: i64 = 180;
+    const STEP_MS: i64 = 30_000;
+    let start = Utc::now() - TimeDelta::minutes(MINUTES);
+    let session = sessions::create_session_at(db, game_id, "device", start).unwrap();
+    db.with_transaction(|conn| {
+        let mut at = STEP_MS;
+        while at < MINUTES * 60_000 {
+            integrity::append_session_event(
+                conn,
+                &session.id,
+                "heartbeat",
+                &integrity::format_timestamp(start + TimeDelta::milliseconds(at)),
+                Some(at),
+                &json!({
+                    "runtime_ms": at, "active_ms": at, "idle_ms": 0,
+                    "wall_elapsed_ms": at, "drift_ms": 0, "integrity_status": "local",
+                })
+                .to_string(),
+            )?;
+            at += STEP_MS;
+        }
+        Ok(())
+    })
+    .unwrap();
+    live.update(
+        &session.id,
+        crate::tracking::live::LiveCounters {
+            runtime_ms: MINUTES * 60_000,
+            active_ms: MINUTES * 60_000,
+            idle_ms: 0,
+        },
+    );
+}
+
+/// What each page asks the core for, timed on the large history, first
+/// with nothing running and then with a game running.
+fn page_timings(
+    db: &Database,
+    game_ids: &[String],
+    timed: &dyn Fn(&str, &mut dyn FnMut() -> String),
+) {
+    use crate::playtime::{journal, summaries};
+    let tz = chrono::Local;
+    let now_ms = Utc::now().timestamp_millis();
+    let today = summaries::today_of(&tz, now_ms);
+    let monday = today
+        - TimeDelta::days(i64::from(
+            chrono::Datelike::weekday(&today).num_days_from_monday(),
+        ));
+    let spans: i64 = db
+        .with_conn(|conn| {
+            conn.query_row("SELECT COUNT(*) FROM play_spans", [], |row| row.get(0))
+                .map_err(map_db)
+        })
+        .unwrap();
+    println!("{spans} stretches kept");
+    let live = LiveSessions::default();
+    for running in [false, true] {
+        if running {
+            start_running(db, &game_ids[2], &live);
+        }
+        let label = |what: &str| format!("{what}{}", if running { ", a game running" } else { "" });
+        let now_ms = Utc::now().timestamp_millis();
+        timed(&label("journal week"), &mut || {
+            let week = journal::journal_week(db, &live, &tz, monday, "device", now_ms).unwrap();
+            format!(
+                "{} days, {} bytes",
+                week.days.len(),
+                serde_json::to_string(&week).unwrap().len()
+            )
+        });
+        timed(&label("journal week a year back"), &mut || {
+            let week = journal::journal_week(
+                db,
+                &live,
+                &tz,
+                monday - TimeDelta::days(364),
+                "device",
+                now_ms,
+            )
+            .unwrap();
+            format!("{} days", week.days.len())
+        });
+        timed(&label("year play"), &mut || {
+            let year = summaries::year_play(
+                db,
+                &live,
+                &tz,
+                chrono::Datelike::year(&today),
+                today,
+                now_ms,
+            )
+            .unwrap();
+            format!(
+                "{} day rows, streak {}",
+                year.days.len(),
+                year.current_streak
+            )
+        });
+        timed(&label("recent play"), &mut || {
+            let recent = summaries::recent_play(db, &live, &tz, 7, today, now_ms).unwrap();
+            format!("{} sessions", recent.sessions_count)
+        });
+        timed(&label("played today"), &mut || {
+            format!(
+                "{} ms",
+                summaries::played_on(db, &live, &tz, today, now_ms).unwrap()
+            )
+        });
+    }
+    timed("steps aside hint", &mut || {
+        format!(
+            "{:?}",
+            crate::playtime::beside::steps_aside_hint(db, &game_ids[3], "device", now_ms).unwrap()
+        )
+    });
 }
 
 #[test]
@@ -313,6 +437,7 @@ fn large_history() {
         .unwrap();
         String::new()
     });
+    page_timings(&db, &game_ids, &timed);
     let bytes = std::fs::metadata(&path).map_or(0, |meta| meta.len());
     println!("database file: {} MB", bytes / 1_000_000);
     drop(db);

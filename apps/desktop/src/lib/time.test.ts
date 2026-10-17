@@ -20,6 +20,7 @@ import {
   parseVaultimeDate,
   startOfDay,
   startOfWeek,
+  toDayKey,
   toLocalInput,
   weekdayOf,
 } from "./time";
@@ -137,6 +138,8 @@ describe("daylight saving", () => {
     expect(startOfDay(new Date(2026, 9, 26, 0, 30), -1)).toEqual(new Date(2026, 9, 25));
     expect(isoWeekNumber(new Date(2026, 9, 25, 23, 0))).toBe(43);
     expect(isoWeekNumber(new Date(2026, 9, 26, 0, 30))).toBe(44);
+    expect(toDayKey(new Date(2026, 9, 25, 23, 30))).toBe("2026-10-25");
+    expect(toDayKey(startOfDay(new Date(2026, 9, 25, 23, 30), 1))).toBe("2026-10-26");
   });
 
   it("places the strip by clock time on a 25 hour day", () => {

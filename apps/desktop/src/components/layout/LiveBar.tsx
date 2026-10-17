@@ -5,16 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ArrowUpRight, Gamepad2 } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
-import { useActiveSessions, useLastPoll, useLibrary } from "@/features/library/library-context";
+import { useActiveSessions, useLastPoll, useLibrary, usePlayedToday } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
-import { formatClock, formatHoursMinutes, parseVaultimeDate, UI_LOCALE } from "@/lib/time";
-import { playedToday, stepsAside } from "@/lib/steps-aside";
+import { formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
+import { stepsAside } from "@/lib/steps-aside";
 import { usePageVisible } from "@/lib/use-page-visible";
 
 /** The bar at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
-  const { games, covers, sessions, idleThresholdSeconds, today } = useLibrary();
+  const { games, covers, idleThresholdSeconds } = useLibrary();
   const active = useActiveSessions();
   const activePolledAt = useLastPoll();
   const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
@@ -22,21 +22,8 @@ export function LiveBar() {
   // whose clock stands still while the game runs.
   const current = active.find((session) => !stepping.has(session.game_id)) ?? active[0];
 
-  // Only sessions that reach into today count for it, so a poll goes through
-  // those and not the whole history.
-  const sinceMidnight = useMemo(() => {
-    const midnight = parseVaultimeDate(today);
-    return sessions.filter((session) => !session.ended_at_wall || parseVaultimeDate(session.ended_at_wall) >= midnight);
-  }, [sessions, today]);
-  // Running sessions as of the last poll, so today keeps up while they run.
-  const todayMs = useMemo(() => {
-    const running = new Map(active.map((session) => [session.id, session]));
-    return playedToday(
-      sinceMidnight.map((session) => running.get(session.id) ?? session),
-      stepping,
-      new Date(activePolledAt),
-    );
-  }, [sinceMidnight, active, stepping, activePolledAt]);
+  // Counted by the core at each poll, as the journal counts the day.
+  const todayMs = usePlayedToday();
 
   if (!current) {
     const watched = games.filter((game) => game.executable_path).length;
@@ -71,10 +58,7 @@ export function LiveBar() {
   const counted = current.active_ms + current.idle_ms;
   const activeShare = counted > 0 ? current.active_ms / counted : 1;
   const trust = getIntegrityMeta(current.integrity_status).label;
-  const startedAt = parseVaultimeDate(current.started_at_wall).toLocaleTimeString(UI_LOCALE, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const startedAt = formatClockTime(parseVaultimeDate(current.started_at_wall));
 
   return (
     <footer
