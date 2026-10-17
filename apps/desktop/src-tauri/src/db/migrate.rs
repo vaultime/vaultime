@@ -58,6 +58,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0011_offered_programs",
         include_str!("../../migrations/0011_offered_programs.sql"),
     ),
+    (
+        "0012_session_event_indexes",
+        include_str!("../../migrations/0012_session_event_indexes.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.
