@@ -3,12 +3,18 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import * as api from "@/lib/tauri";
+import type { Setting } from "@/lib/types";
 import { SettingsContext } from "./settings-context";
 
+function byKey(settings: Setting[]): Record<string, string> {
+  return Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
+}
+
 /**
- * The stored settings, read once for the whole app and kept as they are
- * saved. The app draws once they are read, so no page changes a setting
- * after its first frame. The look of the last run is on the page already.
+ * The stored settings, read for the whole app at start and after a restore,
+ * and kept as they are saved. The app draws once they are read, so no page
+ * changes a setting after its first frame. The look of the last run is on
+ * the page already.
  */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [values, setValues] = useState<Record<string, string> | null>(null);
@@ -18,7 +24,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     api
       .listSettings()
       .then((settings) => {
-        if (!cancelled) setValues(Object.fromEntries(settings.map((setting) => [setting.key, setting.value])));
+        if (!cancelled) setValues(byKey(settings));
       })
       .catch(() => {
         // The app works with the defaults when the settings cannot be read.
@@ -34,7 +40,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setValues((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const state = useMemo(() => (values ? { values, save } : null), [values, save]);
+  const reload = useCallback(async () => {
+    setValues(byKey(await api.listSettings()));
+  }, []);
+
+  const state = useMemo(() => (values ? { values, save, reload } : null), [values, save, reload]);
   if (!state) return null;
   return <SettingsContext.Provider value={state}>{children}</SettingsContext.Provider>;
 }

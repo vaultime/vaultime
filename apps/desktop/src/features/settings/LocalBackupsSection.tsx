@@ -37,7 +37,7 @@ export function LocalBackupsSection({
   onRestartRequired: () => void;
 }) {
   const { refresh, thisDeviceId } = useLibrary();
-  const { save } = useSettings();
+  const { save, reload: reloadSettings } = useSettings();
   const [autoBackup, setAutoBackup] = useState(initial.autoBackup);
   const [folder, setFolder] = useState(initial.folder);
   const [snapshots, setSnapshots] = useState(initial.snapshots);
@@ -109,6 +109,8 @@ export function LocalBackupsSection({
       setRestorePreview(null);
       setMessage(summary.continues_as ? `Backup restored. ${continuesAs(summary.continues_as)}` : "Backup restored.");
       if (summary.restart_required) onRestartRequired();
+      // A restore replaces the settings that are not kept per PC.
+      await reloadSettings().catch(() => {});
       setSnapshots(await api.listBackupSnapshots());
       await refresh();
     });

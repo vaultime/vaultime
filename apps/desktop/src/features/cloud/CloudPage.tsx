@@ -13,6 +13,7 @@ import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
+import { useSettings } from "@/features/settings/settings-context";
 import type { CloudBackupRecord, CloudStorage } from "@/lib/types";
 import { continuesAs } from "@/lib/devices";
 import { getThisPc } from "@/lib/tauri";
@@ -52,6 +53,7 @@ export function CloudPage() {
     uploadRemoteBackup,
   } = useCloudSession();
   const { thisDeviceId: deviceId } = useLibrary();
+  const { reload: reloadSettings } = useSettings();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
@@ -234,6 +236,8 @@ export function CloudPage() {
       if (result.restored_summary.restart_required) {
         setRestartRequired(true);
       }
+      // A restore replaces the settings that are not kept per PC.
+      await reloadSettings().catch(() => {});
     } catch (error) {
       setErrorMessage(describeError(error));
     } finally {

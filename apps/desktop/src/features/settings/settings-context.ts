@@ -4,10 +4,12 @@
 import { createContext, useContext } from "react";
 
 export interface SettingsState {
-  /** The stored settings by key, as read at start and saved since. */
+  /** The stored settings by key, as read last and saved since. */
   values: Record<string, string>;
   /** Saves a setting and keeps its value for everything that reads it. */
   save: (key: string, value: string) => Promise<void>;
+  /** Reads the settings again, after a restore replaced those that are not kept per PC. */
+  reload: () => Promise<void>;
 }
 
 export const SettingsContext = createContext<SettingsState | null>(null);
