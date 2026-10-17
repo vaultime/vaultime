@@ -343,7 +343,11 @@ function GamePage({ gameId }: { gameId: string }) {
         <AddSessionDialog
           gameId={game.id}
           gameTitle={game.title}
-          steamGame={game.launcher_source === STEAM_LAUNCHER || summary.earlier?.source === STEAM_LAUNCHER}
+          steamGame={
+            game.launcher_source === STEAM_LAUNCHER ||
+            summary.earlier?.source === STEAM_LAUNCHER ||
+            linkedTo(game.id, links, thisDeviceId).installs.some((link) => link.launcher_source === STEAM_LAUNCHER)
+          }
           open={addingSession}
           onOpenChange={setAddingSession}
           onAdded={() => void refresh()}
