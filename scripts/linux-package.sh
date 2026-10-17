@@ -9,7 +9,7 @@
 #   scripts/linux-package.sh --test     only test the bundles in dist-linux/
 set -euo pipefail
 
-repo="$(cd "$(dirname "$0")/.." && pwd -W 2>/dev/null || pwd)"
+repo="$(cd "$(dirname "$0")/.." && { pwd -W 2>/dev/null || pwd; })"
 out="$repo/dist-linux"
 export MSYS_NO_PATHCONV=1
 
@@ -42,9 +42,9 @@ if [ "${1:-}" != "--test" ]; then
     '
 fi
 
-deb=$(cd "$out" && ls *.deb)
-rpm=$(cd "$out" && ls *.rpm)
-appimage=$(cd "$out" && ls *.AppImage)
+deb=$(cd "$out" && ls -- *.deb)
+rpm=$(cd "$out" && ls -- *.rpm)
+appimage=$(cd "$out" && ls -- *.AppImage)
 status=0
 
 smoke() {

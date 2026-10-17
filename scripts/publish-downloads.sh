@@ -23,6 +23,7 @@ base=${VAULTIME_DOWNLOADS_URL:-https://vaultime.codfishcloud.de/downloads}
 
 # Exactly one file matches each pattern, or the release is incomplete.
 one() {
+  # shellcheck disable=SC2206 # the pattern is meant to expand
   local matches=("$source"/$1)
   if [ ${#matches[@]} -ne 1 ]; then
     echo "expected one $1 in $source, found ${#matches[@]}" >&2

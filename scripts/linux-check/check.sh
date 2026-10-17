@@ -13,13 +13,13 @@ run() {
 
 mkdir -p /src/apps/desktop/dist
 
-cd /src/apps/desktop/src-tauri
+cd /src/apps/desktop/src-tauri || exit 1
 rustup toolchain install >/dev/null
 run cargo fmt --check
 run cargo clippy --locked --all-targets -q -- -D warnings
 run cargo test --locked -q
 
-cd /src/apps/api
+cd /src/apps/api || exit 1
 run cargo fmt --check
 run cargo clippy --locked --all-targets -q -- -D warnings
 run cargo test --locked -q

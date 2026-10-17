@@ -6,7 +6,7 @@
 # Build output and the cargo registry live in Docker volumes, so reruns are fast.
 set -euo pipefail
 
-repo="$(cd "$(dirname "$0")/.." && pwd -W 2>/dev/null || pwd)"
+repo="$(cd "$(dirname "$0")/.." && { pwd -W 2>/dev/null || pwd; })"
 
 docker build -q -t vaultime-linux-check "$repo/scripts/linux-check" >/dev/null
 
