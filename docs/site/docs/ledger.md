@@ -14,11 +14,14 @@ A chain inside the database can be rebuilt by someone who rewrites the whole dat
 
 Each PC keeps a ledger, a second chain that it signs with a key of its own. The key is in the file `device-key` next to the database. It never goes into a backup and never leaves the PC through Vaultime. The ledger:
 
-- pins a session's record when the session starts, when it ends and when it is corrected,
+- pins a session's record when the session starts, every five minutes of play while it runs, when it ends and when it is corrected,
 - notes every session you remove, together with its game,
-- notes every restore and every session taken in from another PC.
+- notes every restore and every session taken in from another PC,
+- notes when a new install takes over the PC whose backup it restored, see [Several PCs](several-pcs.md#setting-a-pc-up-again).
 
-The file `device-keys` lists every public key the PC has signed with, so older entries still count as its own after a new key.
+The file `device-keys` lists every public key the PC has signed with or took over, so older entries still count as its own after a new key.
+
+Between two pins, Vaultime saves a session's time every 30 seconds without pinning it. After a crash, a session counts up to its last saved note, but at most five minutes past the last one the ledger holds. A session whose notes run further, as when the last one was raised outside Vaultime, counts up to those five minutes and turns Suspicious. Sessions recorded before Vaultime pinned these notes keep their time as it was.
 
 A session that was rewritten outside Vaultime, even with its own log rebuilt to match, no longer matches what the ledger pinned and turns Suspicious. So does a session no ledger knows. Sessions recorded before the ledger existed were taken in as they were when it began.
 
@@ -41,6 +44,8 @@ Changed
 - A session whose log was rebuilt to look consistent.
 - Sessions deleted outside Vaultime.
 - Clock changes while a game runs.
+- Time added to the last saved note of a session before a restart, beyond five minutes past what the ledger holds.
+- Times below zero or longer than ten years, which only a damaged or made up record holds.
 - Sessions that turn up without this PC or a trusted PC having recorded them.
 - Backups that are damaged or hold database parts Vaultime never writes. Those are refused before anything is merged or restored.
 
@@ -51,6 +56,7 @@ Changed
 
 - Someone with your PC and its key file can rewrite the history and the ledger together, and nothing will look wrong.
 - Removing the newest sessions together with the newest ledger entries leaves a shorter ledger that still checks out.
+- Up to five minutes past the last note the ledger holds can be added to a session that was cut off without anything looking wrong.
 - Vaultime only knows what happened while it ran. Play while it was closed is not recorded at all.
 - No server checks your history. That is why there is no Verified label.
 
@@ -59,5 +65,7 @@ All of this helps you trust your own records and notice when something went wron
 ## When the key is lost
 
 If `device-key` goes missing, for example after a fresh install without the old data folder, Vaultime makes a new key and goes on. The PC's earlier entries still count through `device-keys` when that file survived. Other PCs that merge from this one see a new key and count its sessions only once you confirm the backup comes from this PC, see [Several PCs](several-pcs.md#new-keys).
+
+A fresh install that restores the PC's last backup before anything else continues as that PC and takes over the keys the backup names for it, see [Several PCs](several-pcs.md#setting-a-pc-up-again).
 
 A copy of the whole data folder keeps the key. A backup made in Vaultime does not, on purpose.

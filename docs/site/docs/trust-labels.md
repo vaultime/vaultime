@@ -11,7 +11,7 @@ Suspicious
 : Something about the record does not add up: the system clock jumped while the game ran, or the record was changed outside Vaultime. The session keeps its time, but the label stays.
 
 Recovered
-: Vaultime was closed while the game ran, for example after a crash or a power cut, and closed the session on the next start. It keeps the time up to Vaultime's last note, at most 30 seconds before the crash.
+: Vaultime was closed while the game ran, for example after a crash or a power cut, and closed the session on the next start. It keeps the time up to Vaultime's last note, at most 30 seconds before the crash. Only five minutes past the last note the [ledger](ledger.md) holds count, so a session whose notes run further is Suspicious instead. A session another PC was still running when its backup was made is never closed here, see [Several PCs](several-pcs.md#running-sessions).
 
 Edited
 : Tracked, then corrected by you. The old times and your reason stay in the session's log.
@@ -30,6 +30,8 @@ There is no Verified label. Vaultime saves it for a check done by a server, and 
 - Something was added to the session after it ended, other than a correction.
 - A correction would have added time.
 - The PC's [ledger](ledger.md) does not know the session, or holds a different record of it.
+- The session's time runs more than five minutes past the last note the ledger holds, as when the last note was raised before a restart.
+- The session holds a time below zero or longer than ten years.
 - The session came from [another PC](several-pcs.md) and did not pass its check with the keys this PC trusts for that PC.
 
 A suspicious session stays Suspicious when you correct it, so a correction can never hide a flag. Clock changes from time zones and daylight saving time do not count, as Vaultime keeps its times in UTC.

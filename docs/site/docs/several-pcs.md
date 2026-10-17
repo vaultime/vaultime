@@ -29,6 +29,22 @@ When a PC signs with a new key, for example after its key file was lost, its new
 
 Only confirm when you know the backup really comes from that PC.
 
+## Running sessions
+
+A session that was still running on the other PC when its backup was made does not come in with a merge. It waits for a later backup, once it has ended there.
+
+Restoring a backup another PC made while a game ran there leaves that session open, exactly as that PC recorded it. Only the PC that recorded a session may close it, so it is never closed here as Recovered. It counts up to its last saved time, says it was still running on that PC, and never shows in the live bar or the tray. The next merge of that PC brings its real end.
+
+## Setting a PC up again
+
+When you set a PC up again, Vaultime makes a new key for it. If the first thing you do on the new install is restore that PC's last backup, the new install continues as that PC. The restore preview says so plainly: This PC continues as, and the PC's name.
+
+- Its sessions are this PC's own again, and the keys the backup names for that PC count as this PC's own beside the new key.
+- The ledger notes the takeover with the keys it took over, so it shows and can be checked.
+- Sessions the PC played after that backup, which another PC took in, come back as this PC's own with the next merge of that PC, as long as that PC checked them with the old keys.
+
+Only a fresh install takes over: one without sessions, merges or restores of its own. A PC with history of its own restores another PC's backup as described under [Backups](backups.md#restoring). Taking over trusts the backup the way a new PC trusts any PC it has never seen, so a made up backup gains nothing it could not get on a new PC anyway.
+
 ## Games from another PC
 
 A game that comes along with a merge is never tracked on this PC. You can let it count as the same game as one you have here, and Vaultime then shows the two as one game in the journal, the stats and on the game's page.
