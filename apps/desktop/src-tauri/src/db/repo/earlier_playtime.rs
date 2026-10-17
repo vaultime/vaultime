@@ -46,12 +46,12 @@ pub fn list_earlier_playtime(db: &Database) -> Result<Vec<EarlierPlaytime>> {
     })
 }
 
-/// Imported playtime per game the library shows: an entry of a linked game
-/// counts for the game it is linked to, and entries that meet there add up.
-pub fn list_shown_earlier_playtime(db: &Database) -> Result<Vec<EarlierPlaytime>> {
+/// `entries` per game the library shows: an entry of a linked game counts
+/// for the game it is linked to, and entries that meet there add up.
+pub fn by_shown_game(db: &Database, entries: Vec<EarlierPlaytime>) -> Result<Vec<EarlierPlaytime>> {
     let links = crate::db::repo::games::links(db)?;
     let mut shown: BTreeMap<String, EarlierPlaytime> = BTreeMap::new();
-    for mut entry in list_earlier_playtime(db)? {
+    for mut entry in entries {
         if let Some(linked) = links.get(&entry.game_id) {
             entry.game_id.clone_from(linked);
         }

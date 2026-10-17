@@ -835,7 +835,7 @@ pub fn set_session_note(
 pub fn list_earlier_playtime(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<EarlierPlaytime>, VaultimeError> {
-    earlier_playtime::list_shown_earlier_playtime(&db)
+    earlier::shown_earlier_playtime(&db)
 }
 
 /// What an import from Steam would add, without storing anything.

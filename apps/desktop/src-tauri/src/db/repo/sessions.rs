@@ -461,10 +461,12 @@ pub struct LauncherRuntime {
 }
 
 /// Runtime per game id that `launcher` may have counted as well, for each
-/// game as it was recorded, links left to the caller.
+/// game as it was recorded, links left to the caller. Only sessions that
+/// ended by `ended_by` count, as a launcher's number is a snapshot.
 pub fn launcher_runtime_by_game(
     db: &Database,
     launcher: &str,
+    ended_by: &str,
 ) -> Result<std::collections::HashMap<String, LauncherRuntime>> {
     db.with_conn(|conn| {
         let mut stmt = conn
@@ -481,13 +483,14 @@ pub fn launcher_runtime_by_game(
                  FROM sessions
                  LEFT JOIN session_events AS manual
                      ON manual.session_id = sessions.id AND manual.event_type = 'added_manually'
-                 WHERE manual.id IS NULL
-                    OR json_extract(manual.payload_json, '$.launcher') = ?1
+                 WHERE (manual.id IS NULL
+                    OR json_extract(manual.payload_json, '$.launcher') = ?1)
+                    AND sessions.ended_at_wall <= ?2
                  GROUP BY sessions.game_id",
             )
             .map_err(map_db)?;
         let rows = stmt
-            .query_map([launcher], |row| {
+            .query_map([launcher, ended_by], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     LauncherRuntime {

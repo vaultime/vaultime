@@ -49,9 +49,12 @@ pub fn preview_steam(db: &Database) -> Result<SteamPlaytimePreview> {
             games: Vec::new(),
         });
     };
-    candidates(db, &steam, |folder| {
-        steam::app_id_for_install_folder(Path::new(folder))
-    })
+    candidates(
+        db,
+        &steam,
+        |folder| steam::app_id_for_install_folder(Path::new(folder)),
+        &integrity::now_timestamp(),
+    )
 }
 
 /// Stores what `preview_steam` finds, replacing earlier imports of the same games.
@@ -104,19 +107,65 @@ fn seen_by_steam(
         .sum()
 }
 
+fn launcher_of_each_game(db: &Database) -> Result<HashMap<String, Option<String>>> {
+    Ok(games::list_all_games(db)?
+        .into_iter()
+        .map(|game| (game.id, game.launcher_source))
+        .collect())
+}
+
+/// Every imported entry, with the time Steam counted too worked out from the
+/// sessions there are now. Steam's number is a snapshot, so it holds every
+/// session of a Steam copy that ended before the import, also one merged
+/// from another PC since, and none that ended after.
+pub fn earlier_playtime(db: &Database) -> Result<Vec<EarlierPlaytime>> {
+    let mut entries = earlier_playtime::list_earlier_playtime(db)?;
+    if !entries.iter().any(|entry| entry.source == STEAM_SOURCE) {
+        return Ok(entries);
+    }
+    let launchers = launcher_of_each_game(db)?;
+    let links = games::links(db)?;
+    let mut runtime_at: HashMap<String, HashMap<String, LauncherRuntime>> = HashMap::new();
+    for entry in entries
+        .iter_mut()
+        .filter(|entry| entry.source == STEAM_SOURCE)
+    {
+        if !runtime_at.contains_key(&entry.imported_at) {
+            let runtime = sessions::launcher_runtime_by_game(db, STEAM_SOURCE, &entry.imported_at)?;
+            runtime_at.insert(entry.imported_at.clone(), runtime);
+        }
+        let runtime = &runtime_at[&entry.imported_at];
+        entry.tracked_before_ms = seen_by_steam(&entry.game_id, runtime, &launchers, &links);
+        entry.earlier_ms =
+            earlier_playtime::earlier_ms(entry.launcher_minutes, entry.tracked_before_ms);
+    }
+    Ok(entries)
+}
+
+/// `earlier_playtime` per game the library shows.
+pub fn shown_earlier_playtime(db: &Database) -> Result<Vec<EarlierPlaytime>> {
+    earlier_playtime::by_shown_game(db, earlier_playtime(db)?)
+}
+
+/// What Steam's number holds for each Steam game in the library, as of the
+/// moment `snapshot_at` it was read.
 fn candidates(
     db: &Database,
     steam: &SteamPlaytime,
     app_id_of: impl Fn(&str) -> Option<String>,
+    snapshot_at: &str,
 ) -> Result<SteamPlaytimePreview> {
-    let runtime = sessions::launcher_runtime_by_game(db, STEAM_SOURCE)?;
-    let launchers: HashMap<String, Option<String>> = games::list_all_games(db)?
-        .into_iter()
-        .map(|game| (game.id, game.launcher_source))
-        .collect();
+    let runtime = sessions::launcher_runtime_by_game(db, STEAM_SOURCE, snapshot_at)?;
+    let launchers = launcher_of_each_game(db)?;
     let links = games::links(db)?;
+    let local = games::list_local_games(db)?;
+    // Named as the library shows it, another install by the game it counts as.
+    let titles: HashMap<String, String> = local
+        .iter()
+        .map(|game| (game.id.clone(), game.title.clone()))
+        .collect();
     let mut games = Vec::new();
-    for game in games::list_local_games(db)? {
+    for game in local {
         let Some(app) = game
             .install_folder
             .as_deref()
@@ -126,9 +175,14 @@ fn candidates(
             continue;
         };
         let tracked_before_ms = seen_by_steam(&game.id, &runtime, &launchers, &links);
+        let title = links
+            .get(&game.id)
+            .and_then(|shown| titles.get(shown))
+            .cloned()
+            .unwrap_or(game.title);
         games.push(EarlierCandidate {
             game_id: game.id,
-            title: game.title,
+            title,
             launcher_minutes: app.minutes,
             tracked_before_ms,
             earlier_ms: earlier_playtime::earlier_ms(app.minutes, tracked_before_ms),
@@ -185,9 +239,12 @@ mod tests {
             )]),
         };
 
-        let preview = candidates(&db, &steam, |folder| {
-            folder.ends_with("cs2").then(|| "730".to_string())
-        })
+        let preview = candidates(
+            &db,
+            &steam,
+            |folder| folder.ends_with("cs2").then(|| "730".to_string()),
+            &integrity::now_timestamp(),
+        )
         .unwrap();
         assert_eq!(preview.account.as_deref(), Some("Player"));
         assert_eq!(preview.games.len(), 1);
@@ -247,7 +304,13 @@ mod tests {
                 },
             )]),
         };
-        let preview = candidates(&db, &steam, |_| Some("730".to_string())).unwrap();
+        let preview = candidates(
+            &db,
+            &steam,
+            |_| Some("730".to_string()),
+            &integrity::now_timestamp(),
+        )
+        .unwrap();
         assert_eq!(preview.games[0].tracked_before_ms, 5 * HOUR_MS);
         assert_eq!(preview.games[0].earlier_ms, 5 * HOUR_MS);
     }
@@ -292,9 +355,12 @@ mod tests {
             )]),
         };
 
-        let preview = candidates(&db, &steam, |folder| {
-            folder.contains("steamapps").then(|| "1091500".to_string())
-        })
+        let preview = candidates(
+            &db,
+            &steam,
+            |folder| folder.contains("steamapps").then(|| "1091500".to_string()),
+            &integrity::now_timestamp(),
+        )
         .unwrap();
         assert_eq!(preview.games.len(), 1);
         assert_eq!(preview.games[0].game_id, steam_copy.id);
@@ -311,14 +377,90 @@ mod tests {
                 tracked_before_ms: candidate.tracked_before_ms,
                 earlier_ms: candidate.earlier_ms,
                 last_played_at: None,
-                imported_at: "2026-10-17T10:00:00Z".into(),
+                imported_at: integrity::now_timestamp(),
             })
             .collect();
         earlier_playtime::replace_earlier_playtime(&db, &entries).unwrap();
         // The library shows it for the game the Steam copy counts as.
-        let shown = earlier_playtime::list_shown_earlier_playtime(&db).unwrap();
+        let shown = shown_earlier_playtime(&db).unwrap();
         assert_eq!(shown.len(), 1);
         assert_eq!(shown[0].game_id, gog_copy.id);
         assert_eq!(shown[0].earlier_ms, 7 * HOUR_MS);
+    }
+
+    #[test]
+    fn steam_copies_merged_later_come_off_when_they_ended_before_the_import() {
+        const HOUR_MS: i64 = 3_600_000;
+        const IMPORTED_AT: &str = "2026-10-10T12:00:00.000Z";
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "desktop", "windows", "0.1.0").unwrap();
+        devices::ensure_device(&db, "laptop", "windows", "0.1.0").unwrap();
+        let create = |folder: &str| {
+            games::create_game(
+                &db,
+                &CreateGame {
+                    title: "Cyberpunk 2077".into(),
+                    executable_path: Some(format!("{folder}/Cyberpunk2077.exe")),
+                    install_folder: Some(folder.into()),
+                    launcher_source: Some(STEAM_SOURCE.into()),
+                },
+            )
+            .unwrap()
+            .id
+        };
+        let here = create("C:/Steam/steamapps/common/Cyberpunk 2077");
+        earlier_playtime::replace_earlier_playtime(
+            &db,
+            &[EarlierPlaytime {
+                game_id: here.clone(),
+                source: STEAM_SOURCE.into(),
+                launcher_minutes: 600,
+                tracked_before_ms: 0,
+                earlier_ms: 0,
+                last_played_at: None,
+                imported_at: IMPORTED_AT.into(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            shown_earlier_playtime(&db).unwrap()[0].earlier_ms,
+            10 * HOUR_MS
+        );
+
+        // The Steam copy of the laptop comes in by a merge after the import.
+        let laptop = create("D:/Steam/steamapps/common/Cyberpunk 2077");
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE games SET origin_device_id = 'laptop' WHERE id = ?1",
+                [&laptop],
+            )
+            .map_err(crate::db::repo::map_db)
+        })
+        .unwrap();
+        games::link_game(&db, &laptop, Some(&here)).unwrap();
+        let played = |game_id: &str, device: &str, ended_at: &str, hours: i64| {
+            let session = sessions::create_session(&db, game_id, device).unwrap();
+            let ms = hours * HOUR_MS;
+            sessions::end_session(&db, &session.id, ms, ms, 0, "local").unwrap();
+            db.with_conn(|conn| {
+                conn.execute(
+                    "UPDATE sessions SET ended_at_wall = ?1 WHERE id = ?2",
+                    [ended_at, &session.id],
+                )
+                .map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+        };
+        // Steam counted the evening before the import, wherever it was played.
+        played(&laptop, "laptop", "2026-10-09T22:00:00.000Z", 2);
+        // Play after the import is not in Steam's number, on either PC.
+        played(&laptop, "laptop", "2026-10-11T22:00:00.000Z", 1);
+        played(&here, "desktop", "2026-10-12T22:00:00.000Z", 1);
+
+        let shown = shown_earlier_playtime(&db).unwrap();
+        assert_eq!(shown[0].tracked_before_ms, 2 * HOUR_MS);
+        assert_eq!(shown[0].earlier_ms, 8 * HOUR_MS);
+        // Exports read the same number.
+        assert_eq!(earlier_playtime(&db).unwrap()[0].earlier_ms, 8 * HOUR_MS);
     }
 }

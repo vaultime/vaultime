@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::{EXPORT_FORMAT_NAME, EXPORT_FORMAT_VERSION};
 use crate::db::connection::Database;
-use crate::db::repo::{annotations, earlier_playtime, games, sessions};
+use crate::db::repo::{annotations, games, sessions};
+use crate::earlier;
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
@@ -175,7 +176,7 @@ fn exported_games(db: &Database) -> Result<Vec<ExportedGame>> {
     for change in annotations::list_status_changes(db)? {
         statuses.insert(change.game_id, change.status);
     }
-    let earlier: HashMap<String, (i64, String)> = earlier_playtime::list_earlier_playtime(db)?
+    let earlier: HashMap<String, (i64, String)> = earlier::earlier_playtime(db)?
         .into_iter()
         .map(|entry| (entry.game_id, (entry.earlier_ms, entry.source)))
         .collect();
