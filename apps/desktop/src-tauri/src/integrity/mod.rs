@@ -557,7 +557,9 @@ pub fn validate_session_history_cached(
 }
 
 /// Forgets every remembered check, for when the app itself replaced the
-/// history, as a restore does, so each chain is checked again.
+/// history, as a restore does, so each chain is checked again. A merge
+/// forgets them all too: its `trusted` and `adopted` entries can change the
+/// result for sessions that were here before.
 pub fn forget_checks() {
     check_cache()
         .lock()
