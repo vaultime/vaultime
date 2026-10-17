@@ -259,20 +259,7 @@ fn poll_loop(
     }
 
     for session in active.into_values() {
-        if let Err(error) = sessions::end_session(
-            db,
-            &session.session_id,
-            session.runtime_ms,
-            session.active_ms,
-            session.idle_ms,
-            &session.integrity_status,
-        ) {
-            error!(
-                "failed to close session {} on shutdown: {error}",
-                session.session_id
-            );
-        }
-        live.remove(&session.session_id);
+        end_active_session(db, live, &session);
     }
 
     info!("tracking engine stopped");
@@ -393,30 +380,35 @@ fn end_finished_sessions(
 
     for game_id in finished {
         if let Some(session) = active.remove(&game_id) {
-            let ended = sessions::end_session(
-                db,
-                &session.session_id,
-                session.runtime_ms,
-                session.active_ms,
-                session.idle_ms,
-                &session.integrity_status,
-            );
-            live.remove(&session.session_id);
-            match ended {
-                Ok(ended) => {
-                    info!(
-                        "session ended for game {}: {} (runtime={}ms active={}ms idle={}ms)",
-                        game_id, ended.id, session.runtime_ms, session.active_ms, session.idle_ms
-                    );
-                }
-                Err(error) => {
-                    error!(
-                        "failed to end session {} for game {}: {error}",
-                        session.session_id, game_id
-                    );
-                }
-            }
+            end_active_session(db, live, &session);
         }
+    }
+}
+
+/// Closes a session with the counters of its last counted tick.
+fn end_active_session(db: &Database, live: &LiveSessions, session: &ActiveSession) {
+    let ended = sessions::end_session(
+        db,
+        &session.session_id,
+        session.runtime_ms,
+        session.active_ms,
+        session.idle_ms,
+        &session.integrity_status,
+    );
+    live.remove(&session.session_id);
+    match ended {
+        Ok(_) => info!(
+            "session ended for game {}: {} (runtime={}ms active={}ms idle={}ms)",
+            session.game_id,
+            session.session_id,
+            session.runtime_ms,
+            session.active_ms,
+            session.idle_ms
+        ),
+        Err(error) => error!(
+            "failed to end session {} for game {}: {error}",
+            session.session_id, session.game_id
+        ),
     }
 }
 
@@ -665,7 +657,7 @@ fn apply_observation(
             session.runtime_ms,
             wall_elapsed_ms,
             drift_ms,
-            &reason,
+            reason,
         )?;
         session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
         flagged = true;
@@ -753,17 +745,17 @@ fn detect_integrity_reason(
     wall_delta_ms: i64,
     monotonic_delta_ms: i64,
     drift_ms: i64,
-) -> Option<String> {
+) -> Option<&'static str> {
     if wall_delta_ms < -CLOCK_BACKWARDS_TOLERANCE_MS {
-        return Some("wall_clock_moved_backwards".into());
+        return Some("wall_clock_moved_backwards");
     }
 
     if (wall_delta_ms - monotonic_delta_ms).abs() > CLOCK_STEP_TOLERANCE_MS {
-        return Some("wall_clock_step_mismatch".into());
+        return Some("wall_clock_step_mismatch");
     }
 
     if drift_ms.abs() > CLOCK_TOTAL_DRIFT_TOLERANCE_MS {
-        return Some("wall_clock_drift_exceeded".into());
+        return Some("wall_clock_drift_exceeded");
     }
 
     None
@@ -800,6 +792,51 @@ fn close_orphaned_sessions(db: &Database, device_id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::models::CreateGame;
+    use crate::db::repo::{devices, session_events};
+
+    /// A game in front that uses the CPU.
+    const PLAYING: GameObservation = GameObservation {
+        is_running: true,
+        has_foreground_window: true,
+        has_process_activity: true,
+    };
+
+    fn settings() -> TrackingSettings {
+        TrackingSettings {
+            idle_threshold: Duration::from_secs(300),
+            treat_background_as_active: false,
+        }
+    }
+
+    /// A desktop that reports input and the window in front, with the last
+    /// input `idle_for` ago.
+    fn desktop(idle_for: Duration) -> ActivitySnapshot {
+        ActivitySnapshot {
+            foreground_pid: None,
+            foreground_supported: true,
+            foreground_known: true,
+            idle_for: Some(idle_for),
+            idle_supported: true,
+        }
+    }
+
+    /// A database of this PC with one game. Returns the game's id.
+    fn library_with(title: &str) -> (Database, String) {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: title.into(),
+                executable_path: Some("game.exe".into()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        (db, game.id)
+    }
 
     /// Starts a real installed game and checks that a session opens and closes.
     /// Set `VAULTIME_GAME_EXE` and `VAULTIME_GAME_FOLDER` (the Steam install
@@ -973,8 +1010,6 @@ mod tests {
         assert!(closed.closed_cleanly);
         assert_eq!(closed.integrity_status, "local");
     }
-    use crate::db::models::CreateGame;
-    use crate::db::repo::{devices, session_events};
 
     struct Fixture {
         db: Database,
@@ -983,22 +1018,11 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
-        let db = Database::open_in_memory().unwrap();
-        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
-        let game = games::create_game(
-            &db,
-            &CreateGame {
-                title: "Gap Game".into(),
-                executable_path: Some("game.exe".into()),
-                install_folder: None,
-                launcher_source: None,
-            },
-        )
-        .unwrap();
-        let session = sessions::create_session(&db, &game.id, "device").unwrap();
+        let (db, game_id) = library_with("Gap Game");
+        let session = sessions::create_session(&db, &game_id, "device").unwrap();
         Fixture {
             db,
-            game_id: game.id,
+            game_id,
             session_id: session.id,
         }
     }
@@ -1020,28 +1044,12 @@ mod tests {
     }
 
     fn tick_at(f: &Fixture, session: &mut ActiveSession, asleep_ms: Option<i64>) {
-        let observation = GameObservation {
-            is_running: true,
-            has_foreground_window: true,
-            has_process_activity: true,
-        };
-        let snapshot = ActivitySnapshot {
-            foreground_pid: None,
-            foreground_supported: true,
-            foreground_known: true,
-            idle_for: Some(Duration::ZERO),
-            idle_supported: true,
-        };
-        let settings = TrackingSettings {
-            idle_threshold: Duration::from_secs(300),
-            treat_background_as_active: false,
-        };
         apply_observation(
             &f.db,
             session,
-            observation,
-            &settings,
-            &snapshot,
+            PLAYING,
+            &settings(),
+            &desktop(Duration::ZERO),
             &Clocks {
                 now: Instant::now(),
                 wall: Utc::now(),
@@ -1113,21 +1121,14 @@ mod tests {
         let f = fixture();
         let session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(5));
         let behind = GameObservation {
-            is_running: true,
             has_foreground_window: false,
-            has_process_activity: true,
+            ..PLAYING
         };
         let wayland_window_in_front = ActivitySnapshot {
-            foreground_pid: None,
-            foreground_supported: true,
             foreground_known: false,
-            idle_for: Some(Duration::ZERO),
-            idle_supported: true,
+            ..desktop(Duration::ZERO)
         };
-        let settings = TrackingSettings {
-            idle_threshold: Duration::from_secs(300),
-            treat_background_as_active: false,
-        };
+        let settings = settings();
         let now = Instant::now();
         // A native Wayland game never shows up in front, so input decides.
         assert!(should_count_as_active(
@@ -1153,17 +1154,10 @@ mod tests {
     fn every_signal_decides_activity_as_documented() {
         let f = fixture();
         let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(5));
-        let settings = TrackingSettings {
-            idle_threshold: Duration::from_secs(300),
-            treat_background_as_active: false,
-        };
+        let settings = settings();
         let now = Instant::now();
         let quiet = settings.idle_threshold + Duration::from_secs(1);
-        let in_front = GameObservation {
-            is_running: true,
-            has_foreground_window: true,
-            has_process_activity: true,
-        };
+        let in_front = PLAYING;
         let behind = GameObservation {
             has_foreground_window: false,
             ..in_front
@@ -1172,17 +1166,8 @@ mod tests {
             has_process_activity: false,
             ..behind
         };
-        let full = ActivitySnapshot {
-            foreground_pid: None,
-            foreground_supported: true,
-            foreground_known: true,
-            idle_for: Some(Duration::ZERO),
-            idle_supported: true,
-        };
-        let away = ActivitySnapshot {
-            idle_for: Some(settings.idle_threshold),
-            ..full
-        };
+        let full = desktop(Duration::ZERO);
+        let away = desktop(settings.idle_threshold);
         let heuristic = ActivitySnapshot {
             foreground_supported: false,
             idle_for: None,
@@ -1225,11 +1210,11 @@ mod tests {
         let tick = POLL_INTERVAL.as_millis() as i64;
         assert_eq!(detect_integrity_reason(tick, tick, 0), None);
         assert_eq!(
-            detect_integrity_reason(-CLOCK_BACKWARDS_TOLERANCE_MS - 1, tick, 0).as_deref(),
+            detect_integrity_reason(-CLOCK_BACKWARDS_TOLERANCE_MS - 1, tick, 0),
             Some("wall_clock_moved_backwards")
         );
         assert_eq!(
-            detect_integrity_reason(tick + CLOCK_STEP_TOLERANCE_MS + 1, tick, 0).as_deref(),
+            detect_integrity_reason(tick + CLOCK_STEP_TOLERANCE_MS + 1, tick, 0),
             Some("wall_clock_step_mismatch")
         );
         assert_eq!(
@@ -1237,11 +1222,11 @@ mod tests {
             None
         );
         assert_eq!(
-            detect_integrity_reason(tick, tick, CLOCK_TOTAL_DRIFT_TOLERANCE_MS + 1).as_deref(),
+            detect_integrity_reason(tick, tick, CLOCK_TOTAL_DRIFT_TOLERANCE_MS + 1),
             Some("wall_clock_drift_exceeded")
         );
         assert_eq!(
-            detect_integrity_reason(tick, tick, -CLOCK_TOTAL_DRIFT_TOLERANCE_MS - 1).as_deref(),
+            detect_integrity_reason(tick, tick, -CLOCK_TOTAL_DRIFT_TOLERANCE_MS - 1),
             Some("wall_clock_drift_exceeded")
         );
     }
@@ -1292,24 +1277,13 @@ mod tests {
     }
 
     fn driven() -> Driven {
-        let db = Database::open_in_memory().unwrap();
-        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
-        let game = games::create_game(
-            &db,
-            &CreateGame {
-                title: "Checkpoint Game".into(),
-                executable_path: Some("game.exe".into()),
-                install_folder: None,
-                launcher_source: None,
-            },
-        )
-        .unwrap();
+        let (db, game_id) = library_with("Checkpoint Game");
         let wall = parse_wall_timestamp("2026-10-02T18:00:00.000Z");
-        let row = sessions::create_session_at(&db, &game.id, "device", wall).unwrap();
+        let row = sessions::create_session_at(&db, &game_id, "device", wall).unwrap();
         let now = Instant::now();
         let session = ActiveSession::new(
             row.id.clone(),
-            game.id.clone(),
+            game_id.clone(),
             now,
             wall,
             integrity::STATUS_LOCAL.into(),
@@ -1317,7 +1291,7 @@ mod tests {
         Driven {
             f: Fixture {
                 db,
-                game_id: game.id,
+                game_id,
                 session_id: row.id,
             },
             session,
@@ -1339,32 +1313,17 @@ mod tests {
         ) -> crate::error::Result<()> {
             self.now += POLL_INTERVAL;
             self.wall += wall_step;
-            let snapshot = ActivitySnapshot {
-                foreground_pid: None,
-                foreground_supported: true,
-                foreground_known: true,
-                idle_for: Some(if active {
-                    Duration::ZERO
-                } else {
-                    Duration::from_secs(600)
-                }),
-                idle_supported: true,
-            };
-            let settings = TrackingSettings {
-                idle_threshold: Duration::from_secs(300),
-                treat_background_as_active: false,
-            };
-            let observation = GameObservation {
-                is_running: true,
-                has_foreground_window: true,
-                has_process_activity: true,
+            let idle_for = if active {
+                Duration::ZERO
+            } else {
+                Duration::from_secs(600)
             };
             apply_observation(
                 &self.f.db,
                 &mut self.session,
-                observation,
-                &settings,
-                &snapshot,
+                PLAYING,
+                &settings(),
+                &desktop(idle_for),
                 &Clocks {
                     now: self.now,
                     wall: self.wall,
