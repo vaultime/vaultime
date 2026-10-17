@@ -56,7 +56,8 @@ export function EditGameDialog({
         executablePath !== (game.executable_path ?? "") || installFolder !== (game.install_folder ?? "");
       await api.updateGame(game.id, {
         title: title.trim(),
-        executable_path: executablePath || null,
+        // An empty path clears it in the core, a missing one keeps it.
+        executable_path: executablePath,
         // An empty field clears the folder.
         install_folder: installFolder,
       });
