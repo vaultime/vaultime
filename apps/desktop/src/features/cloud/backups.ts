@@ -32,9 +32,9 @@ export function backupSize(backup: CloudBackupRecord) {
   return formatByteSize(backup.size_bytes + (backup.metadata_json?.artwork_bytes ?? 0));
 }
 
-/** The PC a backup was made on, as the backup names it. */
+/** The PC a backup was made on, as the backup names it. The upload's client id is no PC id. */
 export function backupSource(backup: CloudBackupRecord): string | null {
-  return backup.metadata_json?.source_device_id ?? backup.client_device_id;
+  return backup.metadata_json?.source_device_id ?? null;
 }
 
 /** A local date and time field as an ISO timestamp, null when empty or unreadable. */

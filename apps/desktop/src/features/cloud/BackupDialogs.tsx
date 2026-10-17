@@ -83,7 +83,7 @@ export function RestoreBackupDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   target: CloudBackupRecord | null;
-  /** This PC has no history yet and continues as the PC that made the backup. */
+  /** This PC has no history yet and the backup names another PC, which this one continues as if its ledger is sound. */
   takesOver: boolean;
   busy: boolean;
   onRestore: () => void;
@@ -110,7 +110,8 @@ export function RestoreBackupDialog({
             </p>
             {takesOver && (
               <p className="text-[15px]">
-                This PC continues as the PC that made this backup, as it has no history of its own yet.
+                This PC has no history of its own yet, so it continues as the PC that made this backup, as long as
+                the backup&apos;s ledger is sound.
               </p>
             )}
             <p className="text-[13px] leading-relaxed text-faint">

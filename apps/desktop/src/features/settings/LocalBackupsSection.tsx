@@ -168,7 +168,8 @@ export function LocalBackupsSection({
               {continuesAs(restorePreview.continues_as)}{" "}
               <span className="text-[13px] text-faint">
                 This PC has no history of its own yet, so it takes over the backup&apos;s PC: its sessions count as
-                this PC&apos;s own, and so do sessions it played after the backup that come in by merge.
+                this PC&apos;s own, and so do sessions it played after the backup that come in by merge, as long as
+                that PC checked them only with this PC&apos;s keys.
               </span>
             </p>
           )}

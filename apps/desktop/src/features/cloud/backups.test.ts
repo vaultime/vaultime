@@ -38,8 +38,8 @@ describe("backups", () => {
     expect(backupSize(withArt)).toBe("1.0 MiB");
   });
 
-  it("name the PC they came from, the payload's first", () => {
-    expect(backupSource(record())).toBe("client");
+  it("name the PC they came from only from the payload", () => {
+    expect(backupSource(record())).toBeNull();
     const named = record({ metadata_json: { source_device_id: "desktop" } as CloudBackupRecord["metadata_json"] });
     expect(backupSource(named)).toBe("desktop");
   });

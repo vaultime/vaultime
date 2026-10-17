@@ -538,7 +538,11 @@ export function CloudPage() {
         }}
         target={restoreTarget}
         takesOver={
-          freshInstall && deviceId !== null && restoreTarget !== null && backupSource(restoreTarget) !== deviceId
+          freshInstall &&
+          deviceId !== null &&
+          restoreTarget !== null &&
+          backupSource(restoreTarget) !== null &&
+          backupSource(restoreTarget) !== deviceId
         }
         busy={remoteBackupBusy}
         onRestore={() => void handleRestoreRemoteBackup()}
