@@ -13,6 +13,7 @@
 // ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
 // fills the three days before today with games that ran side by side.
+// ?midnight=1 fills the week with sessions that run past midnight.
 // ?update=1 offers a new version. ?ignored=1 lists an ignored program.
 // ?posters=1 draws a poster for every game, for screenshots of the README.
 
@@ -143,6 +144,49 @@ if (params.get("sidebyside") === "1") {
     const idle = Math.round(runtime * 0.1);
     sessions.push({
       id: `session-side-${daysAgo}-${gameIndex}-${hour}`,
+      game_id: games[gameIndex].id,
+      device_id: "preview",
+      started_at_wall: iso(start),
+      ended_at_wall: iso(start + runtime),
+      elapsed_monotonic_ms: runtime,
+      active_ms: runtime - idle,
+      idle_ms: idle,
+      runtime_ms: runtime,
+      integrity_status: "local",
+      closed_cleanly: true,
+    });
+  }
+}
+
+// ?midnight=1 fills this week and the end of the last one with sessions that
+// run past midnight: one from Sunday into this week's Monday, a pair side by
+// side into the next day, one left open for more than a day and one from
+// last night into today. Laid out for a day late in the week.
+if (params.get("midnight") === "1") {
+  const today = new Date(now);
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+  const at = (dayFromMonday: number, hour: number) =>
+    new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayFromMonday).getTime() + hour * HOUR_MS;
+  const before = sessions.filter((session) => new Date(session.started_at_wall).getTime() < at(-2, 0));
+  sessions.splice(0, sessions.length, ...before);
+  const yesterday = (today.getDay() + 5) % 7;
+  // [day from Monday, game index, start hour, hours]
+  const pastMidnight: [number, number, number, number][] = [
+    [-2, 3, 15, 2.2],
+    [-1, 0, 22.67, 3.17],
+    [1, 1, 22, 2.5],
+    [1, 2, 23.25, 1.5],
+    [2, 5, 19, 30],
+    [3, 4, 18, 1],
+    [yesterday, 3, 22.67, 3.58],
+  ];
+  for (const [day, gameIndex, hour, hours] of pastMidnight) {
+    const start = at(day, hour);
+    if (start >= now) continue;
+    const runtime = Math.round(hours * HOUR_MS);
+    const idle = Math.round(runtime * (games[gameIndex].title === LEFT_RUNNING ? 0.4 : 0.08));
+    sessions.push({
+      id: `session-midnight-${day}-${gameIndex}`,
       game_id: games[gameIndex].id,
       device_id: "preview",
       started_at_wall: iso(start),
