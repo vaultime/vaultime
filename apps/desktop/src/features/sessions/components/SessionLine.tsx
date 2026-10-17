@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NotebookPen, Scissors } from "lucide-react";
 import { PhraseText } from "@/components/media/PhraseText";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
@@ -26,6 +26,8 @@ export function SessionLine({
   gameSessions,
   earlierMs,
   when,
+  highlighted = false,
+  amountsNote,
   bordered = true,
   note,
   onSaveNote,
@@ -46,6 +48,10 @@ export function SessionLine({
   earlierMs?: number;
   /** Replaces the start day and time in the left column. */
   when?: string;
+  /** Marks the line, its time in the title color, while another part of the page points at it. */
+  highlighted?: boolean;
+  /** Said after the amounts, like how much of the session counts on a later day. */
+  amountsNote?: ReactNode;
   bordered?: boolean;
   note?: string;
   /** Lets the player write a note. An empty note removes it. */
@@ -93,7 +99,10 @@ export function SessionLine({
 
   return (
     <article className={cn("group flex items-baseline gap-5", bordered && "border-b border-rule py-3.5")}>
-      <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
+      <span
+        className="w-[20ch] shrink-0 font-mono text-[13px] text-faint transition-colors"
+        style={highlighted ? { color: titleColor ?? "var(--text)" } : undefined}
+      >
         {when ?? formatSessionStart(session.started_at_wall)}
       </span>
       <div className="min-w-0 flex-1">
@@ -103,6 +112,7 @@ export function SessionLine({
         <div className="mt-1 text-[13px] text-faint">
           {sessionAmounts(session)}
           {live ? " so far." : "."}
+          {amountsNote && <span> {amountsNote}</span>}
           {(session.set_aside_ms ?? 0) >= MINUTE_MS && (
             <span> {formatHoursMinutes(session.set_aside_ms ?? 0)} set aside while other games ran.</span>
           )}

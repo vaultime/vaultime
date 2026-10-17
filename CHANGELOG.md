@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Journal
+
+- **One session past midnight reads as one.** Play still counts on the day it happened, but a session that runs past midnight no longer looks like two. Its bar runs out at the right edge of the first day and in from the left edge of the next, and the next day shows a quiet line like "Still in Elden Ring from Saturday night" instead of a second entry. The entry reads "22:40 to Sun 02:15" with the whole session's time and how much of it counts after midnight, the line says how much of the whole falls on its day, and each leads to the other, also into the next or last week. Pointing at either marks every part of the session, and pointing at a bar shows each day's part and the whole. A week that opens with the end of a session from the week before says so.
+
 ### Fixes
 
 - **Starts the version you installed.** Starting with the system now always opens the copy of Vaultime you last ran. A login item made by an older copy in another folder used to keep starting that copy after every restart.
