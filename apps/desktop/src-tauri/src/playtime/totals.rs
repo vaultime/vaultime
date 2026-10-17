@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Timelike, Utc};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::PLAY_SLICE_MS;
@@ -76,7 +76,10 @@ fn bucket_of<Tz: TimeZone>(tz: &Tz, start_ms: i64, bucket: Bucket) -> Option<Str
 }
 
 /// Open sessions, or those of `game_id` and the games linked to it.
-fn open_sessions(conn: &rusqlite::Connection, game_id: Option<&str>) -> Result<Vec<Session>> {
+pub(crate) fn open_sessions(
+    conn: &rusqlite::Connection,
+    game_id: Option<&str>,
+) -> Result<Vec<Session>> {
     let mut stmt = conn
         .prepare_cached(
             "SELECT * FROM sessions
@@ -115,6 +118,32 @@ pub(crate) fn open_session_spans(
         });
     let aside = aside_stretches(conn, session, now_ms)?;
     Ok(spans_of(session, &events, latest, &aside))
+}
+
+/// The moment `open_session_spans` places an open session up to, which none
+/// of its stretches goes past: the latest tick for one the tracker runs, else
+/// its last event or, without one, its start. None when nothing is placed.
+/// A session another PC left open long ago ends long ago.
+pub(crate) fn placed_until(
+    conn: &rusqlite::Connection,
+    live: &LiveSessions,
+    session: &Session,
+    now_ms: i64,
+) -> Result<Option<i64>> {
+    if live.get(&session.id).is_some() {
+        return Ok(Some(now_ms));
+    }
+    let last: Option<String> = conn
+        .prepare_cached(
+            "SELECT event_time_wall FROM session_events
+             WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+        )
+        .and_then(|mut stmt| stmt.query_row([&session.id], |row| row.get(0)).optional())
+        .map_err(map_db)?;
+    Ok(last
+        .as_deref()
+        .and_then(wall_ms)
+        .or_else(|| wall_ms(&session.started_at_wall)))
 }
 
 /// The slices of an open session, as `open_session_spans` places it.
@@ -212,6 +241,9 @@ fn range_play(
             }
         }
         for session in open_sessions(conn, game_id)? {
+            if placed_until(conn, live, &session, now_ms)?.is_none_or(|until| until < from_ms) {
+                continue;
+            }
             let placed = open_session_spans(conn, live, &session, now_ms)?;
             slices.extend(
                 slices_from(&placed)
@@ -555,6 +587,20 @@ fn stored_shared_slices(conn: &rusqlite::Connection) -> Result<Vec<(String, Stri
     rows.collect::<rusqlite::Result<_>>().map_err(map_db)
 }
 
+/// The first stored quarter hour of the sessions `ids`.
+fn first_stored_slice(conn: &rusqlite::Connection, ids: &[&str]) -> Result<Option<i64>> {
+    if ids.is_empty() {
+        return Ok(None);
+    }
+    let ids = serde_json::to_string(ids).unwrap_or_default();
+    conn.prepare_cached(
+        "SELECT MIN(slice_start) FROM play_slices
+         WHERE session_id IN (SELECT value FROM json_each(?1))",
+    )
+    .and_then(|mut stmt| stmt.query_row([ids], |row| row.get(0)))
+    .map_err(map_db)
+}
+
 /// Stored slices of the games `game_ids` from `from_ms` on, each with its
 /// session.
 fn stored_slices_since(
@@ -632,10 +678,40 @@ pub fn fill_copy_overlap(
     sessions: &mut [Session],
     now_ms: i64,
 ) -> Result<()> {
+    if sessions.is_empty() {
+        return Ok(());
+    }
     let any_closed = sessions
         .iter()
         .any(|session| session.ended_at_wall.is_some());
     let slices: Vec<(String, String, Slice)> = db.with_transaction(|conn| {
+        let beside = running_beside_copies(conn)?;
+        // Only quarter hours with time of the given sessions matter, so
+        // nothing before the first of them is read or placed.
+        let asked: HashSet<&str> = sessions.iter().map(|session| session.id.as_str()).collect();
+        let mut placed: HashMap<String, Vec<Slice>> = HashMap::new();
+        for (running, _) in &beside {
+            if asked.contains(running.id.as_str()) {
+                placed.insert(
+                    running.id.clone(),
+                    open_session_slices(conn, live, running, now_ms)?,
+                );
+            }
+        }
+        let closed: Vec<&str> = sessions
+            .iter()
+            .filter(|session| session.ended_at_wall.is_some())
+            .map(|session| session.id.as_str())
+            .collect();
+        let Some(from_ms) = placed
+            .values()
+            .flatten()
+            .map(|slice| slice.start_ms)
+            .chain(first_stored_slice(conn, &closed)?)
+            .min()
+        else {
+            return Ok(Vec::new());
+        };
         let mut slices = Vec::new();
         let mut seen: HashSet<(String, i64)> = HashSet::new();
         let mut add = |session: String, game: String, slice: Slice| {
@@ -648,13 +724,22 @@ pub fn fill_copy_overlap(
                 add(session, game, slice);
             }
         }
-        for (running, set) in running_beside_copies(conn)? {
+        for (running, set) in beside {
             let game = set[0].clone();
-            let from_ms = slice_of(wall_ms(&running.started_at_wall).unwrap_or(0));
-            for (session, slice) in stored_slices_since(conn, &set, from_ms)? {
+            let start_ms = slice_of(wall_ms(&running.started_at_wall).unwrap_or(0));
+            for (session, slice) in stored_slices_since(conn, &set, start_ms.max(from_ms))? {
                 add(session, game.clone(), slice);
             }
-            for slice in open_session_slices(conn, live, &running, now_ms)? {
+            let own = match placed.remove(&running.id) {
+                Some(own) => own,
+                None if placed_until(conn, live, &running, now_ms)?
+                    .is_some_and(|until| until >= from_ms) =>
+                {
+                    open_session_slices(conn, live, &running, now_ms)?
+                }
+                None => Vec::new(),
+            };
+            for slice in own {
                 add(running.id.clone(), game.clone(), slice);
             }
         }

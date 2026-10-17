@@ -19,8 +19,10 @@ use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
 use crate::integrity;
 use crate::playtime::journal::{GameTime, local_day};
+use crate::playtime::slices::slices_from;
 use crate::playtime::totals::{
-    Bucket, PlayTotal, day_start_ms, day_totals, fill_set_aside, play_totals,
+    Bucket, PlayTotal, day_start_ms, day_totals, fill_set_aside, open_session_spans, open_sessions,
+    placed_until, play_totals,
 };
 use crate::tracking::live::LiveSessions;
 
@@ -93,8 +95,10 @@ fn longest_run(days: &BTreeSet<NaiveDate>) -> Option<Streak> {
     })
 }
 
-/// Days with play from the local day `from` up to but not including `to`.
-fn days_with_play<Tz: TimeZone>(
+/// Days with play of the open sessions from the local day `from` up to but
+/// not including `to`. Running sessions keep no slices yet. A day has play
+/// when a quarter hour of it does, also where copies of a game share one.
+fn open_days_with_play<Tz: TimeZone>(
     db: &Database,
     live: &LiveSessions,
     tz: &Tz,
@@ -102,13 +106,25 @@ fn days_with_play<Tz: TimeZone>(
     to: NaiveDate,
     now_ms: i64,
 ) -> Result<BTreeSet<NaiveDate>> {
-    Ok(
-        play_totals(db, live, tz, from, to, Bucket::Day, None, now_ms)?
-            .iter()
-            .filter(|total| total.runtime_ms > 0)
-            .filter_map(|total| date_of(&total.bucket))
-            .collect(),
-    )
+    let (from_ms, to_ms) = (day_start_ms(tz, from), day_start_ms(tz, to));
+    db.with_transaction(|conn| {
+        let mut days = BTreeSet::new();
+        for session in open_sessions(conn, None)? {
+            if placed_until(conn, live, &session, now_ms)?.is_none_or(|until| until < from_ms) {
+                continue;
+            }
+            let spans = open_session_spans(conn, live, &session, now_ms)?;
+            days.extend(
+                slices_from(&spans)
+                    .into_iter()
+                    .filter(|slice| {
+                        slice.start_ms >= from_ms && slice.start_ms < to_ms && slice.runtime_ms > 0
+                    })
+                    .filter_map(|slice| local_day(tz, slice.start_ms)),
+            );
+        }
+        Ok(days)
+    })
 }
 
 /// Local days with play in the stored slices from `from_ms` on. Quicker than
@@ -169,15 +185,22 @@ fn current_streak<Tz: TimeZone>(
     let Some(first_day) = day_of(first_play) else {
         return Ok(0);
     };
-    // Running sessions keep no slices yet, so their days come from totals.
     let yesterday = today - TimeDelta::days(1);
     let open_from = day_of(first_open).map_or(yesterday, |day| day.min(yesterday));
-    let running = days_with_play(db, live, tz, open_from, today + TimeDelta::days(1), now_ms)?;
     let mut look = first_look;
     loop {
         let from = today - TimeDelta::days(look);
         let mut days = stored_days_with_play(db, tz, day_start_ms(tz, from))?;
-        days.extend(running.iter().copied());
+        // Days before `from` never decide the streak, so a session another
+        // PC left open long ago is not placed.
+        days.extend(open_days_with_play(
+            db,
+            live,
+            tz,
+            open_from.max(from),
+            today + TimeDelta::days(1),
+            now_ms,
+        )?);
         let mut day = if days.contains(&today) {
             today
         } else {
@@ -428,6 +451,93 @@ mod tests {
         assert_eq!(
             current_streak(&db, &live, &Berlin, (today, now), 400).unwrap(),
             5
+        );
+    }
+
+    /// A session of `game_id` the laptop left open after `minutes` of play
+    /// from `start`, as a restored backup brings it.
+    fn left_open_on_laptop(db: &Database, game_id: &str, start: &str, minutes: i64) {
+        let session =
+            crate::db::repo::sessions::create_session_at(db, game_id, "laptop", utc(start))
+                .unwrap();
+        let runtime = minutes * MINUTE;
+        db.with_conn(|conn| {
+            integrity::append_session_event(
+                conn,
+                &session.id,
+                "heartbeat",
+                &integrity::format_timestamp(utc(start) + TimeDelta::milliseconds(runtime)),
+                Some(runtime),
+                &serde_json::json!({
+                    "runtime_ms": runtime, "active_ms": runtime, "idle_ms": 0,
+                    "integrity_status": "local",
+                })
+                .to_string(),
+            )?;
+            conn.execute(
+                "UPDATE sessions SET runtime_ms = ?1, elapsed_monotonic_ms = ?1, active_ms = ?1
+                 WHERE id = ?2",
+                params![runtime, session.id],
+            )
+            .map_err(map_db)?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_session_left_open_elsewhere_counts_up_to_its_last_event() {
+        let db = database();
+        let one = game(&db, "One");
+        left_open_on_laptop(&db, &one, "2026-03-01T18:00:00Z", 45);
+        for day in ["03-02", "03-03", "09-29"] {
+            played(&db, &one, &format!("2026-{day}T18:00:00Z"), 30);
+        }
+        let live = LiveSessions::default();
+        let totals = |from: &str, to: &str, now: &str| {
+            play_totals(
+                &db,
+                &live,
+                &Berlin,
+                date(from),
+                date(to),
+                Bucket::Day,
+                None,
+                utc(now).timestamp_millis(),
+            )
+            .unwrap()
+            .iter()
+            .map(|total| (total.bucket.clone(), total.runtime_ms / MINUTE))
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            totals("2026-03-01", "2026-03-02", "2026-09-30T10:00:00Z"),
+            vec![("2026-03-01".into(), 45)]
+        );
+        assert_eq!(
+            totals("2026-03-02", "2026-10-01", "2026-09-30T10:00:00Z"),
+            vec![
+                ("2026-03-02".into(), 30),
+                ("2026-03-03".into(), 30),
+                ("2026-09-29".into(), 30)
+            ]
+        );
+        // Its day still carries a streak that reaches it.
+        let now = utc("2026-03-03T19:00:00Z").timestamp_millis();
+        for first_look in [1, 400] {
+            assert_eq!(
+                current_streak(&db, &live, &Berlin, (date("2026-03-03"), now), first_look).unwrap(),
+                3
+            );
+        }
+        let now = utc("2026-09-30T10:00:00Z").timestamp_millis();
+        assert_eq!(
+            current_streak(&db, &live, &Berlin, (date("2026-09-30"), now), 400).unwrap(),
+            1
+        );
+        assert_eq!(
+            played_on(&db, &live, &Berlin, date("2026-09-30"), now).unwrap(),
+            0
         );
     }
 
