@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { maxSrgbChroma } from "./color";
 import {
   MARK_CHROMA_BOOST,
@@ -11,7 +11,7 @@ import {
   MARK_MIN_HUE_GAP_DEG,
   MARK_TINTED_GREY_CHROMA,
 } from "./constants";
-import { markColors, tintForTitle, tintFromPixels, type ArtColor } from "./game-tint";
+import { markColors, tintForTitle, tintFromPixels, tintsFromImages, type ArtColor } from "./game-tint";
 
 const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
@@ -89,6 +89,31 @@ describe("tintFromPixels", () => {
 
   it("returns grey for an empty image", () => {
     expect(tintFromPixels(pixels([16, 0, 0, 0, 0])).colors).toEqual([]);
+  });
+});
+
+describe("tintsFromImages", () => {
+  it("reads each image once and forgets images the latest call left out", async () => {
+    const read: string[] = [];
+    vi.stubGlobal(
+      "Image",
+      class {
+        set src(value: string) {
+          read.push(value);
+        }
+        decode() {
+          return Promise.reject(new Error("no image in tests"));
+        }
+      },
+    );
+    try {
+      expect(await tintsFromImages({ a: "first", b: "second" })).toEqual({});
+      await tintsFromImages({ a: "first" });
+      await tintsFromImages({ a: "first", b: "second" });
+      expect(read).toEqual(["first", "second", "second"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

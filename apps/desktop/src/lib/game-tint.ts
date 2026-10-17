@@ -237,16 +237,24 @@ export function tintFromPixels(data: Uint8ClampedArray): GameTint {
   return tintFromHue(colors[0].hue, strength, colors);
 }
 
-const imageTints = new Map<string, Promise<GameTint | null>>();
+/** Tints of the images of the latest `tintsFromImages`, by image source. */
+let imageTints = new Map<string, Promise<GameTint | null>>();
 
-/** The tint of a cover image, null when the image cannot be read. */
-export function tintFromImage(src: string): Promise<GameTint | null> {
-  let tint = imageTints.get(src);
-  if (!tint) {
-    tint = readImageTint(src);
-    imageTints.set(src, tint);
+/**
+ * The tints of cover images by key, leaving out images that cannot be read.
+ * Only the images of the latest call stay remembered, so a cover that
+ * changed or went away does not keep its data URL in memory.
+ */
+export async function tintsFromImages(images: Record<string, string>): Promise<Record<string, GameTint>> {
+  const kept = new Map<string, Promise<GameTint | null>>();
+  for (const src of Object.values(images)) kept.set(src, imageTints.get(src) ?? readImageTint(src));
+  imageTints = kept;
+  const tints: Record<string, GameTint> = {};
+  for (const [key, src] of Object.entries(images)) {
+    const tint = await kept.get(src);
+    if (tint) tints[key] = tint;
   }
-  return tint;
+  return tints;
 }
 
 async function readImageTint(src: string): Promise<GameTint | null> {

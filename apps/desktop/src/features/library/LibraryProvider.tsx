@@ -10,7 +10,7 @@ import {
   SETTING_KEYS,
   TRUST_BADGE_RECENT_DAYS,
 } from "@/lib/constants";
-import { tintForTitle, tintFromImage, type GameTint } from "@/lib/game-tint";
+import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import { countedOnce, countsAsPlay } from "@/lib/session-stats";
 import { countedSession } from "@/lib/steps-aside";
@@ -131,15 +131,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      Object.entries(covers).map(async ([gameId, src]) => [gameId, await tintFromImage(src)] as const),
-    ).then((entries) => {
-      if (cancelled) return;
-      const next: Record<string, GameTint> = {};
-      for (const [gameId, tint] of entries) {
-        if (tint) next[gameId] = tint;
-      }
-      setArtTints(next);
+    tintsFromImages(covers).then((next) => {
+      if (!cancelled) setArtTints(next);
     });
     return () => {
       cancelled = true;
