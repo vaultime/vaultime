@@ -24,9 +24,13 @@ impl Database {
             VaultimeError::Database(format!("failed to open database: {error}"))
         })?;
 
-        // WAL needs fewer disk syncs per commit, which suits the tracker's frequent small writes.
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-            .map_err(|error| VaultimeError::Database(format!("failed to set pragmas: {error}")))?;
+        // WAL suits the tracker's frequent small writes. Every commit still
+        // waits for the disk, so a power cut never takes back a checkpoint, a
+        // ledger pin or a takeover whose key files are already written.
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;",
+        )
+        .map_err(|error| VaultimeError::Database(format!("failed to set pragmas: {error}")))?;
         // Test databases never have to outlast a power cut, so their commits
         // skip waiting for the disk, which halves the time of the merge tests.
         #[cfg(test)]
