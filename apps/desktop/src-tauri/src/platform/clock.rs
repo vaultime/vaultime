@@ -6,7 +6,8 @@
 //! system, whether or not the monotonic clock stops during sleep.
 
 /// Milliseconds the PC spent asleep since boot: the clock that counts
-/// through sleep minus the one that does not.
+/// through sleep minus the one that does not. Only differences between two
+/// readings mean anything, since under WSL2 the result can be negative.
 #[cfg(target_os = "linux")]
 pub fn asleep_ms() -> Option<i64> {
     let read = |clock| {
@@ -55,7 +56,6 @@ mod tests {
         let before = super::asleep_ms().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(30));
         let after = super::asleep_ms().unwrap();
-        assert!(before >= 0);
         // Timer resolution can move the difference by a few milliseconds.
         assert!((after - before).abs() < 100);
     }

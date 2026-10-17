@@ -586,10 +586,14 @@ fn apply_observation(
     let wall_delta_ms = current_wall
         .signed_duration_since(previous_wall)
         .num_milliseconds();
+    // Only growth counts. A reading that moved back, as WSL2 can have it,
+    // is no sleep.
     let slept_ms = clocks
         .asleep_ms
         .zip(session.last_asleep_ms)
-        .map_or(0, |(now_asleep, before_asleep)| now_asleep - before_asleep);
+        .map_or(0, |(now_asleep, before_asleep)| {
+            (now_asleep - before_asleep).max(0)
+        });
     // The clocks move on only once the writes before them went through, so
     // a tick whose write fails is taken again in full by the next one.
     let move_clocks = |session: &mut ActiveSession| {
@@ -1189,6 +1193,20 @@ mod tests {
 
         assert_eq!(session.runtime_ms, 0);
         assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn a_negative_or_falling_sleep_reading_changes_nothing() {
+        let f = fixture();
+        let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(5));
+        session.last_asleep_ms = Some(-500);
+        tick_at(&f, &mut session, Some(-40_000));
+
+        assert!(session.runtime_ms >= 5_000);
+        assert_eq!(session.active_ms, session.runtime_ms);
+        assert_eq!(session.integrity_status, integrity::STATUS_LOCAL);
+        let events = session_events::list_events_for_game(&f.db, &f.game_id).unwrap();
+        assert!(!events.iter().any(|e| e.event_type == "tracking_gap"));
     }
 
     #[test]
