@@ -4,16 +4,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { PageHeader, StepButton } from "@/components/layout/Page";
+import { Notice, PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useAppearance } from "@/features/appearance/appearance-context";
-import { useActiveSessions, useLastPoll, useLibrary } from "@/features/library/library-context";
-import { DAYS_PER_WEEK, JOURNAL_LINK_FLASH_MS } from "@/lib/constants";
+import { useActiveSessions, useLibrary } from "@/features/library/library-context";
+import { DAYS_PER_WEEK, JOURNAL_LINK_FLASH_MS, LIVE_TOTALS_REFRESH_MS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { weekSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
 import { formatDate, isoWeekNumber, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
 import type { DayShare, JournalWeekPlay, Session, SessionEvent } from "@/lib/types";
+import { useRefreshWhile } from "@/lib/use-refresh-while";
+import { describeError } from "@/lib/utils";
 import { DaySection } from "./DaySection";
 import { entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
 
@@ -34,7 +36,6 @@ const NO_SHARES: DayShare[] = [];
 export function JournalPage() {
   const { sessions: stored, summaries, statusChanges, notes, saveNote, refresh, today, loaded } = useLibrary();
   const active = useActiveSessions();
-  const lastPoll = useLastPoll();
   // Running sessions as of the last poll, a few seconds old at most. The
   // full list only reloads when a session starts or ends.
   const sessions = useMemo(() => {
@@ -49,27 +50,32 @@ export function JournalPage() {
   // The week on the page as the core worked it out. It stays until the next
   // one comes, so moving between weeks does not flash an empty page.
   const [shown, setShown] = useState<{ offset: number; start: Date; play: JournalWeekPlay } | null>(null);
+  const [weekError, setWeekError] = useState<string | null>(null);
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const dateInput = useRef<HTMLInputElement>(null);
   // Shown as a field to type a day in where the webview has no date picker.
   const [typingDay, setTypingDay] = useState(false);
 
-  // Read again when a session starts or ends, on a new day, and with every
-  // poll while a game runs, as its time grows.
-  const livePoll = active.length > 0 ? lastPoll : 0;
+  // Read again when a session starts or ends, on a new day, and while a game
+  // runs and this week is on the page, as its time grows.
+  const refreshed = useRefreshWhile(active.length > 0 && offset === 0, LIVE_TOTALS_REFRESH_MS);
   useEffect(() => {
     let cancelled = false;
     const start = weekStart(offset, new Date());
     api
       .getJournalWeek(toDayKey(start))
       .then((play) => {
-        if (!cancelled) setShown({ offset, start, play });
+        if (cancelled) return;
+        setShown({ offset, start, play });
+        setWeekError(null);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (!cancelled) setWeekError(describeError(error));
+      });
     return () => {
       cancelled = true;
     };
-  }, [offset, stored, today, livePoll]);
+  }, [offset, stored, today, refreshed]);
 
   const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
   // Kept between polls, so session lines can reuse their sentences.
@@ -168,7 +174,15 @@ export function JournalPage() {
     [stored],
   );
 
-  if (!loaded || !shown) return null;
+  if (!loaded) return null;
+  if (weekError) {
+    return (
+      <div className="px-8 pt-12 xl:px-14">
+        <Notice tone="warning">The week could not be read: {weekError}</Notice>
+      </div>
+    );
+  }
+  if (!shown) return null;
 
   const { play, start, offset: shownOffset } = shown;
   const canGoBack = earliest !== null && startOfWeek(earliest) < start;
