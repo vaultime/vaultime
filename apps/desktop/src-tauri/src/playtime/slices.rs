@@ -603,7 +603,7 @@ pub fn slices_of(
     slices_from(&spans_of(session, events, live, aside))
 }
 
-// Games whose switch makes them step aside, read from their metadata, or
+/// Games whose switch makes them step aside, read from their metadata, or
 /// from the game a linked game is linked to, as the switch belongs to the
 /// game shown. A game whose metadata is no JSON does not step aside.
 pub(crate) const STEPS_ASIDE: &str = "COALESCE((SELECT CASE WHEN json_valid(shown.metadata_json)
