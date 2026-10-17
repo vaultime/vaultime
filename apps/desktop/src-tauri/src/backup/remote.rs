@@ -255,6 +255,8 @@ fn upload_with_key(
     result
 }
 
+/// Restores a cloud backup. `take_over` works as in `import_local_backup`.
+#[expect(clippy::too_many_arguments)]
 pub fn restore_remote_backup(
     db: &Database,
     asset_manager: &AssetManager,
@@ -263,6 +265,7 @@ pub fn restore_remote_backup(
     access_token: &str,
     account_id: &str,
     backup_id: &str,
+    take_over: bool,
 ) -> Result<RemoteBackupRestoreResult> {
     let backup_key = secure_storage::load_cloud_backup_key(account_id)?;
     restore_with_key(
@@ -273,9 +276,11 @@ pub fn restore_remote_backup(
         access_token,
         &backup_key,
         backup_id,
+        take_over,
     )
 }
 
+#[expect(clippy::too_many_arguments)]
 fn restore_with_key(
     db: &Database,
     asset_manager: &AssetManager,
@@ -284,6 +289,7 @@ fn restore_with_key(
     access_token: &str,
     backup_key: &[u8; BACKUP_KEY_BYTES],
     backup_id: &str,
+    take_over: bool,
 ) -> Result<RemoteBackupRestoreResult> {
     // The id comes from the server and ends up in request paths.
     let backup_id = uuid::Uuid::parse_str(backup_id)
@@ -326,7 +332,8 @@ fn restore_with_key(
         restore_artwork(&api, &extracted_dir, backup_key, &staging_dir)?;
 
         // The manifest check in the import confirms every artwork file too.
-        let local_summary = import_local_backup(db, asset_manager, app_context, &extracted_dir)?;
+        let local_summary =
+            import_local_backup(db, asset_manager, app_context, &extracted_dir, take_over)?;
 
         Ok(RemoteBackupRestoreResult {
             backup,
@@ -912,6 +919,7 @@ mod tests {
             &token,
             &key,
             &third.backup.id,
+            true,
         )
         .unwrap();
         for (path, bytes) in [
@@ -934,6 +942,7 @@ mod tests {
             &token,
             &[4_u8; BACKUP_KEY_BYTES],
             &third.backup.id,
+            true,
         );
         assert!(wrong_key.is_err());
 

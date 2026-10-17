@@ -130,7 +130,7 @@ pub struct ThisPc {
     pub name: String,
     pub ledger: LedgerReport,
     /// Whether this PC has no history of its own yet, so restoring a backup
-    /// of another PC makes it continue as that PC.
+    /// of another PC can make it continue as that PC.
     pub fresh: bool,
 }
 
@@ -593,9 +593,16 @@ pub fn import_local_backup(
     app_context: State<'_, AppContext>,
     engine: State<'_, TrackingEngine>,
     path: String,
+    take_over: bool,
 ) -> Result<LocalBackupSummary, VaultimeError> {
     let summary = with_tracking_paused(&db, &engine, &app_context.device_id, || {
-        backup::import_local_backup(&db, &asset_manager, &app_context, Path::new(&path))
+        backup::import_local_backup(
+            &db,
+            &asset_manager,
+            &app_context,
+            Path::new(&path),
+            take_over,
+        )
     })?;
 
     record_snapshot(
@@ -673,6 +680,7 @@ pub async fn restore_remote_backup(
     access_token: String,
     account_id: String,
     backup_id: String,
+    take_over: bool,
 ) -> Result<RemoteBackupRestoreResult, VaultimeError> {
     on_blocking_pool(move || {
         let db = app.state::<Arc<Database>>();
@@ -686,6 +694,7 @@ pub async fn restore_remote_backup(
                 &access_token,
                 &account_id,
                 &backup_id,
+                take_over,
             )
         })?;
 

@@ -1670,7 +1670,14 @@ mod tests {
         // by a restore, before merges existed, and cut the session there.
         let earlier = laptop.back_up();
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &earlier).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &earlier,
+            true,
+        )
+        .unwrap();
         integrity::forget_checks();
         let start = |pc: &Pc| -> DateTime<Utc> {
             let started: String = pc
@@ -1795,7 +1802,14 @@ mod tests {
         let backup = laptop.back_up();
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.status(&session), STATUS_LOCAL);
     }
 
@@ -1876,7 +1890,14 @@ mod tests {
         let backup = laptop.back_up();
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.status(&honest), STATUS_LOCAL);
         assert_eq!(desktop.status(&forged.id), integrity::STATUS_SUSPICIOUS);
     }
@@ -1899,7 +1920,14 @@ mod tests {
         assert!(refused.to_string().contains("never writes"));
         desktop.act();
         assert!(
-            import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &viewed).is_err()
+            import_local_backup(
+                &desktop.db,
+                &desktop.assets,
+                &desktop.context,
+                &viewed,
+                true
+            )
+            .is_err()
         );
 
         let triggered = laptop.back_up();
@@ -1969,7 +1997,7 @@ mod tests {
         let other = Pc::new("other");
         other.merge(&laptop.back_up(), &[]);
         other.act();
-        import_local_backup(&other.db, &other.assets, &other.context, &backup).unwrap();
+        import_local_backup(&other.db, &other.assets, &other.context, &backup, true).unwrap();
         assert_eq!(other.status(&own), STATUS_LOCAL);
         assert_eq!(other.status(&as_laptop.id), integrity::STATUS_SUSPICIOUS);
     }
@@ -1987,7 +2015,14 @@ mod tests {
         });
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.status(&honest), STATUS_LOCAL);
         assert_eq!(desktop.status(&changed), integrity::STATUS_SUSPICIOUS);
     }
@@ -2002,7 +2037,14 @@ mod tests {
         let backup = laptop.back_up();
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert!(
             games::list_local_games(&desktop.db)
                 .unwrap()
@@ -2028,6 +2070,7 @@ mod tests {
             &desktop.assets,
             &desktop.context,
             Path::new(&summary.safety_backup_path.unwrap()),
+            true,
         )
         .unwrap();
 
@@ -2180,7 +2223,14 @@ mod tests {
         let backup = laptop.back_up();
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         desktop.act();
         let stretches = desktop
             .db
@@ -2273,7 +2323,14 @@ mod tests {
         });
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.status(&honest), STATUS_LOCAL);
         assert_eq!(desktop.status(&changed), integrity::STATUS_SUSPICIOUS);
     }
@@ -2302,7 +2359,14 @@ mod tests {
         let backup = impostor.back_up();
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.status(&made_up.id), integrity::STATUS_SUSPICIOUS);
     }
 
@@ -2322,7 +2386,7 @@ mod tests {
             );
             desktop.act();
             assert!(
-                import_local_backup(&desktop.db, &desktop.assets, &desktop.context, backup)
+                import_local_backup(&desktop.db, &desktop.assets, &desktop.context, backup, true)
                     .is_err()
             );
         };
@@ -2546,7 +2610,14 @@ mod tests {
         // Back to a backup from before the tablet's sessions came through
         // the laptop.
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &before).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &before,
+            true,
+        )
+        .unwrap();
 
         let impostor = Pc::new("tablet");
         let its_game = impostor.game("Hades", None);
@@ -2596,7 +2667,14 @@ mod tests {
         desktop.merge(&laptop.back_up(), &[]);
         let backup = laptop.back_up();
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.status(&session), STATUS_LOCAL);
         // The laptop's own row says nothing about merges, this PC still knows.
         let refused = corrections::trim_session(
@@ -2657,7 +2735,14 @@ mod tests {
         .unwrap();
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &during).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &during,
+            true,
+        )
+        .unwrap();
         // Left as the laptop recorded it, nothing appended here.
         let kept = desktop.events(&running.id);
         assert_eq!(kept.len(), 2);
@@ -2725,7 +2810,14 @@ mod tests {
         });
 
         desktop.act();
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         // Pinned at six minutes, so it counts five more at most.
         let interval = crate::constants::CHECKPOINT_PIN_INTERVAL_SECS * 1_000;
         let restored = desktop
@@ -2820,7 +2912,8 @@ mod tests {
         assert_eq!(continues.device_id, "desktop");
         assert_eq!(continues.name.as_deref(), Some("desktop"));
         let summary =
-            import_local_backup(&fresh.db, &fresh.assets, &fresh.context, &last_backup).unwrap();
+            import_local_backup(&fresh.db, &fresh.assets, &fresh.context, &last_backup, true)
+                .unwrap();
         assert_eq!(summary.continues_as, Some(continues));
 
         fresh.act();
@@ -2884,6 +2977,93 @@ mod tests {
     }
 
     #[test]
+    fn a_fresh_install_that_declines_the_takeover_stays_the_pc_it_is() {
+        let desktop = Pc::new("desktop");
+        let game = desktop.game("Hades", None);
+        let played = desktop.play(&game, 20);
+        desktop.act();
+        let running = sessions::create_session(&desktop.db, &game, "desktop").unwrap();
+        let checkpoint = Checkpoint {
+            runtime_ms: 10 * MINUTE,
+            active_ms: 10 * MINUTE,
+            wall_elapsed_ms: 10 * MINUTE,
+            ..Checkpoint::default()
+        };
+        sessions::record_checkpoint(
+            &desktop.db,
+            &running.id,
+            &checkpoint,
+            STATUS_LOCAL,
+            Utc::now(),
+        )
+        .unwrap();
+        let backup = desktop.back_up();
+        desktop.act();
+        let desktop_key = ledger::key_id().unwrap();
+
+        let second = Pc::new("second");
+        second.act();
+        let own_key = ledger::key_id().unwrap();
+        let dir = &second.context.app_dir;
+        let files = || {
+            [
+                crate::constants::DEVICE_ID_FILE,
+                crate::constants::DEVICE_KEYS_FILE,
+            ]
+            .map(|file| fs::read_to_string(dir.join(file)).ok())
+        };
+        let files_before = files();
+        let preview = crate::backup::inspect_local_backup(&second.db, &backup).unwrap();
+        assert!(preview.continues_as.is_some());
+        let summary =
+            import_local_backup(&second.db, &second.assets, &second.context, &backup, false)
+                .unwrap();
+        assert_eq!(summary.continues_as, None);
+
+        second.act();
+        assert_eq!(ledger::this_device().unwrap(), "second");
+        assert_eq!(ledger::key_id().unwrap(), own_key);
+        assert!(!ledger::own_keys().unwrap().contains(&desktop_key));
+        assert_eq!(files(), files_before);
+        let took_over: i64 = second
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM ledger_entries WHERE entry_type = 'took_over'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        assert_eq!(took_over, 0);
+
+        // The desktop's sessions come in as a PC never seen before: checked
+        // with its keys and taken in, the running one left open for the
+        // desktop to close.
+        assert_eq!(second.status(&played), STATUS_LOCAL);
+        assert!(second.adopted(&played));
+        let kept = second.events(&running.id);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[1].1, "heartbeat");
+        second.act();
+        assert!(
+            sessions::get_active_sessions(&second.db, "second")
+                .unwrap()
+                .is_empty()
+        );
+        let mut shown = sessions::list_all_sessions(&second.db).unwrap();
+        sessions::show_running_elsewhere(&second.db, "second", &mut shown).unwrap();
+        let open = shown
+            .iter()
+            .find(|session| session.id == running.id)
+            .unwrap();
+        assert_eq!(open.still_running_on.as_deref(), Some("desktop"));
+        // It no longer counts as a fresh install, so a later restore asks nothing.
+        assert!(!second.db.with_conn(ledger::fresh_install).unwrap());
+    }
+
+    #[test]
     fn a_pc_set_up_again_gets_its_sessions_back_after_the_other_pc_confirmed_its_new_key() {
         let laptop = Pc::new("laptop");
         let desktop = Pc::new("desktop");
@@ -2895,7 +3075,7 @@ mod tests {
 
         let fresh = Pc::new("reinstalled");
         fresh.act();
-        import_local_backup(&fresh.db, &fresh.assets, &fresh.context, &last_backup).unwrap();
+        import_local_backup(&fresh.db, &fresh.assets, &fresh.context, &last_backup, true).unwrap();
         fresh.act();
         let again = sessions::create_session(&fresh.db, &game, "desktop").unwrap();
         sessions::end_session(&fresh.db, &again.id, MINUTE, MINUTE, 0, STATUS_LOCAL).unwrap();
@@ -2964,12 +3144,20 @@ mod tests {
         let restored = Pc::new("restored");
         let own = restored.back_up();
         restored.act();
-        import_local_backup(&restored.db, &restored.assets, &restored.context, &own).unwrap();
+        import_local_backup(
+            &restored.db,
+            &restored.assets,
+            &restored.context,
+            &own,
+            true,
+        )
+        .unwrap();
         for pc in [&played, &restored] {
             pc.act();
             let preview = crate::backup::inspect_local_backup(&pc.db, &backup).unwrap();
             assert_eq!(preview.continues_as, None);
-            let summary = import_local_backup(&pc.db, &pc.assets, &pc.context, &backup).unwrap();
+            let summary =
+                import_local_backup(&pc.db, &pc.assets, &pc.context, &backup, true).unwrap();
             assert_eq!(summary.continues_as, None);
             pc.act();
             assert_eq!(ledger::this_device().unwrap(), pc.context.device_id);
@@ -3021,7 +3209,7 @@ mod tests {
         let its_game = other.game("Celeste", None);
         other.play(&its_game, 5);
         other.act();
-        import_local_backup(&other.db, &other.assets, &other.context, &backup).unwrap();
+        import_local_backup(&other.db, &other.assets, &other.context, &backup, true).unwrap();
         assert_eq!(name(&other), expected);
     }
 
@@ -3152,7 +3340,14 @@ mod tests {
         desktop.act();
         games::link_game(&desktop.db, &gog_copy, None).unwrap();
 
-        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        import_local_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            true,
+        )
+        .unwrap();
         assert_eq!(desktop.links()[&gog_copy], steam_copy);
         assert_eq!(desktop.shown(), [steam_copy]);
     }

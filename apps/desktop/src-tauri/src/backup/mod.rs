@@ -220,11 +220,15 @@ fn preview_takeover(
         .flatten()
 }
 
+/// Restores the backup at `backup_path`. With `take_over`, a fresh install
+/// continues as the PC that made it, see `ledger::Takeover`. Without, it
+/// stays the PC it is and the backup's history comes in as another PC's.
 pub fn import_local_backup(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
     backup_path: &Path,
+    take_over: bool,
 ) -> Result<LocalBackupSummary> {
     let backup_dir = resolve_backup_dir(backup_path)?;
     let (manifest, artwork) = load_and_validate_manifest(&backup_dir)?;
@@ -244,6 +248,7 @@ pub fn import_local_backup(
         &backup_dir,
         &staging_dir,
         &artwork,
+        take_over,
     );
     // When putting the old artwork back failed, it is still in the staging
     // folder, which then stays so nothing is lost.
@@ -274,7 +279,8 @@ fn cleanup_staging_dir(staging_dir: &Path) {
 /// Stages the backup, checks it, then swaps the artwork cache and the
 /// database. A failed database swap puts the old cache back, and this PC
 /// stays the PC it was. Returns the PC this one continues as, if it took
-/// one over.
+/// one over, which it only may with `take_over`.
+#[expect(clippy::too_many_arguments)]
 fn restore_from_staging(
     db: &Database,
     asset_manager: &AssetManager,
@@ -283,6 +289,7 @@ fn restore_from_staging(
     backup_dir: &Path,
     staging_dir: &Path,
     artwork: &[String],
+    take_over: bool,
 ) -> Result<Option<integrity::ledger::Takeover>> {
     let staged_assets = staging_dir.join(ASSET_CACHE_DIR);
     create_dir(&staged_assets)?;
@@ -305,17 +312,22 @@ fn restore_from_staging(
     // Everything that can still fail runs on the staged copy, so swapping the
     // artwork and the database is the last step.
     let cache_dir = asset_manager.cache_dir();
-    let takeover;
+    let planned;
     let mut taking_over = None;
     {
         let staged = open_staged_database(&staged_db)?;
-        // A fresh install continues as the PC whose backup it restores.
-        takeover = staged.with_conn(|staged_conn| {
-            db.with_conn(|local| {
-                integrity::ledger::plan_takeover(local, staged_conn, &manifest.source_device_id)
-            })
-        })?;
-        if let Some(plan) = &takeover {
+        // A fresh install continues as the PC whose backup it restores,
+        // unless the player declined it.
+        planned = if take_over {
+            staged.with_conn(|staged_conn| {
+                db.with_conn(|local| {
+                    integrity::ledger::plan_takeover(local, staged_conn, &manifest.source_device_id)
+                })
+            })?
+        } else {
+            None
+        };
+        if let Some(plan) = &planned {
             taking_over = Some(integrity::ledger::TakingOver::begin(plan)?);
         }
         take_in_restored(db, &staged, manifest, taking_over.as_ref())?;
@@ -373,7 +385,7 @@ fn restore_from_staging(
     if let Err(error) = crate::playtime::slices::rebuild_all(db) {
         warn!("play slices not rebuilt after the restore: {error}");
     }
-    Ok(takeover)
+    Ok(planned)
 }
 
 fn create_dir(path: &Path) -> Result<()> {
@@ -1342,6 +1354,7 @@ mod tests {
             &asset_manager,
             &context,
             Path::new(&backup.backup_path),
+            true,
         )
         .unwrap();
 
@@ -1446,7 +1459,13 @@ mod tests {
         }
 
         fn restore(&self) -> Result<LocalBackupSummary> {
-            import_local_backup(&self.db, &self.assets, &self.context, &self.backup_dir)
+            import_local_backup(
+                &self.db,
+                &self.assets,
+                &self.context,
+                &self.backup_dir,
+                true,
+            )
         }
 
         fn finish(self) {
