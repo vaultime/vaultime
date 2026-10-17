@@ -20,7 +20,7 @@ The totals show the game's runtime, active and idle time, the number of sessions
 
 ## Status
 
-**Set a status** marks a game as Backlog, Playing, Finished or Dropped. The status shows in the journal on the day you set it, and the library can filter by it.
+**Set a status** marks a game as Backlog, Playing, Finished or Dropped. The status shows in the journal on the day you set it, and the library can filter by it. A second install that counts as the game keeps the status it had, but the game shows its own until you unlink the install.
 
 ## Cover art
 

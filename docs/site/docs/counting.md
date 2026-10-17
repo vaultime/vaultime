@@ -45,6 +45,10 @@ Ignored programs never count, and games that came from [another PC](several-pcs.
 
 Each game that runs gets a session of its own. The journal's day and week totals count clock time once, so two games side by side for an hour add one hour to the day.
 
+### One game, two installs
+
+A game installed twice, like through Steam and GOG, can count as one game. Both installs keep their own sessions, and when both run at the same time, or the game runs on two PCs at once, that time counts once in every total: the library, the game's page, the journal and the stats. A game can only be played once at a time.
+
 ### Launchers that step aside
 
 Some launchers and game clients stay open while you play the game they started, like the League of Legends client. Switch on **Count only when no other game runs** on the game's page. Its time beside another game is then set aside: it stays in the session's record but counts nowhere, and switching it off brings it back. The game's page suggests the switch when other games often started while it was open.
@@ -61,6 +65,7 @@ While a game runs, Vaultime notes its time whenever it switches between active a
 
 Settings, Earlier playtime, **Import from Steam** reads how long Steam says you played each of your Steam games. That time counts toward each game's total and shows as **Before Vaultime** on its page, minus the time Steam and Vaultime both counted, so nothing counts twice.
 
+- Steam's number is a snapshot of the moment it was read. Sessions of a Steam copy that ended before then come off, also ones that come in later from [another PC](several-pcs.md) with the same Steam account. Sessions after it count on top.
 - A session you corrected comes off at the length Vaultime first tracked, so a cut stays cut when you read Steam again.
 - A session you added by hand only comes off when you marked it as **Played through Steam**.
 - Imported time stays out of the journal and the stats, because Steam does not say when you played.
