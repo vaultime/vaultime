@@ -39,11 +39,11 @@ service that runs on our own VPS.
 apps/desktop/     Tauri app, React in src/, Rust in src-tauri/
 apps/api/         Self-hosted cloud backup API
 deploy/vps/       Server install script, systemd unit and admin tools
-docs/             Legal pages and landing page (docs/site)
+docs/             Legal pages, landing page and documentation (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
 scripts/          Dev helpers: Linux checks, packaging, cloud round trip, API and
                   site deploy, release upload, logo, UI screenshots
-assets/           Brand assets
+assets/           Brand assets and the README screenshots
 ```
 
 ## Commands
@@ -218,9 +218,12 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 
 ## Docs
 
-- `README.md` is for users only: what Vaultime does, how to install it, how it
-  counts playtime, where data lives, platform support. No build steps, stack
-  tables, infrastructure or internal structure.
+- `README.md` is for users only and stays short: pitch, screenshots, features,
+  download and a link to the documentation. No build steps, stack tables,
+  infrastructure or internal structure.
+- The user documentation is one Markdown file per page in `docs/site/docs`,
+  with its sidebar in `DOCS_NAV` in `scripts/build-site.py`. Keep it accurate
+  to the code and never overstate what the trust checks guarantee.
 - Developer and maintainer information goes into `PLAN.md` (local, gitignored),
   or into `CLAUDE.md` when it is a general rule that is safe to publish.
 - `CHANGELOG.md` records user-visible changes per release.
