@@ -47,6 +47,12 @@ export function mergeNotes(preview: MergePreview): string[] {
       `${plural(preview.failing, "session")} ${preview.failing === 1 ? "does" : "do"} not pass ${preview.failing === 1 ? "its" : "their"} check here, so ${preview.failing === 1 ? "it comes" : "they come"} in Suspicious.`,
     );
   }
+  if (preview.own_failing > 0) {
+    const one = preview.own_failing === 1;
+    notes.push(
+      `${plural(preview.own_failing, "session")} this PC played before it was set up again ${one ? "fails its" : "fail their"} check there, so ${one ? "it stays" : "they stay"} out.`,
+    );
+  }
   if (preview.unknown_keys) {
     notes.push(`${from} signs with a key this PC does not trust for it, so that key vouches for nothing here unless you say so below.`);
   }

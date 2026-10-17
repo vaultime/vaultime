@@ -127,6 +127,8 @@ export interface MergePreview {
   first_merge: boolean;
   /** Sessions here that came in unvouched and pass their check now. */
   vouched_now: number;
+  /** Sessions this PC recorded before it was set up again that fail their check there, so they stay out. */
+  own_failing: number;
   /** Sessions added by hand here that overlap sessions that come in. */
   overlapping_manual: number;
   conflicts: MergeConflict[];

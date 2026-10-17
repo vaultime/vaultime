@@ -361,6 +361,7 @@ const mergePreview: MergePreview = {
   unknown_keys: false,
   first_merge: true,
   vouched_now: 0,
+  own_failing: 0,
   overlapping_manual: 1,
   conflicts: [],
   games: [

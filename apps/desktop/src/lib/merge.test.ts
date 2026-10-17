@@ -21,6 +21,7 @@ const preview: MergePreview = {
   unknown_keys: false,
   first_merge: false,
   vouched_now: 0,
+  own_failing: 0,
   overlapping_manual: 0,
   conflicts: [],
   games: [],
@@ -51,6 +52,7 @@ describe("merge text", () => {
     const notes = mergeNotes({
       ...preview,
       failing: 1,
+      own_failing: 2,
       unknown_keys: true,
       first_merge: true,
       overlapping_manual: 2,
@@ -64,6 +66,7 @@ describe("merge text", () => {
     expect(notes).toEqual([
       "Vaultime has not seen Laptop before, so it takes its ledger at its word, as it does for any new PC.",
       "1 session does not pass its check here, so it comes in Suspicious.",
+      "2 sessions this PC played before it was set up again fail their check there, so they stay out.",
       "Laptop signs with a key this PC does not trust for it, so that key vouches for nothing here unless you say so below.",
       "2 sessions you added by hand here overlap sessions that come in. If they were the same play, take them out after the merge.",
       "1 session went on differently on both PCs and stays as here.",

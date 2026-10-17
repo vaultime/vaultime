@@ -117,6 +117,9 @@ pub struct MergePreview {
     /// Sessions here that came in unvouched before and pass their check
     /// now, so this PC vouches for them.
     pub vouched_now: usize,
+    /// Sessions this PC recorded before it was set up again that fail their
+    /// check there, so they stay out.
+    pub own_failing: usize,
     /// Sessions added by hand here that overlap sessions that come in. They
     /// may be the same play.
     pub overlapping_manual: usize,
@@ -377,6 +380,7 @@ fn plan(db: &Database, staged: &Staged, trust_new_keys: bool) -> Result<Plan> {
         unknown_keys,
         first_merge: trust.first_merge(),
         vouched_now: 0,
+        own_failing: 0,
         overlapping_manual: 0,
         conflicts: Vec::new(),
         games: Vec::new(),
@@ -579,6 +583,7 @@ fn check_candidates(
             )?
             .is_none();
             if own && !vouched {
+                preview.own_failing += 1;
                 continue;
             }
             match take {
@@ -2856,7 +2861,6 @@ mod tests {
             crate::backup::export_local_backup(&fresh.db, &fresh.assets, &fresh.context, dir)
                 .unwrap();
         assert_eq!(saved.source_device_id, "desktop");
-
 
         // The laptop took in the sessions played after that backup, checked
         // with the old key, so they come back vouched for.
