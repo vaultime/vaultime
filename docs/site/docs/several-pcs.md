@@ -43,7 +43,12 @@ When you set a PC up again, Vaultime makes a new key for it. If the first thing 
 - The ledger notes the takeover with the keys it took over, so it shows and can be checked.
 - Sessions the PC played after that backup, which another PC took in, come back as this PC's own with the next merge of that PC, as long as that PC checked them with the old keys.
 
-Only a fresh install takes over: one without sessions, merges or restores of its own. A PC with history of its own restores another PC's backup as described under [Backups](backups.md#restoring). Taking over trusts the backup the way a new PC trusts any PC it has never seen, so a made up backup gains nothing it could not get on a new PC anyway.
+Only a fresh install takes over: one without sessions, merges or restores of its own. A PC with history of its own restores another PC's backup as described under [Backups](backups.md#restoring). Restart Vaultime after the restore to finish. Until then it does not track and makes no backups.
+
+> [!CAUTION]
+> Taking over trusts the backup the way a new PC trusts any PC it has never seen. The same goes for the first merge after it: a PC this one has never seen is taken at its word, also for the sessions it says it took in from this PC. A made up backup can therefore bring in made up play that reads as this PC's own, just as it could bring in made up play of a new PC on any install.
+
+If that backup was made while a game ran, the session is closed as Recovered at its last saved time, since this PC now is the PC that recorded it. A longer end that another PC took in later stays out, and the shorter copy here stays.
 
 ## Games from another PC
 
