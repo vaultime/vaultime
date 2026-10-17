@@ -6,8 +6,7 @@
 // events, this spreads each session evenly over its span instead.
 
 import { countsAsPlay, toDayKey } from "@/lib/session-stats";
-import { weekdayOf } from "@/lib/stats";
-import { parseVaultimeDate } from "@/lib/time";
+import { parseVaultimeDate, weekdayOf } from "@/lib/time";
 import type { PlayBucket, PlayTotal, Session } from "@/lib/types";
 
 const SLICE_MS = 15 * 60 * 1000;

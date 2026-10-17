@@ -245,7 +245,7 @@ export const CROP_SLIDER_STEPS = 200;
 export const PLAYER_ARTWORK_SOURCE = "user_picked";
 
 /** File types the cover and background pickers offer. The core reads all of them. */
-export const ARTWORK_EXTENSIONS = [
+const ARTWORK_EXTENSIONS = [
   "png",
   "jpg",
   "jpeg",
@@ -366,6 +366,8 @@ export const SHARE_TOP_GAMES = { wide: 3, square: 4, story: 5 } as const;
 export const SHARE_QUIET_MAX_DAYS = 10;
 /** Largest card the core saves, in bytes. Same as SHARE_IMAGE_MAX_BYTES in constants.rs. */
 export const SHARE_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
+/** Share of a day's pitch in the calendar of the year card that its square covers, the rest is the gap. */
+export const SHARE_CALENDAR_CELL_SHARE = 0.8;
 /** Covers on the card are blurred by drawing them this many times smaller and back up. */
 export const SHARE_BACKDROP_SHRINK = 24;
 /** How long "Copied" shows after copying the card. */

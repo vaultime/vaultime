@@ -6,7 +6,7 @@ import { MINUTE_MS } from "@/lib/constants";
 import { estimatePlayTotals } from "@/test/play-totals";
 import { at, session } from "@/test/sessions";
 import type { Session } from "@/lib/types";
-import { daysSoFar, shapeOf, weekdayOf, yearStats } from "./stats";
+import { daysSoFar, shapeOf, yearStats } from "./stats";
 
 const now = new Date(2026, 8, 30, 21, 0);
 
@@ -88,11 +88,6 @@ describe("yearStats", () => {
 });
 
 describe("helpers", () => {
-  it("counts weekdays from Monday", () => {
-    expect(weekdayOf(new Date(2026, 8, 28))).toBe(0);
-    expect(weekdayOf(new Date(2026, 8, 27))).toBe(6);
-  });
-
   it("names session lengths at their limits", () => {
     expect(shapeOf(session(at(2026, 1, 1), 19))).toBe("quick");
     expect(shapeOf(session(at(2026, 1, 1), 20))).toBe("short");

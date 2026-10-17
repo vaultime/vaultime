@@ -42,7 +42,7 @@ export function whereFrom(source: string | null | undefined): string {
 }
 
 /** Whether a linked game is another install on this PC rather than a game of another PC. */
-export function isInstallHere(link: GameLink, thisDeviceId: string | null): boolean {
+function isInstallHere(link: GameLink, thisDeviceId: string | null): boolean {
   return link.origin_device_id === null || link.origin_device_id === thisDeviceId;
 }
 

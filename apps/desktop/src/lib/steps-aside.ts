@@ -6,7 +6,7 @@
 // how much per session. This file presents that.
 
 import { clipToWindow, clockSpan, countsAsPlay, playedMs, touchesWindow } from "@/lib/session-stats";
-import { parseVaultimeDate } from "@/lib/time";
+import { parseVaultimeDate, startOfDay } from "@/lib/time";
 import type { Game, Session } from "@/lib/types";
 
 /** The first index of a list sorted so that `before` holds for a leading run of it, past that run. */
@@ -185,8 +185,8 @@ export function stepAsideWithin(
  * game that steps aside only where it ran alone.
  */
 export function playedToday(sessions: Session[], stepping: Set<string>, now = new Date()): number {
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const midnight = startOfDay(now);
+  const tomorrow = startOfDay(now, 1);
   const today = stepAsideWithin(sessions, stepping, midnight, tomorrow, now).flatMap(
     (session) => clipToWindow(session, midnight, tomorrow, now) ?? [],
   );

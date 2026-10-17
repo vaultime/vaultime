@@ -6,12 +6,13 @@
 // features/stats/share-card-draw.ts.
 
 import { parseOklchList, type Oklch } from "@/lib/color";
-import { DAYS_PER_WEEK, MINUTE_MS, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
+import { DAYS_PER_WEEK, MINUTE_MS, SHARE_CALENDAR_CELL_SHARE, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
 import { markColors, type ArtColor } from "@/lib/game-tint";
 import type { Phrase } from "@/lib/sentences";
 import { toDayKey } from "@/lib/session-stats";
-import { daysSoFar, heatLevel, weekdayOf, type YearStats } from "@/lib/stats";
+import { daysSoFar, heatLevel, type YearStats } from "@/lib/stats";
 import type { ThemeMode } from "@/lib/theme";
+import { startOfDay, weekdayOf } from "@/lib/time";
 import { stableHash } from "@/lib/utils";
 import { shareSentence } from "@/lib/year-sentences";
 
@@ -177,9 +178,9 @@ export function gamesFor(card: ShareCard, format: ShareFormat): ShareGame[] {
 }
 
 /** Every day of `year`, 1 January first, at local midnight. */
-export function yearDays(year: number): Date[] {
+function yearDays(year: number): Date[] {
   const days: Date[] = [];
-  for (let day = new Date(year, 0, 1); day.getFullYear() === year; day = new Date(year, day.getMonth(), day.getDate() + 1)) {
+  for (let day = new Date(year, 0, 1); day.getFullYear() === year; day = startOfDay(day, 1)) {
     days.push(day);
   }
   return days;
@@ -199,9 +200,6 @@ export interface CalendarGrid {
   monthColumns: number[];
 }
 
-/** Share of a day's pitch its square covers, the rest is the gap. */
-const CELL_SHARE = 0.8;
-
 /** A year of days in weeks across `width` pixels. */
 export function calendarGrid(year: number, width: number): CalendarGrid {
   const lead = weekdayOf(new Date(year, 0, 1));
@@ -212,7 +210,7 @@ export function calendarGrid(year: number, width: number): CalendarGrid {
   });
   const columns = places[places.length - 1].column + 1;
   const pitch = width / columns;
-  const cell = pitch * CELL_SHARE;
+  const cell = pitch * SHARE_CALENDAR_CELL_SHARE;
   const monthColumns = days.flatMap((day, index) => (day.getDate() === 1 ? [places[index].column] : []));
   return { columns, pitch, cell, height: (DAYS_PER_WEEK - 1) * pitch + cell, places, monthColumns };
 }

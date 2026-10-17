@@ -16,7 +16,7 @@ import {
 } from "@/lib/constants";
 import { groupByBucket, sumByGame, type BucketPlay, type GamePlay } from "@/lib/play-totals";
 import { clipToWindow, countsAsPlay, daysTouched, playedMs, toDayKey } from "@/lib/session-stats";
-import { parseVaultimeDate } from "@/lib/time";
+import { calendarDaysAgo, parseVaultimeDate, startOfDay } from "@/lib/time";
 import type { PlayTotal, Session } from "@/lib/types";
 
 /** Session lengths from a quick look to a marathon, shortest first. */
@@ -79,26 +79,13 @@ export function heatLevel(activeMs: number): number {
   return 1 + HEATMAP_STEPS_MS.filter((step) => activeMs >= step).length;
 }
 
-/** Monday is 0. */
-export function weekdayOf(date: Date): number {
-  return (date.getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
-}
-
-function nextDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-}
-
-function previousDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
-}
-
 /** The longest run of days in a row among `days`, the earliest when runs tie. */
 function longestRun(days: Date[]): Streak | null {
   const sorted = [...days].sort((a, b) => a.getTime() - b.getTime());
   let best: Streak | null = null;
   let current: Streak | null = null;
   for (const day of sorted) {
-    if (current && toDayKey(nextDay(current.end)) === toDayKey(day)) {
+    if (current && toDayKey(startOfDay(current.end, 1)) === toDayKey(day)) {
       current = { days: current.days + 1, start: current.start, end: day };
     } else {
       current = { days: 1, start: day, end: day };
@@ -146,12 +133,12 @@ export function yearStats(allSessions: Session[], year: number, play: YearPlay, 
     });
 
   const allDays = new Set(sessions.flatMap((session) => daysTouched(session, now)));
-  let day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (!allDays.has(toDayKey(day))) day = previousDay(day);
+  let day = startOfDay(now);
+  if (!allDays.has(toDayKey(day))) day = startOfDay(day, -1);
   let currentStreak = 0;
   while (allDays.has(toDayKey(day))) {
     currentStreak += 1;
-    day = previousDay(day);
+    day = startOfDay(day, -1);
   }
 
   const [yearStart, yearEnd] = [new Date(year, 0, 1), new Date(year + 1, 0, 1)];
@@ -179,9 +166,6 @@ export function yearStats(allSessions: Session[], year: number, play: YearPlay, 
 
 /** Days of the year up to and including today, or all of them for a past year. */
 export function daysSoFar(year: number, now = new Date()): number {
-  const first = new Date(year, 0, 1);
-  const end = year < now.getFullYear() ? new Date(year + 1, 0, 1) : nextDay(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
-  let days = 0;
-  for (let day = first; day < end; day = nextDay(day)) days += 1;
-  return days;
+  const end = year < now.getFullYear() ? new Date(year + 1, 0, 1) : startOfDay(now, 1);
+  return Math.max(0, calendarDaysAgo(new Date(year, 0, 1), end));
 }

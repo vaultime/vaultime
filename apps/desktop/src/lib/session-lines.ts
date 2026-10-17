@@ -6,7 +6,6 @@
 
 import {
   DAY_MS,
-  DAY_PART_HOURS,
   DAYS_PER_WEEK,
   HOUR_MS,
   MINUTE_MS,
@@ -19,6 +18,7 @@ import {
   SESSION_RETURN_MIN_MS,
   SESSION_WORDS_MINUTE_STEP_MS,
   WEEKDAY_NAME_DAYS,
+  WORKING_DAYS_PER_WEEK,
 } from "@/lib/constants";
 import {
   normalizeIntegrityStatus,
@@ -36,7 +36,10 @@ import {
   formatDate,
   formatDayAndMonth,
   formatHoursMinutes,
+  inSmallHours,
   parseVaultimeDate,
+  startOfDay,
+  weekdayOf,
 } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
 import { stableHash } from "@/lib/utils";
@@ -150,12 +153,10 @@ function awayWords(from: Date, to: Date): string {
 function lineWords(session: Session): LineWords {
   const started = parseVaultimeDate(session.started_at_wall);
   const part = dayPartOf(started);
-  const smallHours = part === "night" && started.getHours() < DAY_PART_HOURS.morning;
+  const smallHours = inSmallHours(started);
   const words = DAY_PART_WORDS[part];
-  // Play after midnight still belongs to the night before.
-  const day = smallHours ? new Date(started.getFullYear(), started.getMonth(), started.getDate() - 1) : started;
-  // Sunday and Saturday.
-  const weekend = day.getDay() === 0 || day.getDay() === 6;
+  const day = smallHours ? startOfDay(started, -1) : started;
+  const weekend = weekdayOf(day) >= WORKING_DAYS_PER_WEEK;
   return {
     adjective: words.adjective,
     adverb: smallHours ? "in the small hours" : words.adverb,
@@ -224,7 +225,7 @@ function standoutWordings(session: Session, context: SessionContext, words: Line
   const ended = session.ended_at_wall
     ? Math.min(parseVaultimeDate(session.ended_at_wall).getTime(), started.getTime() + session.runtime_ms)
     : null;
-  const midnight = new Date(started.getFullYear(), started.getMonth(), started.getDate() + 1);
+  const midnight = startOfDay(started, 1);
   if (ended !== null && ended - midnight.getTime() >= SESSION_PAST_MIDNIGHT_MIN_MS) {
     return [
       [["Into the small hours with ", ""], "Into the small hours"],
@@ -279,7 +280,7 @@ export function beganWords(started: Date, day: Date): string {
   }
   const weekday = formatDate(started, { weekday: "long" });
   const part = dayPartOf(started);
-  if (part === "night" && started.getHours() < DAY_PART_HOURS.morning) return `early ${weekday}`;
+  if (inSmallHours(started)) return `early ${weekday}`;
   return `${weekday} ${DAY_PART_WORDS[part].noun}`;
 }
 

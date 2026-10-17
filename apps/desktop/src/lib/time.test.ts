@@ -18,8 +18,10 @@ import {
   fromLocalInput,
   isoWeekNumber,
   parseVaultimeDate,
+  startOfDay,
   startOfWeek,
   toLocalInput,
+  weekdayOf,
 } from "./time";
 
 // Tuesday evening, local time.
@@ -111,6 +113,8 @@ describe("weeks", () => {
   it("starts on Monday", () => {
     expect(startOfWeek(new Date(2026, 9, 4, 12, 0))).toEqual(new Date(2026, 8, 28));
     expect(startOfWeek(new Date(2026, 8, 28, 0, 0))).toEqual(new Date(2026, 8, 28));
+    expect(weekdayOf(new Date(2026, 8, 28))).toBe(0);
+    expect(weekdayOf(new Date(2026, 8, 27))).toBe(6);
   });
 
   it("numbers weeks like ISO 8601", () => {
@@ -129,6 +133,8 @@ describe("daylight saving", () => {
     expect(formatRelativeDay(at(2026, 10, 25, 12, 0), new Date(2026, 9, 26, 10, 0))).toBe("Yesterday");
     expect(formatRelativeDay(at(2026, 10, 31, 12, 0), new Date(2026, 10, 2, 10, 0))).toBe("Saturday");
     expect(startOfWeek(new Date(2026, 9, 28, 12, 0))).toEqual(new Date(2026, 9, 26));
+    expect(startOfDay(new Date(2026, 9, 25, 23, 0), 1)).toEqual(new Date(2026, 9, 26));
+    expect(startOfDay(new Date(2026, 9, 26, 0, 30), -1)).toEqual(new Date(2026, 9, 25));
     expect(isoWeekNumber(new Date(2026, 9, 25, 23, 0))).toBe(43);
     expect(isoWeekNumber(new Date(2026, 9, 26, 0, 30))).toBe(44);
   });

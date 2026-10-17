@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { RECENT_DAYS } from "@/lib/constants";
-import { parseVaultimeDate } from "@/lib/time";
+import { parseVaultimeDate, startOfDay } from "@/lib/time";
 import type { Session } from "@/lib/types";
 
 /** False for a finished session whose time was all taken out. It stays in the history as no play. */
@@ -84,11 +84,7 @@ export function daysTouched(session: Session, now = new Date()): string[] {
   const start = parseVaultimeDate(session.started_at_wall);
   const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
   const days = [toDayKey(start)];
-  let day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
-  while (day < end) {
-    days.push(toDayKey(day));
-    day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-  }
+  for (let day = startOfDay(start, 1); day < end; day = startOfDay(day, 1)) days.push(toDayKey(day));
   return days;
 }
 
@@ -117,9 +113,9 @@ export function splitByDay(session: Session, parts: Session[] = [session], now =
   const start = parseVaultimeDate(session.started_at_wall);
   const end = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : now;
   const shares: DayShare[] = [];
-  let day = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  let day = startOfDay(start);
   do {
-    const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    const next = startOfDay(day, 1);
     const clipped = parts.flatMap((part) => clipToWindow(part, day, next, now) ?? []);
     if (clipped.length > 0 || shares.length === 0) {
       const from = Math.max(start.getTime(), day.getTime());
@@ -362,7 +358,7 @@ export interface RecentPlay {
 
 /** Totals for the last `days` calendar days, today included. */
 export function summarizeRecentPlay(sessions: Session[], days = RECENT_DAYS, now = new Date()): RecentPlay {
-  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  const cutoff = startOfDay(now, -(days - 1));
   const summary: RecentPlay = {
     playedMs: 0,
     runtimeMs: 0,

@@ -75,11 +75,24 @@ export function formatLongDate(value: string): string {
   });
 }
 
-/** Whole calendar days between two dates, 0 for the same day. */
+/** Local midnight at the start of the day that holds `date`, or of the day `plusDays` after it. */
+export function startOfDay(date: Date, plusDays = 0): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + plusDays);
+}
+
+/** Monday is 0. */
+export function weekdayOf(date: Date): number {
+  return (date.getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
+}
+
+/** Whole calendar days between two dates, 0 for the same day. Rounded, so a daylight saving switch does not count. */
 export function calendarDaysAgo(date: Date, now: Date): number {
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  return Math.round((startOfToday.getTime() - startOfDay.getTime()) / DAY_MS);
+  return Math.round((startOfDay(now).getTime() - startOfDay(date).getTime()) / DAY_MS);
+}
+
+/** Between midnight and morning, which prose counts to the night before. */
+export function inSmallHours(date: Date): boolean {
+  return date.getHours() < DAY_PART_HOURS.morning;
 }
 
 /** "Just now", "12 min ago", "3 hours ago", "Yesterday", "Monday", "In August". */
@@ -139,9 +152,7 @@ export function dayPartOf(date: Date): DayPart {
 export function formatDayPart(value: string, now = new Date()): string {
   const date = parseVaultimeDate(value);
   const part = dayPartOf(date);
-  // Play after midnight still belongs to the night before.
-  const afterMidnight = date.getHours() < DAY_PART_HOURS.morning;
-  const day = new Date(date.getTime() - (afterMidnight ? DAY_PART_HOURS.morning * HOUR_MS : 0));
+  const day = inSmallHours(date) ? startOfDay(date, -1) : date;
   const days = calendarDaysAgo(day, now);
   if (days === 0) return part === "night" ? "Tonight" : `This ${part}`;
   if (days === 1) return part === "night" ? "Last night" : `Yesterday ${part}`;
@@ -162,15 +173,13 @@ export function formatSessionStart(value: string, now = new Date()): string {
 
 /** Midnight at the start of the Monday of the week that holds `date`. */
 export function startOfWeek(date: Date): Date {
-  const daysSinceMonday = (date.getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysSinceMonday);
+  return startOfDay(date, -weekdayOf(date));
 }
 
 /** ISO 8601 week number. A week belongs to the year that holds its Thursday. */
 export function isoWeekNumber(date: Date): number {
   const THURSDAY_AFTER_MONDAY = 3;
-  const monday = startOfWeek(date);
-  const thursday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + THURSDAY_AFTER_MONDAY);
+  const thursday = startOfDay(startOfWeek(date), THURSDAY_AFTER_MONDAY);
   const firstOfYear = new Date(thursday.getFullYear(), 0, 1);
   return Math.floor(calendarDaysAgo(firstOfYear, thursday) / DAYS_PER_WEEK) + 1;
 }
@@ -223,7 +232,7 @@ export function formatSpanOnDay(start: Date, end: Date | null, day: Date): strin
   const at = (moment: Date) =>
     onDay(moment) ? formatClockTime(moment) : `${formatNearDay(moment, day)} ${formatClockTime(moment)}`;
   if (!end) return `${at(start)} to now`;
-  const nextDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  const nextDay = startOfDay(day, 1);
   if (!onDay(start) && end > nextDay) return `since ${at(start)}`;
   if (end.getTime() === nextDay.getTime()) return `${at(start)} to midnight`;
   return `${at(start)} to ${at(end)}`;
@@ -235,10 +244,8 @@ export function formatSpanOnDay(start: Date, end: Date | null, day: Date): strin
  * switch. Moments before the day give 0, moments after it 100.
  */
 export function clockPercent(moment: Date, day: Date): number {
-  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-  const nextDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-  if (moment < dayStart) return 0;
-  if (moment >= nextDay) return 100;
+  if (moment < startOfDay(day)) return 0;
+  if (moment >= startOfDay(day, 1)) return 100;
   const minutes = moment.getHours() * MINUTES_PER_HOUR + moment.getMinutes() + moment.getSeconds() / SECONDS_PER_MINUTE;
   return (minutes / (HOURS_PER_DAY * MINUTES_PER_HOUR)) * 100;
 }
