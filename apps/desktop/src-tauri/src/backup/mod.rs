@@ -132,6 +132,10 @@ pub(crate) fn export_backup_to(
             "backup destination must be an existing directory".into(),
         ));
     }
+    // The PC the ledger names, which a restore that made this PC continue as
+    // another one changes before the app restarts with it.
+    let device_id =
+        integrity::ledger::this_device().unwrap_or_else(|_| app_context.device_id.clone());
 
     let backup_id = uuid::Uuid::new_v4().to_string();
     let created_at = integrity::now_timestamp();
@@ -161,7 +165,7 @@ pub(crate) fn export_backup_to(
         &backup_id,
         &created_at,
         &app_context.app_version,
-        &app_context.device_id,
+        &device_id,
         &schema_migrations,
         &files,
     );
@@ -171,7 +175,7 @@ pub(crate) fn export_backup_to(
         backup_version: BACKUP_VERSION,
         created_at: created_at.clone(),
         app_version: app_context.app_version.clone(),
-        source_device_id: app_context.device_id.clone(),
+        source_device_id: device_id,
         schema_migrations,
         overall_checksum,
         games_count,

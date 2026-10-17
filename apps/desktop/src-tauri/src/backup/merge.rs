@@ -2806,6 +2806,13 @@ mod tests {
         assert_eq!(signer, new_key);
         assert!(payload.contains(&old_key) && payload.contains("\"from_device\":\"reinstalled\""));
         assert_eq!(fresh.status(&early), STATUS_LOCAL);
+        // Before the restart the app still started as the reinstalled PC, but
+        // a backup already carries the PC it continues as.
+        let saved =
+            crate::backup::export_local_backup(&fresh.db, &fresh.assets, &fresh.context, dir)
+                .unwrap();
+        assert_eq!(saved.source_device_id, "desktop");
+
 
         // The laptop took in the sessions played after that backup, checked
         // with the old key, so they come back vouched for.

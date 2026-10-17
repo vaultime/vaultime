@@ -113,7 +113,7 @@ fn write_backup(
     )?;
     if let Err(error) = backup_snapshots::create_snapshot(
         db,
-        Some(&app_context.device_id),
+        Some(&summary.source_device_id),
         &summary.overall_checksum,
         Some(&summary.backup_path),
         Some(LABEL),
