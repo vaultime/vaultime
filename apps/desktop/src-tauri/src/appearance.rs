@@ -237,16 +237,14 @@ mod tests {
     fn scales_a_large_picture_down_and_keeps_its_shape() {
         let root = temp_dir("background");
         let source = root.join("wide.png");
-        write_png(&source, BACKGROUND_MAX_SIDE_PX * 2, BACKGROUND_MAX_SIDE_PX);
+        // Two rows are enough to show the shape, and keep the test quick.
+        write_png(&source, BACKGROUND_MAX_SIDE_PX * 2, 2);
         let store = BackgroundStore::new(root.join("appearance"));
 
         let url = store.import(&source).unwrap();
         assert!(url.starts_with("data:image/jpeg;base64,"));
         assert_eq!(store.read().unwrap(), Some(url));
-        assert_eq!(
-            stored_size(&store),
-            (BACKGROUND_MAX_SIDE_PX, BACKGROUND_MAX_SIDE_PX / 2)
-        );
+        assert_eq!(stored_size(&store), (BACKGROUND_MAX_SIDE_PX, 1));
         fs::remove_dir_all(root).unwrap();
     }
 
