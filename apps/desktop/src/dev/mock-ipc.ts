@@ -21,6 +21,8 @@
 // year with little play.
 // ?autodiscover=1 offers games the look at start found since last time, and
 // ?autodiscover=first as on the first look. They come once, as in the app.
+// The fourth game has a GOG install linked to it, and ?discover=1&scan=1&same=1
+// shows a discovered Xbox copy of it marked as the same game.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
@@ -42,6 +44,7 @@ import type {
   IgnoredProgram,
   MergePreview,
   PlayBucket,
+  SameGame,
   Session,
   SessionEvent,
   SteamPlaytimePreview,
@@ -273,7 +276,17 @@ if (params.get("pcs") === "1") {
     updated_at: iso(now - 30 * DAY_MS),
     origin_device_id: "laptop",
   });
-  gameLinks = [{ game_id: "laptop-hades", title: "Hades II", origin_device_id: "laptop", linked_game_id: "game-2" }];
+  gameLinks = [
+    {
+      game_id: "laptop-hades",
+      title: "Hades II",
+      origin_device_id: "laptop",
+      linked_game_id: "game-2",
+      launcher_source: "steam",
+      executable_path: "D:\\Games\\Hades II\\Hades2.exe",
+      install_folder: "D:\\Games\\Hades II",
+    },
+  ];
   const laptopPlay = (daysAgo: number, hour: number, minutes: number, gameId: string, status = "local") => {
     const start = now - daysAgo * DAY_MS - (now % DAY_MS) + hour * HOUR_MS;
     allSessions.push({
@@ -294,6 +307,43 @@ if (params.get("pcs") === "1") {
   laptopPlay(3, 22, 50, "laptop-sun-haven");
   laptopPlay(5, 20, 95, "laptop-sun-haven", "suspicious");
   allSessions.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
+}
+
+// The fourth game is installed through GOG as well and linked to its Steam
+// copy, so its page lists both installs and some sessions came through GOG.
+if (scenario !== "empty") {
+  const steamCopy = games[3];
+  const gogFolder = `C:\\GOG Games\\${steamCopy.title}`;
+  const gogCopy: Game = {
+    ...steamCopy,
+    id: `${steamCopy.id}-gog`,
+    executable_path: `${gogFolder}\\${steamCopy.title.replace(/\s/g, "")}.exe`,
+    install_folder: gogFolder,
+    launcher_source: "gog",
+  };
+  games.push(gogCopy);
+  gameLinks.push({
+    game_id: gogCopy.id,
+    title: gogCopy.title,
+    origin_device_id: null,
+    linked_game_id: steamCopy.id,
+    launcher_source: gogCopy.launcher_source,
+    executable_path: gogCopy.executable_path,
+    install_folder: gogCopy.install_folder,
+  });
+  allSessions
+    .filter((session) => session.game_id === steamCopy.id)
+    .forEach((session, index) => {
+      if (index % 3 === 0) session.game_id = gogCopy.id;
+    });
+}
+
+/** Sessions as the core lists them: a linked game's as the game it counts as. */
+function shownSessions(): Session[] {
+  return allSessions.map((session) => {
+    const linked = gameLinks.find((link) => link.game_id === session.game_id)?.linked_game_id;
+    return linked ? { ...session, game_id: linked, recorded_game_id: session.game_id } : { ...session };
+  });
 }
 
 const mergePreview: MergePreview = {
@@ -322,6 +372,19 @@ const mergePreview: MergePreview = {
       runtime_ms: 7 * HOUR_MS,
       suggested_game_id: "game-5",
       suggested_because: "launcher",
+      counts_as: null,
+      counts_as_title: null,
+    },
+    {
+      game_id: "laptop-celeste-gog",
+      title: "Celeste",
+      launcher_source: "gog",
+      sessions: 2,
+      runtime_ms: 2 * HOUR_MS,
+      suggested_game_id: null,
+      suggested_because: null,
+      counts_as: "laptop-celeste",
+      counts_as_title: "Celeste",
     },
     {
       game_id: "laptop-tunic",
@@ -331,6 +394,8 @@ const mergePreview: MergePreview = {
       runtime_ms: 4 * HOUR_MS,
       suggested_game_id: null,
       suggested_because: null,
+      counts_as: null,
+      counts_as_title: null,
     },
   ],
 };
@@ -501,9 +566,17 @@ function coverAssets() {
 }
 
 /** A result of the discovery scan, for the discover dialog. */
-function discovered(title: string, path: string, source: string, alreadyAdded = false) {
+function discovered(title: string, path: string, source: string, alreadyAdded = false, sameGame: SameGame | null = null) {
   const installFolder = source === "folder_scan" ? null : path.slice(0, path.lastIndexOf("/"));
-  return { title, executable_path: path, install_folder: installFolder, source, source_id: null, already_added: alreadyAdded };
+  return {
+    title,
+    executable_path: path,
+    install_folder: installFolder,
+    source,
+    source_id: null,
+    already_added: alreadyAdded,
+    same_game: sameGame,
+  };
 }
 
 /** Games the look at start found, offered once with ?autodiscover=1 or ?autodiscover=first. */
@@ -684,6 +757,13 @@ if (new URLSearchParams(window.location.search).get("scan") === "1") {
     const start = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Start the scan"));
     start?.click();
   }, 800);
+  // ?same=1 then scrolls to the game marked as another install of a library game.
+  if (new URLSearchParams(window.location.search).get("same") === "1") {
+    setTimeout(() => {
+      const marked = [...document.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Same game as"));
+      marked?.scrollIntoView({ block: "center" });
+    }, 1400);
+  }
 }
 
 // ?palette=1 opens the command palette once the app has rendered.
@@ -1296,18 +1376,26 @@ mockIPC((cmd, payload) => {
       return devices;
     case "list_game_links":
       return gameLinks;
-    case "link_game":
-      gameLinks = gameLinks.filter((link) => link.game_id !== args.gameId);
+    case "link_game": {
+      const gameId = String(args.gameId);
+      gameLinks = gameLinks.filter((link) => link.game_id !== gameId);
       if (args.linkedGameId) {
-        const foreign = games.find((game) => game.id === args.gameId);
+        const target = String(args.linkedGameId);
+        // Games that counted as it move along, so links never chain.
+        gameLinks = gameLinks.map((link) => (link.linked_game_id === gameId ? { ...link, linked_game_id: target } : link));
+        const linked = games.find((game) => game.id === gameId);
         gameLinks.push({
-          game_id: String(args.gameId),
-          title: foreign?.title ?? "",
-          origin_device_id: foreign?.origin_device_id ?? null,
-          linked_game_id: String(args.linkedGameId),
+          game_id: gameId,
+          title: linked?.title ?? "",
+          origin_device_id: linked?.origin_device_id ?? null,
+          linked_game_id: target,
+          launcher_source: linked?.launcher_source ?? null,
+          executable_path: linked?.executable_path ?? null,
+          install_folder: linked?.install_folder ?? null,
         });
       }
       return null;
+    }
     case "preview_merge":
       return mergePreview;
     case "merge_backup":
@@ -1326,7 +1414,7 @@ mockIPC((cmd, payload) => {
       thisPc = { ...thisPc, name: String(args.name).trim().slice(0, DEVICE_NAME_MAX_CHARS) || thisPc.name };
       return thisPc;
     case "list_games":
-      // A linked game of another PC counts as the game it is linked to.
+      // A linked game counts as the game it is linked to.
       return allGames.filter((game) => !gameLinks.some((link) => link.game_id === game.id));
     case "list_earlier_playtime":
       return earlierPlaytime;
@@ -1369,10 +1457,7 @@ mockIPC((cmd, payload) => {
     }
     case "list_sessions":
       // Copies, as the real IPC sends, so corrections show up as new data.
-      return allSessions.map((session) => ({
-        ...session,
-        game_id: gameLinks.find((link) => link.game_id === session.game_id)?.linked_game_id ?? session.game_id,
-      }));
+      return shownSessions();
     case "export_sessions":
       return allSessions.filter((session) => session.ended_at_wall).length;
     case "save_share_image":
@@ -1414,7 +1499,7 @@ mockIPC((cmd, payload) => {
         typeof args.launcher === "string" ? args.launcher : null,
       );
     case "get_session_events_for_game": {
-      const ids = new Set(allSessions.filter((session) => session.game_id === args.gameId).map((session) => session.id));
+      const ids = new Set(shownSessions().filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id));
     }
     case "get_active_sessions":
@@ -1465,6 +1550,12 @@ mockIPC((cmd, payload) => {
         discovered("Stardew Valley", "C:/GOG Games/Stardew Valley/Stardew Valley.exe", "gog"),
         discovered("Diablo IV", "D:/BlizzardLibrary/Diablo IV/Diablo IV.exe", "battlenet"),
         discovered("Genshin Impact", "C:/Program Files/HoYoPlay/games/Genshin Impact game/GenshinImpact.exe", "hoyoplay"),
+        // The fourth game from the Xbox app too, which adding links to the Steam copy.
+        discovered(games[3].title, `C:/XboxGames/${games[3].title}/Content/${games[3].title.replace(/\s/g, "")}.exe`, "xbox", false, {
+          game_id: games[3].id,
+          title: games[3].title,
+          launcher_source: games[3].launcher_source,
+        }),
       ];
     case "get_default_scan_paths":
       return ["C:/Games"];
@@ -1506,7 +1597,7 @@ mockIPC((cmd, payload) => {
     }
     case "get_play_totals":
       return estimatePlayTotals(
-        allSessions,
+        shownSessions(),
         String(args.from),
         String(args.to),
         args.bucket as PlayBucket,
