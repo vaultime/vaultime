@@ -730,6 +730,12 @@ pub fn export_sessions(
     )
 }
 
+/// Saves the year card, a PNG image as base64, to a `.png` file.
+#[tauri::command(async)]
+pub fn save_share_image(path: String, png_base64: String) -> Result<(), VaultimeError> {
+    crate::share::save_share_image(std::path::Path::new(&path), &png_base64)
+}
+
 /// Counts a closed session only up to `ended_at`, with a reason.
 #[tauri::command]
 pub fn trim_session(

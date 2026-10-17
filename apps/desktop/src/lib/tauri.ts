@@ -221,6 +221,11 @@ export async function exportSessions(path: string, format: ExportFormat): Promis
   return invoke<number>("export_sessions", { path, format });
 }
 
+/** Saves the year card, a PNG image as base64, to a `.png` file. */
+export async function saveShareImage(path: string, pngBase64: string): Promise<void> {
+  return invoke<void>("save_share_image", { path, pngBase64 });
+}
+
 /** Counts a closed session only up to `endedAt`, with a reason. */
 export async function trimSession(sessionId: string, endedAt: string, reason: string): Promise<Session> {
   return invoke<Session>("trim_session", { sessionId, endedAt, reason });

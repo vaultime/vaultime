@@ -18,6 +18,7 @@ pub mod integrity;
 pub mod platform;
 pub mod playtime;
 pub mod secure_storage;
+pub mod share;
 pub mod tracking;
 pub mod tray;
 pub mod window_look;
@@ -171,6 +172,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::import_discovered_games,
         commands::list_earlier_playtime,
         commands::export_sessions,
+        commands::save_share_image,
         commands::trim_session,
         commands::preview_trim,
         commands::discard_session,
