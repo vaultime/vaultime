@@ -51,7 +51,7 @@ Some launchers and game clients stay open while you play the game they started, 
 
 ## Midnight
 
-Time counts on the day it happened. A session from 23:00 to 02:00 counts one hour on the first day and two on the next, in the stats and in the journal's day totals. The journal lists the session under the day it started.
+Time counts on the day it happened. A session from 23:00 to 02:00 counts one hour on the first day and two on the next, in the stats and in the journal's day totals. The journal lists the session under the day it started and shows it as one session that runs on, see [Past midnight](journal-and-stats.md#past-midnight).
 
 ## Checkpoints and crashes
 

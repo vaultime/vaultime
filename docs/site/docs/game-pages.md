@@ -49,6 +49,18 @@ The cross on an image deletes it after you confirm. The file it came from is nev
 
 The page takes its tint from the cover, and so does the game's mark in the journal. Settings, Appearance can also use a game's art as the background picture of the whole app.
 
+## One game, two installs
+
+A game you own in two launchers, say through Steam and GOG or in the Xbox app and on Steam, can count as one game. On the page of the copy you want to fold in, pick a game under **Counts as**. From then on:
+
+- Both installs stay tracked, each with its own program.
+- The library, journal, stats, live bar and tray show one game with one history, under the title, cover and colors of the game it counts as.
+- Its page names every launcher in the line above the title and lists the installs under **Also counts**, each with its program, a way to edit it and **Unlink**.
+- Each session says which install recorded it, for example *Played through GOG.*
+- Two installs running at the same time count once in the stats.
+
+Linking changes nothing in the record of any session, so **Unlink** brings the install back as a game of its own with its own sessions, at any time. Deleting a game also deletes the installs that count as it, so unlink first to keep one. When you [merge another PC](several-pcs.md), its linked installs come along as one game too.
+
 ## Tracking
 
 The **Tracking** section shows the program Vaultime watches and how the game is recognized, by its full path or by any game program in its install folder. It also holds:

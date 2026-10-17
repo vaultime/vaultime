@@ -24,6 +24,17 @@ Every game gets a mark in the main color of its artwork, and its title takes tha
 
 When two games ran at the same time, the strip shows the shared stretch hatched in both colors and a sentence says which games ran together. The day total counts that time once.
 
+### Past midnight
+
+Time counts on the day it happened, so a session from 22:40 to 02:15 adds 1 h 20 to the first day and 2 h 15 to the second. It is still one session, and the journal shows it as one:
+
+- The entry stays under the day it started, with the whole session's time, and its time reads *22:40 to Sun 02:15*. It adds how much counted after midnight and on which day.
+- The bar runs out over the right edge of the first day's strip and back in at the left edge of the next.
+- The next day shows no second entry, only a quiet line such as *Still in Elden Ring from Saturday night*, with how much of the whole counts on that day.
+- Each part links to the other, also across weeks, and pointing at either marks both. Pointing at the bar shows each day's part and the whole.
+
+A session that ran for more than a day reads the same way, with every day it touched.
+
 ## Notes
 
 Point at a session and pick **Add a note** to keep a line about it, up to 280 characters. The note shows under the session in quotes.
@@ -67,6 +78,21 @@ Session lengths
 
 Left running
 : Games that often ran while you were away. Only shown when there are some.
+
+### Share your year
+
+**Share your year**, at the top of the stats page or in the command palette, makes a picture of the year to post. It shows your hours of active play, the days you played, your longest streak, the busiest month, the year calendar, your most played games with their covers and colors, and a line about the year.
+
+Format
+: **Wide** at 1200 by 675 for X, Discord and Mastodon, **Square** at 1080 by 1080 for feeds, **Story** at 1080 by 1920.
+
+On the card
+: **Game titles and covers**, **Calendar of the year** and **Name of this PC** can each be switched off. Without titles the card shows how many games you played and how the time split. Hidden games never appear.
+
+Look
+: Dark or light, always in your ground and accent.
+
+**Save as PNG** saves the picture, and **Copy image** puts it on the clipboard to paste into a post, where your system allows it. Vaultime draws the picture on your PC and uploads nothing.
 
 ### What the stats count
 

@@ -54,6 +54,16 @@ Folders scanned on Linux
 
 You can scan again at any time with **Discover** above the game grid, or from the command palette.
 
+### New games find you
+
+Each time Vaultime starts, it reads what Steam and your other launchers installed, a few seconds after it opens and without holding anything up. When it finds games that are not in your library yet, it shows them in the same dialog, titled **New games found**, with all of them checked. Plain game folders are left out of this look, because folder finds are guesses and scanning every drive at each start would be slow.
+
+Each game is offered only once on a PC. A game you leave out, or one you already saw in a full scan, stays quiet from then on, and **Discover** still lists everything. When Vaultime starts in the tray at login, the dialog waits until you open the window. The switch **Look for new games when Vaultime starts** under Settings, In the background turns it off.
+
+### The same game from two launchers
+
+When a scan finds a game from one launcher that is in your library from another, like Cyberpunk 2077 on GOG next to your Steam copy, the list says **Same game as Cyberpunk 2077 on Steam**. Adding it links it to that game, see [One game, two installs](game-pages.md#one-game-two-installs). Untick the line to add it as a game of its own. Vaultime only suggests this when the title matches exactly one game from another launcher.
+
 ## Add a game by hand
 
 **Add a game** asks for three things:
