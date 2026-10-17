@@ -27,6 +27,11 @@ impl Database {
         // WAL needs fewer disk syncs per commit, which suits the tracker's frequent small writes.
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .map_err(|error| VaultimeError::Database(format!("failed to set pragmas: {error}")))?;
+        // Test databases never have to outlast a power cut, so their commits
+        // skip waiting for the disk, which halves the time of the merge tests.
+        #[cfg(test)]
+        conn.execute_batch("PRAGMA synchronous=OFF;")
+            .map_err(|error| VaultimeError::Database(format!("failed to set pragmas: {error}")))?;
 
         let db = Self {
             conn: Mutex::new(conn),
