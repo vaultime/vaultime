@@ -10,6 +10,7 @@
 //! changes wins. Cloud transfers and the OS credential store run on the
 //! blocking pool, see `on_blocking_pool`.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use log::warn;
@@ -96,12 +97,7 @@ pub fn preview_merge(
     path: String,
     trust_new_keys: bool,
 ) -> Result<MergePreview, VaultimeError> {
-    backup::merge::preview(
-        &db,
-        &app_context,
-        std::path::Path::new(&path),
-        trust_new_keys,
-    )
+    backup::merge::preview(&db, &app_context, Path::new(&path), trust_new_keys)
 }
 
 /// Merges another PC's backup, with the player's choice for each game.
@@ -118,7 +114,7 @@ pub fn merge_backup(
         &db,
         &asset_manager,
         &app_context,
-        std::path::Path::new(&path),
+        Path::new(&path),
         &choices,
         trust_new_keys,
     )
@@ -352,13 +348,7 @@ pub fn list_sessions(
     app_context: State<'_, AppContext>,
 ) -> Result<Vec<Session>, VaultimeError> {
     let mut all = sessions::list_all_sessions(&db)?;
-    for session in &mut all {
-        live.apply(session);
-    }
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    playtime::totals::fill_set_aside(&db, &live, &mut all, now_ms)?;
-    playtime::totals::fill_copy_overlap(&db, &live, &mut all, now_ms)?;
-    show_linked_games(&db, &mut all)?;
+    as_of_now(&db, &live, &mut all)?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
     Ok(all)
 }
@@ -398,14 +388,25 @@ pub fn get_active_sessions(
     app_context: State<'_, AppContext>,
 ) -> Result<Vec<Session>, VaultimeError> {
     let mut active = sessions::get_active_sessions(&db, &app_context.device_id)?;
-    for session in &mut active {
+    as_of_now(&db, &live, &mut active)?;
+    Ok(active)
+}
+
+/// Brings sessions to the tracker's latest tick, with the time each set aside
+/// and the time it shares with another copy of its game, each shown as the
+/// game it counts as.
+fn as_of_now(
+    db: &Database,
+    live: &LiveSessions,
+    sessions: &mut [Session],
+) -> Result<(), VaultimeError> {
+    for session in sessions.iter_mut() {
         live.apply(session);
     }
     let now_ms = chrono::Utc::now().timestamp_millis();
-    playtime::totals::fill_set_aside(&db, &live, &mut active, now_ms)?;
-    playtime::totals::fill_copy_overlap(&db, &live, &mut active, now_ms)?;
-    show_linked_games(&db, &mut active)?;
-    Ok(active)
+    playtime::totals::fill_set_aside(db, live, sessions, now_ms)?;
+    playtime::totals::fill_copy_overlap(db, live, sessions, now_ms)?;
+    show_linked_games(db, sessions)
 }
 
 /// Shows a session of a linked game, another install here or a game of
@@ -437,7 +438,7 @@ pub fn get_session_events_for_game(
 /// Shows in the tray and taskbar icon whether this PC is signed in. Runs off
 /// the main thread, as a redraw may wait for it.
 #[tauri::command(async)]
-pub fn set_cloud_signed_in(app: tauri::AppHandle, signed_in: bool) {
+pub fn set_cloud_signed_in(app: AppHandle, signed_in: bool) {
     crate::tray::show_cloud_state(&app, signed_in);
 }
 
@@ -470,7 +471,7 @@ pub fn export_local_backup(
         &db,
         &asset_manager,
         &app_context,
-        std::path::Path::new(&destination_dir),
+        Path::new(&destination_dir),
     )?;
 
     record_snapshot(
@@ -489,7 +490,7 @@ pub fn inspect_local_backup(
     db: State<'_, Arc<Database>>,
     path: String,
 ) -> Result<LocalBackupSummary, VaultimeError> {
-    backup::inspect_local_backup(&db, std::path::Path::new(&path))
+    backup::inspect_local_backup(&db, Path::new(&path))
 }
 
 #[tauri::command(async)]
@@ -501,12 +502,7 @@ pub fn import_local_backup(
     path: String,
 ) -> Result<LocalBackupSummary, VaultimeError> {
     let summary = with_tracking_paused(&db, &engine, &app_context.device_id, || {
-        backup::import_local_backup(
-            &db,
-            &asset_manager,
-            &app_context,
-            std::path::Path::new(&path),
-        )
+        backup::import_local_backup(&db, &asset_manager, &app_context, Path::new(&path))
     })?;
 
     record_snapshot(
@@ -740,8 +736,7 @@ pub fn discover_games(
     db: State<'_, Arc<Database>>,
     paths: Vec<String>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    let found = discovery::scanner::scan_folders(&db, &paths)?;
-    discovery::mark_same_games(&db, discovery::without_ignored(&db, found)?)
+    discovery::offer(&db, discovery::scanner::scan_folders(&db, &paths)?)
 }
 
 /// Saves every finished session as CSV or JSON and returns how many.
@@ -752,18 +747,13 @@ pub fn export_sessions(
     path: String,
     format: crate::export::ExportFormat,
 ) -> Result<usize, VaultimeError> {
-    crate::export::export_sessions(
-        &db,
-        std::path::Path::new(&path),
-        format,
-        &app_context.app_version,
-    )
+    crate::export::export_sessions(&db, Path::new(&path), format, &app_context.app_version)
 }
 
 /// Saves the year card, a PNG image as base64, to a `.png` file.
 #[tauri::command(async)]
 pub fn save_share_image(path: String, png_base64: String) -> Result<(), VaultimeError> {
-    crate::share::save_share_image(std::path::Path::new(&path), &png_base64)
+    crate::share::save_share_image(Path::new(&path), &png_base64)
 }
 
 /// Counts a closed session only up to `ended_at`, with a reason.
@@ -886,17 +876,7 @@ pub fn remove_steam_playtime(db: State<'_, Arc<Database>>) -> Result<usize, Vaul
 pub fn discover_steam_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    let found = discovery::steam::discover_steam_games(&db)?;
-    remember_launcher_ids(&db, &found);
-    discovery::mark_same_games(&db, discovery::without_ignored(&db, found)?)
-}
-
-/// Games already in the library learn their launcher id from a scan. A
-/// failure here must not fail the scan.
-fn remember_launcher_ids(db: &Database, found: &[DiscoveredGame]) {
-    if let Err(error) = discovery::remember_launcher_ids(db, found) {
-        warn!("launcher ids not stored: {error}");
-    }
+    discovery::offer_launcher_games(&db, discovery::steam::discover_steam_games(&db)?)
 }
 
 #[tauri::command(async)]
@@ -909,9 +889,7 @@ pub fn get_default_scan_paths() -> Result<Vec<String>, VaultimeError> {
 pub fn discover_launcher_games(
     db: State<'_, Arc<Database>>,
 ) -> Result<Vec<DiscoveredGame>, VaultimeError> {
-    let found = discovery::discover_launcher_games(&db)?;
-    remember_launcher_ids(&db, &found);
-    discovery::mark_same_games(&db, discovery::without_ignored(&db, found)?)
+    discovery::offer_launcher_games(&db, discovery::discover_launcher_games(&db)?)
 }
 
 /// The games the look at start found that are still new.
@@ -968,40 +946,5 @@ pub fn import_discovered_games(
     asset_manager: State<'_, AssetManager>,
     discoveries: Vec<DiscoveredGame>,
 ) -> Result<Vec<Game>, VaultimeError> {
-    let mut imported = Vec::new();
-
-    for disc in &discoveries {
-        if disc.already_added {
-            continue;
-        }
-
-        let input = CreateGame {
-            title: disc.title.clone(),
-            executable_path: Some(disc.executable_path.clone()),
-            install_folder: disc.install_folder.clone(),
-            launcher_source: Some(disc.source.clone()),
-        };
-
-        let mut game = games::create_game(&db, &input)?;
-        if let Some(launcher_id) = disc.source_id.as_deref().filter(|id| !id.is_empty()) {
-            game = games::set_launcher_id(&db, &game.id, launcher_id)?;
-        }
-        // Its own cover too, so it looks right should it be unlinked.
-        if let Err(error) = assets::scan_game_assets(&db, &asset_manager, &game.id) {
-            warn!("artwork scan failed for {}: {error}", game.title);
-        }
-        if let Some(same) = &disc.same_game {
-            // The game may count as another one by now, which is then the one.
-            let link = db
-                .with_conn(|conn| games::shown_id(conn, &same.game_id))
-                .and_then(|shown| games::link_game(&db, &game.id, Some(&shown)));
-            if let Err(error) = link {
-                warn!("{} not linked to {}: {error}", game.title, same.title);
-            }
-        }
-
-        imported.push(game);
-    }
-
-    Ok(imported)
+    discovery::import(&db, &asset_manager, &discoveries)
 }

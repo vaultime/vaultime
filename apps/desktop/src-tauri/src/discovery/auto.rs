@@ -115,9 +115,7 @@ fn find(db: &Database) -> Result<Vec<DiscoveredGame>> {
         super::steam::discover_steam_games(db),
         super::discover_launcher_games(db),
     )?;
-    if let Err(error) = super::remember_launcher_ids(db, &found) {
-        warn!("launcher ids not stored: {error}");
-    }
+    super::learn_launcher_ids(db, &found);
     still_new(db, found)
 }
 

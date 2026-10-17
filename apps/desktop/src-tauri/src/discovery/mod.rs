@@ -30,15 +30,17 @@ mod xml;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use log::warn;
 use serde::{Deserialize, Serialize};
 
+use crate::assets::{self, AssetManager};
 use crate::constants::{
     EXECUTABLE_SCAN_DEPTH, LAUNCHER_IDS_BACKFILL_SETTING, LAUNCHER_IDS_BACKFILL_VERSION,
     SHIPPING_BONUS_BYTES, STEAM_SOURCE, TITLE_MATCH_BONUS_BYTES, TITLE_WORD_MIN_CHARS,
     TOP_LEVEL_BONUS_BYTES,
 };
 use crate::db::connection::Database;
-use crate::db::models::Game;
+use crate::db::models::{CreateGame, Game};
 use crate::db::repo::{games, settings};
 use crate::error::Result;
 use crate::platform::process::path_key;
@@ -155,6 +157,67 @@ pub fn without_ignored(db: &Database, games: Vec<DiscoveredGame>) -> Result<Vec<
         .into_iter()
         .filter(|game| !ignored.contains(&path_key(&game.executable_path)))
         .collect())
+}
+
+/// What a scan offers: the candidates without programs the player ignored,
+/// marked where they seem to be another install of a library game.
+pub fn offer(db: &Database, found: Vec<DiscoveredGame>) -> Result<Vec<DiscoveredGame>> {
+    mark_same_games(db, without_ignored(db, found)?)
+}
+
+/// What a scan of the launchers offers, see `offer`. Games already in the
+/// library learn their launcher ids from it first.
+pub fn offer_launcher_games(
+    db: &Database,
+    found: Vec<DiscoveredGame>,
+) -> Result<Vec<DiscoveredGame>> {
+    learn_launcher_ids(db, &found);
+    offer(db, found)
+}
+
+/// `remember_launcher_ids` for a scan, which a failure here must not fail.
+fn learn_launcher_ids(db: &Database, found: &[DiscoveredGame]) {
+    if let Err(error) = remember_launcher_ids(db, found) {
+        warn!("launcher ids not stored: {error}");
+    }
+}
+
+/// Adds the picked candidates to the library, each with its launcher id and
+/// artwork. One marked as another install of a library game counts as that
+/// game. Candidates already added are skipped.
+pub fn import(
+    db: &Database,
+    asset_manager: &AssetManager,
+    picked: &[DiscoveredGame],
+) -> Result<Vec<Game>> {
+    let mut imported = Vec::new();
+    for candidate in picked.iter().filter(|candidate| !candidate.already_added) {
+        let input = CreateGame {
+            title: candidate.title.clone(),
+            executable_path: Some(candidate.executable_path.clone()),
+            install_folder: candidate.install_folder.clone(),
+            launcher_source: Some(candidate.source.clone()),
+        };
+        let mut game = games::create_game(db, &input)?;
+        if let Some(launcher_id) = candidate.source_id.as_deref().filter(|id| !id.is_empty()) {
+            game = games::set_launcher_id(db, &game.id, launcher_id)?;
+        }
+        // Its own cover too, so it looks right should it be unlinked.
+        if let Err(error) = assets::scan_game_assets(db, asset_manager, &game.id) {
+            warn!("artwork scan failed for {}: {error}", game.title);
+        }
+        if let Some(same) = &candidate.same_game {
+            // The game may count as another one by now, which is then the one.
+            let link = db
+                .with_conn(|conn| games::shown_id(conn, &same.game_id))
+                .and_then(|shown| games::link_game(db, &game.id, Some(&shown)));
+            if let Err(error) = link {
+                warn!("{} not linked to {}: {error}", game.title, same.title);
+            }
+        }
+        imported.push(game);
+    }
+    Ok(imported)
 }
 
 /// Games from every launcher other than Steam whose data exists here.
@@ -464,6 +527,54 @@ mod tests {
         games::link_game(&db, &doom_epic.id, Some(&doom.id)).unwrap();
         let marked = mark_same_games(&db, found()).unwrap();
         assert_eq!(same(&marked)[3], Some(doom.id.clone()));
+    }
+
+    #[test]
+    fn imports_new_candidates_with_their_launcher_id_and_link() {
+        let db = Database::open_in_memory().unwrap();
+        let cache = std::env::temp_dir().join(format!("vaultime-import-{}", uuid::Uuid::new_v4()));
+        let assets = AssetManager::new(cache.clone());
+        let steam = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Hades".into(),
+                executable_path: Some("/steam/hades/hades.exe".into()),
+                install_folder: Some("/steam/hades".into()),
+                launcher_source: Some("steam".into()),
+            },
+        )
+        .unwrap();
+        let candidate = |exe: &str, already_added: bool| DiscoveredGame {
+            title: "Hades".into(),
+            executable_path: exe.into(),
+            install_folder: None,
+            source: "gog".into(),
+            source_id: Some("1234".into()),
+            already_added,
+            same_game: Some(SameGame {
+                game_id: steam.id.clone(),
+                title: steam.title.clone(),
+                launcher_source: steam.launcher_source.clone(),
+            }),
+        };
+
+        let imported = import(
+            &db,
+            &assets,
+            &[
+                candidate("/gog/hades/hades.exe", false),
+                candidate("/steam/hades/hades.exe", true),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(imported.len(), 1);
+        assert_eq!(games::launcher_id(&imported[0]).as_deref(), Some("1234"));
+        assert_eq!(
+            games::links(&db).unwrap().get(&imported[0].id),
+            Some(&steam.id)
+        );
+        let _ = std::fs::remove_dir_all(cache);
     }
 
     /// A game folder with executables of the given sizes, in a fresh temp folder.
