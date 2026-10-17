@@ -19,6 +19,22 @@ pub struct RunningProcess {
     /// First word of the command line. Wine puts the Windows path of the game
     /// there, while the executable path is Wine's own.
     pub command: Option<String>,
+    /// `path_key` of `exe_path`, worked out once for all the install folders
+    /// a tick checks it against.
+    exe_key: Option<String>,
+}
+
+impl RunningProcess {
+    pub fn new(pid: u32, name: String, exe_path: Option<String>, command: Option<String>) -> Self {
+        let exe_key = exe_path.as_deref().map(path_key);
+        Self {
+            pid,
+            name,
+            exe_path,
+            command,
+            exe_key,
+        }
+    }
 }
 
 /// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
@@ -36,14 +52,15 @@ pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
 
     sys.processes()
         .values()
-        .map(|p| RunningProcess {
-            pid: p.pid().as_u32(),
-            name: p.name().to_string_lossy().into_owned(),
-            exe_path: p.exe().map(|e| e.to_string_lossy().into_owned()),
-            command: p
-                .cmd()
-                .first()
-                .map(|arg| arg.to_string_lossy().into_owned()),
+        .map(|p| {
+            RunningProcess::new(
+                p.pid().as_u32(),
+                p.name().to_string_lossy().into_owned(),
+                p.exe().map(|e| e.to_string_lossy().into_owned()),
+                p.cmd()
+                    .first()
+                    .map(|arg| arg.to_string_lossy().into_owned()),
+            )
         })
         .collect()
 }
@@ -126,11 +143,10 @@ impl InstallFolder {
 
     /// Whether the process runs a program from inside the folder, at any depth.
     pub fn contains(&self, process: &RunningProcess) -> bool {
-        let Some(exe) = &process.exe_path else {
+        let Some(exe) = &process.exe_key else {
             return false;
         };
-        let exe = path_key(exe);
-        self.keys.iter().any(|folder| is_inside(&exe, folder))
+        self.keys.iter().any(|folder| is_inside(exe, folder))
     }
 }
 
@@ -189,6 +205,9 @@ pub fn path_key(path: &str) -> String {
 /// Ignores case like `path_key`, without allocating.
 #[cfg(windows)]
 fn names_equal(a: &str, b: &str) -> bool {
+    if a.is_ascii() && b.is_ascii() {
+        return a.eq_ignore_ascii_case(b);
+    }
     a.chars()
         .flat_map(char::to_lowercase)
         .eq(b.chars().flat_map(char::to_lowercase))
@@ -205,34 +224,24 @@ mod tests {
 
     #[test]
     fn full_path_match() {
-        let proc = RunningProcess {
-            pid: 1,
-            name: "game".into(),
-            exe_path: Some("/opt/games/cool-game/game".into()),
-            command: None,
-        };
+        let proc = RunningProcess::new(
+            1,
+            "game".into(),
+            Some("/opt/games/cool-game/game".into()),
+            None,
+        );
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
 
     #[test]
     fn filename_match() {
-        let proc = RunningProcess {
-            pid: 2,
-            name: "game".into(),
-            exe_path: None,
-            command: None,
-        };
+        let proc = RunningProcess::new(2, "game".into(), None, None);
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
 
     #[test]
     fn no_match() {
-        let proc = RunningProcess {
-            pid: 3,
-            name: "firefox".into(),
-            exe_path: Some("/usr/bin/firefox".into()),
-            command: None,
-        };
+        let proc = RunningProcess::new(3, "firefox".into(), Some("/usr/bin/firefox".into()), None);
         assert!(!matches_executable(&proc, "/opt/games/cool-game/game"));
     }
 
@@ -256,35 +265,25 @@ mod tests {
     #[test]
     fn same_name_at_another_path_does_not_match() {
         let (root, first, second) = same_named_games();
-        let proc = RunningProcess {
-            pid: 5,
-            name: "game".into(),
-            exe_path: Some(second),
-            command: None,
-        };
+        let proc = RunningProcess::new(5, "game".into(), Some(second), None);
         assert!(!matches_executable(&proc, &first));
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn unresolvable_process_path_falls_back_to_the_name() {
-        let proc = RunningProcess {
-            pid: 6,
-            name: "game".into(),
-            exe_path: Some("/container/only/game".into()),
-            command: None,
-        };
+        let proc = RunningProcess::new(6, "game".into(), Some("/container/only/game".into()), None);
         assert!(matches_executable(&proc, "/opt/games/cool-game/game"));
     }
 
     #[test]
     fn wine_game_with_a_long_name_matches_by_command_line() {
-        let proc = RunningProcess {
-            pid: 12,
-            name: "SomeVeryLongGam".into(),
-            exe_path: Some("/usr/bin/wine64-preloader".into()),
-            command: Some(r"Z:\home\me\Games\SomeVeryLongGameName.exe".into()),
-        };
+        let proc = RunningProcess::new(
+            12,
+            "SomeVeryLongGam".into(),
+            Some("/usr/bin/wine64-preloader".into()),
+            Some(r"Z:\home\me\Games\SomeVeryLongGameName.exe".into()),
+        );
         assert!(matches_executable(
             &proc,
             "/home/me/Games/SomeVeryLongGameName.exe"
@@ -294,23 +293,18 @@ mod tests {
 
     #[test]
     fn loader_process_matches_by_name() {
-        let proc = RunningProcess {
-            pid: 7,
-            name: "game.exe".into(),
-            exe_path: Some("/usr/bin/wine64-preloader".into()),
-            command: None,
-        };
+        let proc = RunningProcess::new(
+            7,
+            "game.exe".into(),
+            Some("/usr/bin/wine64-preloader".into()),
+            None,
+        );
         assert!(matches_executable(&proc, "/home/me/Games/Cool/game.exe"));
     }
 
     #[test]
     fn other_program_with_a_path_does_not_match_by_name() {
-        let proc = RunningProcess {
-            pid: 8,
-            name: "firefox".into(),
-            exe_path: Some("/usr/bin/firefox".into()),
-            command: None,
-        };
+        let proc = RunningProcess::new(8, "firefox".into(), Some("/usr/bin/firefox".into()), None);
         assert!(!matches_executable(&proc, "/opt/games/firefox-game/game"));
     }
 
@@ -320,12 +314,7 @@ mod tests {
         let (root, first, _) = same_named_games();
         let link = root.join("library");
         std::os::unix::fs::symlink(root.join("first"), &link).unwrap();
-        let proc = RunningProcess {
-            pid: 9,
-            name: "game".into(),
-            exe_path: Some(first),
-            command: None,
-        };
+        let proc = RunningProcess::new(9, "game".into(), Some(first), None);
         assert!(matches_executable(
             &proc,
             &link.join("game").to_string_lossy()
@@ -346,12 +335,7 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let proc = RunningProcess {
-            pid: 10,
-            name: "game".into(),
-            exe_path: Some(first),
-            command: None,
-        };
+        let proc = RunningProcess::new(10, "game".into(), Some(first), None);
         assert!(matches_executable(
             &proc,
             &link.join("game").to_string_lossy()
@@ -360,12 +344,7 @@ mod tests {
     }
 
     fn running(exe: &str) -> RunningProcess {
-        RunningProcess {
-            pid: 11,
-            name: file_name(exe).unwrap().into(),
-            exe_path: Some(exe.into()),
-            command: None,
-        }
+        RunningProcess::new(11, file_name(exe).unwrap().into(), Some(exe.into()), None)
     }
 
     #[cfg(windows)]
@@ -401,12 +380,7 @@ mod tests {
 
     #[test]
     fn windows_style_path_matches_by_file_name() {
-        let proc = RunningProcess {
-            pid: 4,
-            name: "game.exe".into(),
-            exe_path: None,
-            command: None,
-        };
+        let proc = RunningProcess::new(4, "game.exe".into(), None, None);
         assert!(matches_executable(&proc, r"C:\Games\Cool\game.exe"));
     }
 

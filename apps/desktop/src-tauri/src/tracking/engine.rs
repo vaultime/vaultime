@@ -513,9 +513,11 @@ impl FolderCache {
     }
 
     fn get(&mut self, folder: &str) -> &InstallFolder {
-        self.folders
-            .entry(folder.to_owned())
-            .or_insert_with(|| InstallFolder::new(folder))
+        if !self.folders.contains_key(folder) {
+            self.folders
+                .insert(folder.to_owned(), InstallFolder::new(folder));
+        }
+        &self.folders[folder]
     }
 }
 
@@ -865,6 +867,68 @@ mod tests {
         assert!(session.closed_cleanly);
         // Runtime grows once per tick, so a tick is all the test can count on.
         assert!(u128::from(session.runtime_ms.unsigned_abs()) >= POLL_INTERVAL.as_millis());
+    }
+
+    /// Times the parts of a tick on a library of 300 games, half of them
+    /// matched by their install folder, against the processes running here:
+    /// `cargo test --release -- --ignored --nocapture tick_timings`.
+    #[test]
+    #[ignore = "prints timings"]
+    fn tick_timings() {
+        const GAMES: usize = 300;
+        const ROUNDS: u32 = 50;
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        for index in 0..GAMES {
+            let steam = index % 2 == 0;
+            games::create_game(
+                &db,
+                &CreateGame {
+                    title: format!("Game {index}"),
+                    executable_path: Some(format!(r"C:\Games\Game {index}\Bin\game{index}.exe")),
+                    install_folder: Some(format!(r"C:\Games\Game {index}")),
+                    launcher_source: steam.then(|| "steam".into()),
+                },
+            )
+            .unwrap();
+        }
+        let mut system = System::new();
+        let mut folders = FolderCache::default();
+        let time = |label: &str, run: &mut dyn FnMut()| {
+            run();
+            let started = Instant::now();
+            for _ in 0..ROUNDS {
+                run();
+            }
+            println!("{label}: {:?}", started.elapsed() / ROUNDS);
+        };
+        time("settings", &mut || {
+            TrackingSettings::load(&db);
+        });
+        time("local games", &mut || {
+            games::list_local_games(&db).unwrap();
+        });
+        time("ignored", &mut || {
+            ignored::paths(&db).unwrap();
+        });
+        time("processes", &mut || {
+            refresh_running_processes(&mut system);
+        });
+        time("activity", &mut || {
+            capture_activity_snapshot();
+        });
+        let tracked = games::list_local_games(&db).unwrap();
+        let processes = refresh_running_processes(&mut system);
+        let snapshot = capture_activity_snapshot();
+        println!("{} processes", processes.len());
+        time("observe", &mut || {
+            observe_games(&tracked, &processes, &snapshot, &mut system, &mut folders);
+        });
+        let live = LiveSessions::default();
+        let mut active = HashMap::new();
+        time("whole tick", &mut || {
+            poll_tick(&db, "device", &live, &mut system, &mut folders, &mut active).unwrap();
+        });
     }
 
     #[test]
