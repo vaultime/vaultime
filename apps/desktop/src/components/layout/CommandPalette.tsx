@@ -10,7 +10,7 @@ import { useLibrary } from "@/features/library/library-context";
 import { useUpdates } from "@/features/updates/update-context";
 import { PALETTE_GAMES_IDLE, PALETTE_GAMES_SEARCHING } from "@/lib/constants";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
-import { matchesSearch } from "@/lib/search";
+import { matchesGame, matchesSearch } from "@/lib/search";
 import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatHoursShort } from "@/lib/time";
@@ -65,7 +65,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const results = useMemo(() => {
     const matches = (text: string) => matchesSearch(text, query);
     const games: Command[] = summaries
-      .filter(({ game }) => matches(game.title))
+      .filter(({ game, otherTitles }) => matchesGame(game.title, otherTitles, query))
       .slice(0, query.trim() ? PALETTE_GAMES_SEARCHING : PALETTE_GAMES_IDLE)
       .map(({ game, cover, totalMs }) => ({
         id: `game-${game.id}`,

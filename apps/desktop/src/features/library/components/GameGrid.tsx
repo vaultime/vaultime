@@ -19,7 +19,7 @@ import { TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { onFind } from "@/lib/find";
 import { GAME_SORTS, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
-import { matchesSearch } from "@/lib/search";
+import { matchesGame } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -52,7 +52,8 @@ export function GameGrid({
   const sorted = useMemo(() => {
     const filtered = summaries.filter(
       (summary) =>
-        (shownFilter === "all" || summary.status === shownFilter) && matchesSearch(summary.game.title, query),
+        (shownFilter === "all" || summary.status === shownFilter) &&
+        matchesGame(summary.game.title, summary.otherTitles, query),
     );
     return sortGames(filtered, sort);
   }, [summaries, sort, shownFilter, query]);

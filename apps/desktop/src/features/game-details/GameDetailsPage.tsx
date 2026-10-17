@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Crop, Eye, EyeOff, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Trash2, Unlink, X } from "lucide-react";
 import { Notice } from "@/components/layout/Page";
@@ -106,6 +106,10 @@ function GamePage({ gameId }: { gameId: string }) {
   }, [gameId]);
 
   if (!loaded) return null;
+
+  // A game that counts as another one has its page there.
+  const countsAs = links.find((link) => link.game_id === gameId)?.linked_game_id;
+  if (!summary && countsAs) return <Navigate to={`/library/${countsAs}`} replace />;
 
   if (!summary) {
     return (
@@ -355,7 +359,6 @@ function GamePage({ gameId }: { gameId: string }) {
       )}
       <DeleteGameDialog
         game={deleting}
-        linkedCount={links.filter((link) => link.linked_game_id === game.id).length}
         onClose={() => setDeleting(null)}
         onDeleted={() => {
           navigate("/library");

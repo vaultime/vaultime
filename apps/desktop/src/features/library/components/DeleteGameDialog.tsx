@@ -12,25 +12,23 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/layout/Page";
-import { linkedGoToo } from "@/lib/links";
+import { useLibrary } from "@/features/library/library-context";
+import { linkedGoToo, programsOf } from "@/lib/links";
 import * as api from "@/lib/tauri";
 import { describeError } from "@/lib/utils";
 import type { Game } from "@/lib/types";
 
 interface DeleteGameDialogProps {
   game: Game | null;
-  /** Other installs and games of other PCs that count as it, which go with it. */
-  linkedCount?: number;
   onClose: () => void;
   onDeleted: () => void;
 }
 
-export function DeleteGameDialog({
-  game,
-  linkedCount = 0,
-  onClose,
-  onDeleted,
-}: DeleteGameDialogProps) {
+export function DeleteGameDialog({ game, onClose, onDeleted }: DeleteGameDialogProps) {
+  const { links, thisDeviceId } = useLibrary();
+  // Other installs and games of other PCs that count as it go with it.
+  const linkedCount = game ? links.filter((link) => link.linked_game_id === game.id).length : 0;
+  const programs = game ? programsOf(game, links, thisDeviceId) : [];
   const [deleting, setDeleting] = useState(false);
   const [ignoreProgram, setIgnoreProgram] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +47,10 @@ export function DeleteGameDialog({
     // that failed and trying again finishes the job.
     let step = "ignore its program";
     try {
-      if (ignoreProgram && game.executable_path) await api.ignoreProgram(game.executable_path, game.title);
+      // Every install of the game, as all of them go.
+      if (ignoreProgram) {
+        for (const program of programs) await api.ignoreProgram(program.path, program.title);
+      }
       step = "delete the game";
       await api.deleteGame(game.id);
       onDeleted();
@@ -71,7 +72,7 @@ export function DeleteGameDialog({
             removed from this PC. {linkedGoToo(linkedCount)} Backups you made earlier keep them.
           </DialogDescription>
         </DialogHeader>
-        {game?.executable_path && (
+        {programs.length > 0 && (
           <label className="flex cursor-pointer items-start gap-2.5 text-sm text-soft">
             <input
               type="checkbox"
@@ -80,7 +81,9 @@ export function DeleteGameDialog({
               className="mt-0.5 accent-violet"
             />
             <span>
-              It is not a game. Never suggest its program again and never track it.
+              {programs.length > 1
+                ? "It is not a game. Never suggest the programs of its installs again and never track them."
+                : "It is not a game. Never suggest its program again and never track it."}
             </span>
           </label>
         )}

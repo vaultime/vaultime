@@ -10,6 +10,7 @@ import {
   linkTargets,
   linkedGoToo,
   linkedTo,
+  programsOf,
   recordedThrough,
   whereFrom,
 } from "./links";
@@ -63,6 +64,16 @@ describe("links", () => {
     expect(launchersOf(game("steam", "steam"), links, "desktop")).toBe("Steam, GOG and Xbox");
     expect(launchersOf(game("steam", "steam"), [], "desktop")).toBe("Steam");
     expect(launchersOf(game("hand", null), [], "desktop")).toBeNull();
+  });
+
+  it("lists the programs of a game and its installs here, never a program of another PC", () => {
+    const steam = { ...game("steam", "steam"), executable_path: "C:/steam/Cyberpunk2077.exe" };
+    expect(programsOf(steam, links, "desktop").map((program) => program.path)).toEqual([
+      "C:/steam/Cyberpunk2077.exe",
+      "C:/gog/Cyberpunk2077.exe",
+      "C:/xbox/Cyberpunk2077.exe",
+    ]);
+    expect(programsOf(game("hand", null), [], "desktop")).toEqual([]);
   });
 
   it("offers every other game of this PC as a target", () => {

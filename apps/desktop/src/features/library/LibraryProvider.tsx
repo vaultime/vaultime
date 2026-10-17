@@ -154,6 +154,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     for (const game of games) {
       byGame.set(game.id, {
         game,
+        otherTitles: [],
         cover: covers[game.id] ?? null,
         tint: artTints[game.id] ?? tintForTitle(game.title),
         runtimeMs: 0,
@@ -192,6 +193,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         summary.lastPlayedAt = session.started_at_wall;
       }
     }
+    for (const link of links) {
+      const summary = byGame.get(link.linked_game_id);
+      if (summary && link.title !== summary.game.title && !summary.otherTitles.includes(link.title)) {
+        summary.otherTitles.push(link.title);
+      }
+    }
     for (const entry of earlier) {
       const summary = byGame.get(entry.game_id);
       if (summary) summary.earlier = entry;
@@ -212,7 +219,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (b.lastPlayedAt) return 1;
       return a.game.title.localeCompare(b.game.title);
     });
-  }, [games, sessions, covers, artTints, earlier, statusChanges]);
+  }, [games, sessions, covers, artTints, earlier, statusChanges, links]);
 
   const setStatus = useCallback(
     async (gameId: string, status: GameStatus | "none") => {

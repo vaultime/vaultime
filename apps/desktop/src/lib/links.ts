@@ -74,6 +74,19 @@ export function linkTargets(game: Game, games: Game[]): Game[] {
   return games.filter((candidate) => candidate.origin_device_id === null && candidate.id !== game.id);
 }
 
+/** The programs of a game and of its other installs here, each once with its title. */
+export function programsOf(
+  game: Game,
+  links: GameLink[],
+  thisDeviceId: string | null,
+): { path: string; title: string }[] {
+  const { installs } = linkedTo(game.id, links, thisDeviceId);
+  const programs = [game, ...installs].flatMap((install) =>
+    install.executable_path ? [{ path: install.executable_path, title: install.title }] : [],
+  );
+  return programs.filter((program, index) => programs.findIndex((other) => other.path === program.path) === index);
+}
+
 /** What deleting a game takes along besides it, as a sentence, or nothing. */
 export function linkedGoToo(count: number): string {
   if (count <= 0) return "";

@@ -14,3 +14,8 @@ export function matchesSearch(text: string, query: string): boolean {
     .filter(Boolean)
     .every((word) => haystack.includes(word));
 }
+
+/** Whether a game's title or another title it has, like that of a second install, matches the query. */
+export function matchesGame(title: string, otherTitles: string[], query: string): boolean {
+  return [title, ...otherTitles].some((text) => matchesSearch(text, query));
+}

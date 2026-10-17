@@ -7,6 +7,8 @@ import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusCha
 
 export interface GameSummary {
   game: Game;
+  /** Other titles of the game, those of installs and games of other PCs that count as it, for search. */
+  otherTitles: string[];
   cover: string | null;
   /** From the cover art when there is some, otherwise from the title. */
   tint: GameTint;
