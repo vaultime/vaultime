@@ -777,14 +777,34 @@ pub fn rebuild_session_and_around(conn: &Connection, session_id: &str) -> Result
 
 /// Marks the slices as stale inside the caller's transaction, so the next
 /// start builds every slice again unless `rebuild_merged` finishes first.
+/// Slices that were stale already stay stale after it.
 pub(crate) fn mark_stale(conn: &Connection) -> Result<()> {
-    settings::put_setting(conn, PLAY_SLICES_VERSION_SETTING, "0")
+    let built: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [PLAY_SLICES_VERSION_SETTING],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(map_db)?;
+    let current = built.as_deref() == Some(PLAY_SLICES_VERSION.to_string().as_str());
+    settings::put_setting(
+        conn,
+        PLAY_SLICES_VERSION_SETTING,
+        if current { MERGE_PENDING } else { "0" },
+    )
 }
+
+/// The slice version while a merge works out the slices of what it took in,
+/// when they were current before it. Like any value but the current version,
+/// it makes the next start build every slice again.
+const MERGE_PENDING: &str = "merge";
 
 /// Works out the slices of merged sessions, and of the sessions that step
 /// aside around them on the same PC, a batch at a time, so the tracker gets
 /// the database in between. The merge marked the slices stale when it took
-/// the sessions in, and this marks them current once it is done.
+/// the sessions in, and this marks them current once it is done, unless they
+/// were stale before the merge or were marked stale since.
 pub fn rebuild_merged(db: &Database, ids: &[String]) -> Result<()> {
     if ids.is_empty() {
         return Ok(());
@@ -816,11 +836,19 @@ pub fn rebuild_merged(db: &Database, ids: &[String]) -> Result<()> {
             Ok(())
         })?;
     }
-    settings::set_setting(
-        db,
-        PLAY_SLICES_VERSION_SETTING,
-        &PLAY_SLICES_VERSION.to_string(),
-    )
+    db.with_conn(|conn| {
+        conn.execute(
+            "UPDATE settings SET value = ?2, updated_at = datetime('now')
+             WHERE key = ?1 AND value = ?3",
+            params![
+                PLAY_SLICES_VERSION_SETTING,
+                PLAY_SLICES_VERSION.to_string(),
+                MERGE_PENDING
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    })
 }
 
 /// The clock spans and PCs of the sessions of a game and of the games
@@ -1450,6 +1478,36 @@ mod tests {
         assert_eq!(stored_spans(&db), 90_000);
         // Current now, so the next start does nothing.
         assert_eq!(ensure_current(&db).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_merge_leaves_a_full_rebuild_pending_from_before() {
+        use crate::playtime::testing::{database, game, played};
+
+        let db = database();
+        let one = game(&db, "One");
+        let id = played(&db, &one, "2026-10-01T18:00:00Z", 30);
+        let merge = |db: &Database| {
+            db.with_transaction(mark_stale).unwrap();
+            rebuild_merged(db, std::slice::from_ref(&id)).unwrap();
+        };
+
+        // Current before the merge, so current after it.
+        ensure_current(&db).unwrap();
+        merge(&db);
+        assert_eq!(ensure_current(&db).unwrap(), 0);
+
+        // A new way of counting waits for the next start, merge or not.
+        settings::set_setting(&db, PLAY_SLICES_VERSION_SETTING, "0").unwrap();
+        merge(&db);
+        assert_eq!(ensure_current(&db).unwrap(), 1);
+        assert_eq!(ensure_current(&db).unwrap(), 0);
+
+        // Marked stale while the merge built its slices.
+        db.with_transaction(mark_stale).unwrap();
+        settings::set_setting(&db, PLAY_SLICES_VERSION_SETTING, "0").unwrap();
+        rebuild_merged(&db, std::slice::from_ref(&id)).unwrap();
+        assert_eq!(ensure_current(&db).unwrap(), 1);
     }
 
     #[test]
