@@ -14,33 +14,29 @@ import { usePageVisible } from "@/lib/use-page-visible";
 
 /** The bar at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
-  const { games, covers, sessions, idleThresholdSeconds } = useLibrary();
+  const { games, covers, sessions, idleThresholdSeconds, today } = useLibrary();
   const active = useActiveSessions();
   const activePolledAt = useLastPoll();
-  const [now, setNow] = useState(() => Date.now());
   const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
   // The game being played rather than a launcher that steps aside for it,
   // whose clock stands still while the game runs.
   const current = active.find((session) => !stepping.has(session.game_id)) ?? active[0];
-  const visible = usePageVisible();
 
-  // Tick every second while something runs and the window is seen, so the
-  // timer does not jump every poll.
-  useEffect(() => {
-    if (!current || !visible) return;
-    const timer = setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
-    return () => clearInterval(timer);
-  }, [current, visible]);
-
+  // Only sessions that reach into today count for it, so a poll goes through
+  // those and not the whole history.
+  const sinceMidnight = useMemo(() => {
+    const midnight = parseVaultimeDate(today);
+    return sessions.filter((session) => !session.ended_at_wall || parseVaultimeDate(session.ended_at_wall) >= midnight);
+  }, [sessions, today]);
   // Running sessions as of the last poll, so today keeps up while they run.
   const todayMs = useMemo(() => {
     const running = new Map(active.map((session) => [session.id, session]));
     return playedToday(
-      sessions.map((session) => running.get(session.id) ?? session),
+      sinceMidnight.map((session) => running.get(session.id) ?? session),
       stepping,
       new Date(activePolledAt),
     );
-  }, [sessions, active, stepping, activePolledAt]);
+  }, [sinceMidnight, active, stepping, activePolledAt]);
 
   if (!current) {
     const watched = games.filter((game) => game.executable_path).length;
@@ -72,8 +68,6 @@ export function LiveBar() {
   const title = game?.title ?? "Unknown game";
   // Two installs of one game running at once are one game here.
   const others = new Set(active.map((session) => session.game_id).filter((id) => id !== current.game_id)).size;
-  const sincePoll = Math.max(0, now - activePolledAt);
-  const runtimeMs = current.runtime_ms + sincePoll;
   const counted = current.active_ms + current.idle_ms;
   const activeShare = counted > 0 ? current.active_ms / counted : 1;
   const trust = getIntegrityMeta(current.integrity_status).label;
@@ -102,9 +96,7 @@ export function LiveBar() {
       </div>
 
       <div className="flex flex-col items-center gap-1.5">
-        <span className="font-mono text-[22px] tracking-wide tabular-nums" role="timer" aria-label={`Running for ${formatHoursMinutes(runtimeMs)}`}>
-          {formatClock(runtimeMs)}
-        </span>
+        <RunningClock runtimeMs={current.runtime_ms} polledAt={activePolledAt} />
         <div className="flex items-center gap-2.5 text-xs text-faint tabular-nums">
           <span className="whitespace-nowrap">
             <span className="label-caps mr-1.5">Active</span>
@@ -134,5 +126,25 @@ export function LiveBar() {
         </Link>
       </div>
     </footer>
+  );
+}
+
+/**
+ * The running time, ticking every second from the last poll while the window
+ * is seen, so it does not jump every poll. Only the clock draws each second.
+ */
+function RunningClock({ runtimeMs, polledAt }: { runtimeMs: number; polledAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  const visible = usePageVisible();
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
+    return () => clearInterval(timer);
+  }, [visible]);
+  const shownMs = runtimeMs + Math.max(0, now - polledAt);
+  return (
+    <span className="font-mono text-[22px] tracking-wide tabular-nums" role="timer" aria-label={`Running for ${formatHoursMinutes(shownMs)}`}>
+      {formatClock(shownMs)}
+    </span>
   );
 }
