@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Stats
 
 - **Share your year.** Share your year, on the Stats page and in the command palette, makes a picture of the year to post: your hours of active play, the days you played, the calendar, your most played games with their covers and journal colors, the busiest month and a line about the year. It comes wide for X, Discord and Mastodon, square for feeds or tall for stories, dark or light in your ground and accent. Game titles and covers, the calendar and the name of your PC can stay off, and hidden games never show. It counts play exactly as the Stats page does. Vaultime draws the picture on your PC and uploads nothing. Save it as a PNG, or copy it to paste it straight into a post where your system allows it.
+### Library
+
+- **New games find you.** When Vaultime starts, it reads what Steam and your other launchers installed and offers the games that are not in your library yet. It offers each game only once, so games you leave out stay quiet, and Discover in the library still lists everything. When Vaultime starts in the tray, it waits until you open the window. Settings, In the background turns it off.
 
 ### Fixes
 
