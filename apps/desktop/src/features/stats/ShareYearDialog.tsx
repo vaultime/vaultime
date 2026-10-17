@@ -135,12 +135,20 @@ export function ShareYearDialog({
     });
   }, [year.stats, year.now, summaries, covers, pcName, accentHues, showGames, showPcName, cardMode]);
 
+  /** The card for the options set now. The preview may still show the one before a change. */
+  async function drawForExport(): Promise<HTMLCanvasElement> {
+    if (!card) throw new Error("there is no card to draw");
+    const target = document.createElement("canvas");
+    await drawShareCard(target, card, options, appearance);
+    return target;
+  }
+
   function reset() {
     setMessage(null);
     setError(null);
   }
 
-  async function save(canvas: HTMLCanvasElement) {
+  async function save() {
     reset();
     try {
       const picked = await saveFileDialog({
@@ -151,7 +159,7 @@ export function ShareYearDialog({
       if (!picked) return;
       const path = /\.png$/i.test(picked) ? picked : `${picked}.png`;
       setBusy("save");
-      await api.saveShareImage(path, await canvasBase64(canvas));
+      await api.saveShareImage(path, await canvasBase64(await drawForExport()));
       setMessage(`Saved to ${path}.`);
     } catch (saveError) {
       setError(describeError(saveError));
@@ -160,12 +168,12 @@ export function ShareYearDialog({
     }
   }
 
-  async function copy(canvas: HTMLCanvasElement) {
+  async function copy() {
     reset();
     setBusy("copy");
     try {
       // The blob goes in as a promise, so the click still counts as the reason to write.
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": canvasBlob(canvas) })]);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": drawForExport().then(canvasBlob) })]);
       setCopied(true);
     } catch {
       setCanCopy(false);
@@ -180,43 +188,37 @@ export function ShareYearDialog({
       <DialogContent className="h-[min(760px,calc(100dvh-2rem))] w-[min(1180px,calc(100%-2rem))] max-w-none grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-none">
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_300px]">
           <CardPreview card={card} options={options} look={appearance} year={stats.year}>
-            {(canvas) => (
-              <SidePanel
-                year={stats.year}
-                format={format}
-                setFormat={setFormat}
-                showGames={showGames}
-                setShowGames={setShowGames}
-                showCalendar={showCalendar}
-                setShowCalendar={setShowCalendar}
-                showPcName={showPcName}
-                setShowPcName={setShowPcName}
-                pcName={pcName}
-                cardMode={cardMode}
-                setCardMode={setCardMode}
-                empty={!card}
-                actions={
-                  <>
-                    <Button onClick={() => canvas && void save(canvas)} disabled={!card || !canvas || busy !== null}>
-                      {busy === "save" ? <Loader2 className="animate-spin" /> : <Download />}
-                      Save as PNG
+            <SidePanel
+              year={stats.year}
+              format={format}
+              setFormat={setFormat}
+              showGames={showGames}
+              setShowGames={setShowGames}
+              showCalendar={showCalendar}
+              setShowCalendar={setShowCalendar}
+              showPcName={showPcName}
+              setShowPcName={setShowPcName}
+              pcName={pcName}
+              cardMode={cardMode}
+              setCardMode={setCardMode}
+              empty={!card}
+              actions={
+                <>
+                  <Button onClick={() => void save()} disabled={!card || busy !== null}>
+                    {busy === "save" ? <Loader2 className="animate-spin" /> : <Download />}
+                    Save as PNG
+                  </Button>
+                  {canCopy && (
+                    <Button variant="outline" onClick={() => void copy()} disabled={!card || busy !== null}>
+                      {copied ? <Check /> : busy === "copy" ? <Loader2 className="animate-spin" /> : <Copy />}
+                      {copied ? "Copied" : "Copy image"}
                     </Button>
-                    {canCopy && (
-                      <Button
-                        variant="outline"
-                        onClick={() => canvas && void copy(canvas)}
-                        disabled={!card || !canvas || busy !== null}
-                      >
-                        {copied ? <Check /> : busy === "copy" ? <Loader2 className="animate-spin" /> : <Copy />}
-                        {copied ? "Copied" : "Copy image"}
-                      </Button>
-                    )}
-                  </>
-                }
-                message={message}
-                error={error}
-              />
-            )}
+                  )}
+                </>
+              }
+              message={message}
+              error={error}
+            />
           </CardPreview>
         </div>
       </DialogContent>
@@ -236,7 +238,7 @@ function CardPreview({
   options: ShareOptions;
   look: CardLook;
   year: number;
-  children: (canvas: HTMLCanvasElement | null) => ReactNode;
+  children: ReactNode;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -305,7 +307,7 @@ function CardPreview({
           )}
         </div>
       </div>
-      {children(card ? canvas : null)}
+      {children}
     </>
   );
 }
