@@ -27,6 +27,7 @@ import {
   STATS_TOP_GAMES,
 } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
+import { usePageVisible } from "@/lib/use-page-visible";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { yearRange } from "@/lib/play-totals";
 import { countsAsPlay, toDayKey } from "@/lib/session-stats";
@@ -61,6 +62,7 @@ function percent(part: number, whole: number): number {
 export function StatsPage() {
   const { sessions, summaries, covers, loaded } = useLibrary();
   const playing = usePlaying().size > 0;
+  const visible = usePageVisible();
   const { accentHues, mode } = useAppearance();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -73,7 +75,9 @@ export function StatsPage() {
   const [playError, setPlayError] = useState<string | null>(null);
   const now = new Date();
   const year = now.getFullYear() + offset;
-  const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
+  // Reads again while a game runs and the window is seen, and when it shows again.
+  const live = playing && visible;
+  const refreshed = useRefreshWhile(live, LIVE_TOTALS_REFRESH_MS);
 
   // Read again whenever a session starts or ends.
   useEffect(() => {
@@ -91,7 +95,7 @@ export function StatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [year, sessions, refreshed]);
+  }, [year, sessions, refreshed, live]);
 
   const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
   const titleOf = (gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game";
