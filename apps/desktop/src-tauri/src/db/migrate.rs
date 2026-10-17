@@ -54,6 +54,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0010_merged_pcs",
         include_str!("../../migrations/0010_merged_pcs.sql"),
     ),
+    (
+        "0011_offered_programs",
+        include_str!("../../migrations/0011_offered_programs.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.

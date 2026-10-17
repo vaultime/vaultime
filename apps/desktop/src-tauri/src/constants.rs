@@ -182,6 +182,15 @@ pub const TITLE_WORD_MIN_CHARS: usize = 3;
 /// Launcher source of Steam games and of playtime read from Steam. Same as
 /// `STEAM_LAUNCHER` in `lib/constants.ts`.
 pub const STEAM_SOURCE: &str = "steam";
+/// Setting that turns the look for new games at start off with `false`.
+/// Same as `SETTING_KEYS.autoDiscover` in `lib/constants.ts`.
+pub const AUTO_DISCOVER_SETTING: &str = "auto_discover_on_start";
+/// Wait after start before looking for new games, so the window, the tracker
+/// and the other start work go first.
+pub const AUTO_DISCOVERY_DELAY: Duration = Duration::from_secs(10);
+/// Event that tells the frontend the look at start found new games. Same as
+/// `FOUND_GAMES_EVENT` in `lib/constants.ts`.
+pub const FOUND_GAMES_EVENT: &str = "found-games";
 
 // Artwork
 
@@ -339,6 +348,7 @@ pub const PAGE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
     CLOUD_AUTO_BACKUP_SETTING,
     RAIL_SORT_SETTING,
+    AUTO_DISCOVER_SETTING,
     APPEARANCE_MODE_SETTING,
     APPEARANCE_GROUND_SETTING,
     APPEARANCE_ACCENT_SETTING,

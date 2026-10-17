@@ -6,6 +6,7 @@
 
 #[cfg(windows)]
 pub mod amazon;
+pub mod auto;
 #[cfg(windows)]
 pub mod ea;
 pub mod epic;

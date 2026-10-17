@@ -170,6 +170,8 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::discover_launcher_games,
         commands::get_default_scan_paths,
         commands::import_discovered_games,
+        commands::list_found_games,
+        commands::remember_offered_games,
         commands::list_earlier_playtime,
         commands::export_sessions,
         commands::save_share_image,
@@ -278,6 +280,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             Err(error) => log::warn!("artwork cache sweep failed: {error}"),
         }
     });
+
+    app.manage(discovery::auto::FoundGames::default());
+    discovery::auto::start(app.handle().clone(), Arc::clone(&database));
 
     app.manage(database);
     app.manage(AssetManager::new(asset_cache_dir));

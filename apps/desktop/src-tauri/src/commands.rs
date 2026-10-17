@@ -31,9 +31,10 @@ use crate::db::models::{
 use crate::db::repo::games::GameLink;
 use crate::db::repo::ignored::{self, IgnoredProgram};
 use crate::db::repo::{
-    annotations, backup_snapshots, corrections, devices, earlier_playtime, games, session_events,
-    sessions, settings,
+    annotations, backup_snapshots, corrections, devices, earlier_playtime, games, offered,
+    session_events, sessions, settings,
 };
+use crate::discovery::auto::{FoundGames, NewGames};
 use crate::discovery::{self, DiscoveredGame};
 use crate::earlier;
 use crate::error::VaultimeError;
@@ -882,6 +883,25 @@ pub fn discover_launcher_games(
     let found = discovery::discover_launcher_games(&db)?;
     remember_launcher_ids(&db, &found);
     discovery::without_ignored(&db, found)
+}
+
+/// The games the look at start found that are still new.
+#[tauri::command(async)]
+pub fn list_found_games(
+    db: State<'_, Arc<Database>>,
+    found: State<'_, FoundGames>,
+) -> Result<NewGames, VaultimeError> {
+    discovery::auto::new_games(&db, &found)
+}
+
+/// Remembers that discovery showed these programs, so the look at start
+/// never offers them again. Returns how many were not shown before.
+#[tauri::command(async)]
+pub fn remember_offered_games(
+    db: State<'_, Arc<Database>>,
+    paths: Vec<String>,
+) -> Result<usize, VaultimeError> {
+    offered::remember(&db, &paths)
 }
 
 /// Programs the player said are no game, newest first.
