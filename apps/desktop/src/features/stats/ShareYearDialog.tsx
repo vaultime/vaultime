@@ -358,7 +358,7 @@ function SidePanel({
 
         {!empty && (
           <>
-        <fieldset className="mt-6">
+        <fieldset className="mt-6 min-w-0">
           <legend className="label-caps">Format</legend>
           <div role="radiogroup" aria-label="Format" onKeyDown={onRadioKeys} className="mt-2.5">
             {SHARE_FORMAT_IDS.map((id, index) => {
@@ -396,7 +396,7 @@ function SidePanel({
           </div>
         </fieldset>
 
-        <fieldset className="mt-5">
+        <fieldset className="mt-5 min-w-0">
           <legend className="label-caps">On the card</legend>
           <div className="mt-1.5">
             <Toggle id="share-games" label="Game titles and covers" checked={showGames} onChange={setShowGames} hint={showGames ? undefined : "Shows how many games and how the time split, no names."} />
@@ -411,7 +411,7 @@ function SidePanel({
           </div>
         </fieldset>
 
-        <fieldset className="mt-5">
+        <fieldset className="mt-5 min-w-0">
           <legend className="label-caps">Look</legend>
           <div
             role="radiogroup"
@@ -474,7 +474,7 @@ function Toggle({
     <div className="flex items-center justify-between gap-4 border-b border-rule py-2.5 last:border-b-0">
       <label htmlFor={id} className="min-w-0 cursor-pointer">
         <span className="block text-[14px] text-text">{label}</span>
-        {hint && <span className="block truncate text-[12px] text-faint">{hint}</span>}
+        {hint && <span className="block text-[12px] leading-snug text-pretty text-faint [overflow-wrap:anywhere]">{hint}</span>}
       </label>
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
     </div>
