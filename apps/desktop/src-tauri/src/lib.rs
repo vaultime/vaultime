@@ -256,30 +256,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         app.state::<AppContext>().inner().clone(),
     );
 
-    // Existing Steam games pick up Steam's covers without a manual scan.
-    let backfill_db = Arc::clone(&database);
-    let backfill_assets = AssetManager::new(asset_cache_dir.clone());
-    let handle = app.handle().clone();
-    std::thread::spawn(move || {
-        match assets::backfill_steam_covers(&backfill_db, &backfill_assets) {
-            Ok(0) => {}
-            Ok(count) => {
-                info!("scanned {count} Steam games for their covers");
-                let _ = handle.emit(LIBRARY_CHANGED_EVENT, ());
-            }
-            Err(error) => log::warn!("artwork backfill failed: {error}"),
-        }
-        match discovery::backfill_launcher_ids(&backfill_db) {
-            Ok(0) => {}
-            Ok(count) => info!("stored the launcher ids of {count} games"),
-            Err(error) => log::warn!("launcher id backfill failed: {error}"),
-        }
-        match assets::sweep_cache(&backfill_db, &backfill_assets) {
-            Ok(0) => {}
-            Ok(count) => info!("removed {count} cached images no game uses"),
-            Err(error) => log::warn!("artwork cache sweep failed: {error}"),
-        }
-    });
+    start_backfills(
+        app.handle().clone(),
+        Arc::clone(&database),
+        AssetManager::new(asset_cache_dir.clone()),
+    );
 
     app.manage(discovery::auto::FoundGames::default());
     discovery::auto::start(app.handle().clone(), Arc::clone(&database));
@@ -314,6 +295,37 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Work left from older versions and the artwork cache sweep, once per start
+/// on a thread of its own. Existing Steam games pick up Steam's covers
+/// without a manual scan.
+fn start_backfills(app: tauri::AppHandle, database: Arc<Database>, assets: AssetManager) {
+    let spawned = std::thread::Builder::new()
+        .name("vaultime-backfill".into())
+        .spawn(move || {
+            match assets::backfill_steam_covers(&database, &assets) {
+                Ok(0) => {}
+                Ok(count) => {
+                    info!("scanned {count} Steam games for their covers");
+                    let _ = app.emit(LIBRARY_CHANGED_EVENT, ());
+                }
+                Err(error) => log::warn!("artwork backfill failed: {error}"),
+            }
+            match discovery::backfill_launcher_ids(&database) {
+                Ok(0) => {}
+                Ok(count) => info!("stored the launcher ids of {count} games"),
+                Err(error) => log::warn!("launcher id backfill failed: {error}"),
+            }
+            match assets::sweep_cache(&database, &assets) {
+                Ok(0) => {}
+                Ok(count) => info!("removed {count} cached images no game uses"),
+                Err(error) => log::warn!("artwork cache sweep failed: {error}"),
+            }
+        });
+    if let Err(error) = spawned {
+        log::warn!("could not start the backfills: {error}");
+    }
 }
 
 /// Checks every `AUTO_BACKUP_CHECK_INTERVAL` whether the daily automatic
