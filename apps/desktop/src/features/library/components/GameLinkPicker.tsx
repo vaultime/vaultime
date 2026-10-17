@@ -3,6 +3,7 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { compareTitles } from "@/lib/game-sort";
 import type { Game } from "@/lib/types";
 
 /** Which game of this PC a game counts as, or none: for a game of another PC, or another install here. */
@@ -20,7 +21,7 @@ export function GameLinkPicker({
   suggestedBecause?: "launcher" | "title" | null;
   onChange: (gameId: string | null) => void;
 }) {
-  const sorted = [...games].sort((a, b) => a.title.localeCompare(b.title));
+  const sorted = [...games].sort((a, b) => compareTitles(a.title, b.title));
   const chosen = games.find((game) => game.id === value);
   const hint = suggestedBecause === "launcher" ? "same launcher id" : "same title";
   const ordered = suggested

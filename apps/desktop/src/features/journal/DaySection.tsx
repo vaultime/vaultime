@@ -11,6 +11,7 @@ import { DAYS_PER_WEEK } from "@/lib/constants";
 import { sideBySideSentence, statusSentence } from "@/lib/sentences";
 import { afterMidnightLead, continuedAmounts, continuedPhrase, sessionAmounts } from "@/lib/session-lines";
 import {
+  compareTimes,
   formatClockTime,
   formatDate,
   formatHoursMinutes,
@@ -203,7 +204,7 @@ export const DaySection = memo(function DaySection({
   const startedToday = new Set(day.sessionIds);
   const continued = [...new Map(parts.map((part) => [part.session.id, part.session])).values()]
     .filter((session) => !startedToday.has(session.id))
-    .sort((a, b) => a.started_at_wall.localeCompare(b.started_at_wall));
+    .sort((a, b) => compareTimes(a.started_at_wall, b.started_at_wall));
 
   /** Pointing at or focusing a session's line marks all its parts, on this day and others. */
   const linkProps = (sessionId: string) => ({
@@ -377,7 +378,7 @@ export const DaySection = memo(function DaySection({
           }),
           ...day.changes.map((change) => ({ at: change.changed_at, session: null, change })),
         ]
-          .sort((a, b) => a.at.localeCompare(b.at))
+          .sort((a, b) => compareTimes(a.at, b.at))
           .map(({ session, change }) => {
             if (change) {
               if (change.status === "none") return null;

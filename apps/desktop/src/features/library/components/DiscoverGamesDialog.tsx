@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { foundGamesText, offeredPaths } from "@/lib/found-games";
+import { compareTitles } from "@/lib/game-sort";
 import { whereFrom } from "@/lib/links";
 import * as api from "@/lib/tauri";
 import type { DiscoveredGame, NewGames } from "@/lib/types";
@@ -46,7 +47,7 @@ function pathKey(path: string): string {
 
 /** Games found at start, by title. All of them come from launchers, so all start selected. */
 function foundResults(found: NewGames | null | undefined): DiscoveredGame[] {
-  return [...(found?.games ?? [])].sort((a, b) => a.title.localeCompare(b.title));
+  return [...(found?.games ?? [])].sort((a, b) => compareTitles(a.title, b.title));
 }
 
 export function DiscoverGamesDialog({
@@ -132,7 +133,7 @@ export function DiscoverGamesDialog({
         if (!insideLauncherFolder && !byPath.has(game.executable_path)) byPath.set(game.executable_path, game);
       }
       const merged = [...byPath.values()].sort((a, b) =>
-        a.already_added !== b.already_added ? (a.already_added ? 1 : -1) : a.title.localeCompare(b.title),
+        a.already_added !== b.already_added ? (a.already_added ? 1 : -1) : compareTitles(a.title, b.title),
       );
       setResults(merged);
       // What the player saw here never comes back as found at start.

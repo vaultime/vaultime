@@ -18,11 +18,11 @@ import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import {
   formatClockTime,
+  formatDate,
   formatHoursMinutes,
   fromLocalInput,
   parseVaultimeDate,
   toLocalInput,
-  UI_LOCALE,
 } from "@/lib/time";
 import type { Session } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
@@ -82,7 +82,7 @@ export function CorrectSessionDialog({
   const kept = mode === "discard" ? { runtime_ms: 0, active_ms: 0 } : preview?.end === endIso ? preview : null;
   const counts = kept?.runtime_ms ?? recorded;
   const activeAfter = kept?.active_ms ?? session.active_ms + (session.set_aside_active_ms ?? 0);
-  const day = (date: Date) => date.toLocaleDateString(UI_LOCALE, { weekday: "long", day: "numeric", month: "long" });
+  const day = (date: Date) => formatDate(date, { weekday: "long", day: "numeric", month: "long" });
   const sameDay = day(start) === day(end);
 
   async function save(event: FormEvent) {

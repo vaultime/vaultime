@@ -11,7 +11,7 @@ import { GAME_HISTORY_DAYS, GAME_HISTORY_MONTHS, LIVE_TOTALS_REFRESH_MS } from "
 import { markColors, type GameTint } from "@/lib/game-tint";
 import { groupByBucket } from "@/lib/play-totals";
 import * as api from "@/lib/tauri";
-import { parseVaultimeDate, startOfWeek, toDayKey, UI_LOCALE } from "@/lib/time";
+import { parseVaultimeDate, startOfDay, startOfWeek, toDayKey, UI_LOCALE } from "@/lib/time";
 import type { PlayBucket, PlayTotal, Session } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { cn, describeError } from "@/lib/utils";
@@ -38,15 +38,11 @@ function monthKey(date: Date): string {
 
 /** What a range asks the core for: from, to and the bucket. */
 function queryOf(range: Range, now: Date, firstYear: number): [string, string, PlayBucket] {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = toDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
+  const today = startOfDay(now);
+  const tomorrow = toDayKey(startOfDay(today, 1));
   switch (range) {
     case "days":
-      return [
-        toDayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - (GAME_HISTORY_DAYS - 1))),
-        tomorrow,
-        "day",
-      ];
+      return [toDayKey(startOfDay(today, -(GAME_HISTORY_DAYS - 1))), tomorrow, "day"];
     case "months":
       return [
         toDayKey(new Date(today.getFullYear(), today.getMonth() - (GAME_HISTORY_MONTHS - 1), 1)),
@@ -72,7 +68,7 @@ function pointsOf(range: Exclude<Range, "calendar">, totals: PlayTotal[], now: D
   });
   if (range === "days") {
     return Array.from({ length: GAME_HISTORY_DAYS }, (_, index) => {
-      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (GAME_HISTORY_DAYS - 1 - index));
+      const day = startOfDay(now, -(GAME_HISTORY_DAYS - 1 - index));
       return point(toDayKey(day), DAY_LABEL.format(day), DAY_NAME.format(day));
     });
   }

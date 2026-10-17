@@ -3,7 +3,7 @@
 
 import { EVENT_LOG_LIMIT } from "@/lib/constants";
 import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integrity";
-import { formatSessionStart } from "@/lib/time";
+import { compareTimes, formatSessionStart } from "@/lib/time";
 import type { SessionEvent } from "@/lib/types";
 
 /** The notable local events, for anyone who wants to check the record. */
@@ -11,7 +11,7 @@ export function EventLog({ events }: { events: SessionEvent[] }) {
   const notable = events.filter((event) => event.event_type !== "heartbeat");
   if (notable.length === 0) return null;
   const shown = [...notable]
-    .sort((a, b) => b.event_time_wall.localeCompare(a.event_time_wall))
+    .sort((a, b) => compareTimes(b.event_time_wall, a.event_time_wall))
     .slice(0, EVENT_LOG_LIMIT);
 
   return (

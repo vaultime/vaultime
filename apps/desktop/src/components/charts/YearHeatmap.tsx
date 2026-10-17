@@ -5,7 +5,7 @@ import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type 
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import type { BucketPlay } from "@/lib/play-totals";
 import { heatLevel } from "@/lib/stats";
-import { toDayKey, UI_LOCALE, weekdayOf } from "@/lib/time";
+import { startOfDay, toDayKey, UI_LOCALE, weekdayOf } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { cardPosition, describePlay, type GameLabel } from "./play-card";
 import { PlayCard } from "./PlayCard";
@@ -14,9 +14,6 @@ import { PlayCard } from "./PlayCard";
 const LEVELS = ["bg-raised", "bg-violet/20", "bg-violet/35", "bg-violet/55", "bg-violet/75", "bg-violet"];
 const WEEKDAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""];
 
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
 
 /** Weeks from the Monday on or before 1 January to the week of 31 December. */
 function weeksOf(year: number): Date[][] {
@@ -25,8 +22,8 @@ function weeksOf(year: number): Date[][] {
   let monday = new Date(year, 0, 1 - weekdayOf(first));
   while (monday <= new Date(year, 11, 31)) {
     const start = monday;
-    weeks.push(Array.from({ length: DAYS_PER_WEEK }, (_, index) => addDays(start, index)));
-    monday = addDays(start, DAYS_PER_WEEK);
+    weeks.push(Array.from({ length: DAYS_PER_WEEK }, (_, index) => startOfDay(start, index)));
+    monday = startOfDay(start, DAYS_PER_WEEK);
   }
   return weeks;
 }
@@ -58,7 +55,7 @@ export const YearHeatmap = memo(function YearHeatmap({
   onOpenDay: (day: Date) => void;
 }) {
   const weeks = useMemo(() => weeksOf(year), [year]);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = startOfDay(now);
   const first = new Date(year, 0, 1);
   const last = new Date(year, 11, 31) < today ? new Date(year, 11, 31) : today;
   const frame = useRef<HTMLDivElement>(null);
@@ -79,10 +76,10 @@ export const YearHeatmap = memo(function YearHeatmap({
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const from = focused ?? last;
     const steps: Record<string, () => Date> = {
-      ArrowUp: () => addDays(from, -1),
-      ArrowDown: () => addDays(from, 1),
-      ArrowLeft: () => addDays(from, -DAYS_PER_WEEK),
-      ArrowRight: () => addDays(from, DAYS_PER_WEEK),
+      ArrowUp: () => startOfDay(from, -1),
+      ArrowDown: () => startOfDay(from, 1),
+      ArrowLeft: () => startOfDay(from, -DAYS_PER_WEEK),
+      ArrowRight: () => startOfDay(from, DAYS_PER_WEEK),
       Home: () => first,
       End: () => last,
     };

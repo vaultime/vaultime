@@ -18,7 +18,7 @@ import {
   type StackBlock,
 } from "@/lib/share-card";
 import { accentColor, groundColor, type GroundId, type ThemeMode } from "@/lib/theme";
-import { formatHoursMinutes, formatHoursShort, UI_LOCALE } from "@/lib/time";
+import { formatDate, formatHoursMinutes, formatHoursShort } from "@/lib/time";
 
 /** The player's look the card takes its colors from. */
 export interface CardLook {
@@ -262,7 +262,7 @@ function streakStat(card: ShareCard): Stat {
 function monthStat(card: ShareCard, short: boolean): Stat {
   const month = card.busiestMonth;
   const name = month
-    ? new Date(card.year, month.month, 1).toLocaleDateString(UI_LOCALE, { month: short ? "short" : "long" })
+    ? formatDate(new Date(card.year, month.month, 1), { month: short ? "short" : "long" })
     : "None";
   return { label: "Busiest month", value: name };
 }
@@ -528,7 +528,7 @@ class Painter {
     this.font(MONO, labelSize, 400);
     ctx.fillStyle = colors.faint;
     grid.monthColumns.forEach((column, month) => {
-      const name = new Date(card.year, month, 1).toLocaleDateString(UI_LOCALE, { month: "short" });
+      const name = formatDate(new Date(card.year, month, 1), { month: "short" });
       ctx.fillText(name, x + column * grid.pitch, top + labelSize);
     });
     const gridTop = top + scale.small * 1.6;

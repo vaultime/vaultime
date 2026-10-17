@@ -80,6 +80,15 @@ export function startOfDay(date: Date, plusDays = 0): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + plusDays);
 }
 
+/**
+ * Two stored times in order. The core writes them all in one form, so their
+ * text sorts like the moments, without the cost of a locale.
+ */
+export function compareTimes(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
 /** The local calendar day, "2026-09-29", as the core names days. */
 export function toDayKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");

@@ -27,7 +27,7 @@ import { gamePlaytime } from "@/lib/sentences";
 import { countsAsPlay } from "@/lib/sessions";
 import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
-import { formatCalendarDay, formatHoursMinutes } from "@/lib/time";
+import { compareTimes, formatCalendarDay, formatHoursMinutes } from "@/lib/time";
 import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { capitalize } from "@/lib/words";
@@ -60,7 +60,7 @@ function GamePage({ gameId }: { gameId: string }) {
     () =>
       allSessions
         .filter((session) => session.game_id === gameId)
-        .sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall)),
+        .sort((a, b) => compareTimes(b.started_at_wall, a.started_at_wall)),
     [allSessions, gameId],
   );
   const playing = usePlaying().has(gameId);

@@ -7,6 +7,7 @@ import { at } from "@/test/sessions";
 import {
   UI_LOCALE,
   clockPercent,
+  compareTimes,
   formatClock,
   formatDayPart,
   formatHoursMinutes,
@@ -203,5 +204,13 @@ describe("datetime-local values", () => {
   it("refuse broken values", () => {
     expect(fromLocalInput("")).toBeNull();
     expect(fromLocalInput("30.09.2026 20:05")).toBeNull();
+  });
+});
+
+describe("compareTimes", () => {
+  it("orders stored times like the moments they name", () => {
+    const times = ["2026-10-02T18:00:00.000Z", "2026-09-30T23:59:59.999Z", "2026-10-02T09:30:00.000Z"];
+    expect([...times].sort(compareTimes)).toEqual([times[1], times[2], times[0]]);
+    expect(compareTimes(times[0], times[0])).toBe(0);
   });
 });

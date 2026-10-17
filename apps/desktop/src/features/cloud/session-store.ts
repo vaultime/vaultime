@@ -13,6 +13,7 @@ import {
   storeCloudBackupKeySecure,
   storeCloudSessionSecure,
 } from "@/lib/tauri";
+import { compareTimes } from "@/lib/time";
 import type { CloudAuthSession, CloudBackupRecord } from "@/lib/types";
 
 export async function loadPersistedSession(): Promise<CloudAuthSession | null> {
@@ -87,7 +88,7 @@ export async function persistBackupPassphrase(
 ): Promise<void> {
   const newest = backups
     .filter((backup) => backup.status === "complete")
-    .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))[0];
+    .sort((a, b) => compareTimes(b.uploaded_at, a.uploaded_at))[0];
   await storeCloudBackupKeySecure(session.user.id, backupPassphrase.trim(), newest?.metadata_json?.key_check ?? null);
 }
 

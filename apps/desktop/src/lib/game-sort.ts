@@ -18,6 +18,11 @@ export function isGameSort(value: unknown): value is GameSort {
 /** Titles in the order of the user's region, case and accents aside, "Game 9" before "Game 10". */
 const TITLE_ORDER = new Intl.Collator(UI_LOCALE, { sensitivity: "base", numeric: true });
 
+/** Two titles in the order of the user's region, as the library sorts them. */
+export function compareTitles(a: string, b: string): number {
+  return TITLE_ORDER.compare(a, b);
+}
+
 interface Sortable {
   game: { title: string };
   totalMs: number;
@@ -27,7 +32,7 @@ interface Sortable {
 export function sortGames<T extends Sortable>(games: T[], sort: GameSort): T[] {
   if (sort === "recent") return games;
   const copy = [...games];
-  if (sort === "title") copy.sort((a, b) => TITLE_ORDER.compare(a.game.title, b.game.title));
+  if (sort === "title") copy.sort((a, b) => compareTitles(a.game.title, b.game.title));
   if (sort === "played") copy.sort((a, b) => b.totalMs - a.totalMs);
   return copy;
 }

@@ -14,7 +14,8 @@ import { useSettings } from "@/features/settings/settings-context";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { normalizeIntegrityStatus } from "@/lib/integrity";
 import { countsAsPlay } from "@/lib/sessions";
-import { toDayKey } from "@/lib/time";
+import { compareTitles } from "@/lib/game-sort";
+import { compareTimes, toDayKey } from "@/lib/time";
 import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
@@ -231,10 +232,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       summary.statusSince = change.status === "none" ? null : change.changed_at;
     }
     return [...byGame.values()].sort((a, b) => {
-      if (a.lastPlayedAt && b.lastPlayedAt) return b.lastPlayedAt.localeCompare(a.lastPlayedAt);
+      if (a.lastPlayedAt && b.lastPlayedAt) return compareTimes(b.lastPlayedAt, a.lastPlayedAt);
       if (a.lastPlayedAt) return -1;
       if (b.lastPlayedAt) return 1;
-      return a.game.title.localeCompare(b.game.title);
+      return compareTitles(a.game.title, b.game.title);
     });
   }, [games, sessions, covers, artTints, earlier, statusChanges, links]);
 
