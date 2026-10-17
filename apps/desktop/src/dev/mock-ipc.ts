@@ -1504,8 +1504,16 @@ mockIPC((cmd, payload) => {
       const ids = new Set(shownSessions().filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id));
     }
-    case "get_active_sessions":
-      return running;
+    case "get_active_sessions": {
+      // Counts on like a running game, so every poll brings new values as in the app.
+      const ran = Date.now() - now;
+      return running.map((session) => ({
+        ...session,
+        elapsed_monotonic_ms: session.elapsed_monotonic_ms + ran,
+        runtime_ms: session.runtime_ms + ran,
+        active_ms: session.active_ms + ran,
+      }));
+    }
     case "list_settings":
       return [
         { key: "idle_threshold_seconds", value: "300", updated_at: iso(now) },
