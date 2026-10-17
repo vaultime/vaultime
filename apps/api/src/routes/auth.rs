@@ -34,8 +34,6 @@ pub async fn sign_up(
     check_password_length(&payload.password)?;
     let parsed_invite = ParsedInviteCode::parse(&payload.invite_code)?;
 
-    let mut tx = state.db.begin().await?;
-
     // The invite is checked before anything else, so a stranger learns nothing
     // about which addresses have accounts and cannot make the server hash.
     let invite = sqlx::query_as::<_, InviteRow>(
@@ -43,11 +41,10 @@ pub async fn sign_up(
         SELECT id, salt, code_hash, max_redemptions, redeemed_count, expires_at, revoked_at
         FROM cloud_invites
         WHERE lookup_key = $1
-        FOR UPDATE
         "#,
     )
     .bind(&parsed_invite.lookup_key)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::bad_request("invite code is invalid"))?;
 
@@ -59,24 +56,13 @@ pub async fn sign_up(
     if !run_hash(&state, move || verify_invite_hash(&code, &salt, &code_hash)).await? {
         return Err(AppError::bad_request("invite code is invalid"));
     }
-    if invite.revoked_at.is_some() {
-        return Err(AppError::forbidden("invite has been revoked"));
-    }
-    if invite
-        .expires_at
-        .is_some_and(|expires_at| expires_at < Utc::now())
-    {
-        return Err(AppError::forbidden("invite has expired"));
-    }
-    if invite.redeemed_count >= invite.max_redemptions {
-        return Err(AppError::forbidden("this invite code has been used up"));
-    }
+    check_invite(&invite)?;
 
     let email_taken = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE email = $1)",
     )
     .bind(&email)
-    .fetch_one(&mut *tx)
+    .fetch_one(&state.db)
     .await?;
     if email_taken {
         return Err(AppError::conflict(
@@ -86,6 +72,24 @@ pub async fn sign_up(
 
     let password = payload.password;
     let password_hash = run_hash(&state, move || hash_password(&password)).await?;
+
+    // The hashes ran before, so the transaction holds its connection and the
+    // invite's lock only briefly. The lock lets one sign-up at a time count a
+    // redemption, so the invite is checked again under it.
+    let mut tx = state.db.begin().await?;
+    let invite = sqlx::query_as::<_, InviteRow>(
+        r#"
+        SELECT id, salt, code_hash, max_redemptions, redeemed_count, expires_at, revoked_at
+        FROM cloud_invites
+        WHERE id = $1
+        FOR UPDATE
+        "#,
+    )
+    .bind(invite.id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| AppError::bad_request("invite code is invalid"))?;
+    check_invite(&invite)?;
 
     let (account_id, account_email, account_role) = sqlx::query_as::<_, (Uuid, String, String)>(
         r#"
@@ -381,6 +385,23 @@ pub async fn change_password(
         refresh_token,
         refresh_expires_at,
     )?))
+}
+
+/// Whether the invite can still be redeemed.
+fn check_invite(invite: &InviteRow) -> AppResult<()> {
+    if invite.revoked_at.is_some() {
+        return Err(AppError::forbidden("invite has been revoked"));
+    }
+    if invite
+        .expires_at
+        .is_some_and(|expires_at| expires_at < Utc::now())
+    {
+        return Err(AppError::forbidden("invite has expired"));
+    }
+    if invite.redeemed_count >= invite.max_redemptions {
+        return Err(AppError::forbidden("this invite code has been used up"));
+    }
+    Ok(())
 }
 
 async fn issue_session(
