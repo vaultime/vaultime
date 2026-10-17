@@ -49,11 +49,11 @@ export interface LedgerReport {
   began_at: string | null;
   /** Entries in this PC's ledger. */
   entries: number;
-  /** Sessions that a ledger covers. */
+  /** Sessions that this PC's ledger covers. */
   covered_sessions: number;
-  /** Sessions a ledger names that are gone without a note that the player removed them. */
+  /** Sessions this PC's ledger names that are gone without a note that the player removed them. */
   missing_sessions: number;
-  /** Whether any ledger fails its check. */
+  /** Whether this PC's ledger fails its check. */
   broken: boolean;
 }
 
@@ -69,7 +69,6 @@ export interface Device {
   merged_at: string | null;
 }
 
-/** A game of another PC that counts as a game of this PC. */
 /** A game that counts as another one: another install here, or a game of another PC. */
 export interface GameLink {
   game_id: string;
@@ -217,6 +216,13 @@ export interface Session {
    * shows it up to its last event in `ended_at_wall`, though it stays open until a merge brings its end.
    */
   still_running_on?: string;
+}
+
+/** What a trim would leave of a session. Mirrors the Rust `TrimPreview` struct. */
+export interface TrimPreview {
+  runtime_ms: number;
+  active_ms: number;
+  idle_ms: number;
 }
 
 /** Mirrors the Rust `ExportFormat` enum. */

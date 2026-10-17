@@ -33,6 +33,7 @@ import type {
   SteamPlaytimePreview,
   ThisPc,
   TrackingDiagnostics,
+  TrimPreview,
   UpdateGameInput,
   WindowLook,
   WindowSizeChoice,
@@ -239,7 +240,7 @@ export async function listIgnoredPrograms(): Promise<IgnoredProgram[]> {
 
 /** Never offers this program again and never counts it. */
 export async function ignoreProgram(path: string, title: string): Promise<void> {
-  await invoke("ignore_program", { path, title });
+  await invoke<void>("ignore_program", { path, title });
 }
 
 /** Lets discovery offer an ignored program again and the tracker count it. */
@@ -253,11 +254,8 @@ export async function setGameStepsAside(gameId: string, stepsAside: boolean): Pr
 }
 
 /** What a closed session would keep when it counted only up to `endedAt`. */
-export async function previewTrim(
-  sessionId: string,
-  endedAt: string,
-): Promise<{ runtime_ms: number; active_ms: number; idle_ms: number }> {
-  return invoke("preview_trim", { sessionId, endedAt });
+export async function previewTrim(sessionId: string, endedAt: string): Promise<TrimPreview> {
+  return invoke<TrimPreview>("preview_trim", { sessionId, endedAt });
 }
 
 /** Takes all time out of a closed session, with a reason. */
@@ -314,7 +312,7 @@ export async function removeSteamPlaytime(): Promise<number> {
 
 /** Turns the tray and taskbar icon violet while signed in to cloud backup. */
 export async function setCloudSignedIn(signedIn: boolean): Promise<void> {
-  return invoke("set_cloud_signed_in", { signedIn });
+  return invoke<void>("set_cloud_signed_in", { signedIn });
 }
 
 export async function getAutoBackupFolder(): Promise<string> {

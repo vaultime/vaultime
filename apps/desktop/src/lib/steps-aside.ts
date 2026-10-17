@@ -23,7 +23,8 @@ function firstNotBefore<T>(list: T[], before: (item: T) => boolean): number {
 /** Whether a game counts only while no other game runs. */
 export function stepsAside(game: Game): boolean {
   try {
-    return JSON.parse(game.metadata_json || "{}")?.steps_aside === true;
+    const metadata: unknown = JSON.parse(game.metadata_json || "{}");
+    return typeof metadata === "object" && metadata !== null && "steps_aside" in metadata && metadata.steps_aside === true;
   } catch {
     return false;
   }
