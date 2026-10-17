@@ -185,7 +185,7 @@ export function ShareYearDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(760px,calc(100dvh-2rem))] w-[min(1180px,calc(100%-2rem))] max-w-none grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-none">
+      <DialogContent className="h-[min(760px,calc(100dvh-2rem))] w-[min(1180px,calc(100%-2rem))] max-w-none grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-none [&>[data-slot=dialog-close]]:z-20">
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_300px]">
           <CardPreview card={card} options={options} look={appearance} year={stats.year}>
             <SidePanel
@@ -349,9 +349,12 @@ function SidePanel({
 }) {
   return (
     <div className="flex min-h-0 flex-col border-l border-rule">
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-7 pb-5 short:pt-5">
-        <div className="label-caps">Stats, {year}</div>
-        <DialogTitle className="mt-2 text-[28px]">Share your year</DialogTitle>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">
+        {/* Stays on top, so the options scroll under it, not under the close button. */}
+        <div className="sticky top-0 z-10 -mx-6 bg-surface px-6 pt-7 pb-2 short:pt-5">
+          <div className="label-caps">Stats, {year}</div>
+        </div>
+        <DialogTitle className="text-[28px]">Share your year</DialogTitle>
         <DialogDescription className="mt-2">
           A picture of {year} in play, made on this PC. Nothing is uploaded.
         </DialogDescription>
