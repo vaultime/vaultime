@@ -36,5 +36,5 @@ dist-linux/
 dist-api/
 dist-site/
 
-# Local Claude Code settings
-.claude/settings.local.json
+# Local Claude Code settings and agent worktrees
+.claude/
