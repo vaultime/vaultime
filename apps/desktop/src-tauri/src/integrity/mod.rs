@@ -58,7 +58,9 @@ pub fn now_timestamp() -> String {
     format_timestamp(Utc::now())
 }
 
-/// Appends a session event while maintaining the per-session hash chain.
+/// Appends a session event while maintaining the per-session hash chain,
+/// and pins it in this PC's ledger: every event but checkpoints, and a
+/// checkpoint every `CHECKPOINT_PIN_INTERVAL_SECS` of runtime.
 pub fn append_session_event(
     conn: &Connection,
     session_id: &str,
@@ -67,6 +69,9 @@ pub fn append_session_event(
     event_time_monotonic: Option<i64>,
     payload_json: &str,
 ) -> Result<()> {
+    // Decided before the checkpoint is in, from the one before it.
+    let pinned = event_type != "heartbeat"
+        || ledger::pins_checkpoint(conn, session_id, event_time_monotonic)?;
     let (next_sequence, previous_hash) = next_sequence_and_previous_hash(conn, session_id)?;
     let hash_self = compute_event_hash(
         session_id,
@@ -99,6 +104,9 @@ pub fn append_session_event(
         VaultimeError::Integrity(format!("failed to append session event: {error}"))
     })?;
 
+    if !pinned {
+        return Ok(());
+    }
     ledger::pin(conn, session_id, next_sequence, &hash_self, event_type)
 }
 
@@ -118,7 +126,7 @@ pub fn validate_session_history(conn: &Connection, session: &Session) -> Result<
 pub(crate) fn adopt_sound_sessions(
     conn: &Connection,
     trust: &ledger::Trust,
-    vouched_before: &HashMap<String, Vec<(i64, String)>>,
+    vouched_before: &HashMap<String, Vec<ledger::StoredPin>>,
     via: &str,
     backup_id: &str,
 ) -> Result<usize> {
@@ -155,7 +163,7 @@ pub(crate) fn adopt_sound_sessions(
                 == Some("not_in_ledger")
             && vouched_before
                 .get(&session.id)
-                .is_some_and(|pins| pins_confirm(pins, &events, session.ended_at_wall.is_some()));
+                .is_some_and(|pins| pins_confirm(pins, session, &events));
         if (passes || known_here)
             && let Some(newest) = events.last()
             && let Some(hash) = newest.hash_self.clone()
@@ -174,20 +182,31 @@ pub(crate) fn adopt_sound_sessions(
     Ok(sound.len())
 }
 
-/// Whether pins confirm a chain: one of them lies within it, each that does
-/// matches it, and a closed session's time lies in a pinned part of it, as
-/// `ledger::session_problem` asks. Pins past its end belong to a later state.
-fn pins_confirm(pins: &[(i64, String)], events: &[SessionEvent], closed: bool) -> bool {
-    let within: Vec<&(i64, String)> = pins
-        .iter()
-        .filter(|(sequence, _)| {
-            usize::try_from(*sequence).is_ok_and(|n| n >= 1 && n <= events.len())
-        })
-        .collect();
-    let Some(newest_pinned) = within.iter().map(|(sequence, _)| *sequence).max() else {
+/// Whether pins confirm a session: one of them lies within its chain, each
+/// that does matches it, a closed session's time lies in a pinned part of
+/// it, and its time runs at most one pin interval past its newest pinned
+/// checkpoint, as `ledger::session_problem` asks. Pins past its end belong
+/// to a later state.
+fn pins_confirm(pins: &[ledger::StoredPin], session: &Session, events: &[SessionEvent]) -> bool {
+    let mut within = Vec::new();
+    let mut points = Vec::new();
+    for pin in pins {
+        let payload = parse_payload(&pin.2).unwrap_or(Value::Null);
+        let (Some(sequence), Some(hash)) = (
+            payload_i64(&payload, "sequence"),
+            payload_str(&payload, "hash"),
+        ) else {
+            continue;
+        };
+        if usize::try_from(sequence).is_ok_and(|n| n >= 1 && n <= events.len()) {
+            within.push(pin.clone());
+            points.push((sequence, hash.to_owned()));
+        }
+    }
+    let Some(newest_pinned) = points.iter().map(|(sequence, _)| *sequence).max() else {
         return false;
     };
-    let matches = within.iter().all(|(sequence, hash)| {
+    let matches = points.iter().all(|(sequence, hash)| {
         sequence
             .checked_sub(1)
             .and_then(|index| usize::try_from(index).ok())
@@ -198,7 +217,11 @@ fn pins_confirm(pins: &[(i64, String)], events: &[SessionEvent], closed: bool) -
         .iter()
         .rev()
         .find(|event| TIMING_EVENTS.contains(&event.event_type.as_str()));
-    matches && !(closed && newest_timing.is_some_and(|event| event.sequence > newest_pinned))
+    let closed = session.ended_at_wall.is_some();
+    let counters = [session.runtime_ms, session.active_ms, session.idle_ms];
+    matches
+        && !(closed && newest_timing.is_some_and(|event| event.sequence > newest_pinned))
+        && ledger::pins_vouch_for_time(&within, events, counters)
 }
 
 /// `validate_session_history` with the pins of `viewpoint`'s keys counting,

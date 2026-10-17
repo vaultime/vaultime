@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Trust
 
 - **Another PC's running session stays its own.** Restoring a backup that another PC made while a game ran there leaves that session open, exactly as that PC recorded it, instead of closing it here as Recovered. It counts up to its last saved time, says it was still running on that PC, and never shows in the live bar or the tray. Merging a later backup of that PC brings its real end. Closing it here added to a record only that PC may extend, so its real end clashed with it later and most of the session was lost. Only this PC's own sessions are closed after a crash or a restore, and only they keep a restore waiting.
+- **Recovered time is pinned too.** While a game runs, the ledger now also holds on to the session's record once every five minutes of play, about twelve times an hour. After a crash, a session still keeps its time up to Vaultime's last note, but only five minutes past the last note the ledger holds count. A session whose notes ran further, as when the last one was raised outside Vaultime before a restart or in a backup, is counted up to those five minutes and turns Suspicious, also when it comes from another PC. Notes in between used to be held by no ledger, so a raised one counted in full. Sessions recorded before this version keep their time as it was.
 
 ### Fixes
 

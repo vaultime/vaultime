@@ -2618,6 +2618,104 @@ mod tests {
         assert_eq!(desktop.status(&running.id), STATUS_LOCAL);
     }
 
+    const HOUR: i64 = 60 * MINUTE;
+
+    #[test]
+    fn a_checkpoint_raised_in_a_backup_made_during_play_counts_one_interval_at_most() {
+        let desktop = Pc::new("desktop");
+        let game = desktop.game("Celeste", None);
+        desktop.act();
+        let running = sessions::create_session(&desktop.db, &game, "desktop").unwrap();
+        for minutes in [2, 4, 6, 7] {
+            sessions::record_checkpoint(
+                &desktop.db,
+                &running.id,
+                &after(minutes),
+                STATUS_LOCAL,
+                Utc::now(),
+            )
+            .unwrap();
+        }
+        let backup = desktop.back_up();
+        rewrite(&backup, |conn| {
+            ledger::raise_last_checkpoint(conn, &running.id, 100 * HOUR);
+        });
+
+        desktop.act();
+        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &backup).unwrap();
+        // Pinned at six minutes, so it counts five more at most.
+        let interval = crate::constants::CHECKPOINT_PIN_INTERVAL_SECS * 1_000;
+        let restored = desktop
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT runtime_ms FROM sessions WHERE id = ?1",
+                    [&running.id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        assert_eq!(restored, 6 * MINUTE + interval);
+        assert_eq!(desktop.status(&running.id), integrity::STATUS_SUSPICIOUS);
+    }
+
+    #[test]
+    fn a_session_whose_time_runs_far_past_its_pins_comes_in_unvouched() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        laptop.act();
+        let session = sessions::create_session(&laptop.db, &game, "laptop").unwrap();
+        for minutes in [3, 6, 7] {
+            sessions::record_checkpoint(
+                &laptop.db,
+                &session.id,
+                &after(minutes),
+                STATUS_LOCAL,
+                Utc::now(),
+            )
+            .unwrap();
+        }
+        // The last checkpoint raised, then closed with the laptop's own key
+        // the way a recovery that checks nothing would close it.
+        laptop
+            .db
+            .with_transaction(|conn| {
+                ledger::raise_last_checkpoint(conn, &session.id, 100 * HOUR);
+                let wall = integrity::now_timestamp();
+                integrity::append_session_event(
+                    conn,
+                    &session.id,
+                    "recovered",
+                    &wall,
+                    Some(100 * HOUR),
+                    &json!({
+                        "reason": "startup_orphan_cleanup", "ended_at_wall": wall,
+                        "runtime_ms": 100 * HOUR, "active_ms": 100 * HOUR, "idle_ms": 0,
+                        "integrity_status": "recovered", "closed_cleanly": false,
+                    })
+                    .to_string(),
+                )?;
+                conn.execute(
+                    "UPDATE sessions SET ended_at_wall = ?1, integrity_status = 'recovered'
+                     WHERE id = ?2",
+                    params![wall, session.id],
+                )
+                .map_err(map_db)?;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(laptop.status(&session.id), integrity::STATUS_SUSPICIOUS);
+
+        let backup = laptop.back_up();
+        let preview = desktop.preview(&backup).unwrap();
+        assert_eq!((preview.new_sessions, preview.failing), (1, 1));
+        desktop.merge(&backup, &[]);
+        assert_eq!(desktop.status(&session.id), integrity::STATUS_SUSPICIOUS);
+        assert!(!desktop.adopted(&session.id));
+    }
+
     #[test]
     fn a_pc_name_from_a_backup_is_cleaned_like_a_rename() {
         let desktop = Pc::new("desktop");

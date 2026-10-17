@@ -115,7 +115,11 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Each PC keeps a ledger, a hash chain signed with a key in `device-key`
   next to the database, which backups leave out. `device-keys` lists every
   public key the PC has signed with. It pins a session's chain at every
-  event but checkpoints and notes removed sessions and restores. On a PC
+  event but checkpoints, a checkpoint each time the runtime enters a new
+  `CHECKPOINT_PIN_INTERVAL_SECS` stretch, and notes removed sessions and
+  restores. A session whose start names that interval may run at most one
+  interval past its newest pinned checkpoint, and a recovery caps it there.
+  On a PC
   only its own keys count, so every session there needs a pin of one of
   them: from its start, from when the ledger began, or from being taken in.
   Write session events only through `append_session_event`, which pins them.

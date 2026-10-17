@@ -54,11 +54,16 @@ const ENTRY_RESTORED: &str = "restored";
 /// A key of another PC that this PC trusts, from its first merge on.
 const ENTRY_TRUSTED: &str = "trusted";
 
-/// Session events the ledger pins. Checkpoints are left out, as there is one
-/// every half minute and dropping the newest ones only takes time away.
-fn pins(event_type: &str) -> bool {
-    event_type != "heartbeat"
-}
+/// The field of a session's start that names how often its checkpoints are
+/// pinned, in seconds. Sessions from before checkpoint pins lack it.
+pub(crate) const CHECKPOINT_PIN_FIELD: &str = "checkpoint_pin_secs";
+/// Events whose counters a pin vouches for: the start at zero, checkpoints,
+/// the end and a session added by hand.
+const COUNTER_EVENTS: [&str; 4] = ["started", "heartbeat", "ended", "added_manually"];
+/// Events that state counters an earlier event or the player gave, so their
+/// pins vouch for no time: a recovery takes the last checkpoint's counters
+/// and a correction the player's.
+const RESTATING_EVENTS: [&str; 2] = ["recovered", "corrected"];
 
 static KEY: OnceLock<SigningKey> = OnceLock::new();
 static DEVICE: OnceLock<String> = OnceLock::new();
@@ -353,8 +358,8 @@ fn write_entry(
     Ok(())
 }
 
-/// Pins a session's chain at an event just appended, unless the ledger
-/// leaves that kind of event out.
+/// Pins a session's chain at an event just appended. See
+/// `pins_checkpoint` for the checkpoints it pins.
 pub(crate) fn pin(
     conn: &Connection,
     session_id: &str,
@@ -362,15 +367,207 @@ pub(crate) fn pin(
     hash: &str,
     event_type: &str,
 ) -> Result<()> {
-    if !pins(event_type) {
-        return Ok(());
-    }
     append(
         conn,
         ENTRY_PINNED,
         Some(session_id),
         &json!({ "sequence": sequence, "hash": hash, "event_type": event_type }),
     )
+}
+
+/// Whether a checkpoint about to be appended with `runtime_ms` gets pinned:
+/// when its session's start names a pin interval and the checkpoint's
+/// runtime lies in another stretch of it than the start or checkpoint before
+/// it. The newest pinned checkpoint then always lies less than one interval
+/// behind the newest one.
+pub(crate) fn pins_checkpoint(
+    conn: &Connection,
+    session_id: &str,
+    runtime_ms: Option<i64>,
+) -> Result<bool> {
+    let start: Option<String> = conn
+        .prepare_cached(
+            "SELECT payload_json FROM session_events
+             WHERE session_id = ?1 AND sequence = 1 AND event_type = 'started'",
+        )
+        .and_then(|mut stmt| stmt.query_row([session_id], |row| row.get(0)).optional())
+        .map_err(ledger_error)?;
+    let Some(interval_ms) = start.as_deref().and_then(interval_in_start) else {
+        return Ok(false);
+    };
+    let previous: Option<Option<i64>> = conn
+        .prepare_cached(
+            "SELECT event_time_monotonic FROM session_events
+             WHERE session_id = ?1 AND event_type IN ('started', 'heartbeat')
+             ORDER BY sequence DESC LIMIT 1",
+        )
+        .and_then(|mut stmt| stmt.query_row([session_id], |row| row.get(0)).optional())
+        .map_err(ledger_error)?;
+    let stretch = |ms: i64| ms.div_euclid(interval_ms);
+    Ok(match (previous.flatten(), runtime_ms) {
+        (Some(previous), Some(runtime)) => stretch(runtime) != stretch(previous),
+        _ => true,
+    })
+}
+
+/// The pin interval a session's start names, in milliseconds.
+fn interval_in_start(payload_json: &str) -> Option<i64> {
+    let payload: Value = serde_json::from_str(payload_json).ok()?;
+    payload
+        .get(CHECKPOINT_PIN_FIELD)?
+        .as_i64()?
+        .checked_mul(1_000)
+        .filter(|interval| *interval > 0)
+}
+
+/// The counters an event states, the start at zero.
+fn counters_of(event: &SessionEvent) -> Option<[i64; 3]> {
+    if !COUNTER_EVENTS.contains(&event.event_type.as_str()) {
+        return None;
+    }
+    if event.event_type == "started" {
+        return Some([0; 3]);
+    }
+    let payload: Value = serde_json::from_str(&event.payload_json).ok()?;
+    let read = |key: &str| payload.get(key).and_then(Value::as_i64);
+    Some([read("runtime_ms")?, read("active_ms")?, read("idle_ms")?])
+}
+
+/// How far a session's time may run past what its pins vouch for: the
+/// counters of its newest event with counters up to the newest pinned one,
+/// when that was, and the interval its start names. None for a session from
+/// before checkpoint pins, whose time counts as recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TailLimit {
+    pub counters: [i64; 3],
+    pub wall: String,
+    pub interval_ms: i64,
+}
+
+impl TailLimit {
+    /// Works out the limit from `events`, in order, of which the pins vouch
+    /// for those up to `vouched_through`.
+    pub(crate) fn of(events: &[SessionEvent], vouched_through: i64) -> Option<Self> {
+        let first = events
+            .first()
+            .filter(|event| event.event_type == "started")?;
+        let interval_ms = interval_in_start(&first.payload_json)?;
+        let (wall, counters) = events
+            .iter()
+            .rev()
+            .filter(|event| event.sequence <= vouched_through)
+            .find_map(|event| counters_of(event).map(|counters| (&event.event_time_wall, counters)))
+            .unwrap_or((&first.event_time_wall, [0; 3]));
+        Some(Self {
+            counters,
+            wall: wall.clone(),
+            interval_ms,
+        })
+    }
+
+    /// Whether any of `counters` runs more than the interval past the
+    /// vouched ones.
+    pub(crate) fn exceeded_by(&self, counters: [i64; 3]) -> bool {
+        counters
+            .iter()
+            .zip(self.counters)
+            .any(|(value, vouched)| *value > vouched.saturating_add(self.interval_ms))
+    }
+
+    /// `counters` with the time past the vouched ones shrunk alike until
+    /// none runs more than the interval past them.
+    pub(crate) fn cap(&self, counters: [i64; 3]) -> [i64; 3] {
+        let tail: [i64; 3] = std::array::from_fn(|index| {
+            counters[index].saturating_sub(self.counters[index]).max(0)
+        });
+        let longest = tail.iter().copied().max().unwrap_or(0);
+        if longest <= self.interval_ms {
+            return counters;
+        }
+        std::array::from_fn(|index| {
+            let shrunk =
+                i128::from(tail[index]) * i128::from(self.interval_ms) / i128::from(longest);
+            self.counters[index]
+                .saturating_add(i64::try_from(shrunk).unwrap_or(self.interval_ms))
+                .min(counters[index])
+        })
+    }
+}
+
+/// A pin as stored: the key that signed it, its entry type and payload.
+pub(crate) type StoredPin = (String, String, String);
+
+/// The newest event of `events` that `pins` vouch for, other than by a
+/// recovery or a correction. A pin at an event vouches for every event
+/// before it, as each event's hash covers the one before.
+fn vouched_through<'a>(
+    pins: impl IntoIterator<Item = &'a StoredPin>,
+    events: &[SessionEvent],
+) -> i64 {
+    let mut newest = 0;
+    for (_, entry_type, payload_json) in pins {
+        let payload: Value = serde_json::from_str(payload_json).unwrap_or(Value::Null);
+        let (Some(sequence), Some(hash)) = (
+            payload.get("sequence").and_then(Value::as_i64),
+            payload.get("hash").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let restating = entry_type == ENTRY_PINNED
+            && payload
+                .get("event_type")
+                .and_then(Value::as_str)
+                .is_some_and(|event_type| RESTATING_EVENTS.contains(&event_type));
+        let matches = sequence
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
+            .and_then(|index| events.get(index))
+            .is_some_and(|event| event.hash_self.as_deref() == Some(hash));
+        if matches && !restating {
+            newest = newest.max(sequence);
+        }
+    }
+    newest
+}
+
+/// Whether `pins` vouch for a session's time: none of `counters` runs more
+/// than its start's pin interval past what they pin, see `TailLimit`.
+pub(crate) fn pins_vouch_for_time(
+    pins: &[StoredPin],
+    events: &[SessionEvent],
+    counters: [i64; 3],
+) -> bool {
+    TailLimit::of(events, vouched_through(pins, events))
+        .is_none_or(|limit| !limit.exceeded_by(counters))
+}
+
+/// The pins of a session as stored.
+fn session_pins(conn: &Connection, session_id: &str) -> Result<Vec<StoredPin>> {
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT key_id, entry_type, payload_json FROM ledger_entries
+             WHERE session_id = ?1 AND entry_type IN ('pinned', 'carried', 'adopted')",
+        )
+        .map_err(ledger_error)?;
+    let rows = stmt
+        .query_map([session_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map_err(ledger_error)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(ledger_error)
+}
+
+/// The limit this PC's own pins set for a session of `events`, see
+/// `TailLimit`.
+pub(crate) fn own_tail_limit(
+    conn: &Connection,
+    session_id: &str,
+    events: &[SessionEvent],
+) -> Result<Option<TailLimit>> {
+    let mine = own_keys()?;
+    let pins = session_pins(conn, session_id)?;
+    let through = vouched_through(pins.iter().filter(|(key, _, _)| mine.contains(key)), events);
+    Ok(TailLimit::of(events, through))
 }
 
 /// Vouches for a session taken in from a backup, at the event `sequence`
@@ -945,14 +1142,13 @@ impl Trust {
     }
 }
 
-/// The pins this PC's own keys hold in `conn`, by session, as sequence and
-/// hash, so a restore can tell which sessions of a backup this PC vouched
-/// for before.
-pub(crate) fn own_pins(conn: &Connection) -> Result<HashMap<String, Vec<(i64, String)>>> {
+/// The pins this PC's own keys hold in `conn`, by session, so a restore can
+/// tell which sessions of a backup this PC vouched for before.
+pub(crate) fn own_pins(conn: &Connection) -> Result<HashMap<String, Vec<StoredPin>>> {
     let mine = own_keys()?;
     let mut stmt = conn
         .prepare(
-            "SELECT key_id, session_id, payload_json FROM ledger_entries
+            "SELECT key_id, session_id, entry_type, payload_json FROM ledger_entries
              WHERE session_id IS NOT NULL AND entry_type IN ('pinned', 'carried', 'adopted')",
         )
         .map_err(ledger_error)?;
@@ -962,23 +1158,17 @@ pub(crate) fn own_pins(conn: &Connection) -> Result<HashMap<String, Vec<(i64, St
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
             ))
         })
         .map_err(ledger_error)?;
-    let mut pins: HashMap<String, Vec<(i64, String)>> = HashMap::new();
+    let mut pins: HashMap<String, Vec<StoredPin>> = HashMap::new();
     for row in rows {
-        let (key, session, payload) = row.map_err(ledger_error)?;
-        if !mine.contains(&key) {
-            continue;
-        }
-        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
-        if let (Some(sequence), Some(hash)) = (
-            payload.get("sequence").and_then(Value::as_i64),
-            payload.get("hash").and_then(Value::as_str),
-        ) {
+        let (key, session, entry_type, payload) = row.map_err(ledger_error)?;
+        if mine.contains(&key) {
             pins.entry(session)
                 .or_default()
-                .push((sequence, hash.to_owned()));
+                .push((key, entry_type, payload));
         }
     }
     Ok(pins)
@@ -1004,8 +1194,9 @@ pub(crate) fn trust_keys(conn: &Connection, device_id: &str, keys: &HashSet<Stri
 /// Why a session's chain disagrees with the ledgers, if it does, seen from
 /// `viewpoint`. Only the pins of its keys count: each must match the chain,
 /// one must cover the session from its start or from when it was carried or
-/// taken in, and a closed session's time must lie in a pinned part of its
-/// chain. `events` are in order and checked.
+/// taken in, a closed session's time must lie in a pinned part of its chain,
+/// and its time may run at most one pin interval past its newest pinned
+/// checkpoint. `events` are in order and checked.
 pub(crate) fn session_problem(
     conn: &Connection,
     session: &Session,
@@ -1013,21 +1204,7 @@ pub(crate) fn session_problem(
     timing_events: &[&str],
     viewpoint: Viewpoint,
 ) -> Result<Option<&'static str>> {
-    let pins: Vec<(String, String, String)> = {
-        let mut stmt = conn
-            .prepare_cached(
-                "SELECT key_id, entry_type, payload_json FROM ledger_entries
-                 WHERE session_id = ?1 AND entry_type IN ('pinned', 'carried', 'adopted')",
-            )
-            .map_err(ledger_error)?;
-        let rows = stmt
-            .query_map([&session.id], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })
-            .map_err(ledger_error)?;
-        rows.collect::<rusqlite::Result<_>>()
-            .map_err(ledger_error)?
-    };
+    let pins = session_pins(conn, &session.id)?;
     if pins.is_empty() {
         return Ok(Some("not_in_ledger"));
     }
@@ -1072,6 +1249,16 @@ pub(crate) fn session_problem(
         if newest_timing.is_some_and(|event| event.sequence > newest_pinned) {
             return Ok(Some("not_in_ledger"));
         }
+    }
+    // Time past the newest pinned checkpoint counts up to one interval,
+    // also when a recovery or a correction restates it later.
+    let counted_pins: Vec<StoredPin> = pins
+        .into_iter()
+        .filter(|(key, _, _)| counted.contains(key))
+        .collect();
+    let counters = [session.runtime_ms, session.active_ms, session.idle_ms];
+    if !pins_vouch_for_time(&counted_pins, events, counters) {
+        return Ok(Some("unpinned_time_too_long"));
     }
     Ok(None)
 }
@@ -1149,9 +1336,50 @@ pub fn report(conn: &Connection) -> Result<LedgerReport> {
     })
 }
 
+/// Raises the newest checkpoint of a session to `runtime_ms`, hashed the
+/// way the tracker hashes, with the row to match, as a database tool can.
+#[cfg(test)]
+pub(crate) fn raise_last_checkpoint(conn: &Connection, session: &str, runtime_ms: i64) {
+    let (sequence, wall, previous): (i64, String, Option<String>) = conn
+        .query_row(
+            "SELECT sequence, event_time_wall, hash_prev FROM session_events
+             WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+            [session],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    let payload = json!({
+        "runtime_ms": runtime_ms, "active_ms": runtime_ms, "idle_ms": 0,
+        "wall_elapsed_ms": runtime_ms, "drift_ms": 0, "integrity_status": "local",
+    })
+    .to_string();
+    let hash = super::compute_event_hash(
+        session,
+        sequence,
+        "heartbeat",
+        &wall,
+        Some(runtime_ms),
+        &payload,
+        previous.as_deref(),
+    );
+    conn.execute(
+        "UPDATE session_events SET payload_json = ?1, event_time_monotonic = ?2, hash_self = ?3
+         WHERE session_id = ?4 AND sequence = ?5",
+        rusqlite::params![payload, runtime_ms, hash, session, sequence],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sessions SET runtime_ms = ?1, elapsed_monotonic_ms = ?1, active_ms = ?1
+         WHERE id = ?2",
+        rusqlite::params![runtime_ms, session],
+    )
+    .unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::CHECKPOINT_PIN_INTERVAL_SECS;
     use crate::db::connection::Database;
     use crate::db::models::CreateGame;
     use crate::db::repo::sessions::Checkpoint;
@@ -1239,6 +1467,145 @@ mod tests {
 
     fn ledger_report(db: &Database) -> LedgerReport {
         db.with_conn(report).unwrap()
+    }
+
+    /// A checkpoint after `seconds` of active play.
+    fn checkpoint_at(db: &Database, session: &str, seconds: i64) {
+        let ms = seconds * 1_000;
+        let checkpoint = Checkpoint {
+            runtime_ms: ms,
+            active_ms: ms,
+            wall_elapsed_ms: ms,
+            ..Checkpoint::default()
+        };
+        sessions::record_checkpoint(db, session, &checkpoint, STATUS_LOCAL, chrono::Utc::now())
+            .unwrap();
+    }
+
+    /// A session left open as by a crash, with a checkpoint every half
+    /// minute up to `seconds`.
+    fn crashed_after(db: &Database, game: &str, seconds: i64) -> String {
+        let session = sessions::create_session(db, game, DEVICE).unwrap();
+        for at in (30..=seconds).step_by(30) {
+            checkpoint_at(db, &session.id, at);
+        }
+        session.id
+    }
+
+    /// The event types the ledger pinned for a session, in order.
+    fn pinned_types(db: &Database, session: &str) -> Vec<String> {
+        db.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT json_extract(payload_json, '$.event_type') FROM ledger_entries
+                     WHERE session_id = ?1 AND entry_type = 'pinned' ORDER BY sequence",
+                )
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map([session], |row| row.get(0))
+                .map_err(map_db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+        })
+        .unwrap()
+    }
+
+    const HOUR_MS: i64 = 3_600_000;
+
+    #[test]
+    fn pins_a_checkpoint_each_time_play_enters_a_new_interval() {
+        let (db, game) = setup();
+        let interval = CHECKPOINT_PIN_INTERVAL_SECS;
+        let session = crashed_after(&db, &game, 2 * interval + 60);
+        assert_eq!(
+            pinned_types(&db, &session),
+            ["started", "heartbeat", "heartbeat"]
+        );
+        assert_eq!(problem(&db, &session), None);
+    }
+
+    #[test]
+    fn an_honest_crash_keeps_its_time_as_recovered() {
+        let (db, game) = setup();
+        let seconds = CHECKPOINT_PIN_INTERVAL_SECS + 120;
+        let session = crashed_after(&db, &game, seconds);
+        let recovered = sessions::recover_session(&db, &session, "startup_orphan_cleanup").unwrap();
+        assert_eq!(recovered.runtime_ms, seconds * 1_000);
+        assert_eq!(recovered.integrity_status, integrity::STATUS_RECOVERED);
+        assert_eq!(problem(&db, &session), None);
+    }
+
+    #[test]
+    fn a_checkpoint_raised_after_a_crash_counts_one_interval_at_most() {
+        let (db, game) = setup();
+        let interval_ms = CHECKPOINT_PIN_INTERVAL_SECS * 1_000;
+        // Pinned at the first interval, then two more minutes unpinned.
+        let session = crashed_after(&db, &game, CHECKPOINT_PIN_INTERVAL_SECS + 120);
+        db.with_conn(|conn| {
+            raise_last_checkpoint(conn, &session, 100 * HOUR_MS);
+            Ok(())
+        })
+        .unwrap();
+        integrity::forget_checks();
+        assert_eq!(
+            problem(&db, &session).as_deref(),
+            Some("unpinned_time_too_long")
+        );
+
+        let recovered = sessions::recover_session(&db, &session, "startup_orphan_cleanup").unwrap();
+        assert_eq!(recovered.runtime_ms, 2 * interval_ms);
+        assert_eq!(recovered.active_ms, 2 * interval_ms);
+        assert_eq!(recovered.integrity_status, STATUS_SUSPICIOUS);
+        assert_eq!(listed(&db, &session).integrity_status, STATUS_SUSPICIOUS);
+        let counted: i64 = db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COALESCE(SUM(runtime_ms), 0) FROM play_slices WHERE session_id = ?1",
+                    [&session],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        assert_eq!(counted, 2 * interval_ms);
+    }
+
+    #[test]
+    fn sessions_from_before_checkpoint_pins_keep_their_time() {
+        let (db, game) = setup();
+        // A start as versions before checkpoint pins wrote it.
+        let session = uuid::Uuid::new_v4().to_string();
+        db.with_transaction(|conn| {
+            let wall = integrity::now_timestamp();
+            conn.execute(
+                "INSERT INTO sessions (id, game_id, device_id, started_at_wall,
+                     elapsed_monotonic_ms, active_ms, idle_ms, runtime_ms,
+                     integrity_status, closed_cleanly)
+                 VALUES (?1, ?2, ?3, ?4, 0, 0, 0, 0, 'local', 0)",
+                rusqlite::params![session, game, DEVICE, wall],
+            )
+            .map_err(map_db)?;
+            integrity::append_session_event(
+                conn,
+                &session,
+                "started",
+                &wall,
+                Some(0),
+                &json!({ "game_id": game, "device_id": DEVICE, "integrity_status": "local" })
+                    .to_string(),
+            )
+        })
+        .unwrap();
+        for at in (30..=CHECKPOINT_PIN_INTERVAL_SECS * 3).step_by(30) {
+            checkpoint_at(&db, &session, at);
+        }
+        assert_eq!(pinned_types(&db, &session), ["started"]);
+        let recovered = sessions::recover_session(&db, &session, "startup_orphan_cleanup").unwrap();
+        assert_eq!(
+            recovered.runtime_ms,
+            CHECKPOINT_PIN_INTERVAL_SECS * 3 * 1_000
+        );
+        assert_eq!(recovered.integrity_status, integrity::STATUS_RECOVERED);
+        assert_eq!(problem(&db, &session), None);
     }
 
     #[test]

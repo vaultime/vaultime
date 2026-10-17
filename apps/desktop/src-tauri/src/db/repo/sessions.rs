@@ -7,6 +7,7 @@ use log::warn;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::json;
 
+use crate::constants::CHECKPOINT_PIN_INTERVAL_SECS;
 use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::map_db;
@@ -81,18 +82,21 @@ pub fn create_session_at(
         )
         .map_err(map_db)?;
 
+        // The start names how often its checkpoints are pinned, so the rule
+        // it was recorded under stays known.
+        let mut payload = json!({
+            "game_id": game_id,
+            "device_id": device_id,
+            "integrity_status": integrity::STATUS_LOCAL,
+        });
+        payload[integrity::ledger::CHECKPOINT_PIN_FIELD] = json!(CHECKPOINT_PIN_INTERVAL_SECS);
         integrity::append_session_event(
             conn,
             &id,
             "started",
             &started_at_wall,
             Some(0),
-            &json!({
-                "game_id": game_id,
-                "device_id": device_id,
-                "integrity_status": integrity::STATUS_LOCAL,
-            })
-            .to_string(),
+            &payload.to_string(),
         )?;
 
         conn.query_row(
@@ -313,7 +317,8 @@ pub fn record_tracking_gap(
 
 /// Closes a session nothing tracks any more, for example after a crash. It
 /// ends where its record ends, the last moment the tracker saw it, not now.
-/// A session that was flagged stays Suspicious.
+/// Time past its newest pinned checkpoint counts up to one pin interval, and
+/// a session that ran further, or was flagged, is Suspicious.
 pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<Session> {
     let recovered_at = integrity::now_timestamp();
 
@@ -332,7 +337,7 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
         } else {
             integrity::STATUS_RECOVERED
         };
-        let ended_at_wall: String = conn
+        let mut ended_at_wall: String = conn
             .query_row(
                 "SELECT event_time_wall FROM session_events
                  WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
@@ -342,15 +347,42 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
             .optional()
             .map_err(map_db)?
             .unwrap_or_else(|| session.started_at_wall.clone());
+        let recorded = [session.runtime_ms, session.active_ms, session.idle_ms];
+        let events = integrity::load_session_events(conn, session_id)?;
+        let limit = integrity::ledger::own_tail_limit(conn, session_id, &events)?;
+        let [runtime_ms, active_ms, idle_ms] =
+            limit.as_ref().map_or(recorded, |limit| limit.cap(recorded));
+        // A capped session ends when its counted time ran out.
+        if let Some(limit) = limit.filter(|limit| limit.exceeded_by(recorded))
+            && let Some(vouched_at) = wall_ms(&limit.wall)
+        {
+            let end_ms = vouched_at.saturating_add(runtime_ms.saturating_sub(limit.counters[0]));
+            if wall_ms(&ended_at_wall).is_none_or(|recorded_end| end_ms < recorded_end)
+                && let Some(end) = chrono::DateTime::from_timestamp_millis(end_ms)
+            {
+                ended_at_wall = integrity::format_timestamp(end);
+            }
+        }
 
         let updated = conn
             .execute(
                 "UPDATE sessions
                  SET ended_at_wall = ?1,
                      integrity_status = ?2,
-                     closed_cleanly = 0
+                     closed_cleanly = 0,
+                     runtime_ms = ?4,
+                     elapsed_monotonic_ms = ?4,
+                     active_ms = ?5,
+                     idle_ms = ?6
                  WHERE id = ?3 AND ended_at_wall IS NULL",
-                params![ended_at_wall, status, session_id],
+                params![
+                    ended_at_wall,
+                    status,
+                    session_id,
+                    runtime_ms,
+                    active_ms,
+                    idle_ms
+                ],
             )
             .map_err(map_db)?;
 
@@ -365,13 +397,13 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
             session_id,
             "recovered",
             &recovered_at,
-            Some(session.runtime_ms),
+            Some(runtime_ms),
             &json!({
                 "reason": reason,
                 "ended_at_wall": ended_at_wall,
-                "runtime_ms": session.runtime_ms,
-                "active_ms": session.active_ms,
-                "idle_ms": session.idle_ms,
+                "runtime_ms": runtime_ms,
+                "active_ms": active_ms,
+                "idle_ms": idle_ms,
                 "integrity_status": status,
                 "closed_cleanly": false,
             })
@@ -386,6 +418,13 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
         )
         .map_err(map_db)
     })
+}
+
+/// A stored wall time in milliseconds since 1970.
+fn wall_ms(value: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|time| time.timestamp_millis())
 }
 
 /// The sessions `device_id` recorded that have not been closed yet. Those of

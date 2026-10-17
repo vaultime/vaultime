@@ -15,6 +15,11 @@ pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// idle, before a tracking gap and when it is flagged, so the time between
 /// two checkpoints is all of one kind. A crash loses at most this much.
 pub const CHECKPOINT_INTERVAL: Duration = Duration::from_secs(30);
+/// The ledger pins a checkpoint each time a session's runtime enters a new
+/// stretch of this many seconds, about twelve times an hour. After a crash,
+/// time past the newest pinned checkpoint counts up to this much, so honest
+/// time is never lost and a raised checkpoint gains at most this.
+pub const CHECKPOINT_PIN_INTERVAL_SECS: i64 = 300;
 /// Longest note on a session, in characters. Same as `SESSION_NOTE_MAX_CHARS`
 /// in `lib/constants.ts`.
 pub const SESSION_NOTE_MAX_CHARS: usize = 280;
