@@ -953,17 +953,25 @@ fn copy_games(
         )
         .map_err(map_db)?;
     expect_rows(written, plan.new_games.len())?;
-    // Games of this PC, which come along only with its own sessions after it
-    // was set up again, are its own once more.
+    // Games of this PC's own sessions, which come along after it was set up
+    // again, are its own once more. Any other game stays out of the tracker,
+    // whatever PC its row names.
+    let this = ledger::this_device()?;
+    let own_games = json_list(
+        plan.sessions
+            .iter()
+            .filter(|planned| planned.session.device_id == this)
+            .map(|planned| planned.session.game_id.as_str()),
+    );
     conn.execute(
         &format!(
             "UPDATE main.games SET origin_device_id = CASE
-                 WHEN origin_device_id IS NULL THEN ?2
-                 WHEN origin_device_id = ?3 THEN NULL
+                 WHEN origin_device_id = ?3 AND id IN (SELECT value FROM json_each(?4)) THEN NULL
+                 WHEN origin_device_id IS NULL OR origin_device_id = ?3 THEN ?2
                  ELSE origin_device_id END
              WHERE id {IN_LIST}"
         ),
-        params![games, source, ledger::this_device()?],
+        params![games, source, this, own_games],
     )
     .map_err(map_db)?;
     for (game, local) in links {
@@ -2908,6 +2916,35 @@ mod tests {
         fresh.merge(&from_laptop, &[]);
         assert_eq!(fresh.status(&later), STATUS_LOCAL);
         assert!(fresh.adopted(&later));
+    }
+
+    #[test]
+    fn a_game_that_names_this_pc_stays_out_of_its_tracker_without_its_sessions() {
+        let laptop = Pc::new("laptop");
+        let desktop = Pc::new("desktop");
+        let game = laptop.game("Hades", None);
+        laptop.play(&game, 20);
+        laptop
+            .db
+            .with_conn(|conn| {
+                conn.execute("UPDATE games SET origin_device_id = 'desktop'", [])
+                    .map_err(map_db)
+            })
+            .unwrap();
+
+        desktop.merge(&laptop.back_up(), &[]);
+        let origin: Option<String> = desktop
+            .db
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT origin_device_id FROM games WHERE id = ?1",
+                    [&game],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        assert_eq!(origin.as_deref(), Some("laptop"));
     }
 
     #[test]
