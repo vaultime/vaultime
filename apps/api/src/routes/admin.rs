@@ -6,7 +6,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 
 use crate::AppState;
-use crate::auth::AuthenticatedAccount;
+use crate::auth::{AuthenticatedAccount, run_hash};
 use crate::constants::DEFAULT_INVITE_MAX_REDEMPTIONS;
 use crate::error::{AppError, AppResult};
 use crate::invites::generate_invite;
@@ -19,14 +19,18 @@ pub async fn create_invite(
 ) -> AppResult<(StatusCode, Json<AdminInviteResponse>)> {
     require_admin(&auth)?;
 
-    let invite = generate_invite(
-        payload.prefix.as_deref(),
-        payload
-            .max_redemptions
-            .unwrap_or(DEFAULT_INVITE_MAX_REDEMPTIONS),
-        payload.expires_at,
-        payload.note,
-    )?;
+    let max_redemptions = payload
+        .max_redemptions
+        .unwrap_or(DEFAULT_INVITE_MAX_REDEMPTIONS);
+    let invite = run_hash(&state, move || {
+        generate_invite(
+            payload.prefix.as_deref(),
+            max_redemptions,
+            payload.expires_at,
+            payload.note,
+        )
+    })
+    .await?;
 
     sqlx::query(
         r#"
