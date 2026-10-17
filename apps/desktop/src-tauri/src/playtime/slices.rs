@@ -47,7 +47,7 @@ struct Point {
 /// Runtime, active and idle time, in that order.
 const MEASURES: usize = 3;
 
-fn wall_ms(value: &str) -> Option<i64> {
+pub(crate) fn wall_ms(value: &str) -> Option<i64> {
     DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|time| time.timestamp_millis())
@@ -168,8 +168,20 @@ pub(crate) fn counters_at(events: &[SessionEvent], wall_ms: i64) -> Option<[i64;
     }
 }
 
-fn slice_of(wall_ms: i64) -> i64 {
+/// The start of the quarter hour `wall_ms` falls in.
+pub(crate) fn slice_of(wall_ms: i64) -> i64 {
     wall_ms.div_euclid(PLAY_SLICE_MS) * PLAY_SLICE_MS
+}
+
+/// Runtime, active and idle time of `slices` added up.
+pub(crate) fn sum_of(slices: &[Slice]) -> [i64; MEASURES] {
+    slices.iter().fold([0; MEASURES], |sum, slice| {
+        [
+            sum[0] + slice.runtime_ms,
+            sum[1] + slice.active_ms,
+            sum[2] + slice.idle_ms,
+        ]
+    })
 }
 
 /// Splits `amount` in proportion to `weights`, in whole milliseconds that
@@ -278,10 +290,16 @@ pub fn slices_of(
     live: Option<(i64, LiveCounters)>,
     aside: &[(i64, i64)],
 ) -> Vec<Slice> {
-    let totals = within_range(match live {
-        Some((_, counters)) => [counters.runtime_ms, counters.active_ms, counters.idle_ms],
-        None => [session.runtime_ms, session.active_ms, session.idle_ms],
+    let live = live.map(|(now, counters)| {
+        (
+            now,
+            within_range([counters.runtime_ms, counters.active_ms, counters.idle_ms]),
+        )
     });
+    let totals = match live {
+        Some((_, counters)) => counters,
+        None => within_range([session.runtime_ms, session.active_ms, session.idle_ms]),
+    };
     let Some(start) = wall_ms(&session.started_at_wall) else {
         return Vec::new();
     };
@@ -297,15 +315,10 @@ pub fn slices_of(
             .unwrap_or(start),
     };
 
-    let mut points: Vec<Point> = points(events)
-        .into_iter()
-        .filter(|point| point.wall_ms <= end)
-        .collect();
-    if let Some((now, counters)) = live {
-        points.push(Point {
-            wall_ms: now,
-            counters: within_range([counters.runtime_ms, counters.active_ms, counters.idle_ms]),
-        });
+    let mut points = points(events);
+    points.retain(|point| point.wall_ms <= end);
+    if let Some((wall_ms, counters)) = live {
+        points.push(Point { wall_ms, counters });
     }
 
     let mut placed: BTreeMap<i64, [i64; MEASURES]> = BTreeMap::new();
@@ -361,8 +374,16 @@ pub fn slices_of(
             spread(&mut placed, within_reach(start, end), end, amounts);
         }
     }
+    scaled_to_totals(&placed, set_aside, totals)
+}
 
-    let starts: Vec<i64> = placed.keys().copied().collect();
+/// The quarter hours `placed`, scaled so they and the time `set_aside` add
+/// up to `totals`.
+fn scaled_to_totals(
+    placed: &BTreeMap<i64, [i64; MEASURES]>,
+    set_aside: [i64; MEASURES],
+    totals: [i64; MEASURES],
+) -> Vec<Slice> {
     let per_measure: Vec<Vec<i64>> = (0..MEASURES)
         .map(|index| {
             let weights: Vec<i64> = placed.values().map(|values| values[index]).collect();
@@ -378,8 +399,8 @@ pub fn slices_of(
             apportion(&weights, target)
         })
         .collect();
-    starts
-        .iter()
+    placed
+        .keys()
         .enumerate()
         .map(|(slot, &start_ms)| Slice {
             start_ms,
@@ -823,16 +844,6 @@ mod tests {
         }
     }
 
-    fn sums(slices: &[Slice]) -> [i64; 3] {
-        slices.iter().fold([0; 3], |sum, slice| {
-            [
-                sum[0] + slice.runtime_ms,
-                sum[1] + slice.active_ms,
-                sum[2] + slice.idle_ms,
-            ]
-        })
-    }
-
     #[test]
     fn active_and_idle_land_in_the_quarter_hours_they_happened() {
         // Active from 18:10 to 18:20, then idle until 18:40.
@@ -905,13 +916,13 @@ mod tests {
         );
         assert_eq!(slices.len(), 1);
         assert_eq!(slices[0].start_ms, slice_of(ms(end)));
-        assert_eq!(sums(&slices), totals);
+        assert_eq!(sum_of(&slices), totals);
 
         // Without checkpoints, spread over the whole session, the same.
         let bare = [event(1, "started", &at(18, 0, 0), &serde_json::json!({}))];
         let slices = slices_of(&session(&at(18, 0, 0), Some(end), totals), &bare, None, &[]);
         assert_eq!(slices.len(), 1);
-        assert_eq!(sums(&slices), totals);
+        assert_eq!(sum_of(&slices), totals);
     }
 
     #[test]
@@ -936,7 +947,7 @@ mod tests {
             let session = session(&at(18, 0, 0), Some(&at(18, 30, 0)), totals);
             let slices = slices_of(&session, &events, None, &[]);
             assert!(
-                sums(&slices)
+                sum_of(&slices)
                     .iter()
                     .all(|sum| (0..=SESSION_TIME_MAX_MS).contains(sum))
             );
@@ -1039,7 +1050,7 @@ mod tests {
             &[],
         );
 
-        assert_eq!(sums(&slices), [60 * MINUTE, 60 * MINUTE, 0]);
+        assert_eq!(sum_of(&slices), [60 * MINUTE, 60 * MINUTE, 0]);
         assert!(
             slices
                 .iter()
@@ -1099,7 +1110,7 @@ mod tests {
             &[],
         );
 
-        assert_eq!(sums(&slices), [20 * MINUTE, 15 * MINUTE, 5 * MINUTE]);
+        assert_eq!(sum_of(&slices), [20 * MINUTE, 15 * MINUTE, 5 * MINUTE]);
         assert_eq!(slices.last().unwrap().start_ms, ms(&at(18, 15, 0)));
     }
 
@@ -1117,7 +1128,7 @@ mod tests {
             &[],
         );
 
-        assert_eq!(sums(&slices), [60_001, 60_001, 0]);
+        assert_eq!(sum_of(&slices), [60_001, 60_001, 0]);
     }
 
     #[test]

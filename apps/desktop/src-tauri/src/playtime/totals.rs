@@ -17,7 +17,9 @@ use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
 use crate::integrity;
-use crate::playtime::slices::{STEPS_ASIDE, Slice, apportion, aside_stretches, slices_of};
+use crate::playtime::slices::{
+    STEPS_ASIDE, Slice, apportion, aside_stretches, slice_of, slices_of, sum_of, wall_ms,
+};
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
 /// What one total covers, in local time.
@@ -81,29 +83,27 @@ fn running_slices(
     game_id: Option<&str>,
     now_ms: i64,
 ) -> Result<Vec<(String, Slice)>> {
-    {
-        let mut stmt = conn
-            .prepare(
-                "SELECT * FROM sessions
-                 WHERE ended_at_wall IS NULL AND (?1 IS NULL OR game_id = ?1
-                     OR game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1))",
-            )
-            .map_err(map_db)?;
-        let open = stmt
-            .query_map([game_id], row_to_session)
-            .map_err(map_db)?
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(map_db)?;
-        let mut placed = Vec::new();
-        for session in open {
-            placed.extend(
-                open_session_slices(conn, live, &session, now_ms)?
-                    .into_iter()
-                    .map(|slice| (session.game_id.clone(), slice)),
-            );
-        }
-        Ok(placed)
+    let mut stmt = conn
+        .prepare(
+            "SELECT * FROM sessions
+             WHERE ended_at_wall IS NULL AND (?1 IS NULL OR game_id = ?1
+                 OR game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1))",
+        )
+        .map_err(map_db)?;
+    let open = stmt
+        .query_map([game_id], row_to_session)
+        .map_err(map_db)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(map_db)?;
+    let mut placed = Vec::new();
+    for session in open {
+        placed.extend(
+            open_session_slices(conn, live, &session, now_ms)?
+                .into_iter()
+                .map(|slice| (session.game_id.clone(), slice)),
+        );
     }
+    Ok(placed)
 }
 
 /// The slices of an open session, placed up to the tracker's latest tick,
@@ -119,10 +119,8 @@ fn open_session_slices(
         .get(&session.id)
         .map(|counters| (now_ms, counters))
         .or_else(|| {
-            let last = events.last()?;
-            let at = DateTime::parse_from_rfc3339(&last.event_time_wall).ok()?;
             Some((
-                at.timestamp_millis(),
+                wall_ms(&events.last()?.event_time_wall)?,
                 LiveCounters {
                     runtime_ms: session.runtime_ms,
                     active_ms: session.active_ms,
@@ -187,15 +185,7 @@ pub fn fill_set_aside(
             let kept = if session.ended_at_wall.is_some() {
                 counted.get(&session.id).copied().unwrap_or_default()
             } else {
-                open_session_slices(conn, live, session, now_ms)?
-                    .iter()
-                    .fold([0; 3], |sum, slice| {
-                        [
-                            sum[0] + slice.runtime_ms,
-                            sum[1] + slice.active_ms,
-                            sum[2] + slice.idle_ms,
-                        ]
-                    })
+                sum_of(&open_session_slices(conn, live, session, now_ms)?)
             };
             session.set_aside_ms = session.runtime_ms.saturating_sub(kept[0]).max(0);
             session.set_aside_active_ms = session.active_ms.saturating_sub(kept[1]).max(0);
@@ -411,10 +401,7 @@ pub fn fill_copy_overlap(
         }
         for (running, set) in running_beside_copies(conn)? {
             let game = set[0].clone();
-            let from_ms = DateTime::parse_from_rfc3339(&running.started_at_wall)
-                .map_or(0, |start| start.timestamp_millis())
-                .div_euclid(PLAY_SLICE_MS)
-                * PLAY_SLICE_MS;
+            let from_ms = slice_of(wall_ms(&running.started_at_wall).unwrap_or(0));
             for (session, slice) in stored_slices_since(conn, &set, from_ms)? {
                 add(session, game.clone(), slice);
             }
