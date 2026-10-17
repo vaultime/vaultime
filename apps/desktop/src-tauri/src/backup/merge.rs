@@ -2526,6 +2526,98 @@ mod tests {
         assert!(refused.to_string().contains("laptop"));
     }
 
+    /// Counters of a checkpoint after `minutes` of active play.
+    fn after(minutes: i64) -> Checkpoint {
+        Checkpoint {
+            runtime_ms: minutes * MINUTE,
+            active_ms: minutes * MINUTE,
+            wall_elapsed_ms: minutes * MINUTE,
+            ..Checkpoint::default()
+        }
+    }
+
+    #[test]
+    fn another_pcs_running_session_stays_open_after_a_restore_and_grows_by_merge() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let mine = desktop.game("Celeste", None);
+        desktop.play(&mine, 5);
+        let game = laptop.game("Outer Wilds", None);
+        laptop.act();
+        let running = sessions::create_session(&laptop.db, &game, "laptop").unwrap();
+        sessions::record_checkpoint(
+            &laptop.db,
+            &running.id,
+            &after(10),
+            STATUS_LOCAL,
+            Utc::now(),
+        )
+        .unwrap();
+        let during = laptop.back_up();
+        laptop.act();
+        sessions::record_checkpoint(
+            &laptop.db,
+            &running.id,
+            &after(40),
+            STATUS_LOCAL,
+            Utc::now(),
+        )
+        .unwrap();
+        sessions::end_session(
+            &laptop.db,
+            &running.id,
+            60 * MINUTE,
+            60 * MINUTE,
+            0,
+            STATUS_LOCAL,
+        )
+        .unwrap();
+
+        desktop.act();
+        import_local_backup(&desktop.db, &desktop.assets, &desktop.context, &during).unwrap();
+        // Left as the laptop recorded it, nothing appended here.
+        let kept = desktop.events(&running.id);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[1].1, "heartbeat");
+        assert_eq!(desktop.status(&running.id), STATUS_LOCAL);
+        desktop.act();
+        assert!(
+            sessions::get_active_sessions(&desktop.db, "desktop")
+                .unwrap()
+                .is_empty()
+        );
+        let mut shown = sessions::list_all_sessions(&desktop.db).unwrap();
+        sessions::show_running_elsewhere(&desktop.db, "desktop", &mut shown).unwrap();
+        let open = shown
+            .iter()
+            .find(|session| session.id == running.id)
+            .unwrap();
+        assert_eq!(open.still_running_on.as_deref(), Some("laptop"));
+        assert!(open.ended_at_wall.is_some());
+        let today = Utc::now().date_naive();
+        let counted: i64 = totals::play_totals(
+            &desktop.db,
+            &LiveSessions::default(),
+            &Utc,
+            today - TimeDelta::days(1),
+            today + TimeDelta::days(1),
+            totals::Bucket::Day,
+            Some(&game),
+            Utc::now().timestamp_millis(),
+        )
+        .unwrap()
+        .iter()
+        .map(|total| total.runtime_ms)
+        .sum();
+        assert_eq!(counted, 10 * MINUTE);
+
+        // The laptop's end comes with the next merge, as it recorded it.
+        let summary = desktop.merge(&laptop.back_up(), &[]);
+        assert_eq!(summary.sessions_grown, 1);
+        assert_eq!(desktop.events(&running.id), laptop.events(&running.id));
+        assert_eq!(desktop.status(&running.id), STATUS_LOCAL);
+    }
+
     #[test]
     fn a_pc_name_from_a_backup_is_cleaned_like_a_rename() {
         let desktop = Pc::new("desktop");

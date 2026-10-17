@@ -99,12 +99,13 @@ const NOTHING_TODAY: &str = "Nothing played today";
 fn start_status_updates<R: Runtime>(app: AppHandle<R>, playing: MenuItem<R>, today: MenuItem<R>) {
     let db = Arc::clone(&app.state::<Arc<Database>>());
     let live = Arc::clone(&app.state::<Arc<LiveSessions>>());
+    let device_id = app.state::<crate::AppContext>().device_id.clone();
     let spawned = std::thread::Builder::new()
         .name("vaultime-tray".into())
         .spawn(move || {
             let mut shown = (NOTHING_RUNNING.to_string(), NOTHING_TODAY.to_string());
             loop {
-                match status_lines(&db, &live, Utc::now()) {
+                match status_lines(&db, &live, &device_id, Utc::now()) {
                     Ok(lines) if lines != shown => {
                         let _ = playing.set_text(&lines.0);
                         let _ = today.set_text(&lines.1);
@@ -124,11 +125,12 @@ fn start_status_updates<R: Runtime>(app: AppHandle<R>, playing: MenuItem<R>, tod
 fn status_lines(
     db: &Database,
     live: &LiveSessions,
+    device_id: &str,
     now: DateTime<Utc>,
 ) -> Result<(String, String)> {
     let day_start = local_day_start(now);
     let since = integrity::format_timestamp(day_start);
-    let mut spans = sessions::spans_since(db, &since)?;
+    let mut spans = sessions::spans_since(db, &since, device_id)?;
     for span in spans.iter_mut().filter(|span| span.ended_at_wall.is_none()) {
         if let Some(counters) = live.get(&span.session_id) {
             span.runtime_ms = counters.runtime_ms;

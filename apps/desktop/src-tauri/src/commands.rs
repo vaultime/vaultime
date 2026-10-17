@@ -338,6 +338,7 @@ pub fn set_preferred_game_asset(
 pub fn list_sessions(
     db: State<'_, Arc<Database>>,
     live: State<'_, Arc<LiveSessions>>,
+    app_context: State<'_, AppContext>,
 ) -> Result<Vec<Session>, VaultimeError> {
     let mut all = sessions::list_all_sessions(&db)?;
     for session in &mut all {
@@ -347,6 +348,7 @@ pub fn list_sessions(
     playtime::totals::fill_set_aside(&db, &live, &mut all, now_ms)?;
     playtime::totals::fill_copy_overlap(&db, &live, &mut all, now_ms)?;
     show_linked_games(&db, &mut all)?;
+    sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
     Ok(all)
 }
 
@@ -382,8 +384,9 @@ pub fn get_play_totals(
 pub fn get_active_sessions(
     db: State<'_, Arc<Database>>,
     live: State<'_, Arc<LiveSessions>>,
+    app_context: State<'_, AppContext>,
 ) -> Result<Vec<Session>, VaultimeError> {
-    let mut active = sessions::get_active_sessions(&db)?;
+    let mut active = sessions::get_active_sessions(&db, &app_context.device_id)?;
     for session in &mut active {
         live.apply(session);
     }
@@ -483,7 +486,7 @@ pub fn import_local_backup(
     engine: State<'_, TrackingEngine>,
     path: String,
 ) -> Result<LocalBackupSummary, VaultimeError> {
-    let summary = with_tracking_paused(&db, &engine, || {
+    let summary = with_tracking_paused(&db, &engine, &app_context.device_id, || {
         backup::import_local_backup(
             &db,
             &asset_manager,
@@ -570,7 +573,8 @@ pub async fn restore_remote_backup(
 ) -> Result<RemoteBackupRestoreResult, VaultimeError> {
     on_blocking_pool(app, move |app| {
         let db = app.state::<Arc<Database>>();
-        let result = with_tracking_paused(&db, &app.state::<TrackingEngine>(), || {
+        let device_id = app.state::<AppContext>().device_id.clone();
+        let result = with_tracking_paused(&db, &app.state::<TrackingEngine>(), &device_id, || {
             backup::remote::restore_remote_backup(
                 &db,
                 &app.state::<AssetManager>(),
@@ -600,10 +604,11 @@ pub async fn restore_remote_backup(
 fn with_tracking_paused<T>(
     db: &Database,
     engine: &TrackingEngine,
+    device_id: &str,
     restore: impl FnOnce() -> Result<T, VaultimeError>,
 ) -> Result<T, VaultimeError> {
     engine.pause();
-    let result = match sessions::get_active_sessions(db) {
+    let result = match sessions::get_active_sessions(db, device_id) {
         Ok(active) if !active.is_empty() => Err(VaultimeError::Backup(
             "close all running games before restoring a backup".into(),
         )),

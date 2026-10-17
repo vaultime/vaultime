@@ -151,6 +151,11 @@ pub struct Session {
     /// that one is linked to. Never stored, the session keeps its own game.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recorded_game_id: Option<String>,
+    /// The PC whose session was still running when the backup it came with
+    /// was made, for a session shown up to its last event. Never stored, the
+    /// session stays open until a merge brings its end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub still_running_on: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

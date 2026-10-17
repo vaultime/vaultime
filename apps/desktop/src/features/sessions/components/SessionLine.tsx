@@ -72,7 +72,7 @@ export function SessionLine({
   const through = recordedThrough(session, links, thisDeviceId);
   // Only the PC that recorded a merged session may change its history.
   const merged = isMergedPc(devices, session.device_id);
-  const correctable = Boolean(onCorrected) && !live && !merged;
+  const correctable = Boolean(onCorrected) && !live && !merged && !session.still_running_on;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -125,6 +125,13 @@ export function SessionLine({
             </span>
           )}
           {through && <span> Played through {through}.</span>}
+          {session.still_running_on && (
+            <span>
+              {" "}
+              Still running on {session.still_running_on} when the backup was made, so it counts up to then. A later
+              merge brings the rest.
+            </span>
+          )}
           {trustNote && <span className="text-soft"> {trustNote}</span>}
         </div>
         {editing ? (

@@ -34,6 +34,7 @@ pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         copy_overlap_active_ms: 0,
         copy_overlap_idle_ms: 0,
         recorded_game_id: None,
+        still_running_on: None,
     })
 }
 
@@ -387,23 +388,70 @@ pub fn recover_session(db: &Database, session_id: &str, reason: &str) -> Result<
     })
 }
 
-/// Returns all sessions that have not been closed yet.
-pub fn get_active_sessions(db: &Database) -> Result<Vec<Session>> {
+/// The sessions `device_id` recorded that have not been closed yet. Those of
+/// other PCs stay open until a merge brings their end, as only the PC that
+/// recorded a session may close it.
+pub fn get_active_sessions(db: &Database, device_id: &str) -> Result<Vec<Session>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
                 "SELECT * FROM sessions
-                 WHERE ended_at_wall IS NULL
+                 WHERE ended_at_wall IS NULL AND device_id = ?1
                  ORDER BY started_at_wall DESC",
             )
             .map_err(map_db)?;
 
-        let rows = stmt.query_map([], row_to_session).map_err(map_db)?;
+        let rows = stmt
+            .query_map([device_id], row_to_session)
+            .map_err(map_db)?;
         let sessions = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)?;
         sessions
             .into_iter()
             .map(|session| attach_validated_status(conn, session))
             .collect()
+    })
+}
+
+/// Shows an open session of another PC than `this_device` as it was when
+/// the backup it came with was made: up to its last event, with the PC it
+/// was still running on. Only what is shown changes, the session stays open.
+pub fn show_running_elsewhere(
+    db: &Database,
+    this_device: &str,
+    sessions: &mut [Session],
+) -> Result<()> {
+    if !sessions
+        .iter()
+        .any(|session| session.ended_at_wall.is_none() && session.device_id != this_device)
+    {
+        return Ok(());
+    }
+    db.with_conn(|conn| {
+        let mut last_event = conn
+            .prepare_cached(
+                "SELECT event_time_wall FROM session_events
+                 WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+            )
+            .map_err(map_db)?;
+        let mut pc_name = conn
+            .prepare_cached("SELECT COALESCE(name, id) FROM devices WHERE id = ?1")
+            .map_err(map_db)?;
+        for session in sessions
+            .iter_mut()
+            .filter(|session| session.ended_at_wall.is_none() && session.device_id != this_device)
+        {
+            let last: Option<String> = last_event
+                .query_row([&session.id], |row| row.get(0))
+                .optional()
+                .map_err(map_db)?;
+            let name: Option<String> = pc_name
+                .query_row([&session.device_id], |row| row.get(0))
+                .optional()
+                .map_err(map_db)?;
+            session.ended_at_wall = Some(last.unwrap_or_else(|| session.started_at_wall.clone()));
+            session.still_running_on = Some(name.unwrap_or_else(|| session.device_id.clone()));
+        }
+        Ok(())
     })
 }
 
@@ -418,24 +466,30 @@ pub struct SessionSpan {
 }
 
 /// Sessions that ran at `since` or later, running ones included, oldest
-/// first, each with the title of the game it is shown as. It skips the
-/// integrity check, so it stays cheap to call often.
-pub fn spans_since(db: &Database, since: &str) -> Result<Vec<SessionSpan>> {
+/// first, each with the title of the game it is shown as. An open session of
+/// another PC than `this_device` ends at its last event, as nothing runs it
+/// here. It skips the integrity check, so it stays cheap to call often.
+pub fn spans_since(db: &Database, since: &str, this_device: &str) -> Result<Vec<SessionSpan>> {
     db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
-                "SELECT sessions.id, games.title, sessions.started_at_wall,
-                        sessions.ended_at_wall, sessions.runtime_ms
-                 FROM sessions JOIN games ON games.id = COALESCE(
-                     (SELECT linked_game_id FROM game_links
-                      WHERE game_links.game_id = sessions.game_id),
-                     sessions.game_id)
-                 WHERE sessions.ended_at_wall IS NULL OR sessions.ended_at_wall > ?1
-                 ORDER BY sessions.started_at_wall",
+                "SELECT id, title, started_at_wall, ended_at_wall, runtime_ms FROM (
+                     SELECT sessions.id, games.title, sessions.started_at_wall,
+                            COALESCE(sessions.ended_at_wall, CASE WHEN sessions.device_id != ?2
+                                THEN (SELECT event_time_wall FROM session_events
+                                      WHERE session_id = sessions.id
+                                      ORDER BY sequence DESC LIMIT 1) END) AS ended_at_wall,
+                            sessions.runtime_ms
+                     FROM sessions JOIN games ON games.id = COALESCE(
+                         (SELECT linked_game_id FROM game_links
+                          WHERE game_links.game_id = sessions.game_id),
+                         sessions.game_id))
+                 WHERE ended_at_wall IS NULL OR ended_at_wall > ?1
+                 ORDER BY started_at_wall",
             )
             .map_err(map_db)?;
         let rows = stmt
-            .query_map([since], |row| {
+            .query_map([since, this_device], |row| {
                 Ok(SessionSpan {
                     session_id: row.get(0)?,
                     game_title: row.get(1)?,
@@ -661,7 +715,12 @@ mod tests {
         let _s2 = create_session(&db, &game_id, DEV_ID).unwrap();
         end_session(&db, &s1.id, 5000, 4000, 1000, integrity::STATUS_LOCAL).unwrap();
 
-        let active = get_active_sessions(&db).unwrap();
+        // Another PC's session still running in a restored backup is not
+        // running here.
+        devices::ensure_device(&db, "laptop", "linux", "0.1.0").unwrap();
+        create_session(&db, &game_id, "laptop").unwrap();
+
+        let active = get_active_sessions(&db, DEV_ID).unwrap();
         assert_eq!(active.len(), 1);
     }
 

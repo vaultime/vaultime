@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Share your year.** Share your year, on the Stats page and in the command palette, makes a picture of the year to post: your hours of active play, the days you played, the calendar, your most played games with their covers and journal colors, the busiest month and a line about the year. It comes wide for X, Discord and Mastodon, square for feeds or tall for stories, dark or light in your ground and accent. Game titles and covers, the calendar and the name of your PC can stay off, and hidden games never show. It counts play exactly as the Stats page does. Vaultime draws the picture on your PC and uploads nothing. Save it as a PNG, or copy it to paste it straight into a post where your system allows it.
 
+### Trust
+
+- **Another PC's running session stays its own.** Restoring a backup that another PC made while a game ran there leaves that session open, exactly as that PC recorded it, instead of closing it here as Recovered. It counts up to its last saved time, says it was still running on that PC, and never shows in the live bar or the tray. Merging a later backup of that PC brings its real end. Closing it here added to a record only that PC may extend, so its real end clashed with it later and most of the session was lost. Only this PC's own sessions are closed after a crash or a restore, and only they keep a restore waiting.
+
 ### Fixes
 
 - **Starts the version you installed.** Starting with the system now always opens the copy of Vaultime you last ran. A login item made by an older copy in another folder used to keep starting that copy after every restart.

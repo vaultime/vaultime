@@ -202,6 +202,11 @@ export interface Session {
   copy_overlap_idle_ms?: number;
   /** The game that recorded it, when that game is linked to the one in `game_id`. */
   recorded_game_id?: string;
+  /**
+   * The PC whose session was still running when the backup it came with was made. The core then
+   * shows it up to its last event in `ended_at_wall`, though it stays open until a merge brings its end.
+   */
+  still_running_on?: string;
 }
 
 /** Mirrors the Rust `ExportFormat` enum. */

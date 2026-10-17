@@ -241,7 +241,7 @@ fn poll_loop(
     let mut system = System::new();
     let mut folders = FolderCache::default();
 
-    close_orphaned_sessions(db);
+    close_orphaned_sessions(db, device_id);
 
     while running.load(Ordering::SeqCst) {
         if !paused.load(Ordering::SeqCst) {
@@ -769,8 +769,8 @@ fn parse_wall_timestamp(value: &str) -> DateTime<Utc> {
 }
 
 /// Closes any sessions left open from a previous run, for example after a crash.
-fn close_orphaned_sessions(db: &Database) {
-    match sessions::get_active_sessions(db) {
+fn close_orphaned_sessions(db: &Database, device_id: &str) {
+    match sessions::get_active_sessions(db, device_id) {
         Ok(orphans) if !orphans.is_empty() => {
             warn!(
                 "found {} orphaned session(s) from previous run, closing",
@@ -822,7 +822,10 @@ mod tests {
             .spawn()
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(60);
-        while sessions::get_active_sessions(&db).unwrap().is_empty() {
+        while sessions::get_active_sessions(&db, "device")
+            .unwrap()
+            .is_empty()
+        {
             assert!(Instant::now() < deadline, "the game was not seen");
             std::thread::sleep(Duration::from_millis(250));
         }
@@ -841,7 +844,10 @@ mod tests {
             }
         }
         let deadline = Instant::now() + POLL_INTERVAL * 3;
-        while !sessions::get_active_sessions(&db).unwrap().is_empty() {
+        while !sessions::get_active_sessions(&db, "device")
+            .unwrap()
+            .is_empty()
+        {
             assert!(Instant::now() < deadline, "the session did not close");
             std::thread::sleep(Duration::from_millis(250));
         }
@@ -879,7 +885,10 @@ mod tests {
 
         let engine = TrackingEngine::start(Arc::clone(&db), "device".into(), Arc::default());
         let deadline = Instant::now() + POLL_INTERVAL;
-        while sessions::get_active_sessions(&db).unwrap().is_empty() {
+        while sessions::get_active_sessions(&db, "device")
+            .unwrap()
+            .is_empty()
+        {
             assert!(Instant::now() < deadline, "no session started");
             std::thread::sleep(Duration::from_millis(20));
         }
@@ -887,7 +896,11 @@ mod tests {
         let started = Instant::now();
         engine.shutdown();
         assert!(started.elapsed() < POLL_INTERVAL);
-        assert!(sessions::get_active_sessions(&db).unwrap().is_empty());
+        assert!(
+            sessions::get_active_sessions(&db, "device")
+                .unwrap()
+                .is_empty()
+        );
         let closed = &sessions::list_sessions_for_game(&db, &game.id).unwrap()[0];
         assert!(closed.closed_cleanly);
         assert_eq!(closed.integrity_status, "local");
@@ -968,6 +981,22 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn a_start_closes_only_the_sessions_this_pc_left_open() {
+        let f = fixture();
+        devices::ensure_device(&f.db, "laptop", "test", "0.1.0").unwrap();
+        let theirs = sessions::create_session(&f.db, &f.game_id, "laptop").unwrap();
+        close_orphaned_sessions(&f.db, "device");
+        assert!(
+            sessions::get_active_sessions(&f.db, "device")
+                .unwrap()
+                .is_empty()
+        );
+        let open = sessions::get_active_sessions(&f.db, "laptop").unwrap();
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].id, theirs.id);
     }
 
     #[test]
@@ -1316,7 +1345,7 @@ mod tests {
         assert_eq!(checkpoints.len(), 10);
         assert_eq!(counters(checkpoints.last().unwrap()), (300_000, 300_000, 0));
         // The open session still passes every integrity check.
-        let open = sessions::get_active_sessions(&d.f.db).unwrap();
+        let open = sessions::get_active_sessions(&d.f.db, "device").unwrap();
         assert_eq!(open[0].integrity_status, integrity::STATUS_LOCAL);
     }
 

@@ -278,8 +278,11 @@ fn restore_from_staging(
         take_in_restored(db, &staged, manifest)?;
         rewrite_asset_cache_paths(&staged, cache_dir)?;
         // A backup made during play holds sessions that were still running.
-        // Nothing tracks them here, so they are closed like after a crash.
-        for session in sessions::get_active_sessions(&staged)? {
+        // Nothing tracks this PC's own here, so they are closed like after a
+        // crash. Those of other PCs stay open until a merge brings their end,
+        // as only the PC that recorded a session may close it.
+        let this = integrity::ledger::this_device()?;
+        for session in sessions::get_active_sessions(&staged, &this)? {
             sessions::recover_session(&staged, &session.id, RESTORED_OPEN_SESSION_REASON)?;
         }
         // The restored device list may not contain this PC yet.
@@ -1163,7 +1166,9 @@ mod tests {
         fs::remove_dir_all(&context.app_dir).ok();
     }
 
+    /// A data folder of its own for a PC that acts as `test-device`.
     fn test_paths() -> AppContext {
+        integrity::ledger::act_as(Some(&integrity::ledger::test_pc("test-device")));
         let root =
             std::env::temp_dir().join(format!("vaultime-backup-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
@@ -1524,7 +1529,7 @@ mod tests {
 
         fixture.restore().unwrap();
         assert!(
-            sessions::get_active_sessions(&fixture.db)
+            sessions::get_active_sessions(&fixture.db, "test-device")
                 .unwrap()
                 .is_empty()
         );
