@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A broken record stays small.** A session whose record spans more than a year on the clock, which only a damaged or edited record does, now counts in the quarter hour it ended in. Merging or restoring such a session used to fill every quarter hour of those years and could stall Vaultime.
 - **A merged PC stays merged.** Restoring a backup of a PC whose sessions were merged here keeps those sessions correctable only on that PC. The restore used to forget the merge, so a correction here could split a session from its record there.
 
+### Website
+
+- **Documentation.** The website explains how Vaultime counts playtime, what the trust labels and the ledger mean, how several PCs and backups work, where your data lives and what to know on Linux, at [vaultime.codfishcloud.de/docs](https://vaultime.codfishcloud.de/docs/).
+
 ## [0.4.0] - 2026-10-03
 
 ### Tracking

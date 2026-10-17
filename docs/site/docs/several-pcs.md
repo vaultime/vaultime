@@ -1,0 +1,46 @@
+# Several PCs
+
+Play on more than one PC and bring it together in one history. Each PC keeps recording its own sessions, and a merge copies the sessions of another PC from one of its backups.
+
+## Merge another PC
+
+1. On the other PC, pick **Save a backup** under Settings, Local backups, and bring the backup folder over, on a USB stick or through a folder that syncs.
+2. On this PC, go to Settings, Other PCs and pick **Merge a backup of another PC**.
+3. Pick the backup. Vaultime shows what would come in before anything changes: new sessions, sessions that grew since the last merge, sessions that fail their check and the games that come along.
+4. Decide for each game whether it counts as the same game as one on this PC.
+5. Pick **Merge**.
+
+Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. Merge again later and only what is new comes in. Sessions you removed here never come back.
+
+> [!NOTE]
+> A merge is not a sync. Nothing happens on its own, and the other PC does not change.
+
+## Which sessions count
+
+Sessions come over exactly as the other PC recorded them, byte for byte. This PC's ledger then vouches only for those that pass their check with the keys it trusts for the PC that recorded them. A session that fails comes in Suspicious and stays visible, so nothing is laundered by a merge.
+
+- The first time Vaultime sees a PC, it takes that PC at its word, since it cannot know it yet. Its keys are trusted from then on.
+- A PC this one trusts also vouches for the sessions it took in from PCs this one has no keys for.
+- A backup that claims to come from this PC vouches for nothing. Only this PC's own key counts for its own sessions.
+
+## New keys
+
+When a PC signs with a new key, for example after its key file was lost, its new sessions do not count right away. The merge dialog asks you to confirm with **This backup comes from my** and the PC's name. Once you confirm, the sessions that came in Suspicious because of that key pass as well.
+
+Only confirm when you know the backup really comes from that PC.
+
+## Games from another PC
+
+A game that comes along with a merge is never tracked on this PC. You can let it count as the same game as one you have here, and Vaultime then shows the two as one game in the journal, the stats and on the game's page.
+
+If you added play from the other PC here by hand before, the merge names the sessions that overlap what comes in, so you can take them out and nothing counts twice.
+
+## Corrections
+
+Only the PC that recorded a session can correct it. Correct it there, then merge again, and the correction comes along. A launcher [steps aside](counting.md#launchers-that-step-aside) only for games on its own PC.
+
+## What is refused
+
+- A backup of this PC itself.
+- A backup of a PC without a ledger, or with a ledger that was changed.
+- A backup that is damaged, holds database parts Vaultime never writes or reads differently from one moment to the next.
