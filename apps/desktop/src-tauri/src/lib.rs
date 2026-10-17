@@ -154,7 +154,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::list_ignored_programs,
         commands::ignore_program,
         commands::allow_program,
-        commands::get_session_events_for_game,
+        commands::get_notable_events_for_game,
         commands::list_backup_snapshots,
         commands::get_auto_backup_folder,
         commands::export_local_backup,

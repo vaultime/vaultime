@@ -149,7 +149,7 @@ export function JournalPage() {
   const gameIds = [...new Set(days.flatMap((day) => day.parts.map((part) => part.game_id)))].sort().join(",");
   useEffect(() => {
     let cancelled = false;
-    Promise.all(gameIds ? gameIds.split(",").map((id) => api.getSessionEventsForGame(id)) : [])
+    Promise.all(gameIds ? gameIds.split(",").map((id) => api.getNotableEventsForGame(id)) : [])
       .then((lists) => {
         if (!cancelled) setEvents(lists.flat());
       })

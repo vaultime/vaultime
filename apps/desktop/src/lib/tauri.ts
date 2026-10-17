@@ -238,10 +238,9 @@ export async function getActiveSessions(): Promise<ActiveSessions> {
   return invoke<ActiveSessions>("get_active_sessions");
 }
 
-export async function getSessionEventsForGame(
-  gameId: string,
-): Promise<SessionEvent[]> {
-  return invoke<SessionEvent[]>("get_session_events_for_game", { gameId });
+/** The events of a game's sessions without the checkpoints, newest first. */
+export async function getNotableEventsForGame(gameId: string): Promise<SessionEvent[]> {
+  return invoke<SessionEvent[]>("get_notable_events_for_game", { gameId });
 }
 
 /** Saves every finished session to `path` and returns how many. */

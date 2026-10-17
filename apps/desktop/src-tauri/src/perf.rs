@@ -285,6 +285,25 @@ fn page_timings(
         })
         .unwrap();
     println!("{spans} stretches kept");
+    timed("notable events of a game", &mut || {
+        let events =
+            crate::db::repo::session_events::list_notable_events_for_game(db, &game_ids[1])
+                .unwrap();
+        format!(
+            "{} events, {} bytes",
+            events.len(),
+            serde_json::to_string(&events).unwrap().len()
+        )
+    });
+    timed("every event of a game", &mut || {
+        let events =
+            crate::db::repo::session_events::list_events_for_game(db, &game_ids[1]).unwrap();
+        format!(
+            "{} events, {} bytes",
+            events.len(),
+            serde_json::to_string(&events).unwrap().len()
+        )
+    });
     let live = LiveSessions::default();
     for running in [false, true] {
         if running {

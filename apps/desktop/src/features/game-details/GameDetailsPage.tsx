@@ -69,7 +69,7 @@ function GamePage({ gameId }: { gameId: string }) {
   useEffect(() => {
     let cancelled = false;
     api
-      .getSessionEventsForGame(gameId)
+      .getNotableEventsForGame(gameId)
       .then((next) => {
         if (!cancelled) setEvents(next);
       })

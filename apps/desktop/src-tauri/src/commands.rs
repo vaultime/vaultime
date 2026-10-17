@@ -518,12 +518,14 @@ fn show_linked_games(db: &Database, sessions: &mut [Session]) -> Result<(), Vaul
     Ok(())
 }
 
+/// The events of a game's sessions and those of the games linked to it,
+/// newest first, without the checkpoints, which only place time.
 #[tauri::command(async)]
-pub fn get_session_events_for_game(
+pub fn get_notable_events_for_game(
     db: State<'_, Arc<Database>>,
     game_id: String,
 ) -> Result<Vec<SessionEvent>, VaultimeError> {
-    session_events::list_events_for_game(&db, &game_id)
+    session_events::list_notable_events_for_game(&db, &game_id)
 }
 
 /// Shows in the tray and taskbar icon whether this PC is signed in. Runs off

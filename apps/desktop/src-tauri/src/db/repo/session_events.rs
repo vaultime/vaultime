@@ -32,16 +32,17 @@ pub(crate) fn row_to_session_event(row: &Row) -> rusqlite::Result<SessionEvent> 
 }
 
 /// Events of a game's sessions, also of those of the games linked to it,
-/// newest first.
-pub fn list_events_for_game(db: &Database, game_id: &str) -> Result<Vec<SessionEvent>> {
+/// newest first, those `filter` keeps.
+fn events_for_game(db: &Database, game_id: &str, filter: &str) -> Result<Vec<SessionEvent>> {
     db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare(&format!(
+            .prepare_cached(&format!(
                 "SELECT {SESSION_EVENT_COLUMNS}
                  FROM session_events se
                  INNER JOIN sessions s ON s.id = se.session_id
-                 WHERE s.game_id = ?1
-                    OR s.game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1)
+                 WHERE (s.game_id = ?1
+                    OR s.game_id IN (SELECT game_id FROM game_links WHERE linked_game_id = ?1))
+                   AND {filter}
                  ORDER BY se.event_time_wall DESC, se.sequence DESC"
             ))
             .map_err(map_db)?;
@@ -52,4 +53,52 @@ pub fn list_events_for_game(db: &Database, game_id: &str) -> Result<Vec<SessionE
 
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })
+}
+
+/// Every event of a game's sessions, also of those of the games linked to
+/// it, newest first.
+#[cfg(test)]
+pub fn list_events_for_game(db: &Database, game_id: &str) -> Result<Vec<SessionEvent>> {
+    events_for_game(db, game_id, "1")
+}
+
+/// The events of a game's sessions that say something, also of those of the
+/// games linked to it, newest first. Checkpoints, which only place time and
+/// are most of the events, stay out.
+pub fn list_notable_events_for_game(db: &Database, game_id: &str) -> Result<Vec<SessionEvent>> {
+    events_for_game(db, game_id, "se.event_type != 'heartbeat'")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::playtime::testing::{Mark, database, game, recorded};
+
+    #[test]
+    fn notable_events_leave_the_checkpoints_out() {
+        let db = database();
+        let one = game(&db, "One");
+        recorded(
+            &db,
+            &one,
+            "device",
+            "2026-10-02T18:00:00Z",
+            &[
+                Mark::Check(1, 1, 1),
+                Mark::Check(2, 2, 2),
+                Mark::Check(3, 3, 3),
+            ],
+        );
+        let types = |events: Vec<SessionEvent>| -> Vec<String> {
+            events.into_iter().map(|event| event.event_type).collect()
+        };
+        assert_eq!(
+            types(list_events_for_game(&db, &one).unwrap()),
+            ["ended", "heartbeat", "heartbeat", "started"]
+        );
+        assert_eq!(
+            types(list_notable_events_for_game(&db, &one).unwrap()),
+            ["ended", "started"]
+        );
+    }
 }

@@ -1533,9 +1533,9 @@ mockIPC((cmd, payload) => {
         String(args.reason ?? ""),
         typeof args.launcher === "string" ? args.launcher : null,
       );
-    case "get_session_events_for_game": {
+    case "get_notable_events_for_game": {
       const ids = new Set(shownSessions().filter((session) => session.game_id === args.gameId).map((session) => session.id));
-      return events.filter((event) => ids.has(event.session_id));
+      return events.filter((event) => ids.has(event.session_id) && event.event_type !== "heartbeat");
     }
     case "get_active_sessions":
       return { sessions: runningNow(), played_today_ms: estimatePlayedToday(sessionsNow()) };
