@@ -336,7 +336,7 @@ export const MANUAL_SESSION_DEFAULT_AGO_MS = 2 * HOUR_MS;
 export const WEEK_CLOCK_MIN_DOT_PERCENT = 22;
 /** Games listed on the stats page, the rest are left out. */
 export const STATS_TOP_GAMES = 8;
-/** Active time per day at which the year heatmap turns one step brighter. */
+/** Time played per day, games side by side counted once, at which the year heatmap turns one step brighter. */
 export const HEATMAP_STEPS_MS = [30 * MINUTE_MS, HOUR_MS, 2 * HOUR_MS, 4 * HOUR_MS];
 /** A game shows among those left running from this much runtime in the year. */
 export const STATS_IDLE_MIN_RUNTIME_MS = 2 * HOUR_MS;

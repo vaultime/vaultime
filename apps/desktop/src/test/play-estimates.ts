@@ -307,10 +307,16 @@ export function estimateYearPlay(sessions: Session[], year: number, now = Date.n
     day = startOfDay(day, -1);
   }
   const spans = sessions.filter(countsAsPlay).map((session) => spanOf(session, now));
+  const played: Record<string, number> = {};
+  for (let day = new Date(year, 0, 1); day.getFullYear() === year; day = startOfDay(day, 1)) {
+    const ms = playedBetween(spans, day.getTime(), startOfDay(day, 1).getTime());
+    if (ms > 0) played[toDayKey(day)] = ms;
+  }
   return {
     days: estimatePlayTotals(sessions, from, to, "day", null, new Date(now)),
     hours: estimatePlayTotals(sessions, from, to, "hour_of_week", null, new Date(now)),
     played_ms: playedBetween(spans, new Date(year, 0, 1).getTime(), new Date(year + 1, 0, 1).getTime()),
+    played,
     days_played: inYear.length,
     longest_streak: longest,
     current_streak: current,

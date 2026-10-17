@@ -159,7 +159,7 @@ export function buildShareCard({
     games,
     topShare: top && stats.activeMs > 0 ? top.activeMs / stats.activeMs : 0,
     days: yearDays(year).map((day) =>
-      day > now ? -1 : heatLevel(stats.days.get(toDayKey(day))?.activeMs ?? 0),
+      day > now ? -1 : heatLevel(stats.played.get(toDayKey(day)) ?? 0),
     ),
     sentence: shareSentence({
       year,

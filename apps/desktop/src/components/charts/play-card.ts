@@ -24,13 +24,23 @@ export function gameTime(game: { activeMs: number; idleMs: number }): string {
   return "under a minute";
 }
 
-/** "3 h 12 active, Elden Ring 2 h 05, Hades II 58 min", for screen readers. */
-export function describePlay(label: string, play: BucketPlay | undefined, labelOf: (gameId: string) => GameLabel): string {
-  if (!play || play.runtimeMs <= 0) return `${label}, not played`;
+/**
+ * "3 h 12 active, Elden Ring 2 h 05, Hades II 58 min", for screen readers.
+ * With `playedMs` it leads with the time played instead.
+ */
+export function describePlay(
+  label: string,
+  play: BucketPlay | undefined,
+  labelOf: (gameId: string) => GameLabel,
+  playedMs?: number,
+): string {
+  if (!play || (playedMs ?? play.runtimeMs) <= 0) return `${label}, not played`;
   const games = play.games
     .slice(0, PLAY_CARD_GAMES)
     .map((game) => `${labelOf(game.gameId).title} ${gameTime(game)}`);
-  return `${label}, ${formatHoursMinutes(play.activeMs)} active, ${games.join(", ")}`;
+  const lead =
+    playedMs === undefined ? `${formatHoursMinutes(play.activeMs)} active` : `${formatHoursMinutes(playedMs)} played`;
+  return `${label}, ${lead}, ${games.join(", ")}`;
 }
 
 /**

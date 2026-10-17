@@ -902,6 +902,7 @@ mod tests {
         let year = year_play(&db, &live, &Berlin, 2026, date("2026-10-08"), now_ms).unwrap();
         for day in &week.days {
             assert_eq!(day.played_ms, stats.played[&day.day], "{}", day.day);
+            assert_eq!(day.played_ms, year.played[&day.day], "{}", day.day);
         }
         let played: Vec<i64> = week.days.iter().map(|day| day.played_ms / MINUTE).collect();
         assert_eq!(played, [60, 240, 180]);

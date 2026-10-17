@@ -44,6 +44,8 @@ export interface YearStats {
   sessionsCount: number;
   /** What was played on each local day, by `toDayKey`. Time counts on the day it happened. */
   days: Map<string, BucketPlay>;
+  /** Time with a game running on each local day, games side by side counted once, as the journal counts its days. */
+  played: Map<string, number>;
   daysPlayed: number;
   longestStreak: Streak | null;
   /** Days in a row with play up to today, or up to yesterday while today has none yet. */
@@ -67,10 +69,10 @@ export function shapeOf(session: Session): SessionShape {
   return "marathon";
 }
 
-/** How bright a day of the year calendar is for its active time, 0 for none up to one past the last step. */
-export function heatLevel(activeMs: number): number {
-  if (activeMs <= 0) return 0;
-  return 1 + HEATMAP_STEPS_MS.filter((step) => activeMs >= step).length;
+/** How bright a day of the year calendar is for its time played, 0 for none up to one past the last step. */
+export function heatLevel(playedMs: number): number {
+  if (playedMs <= 0) return 0;
+  return 1 + HEATMAP_STEPS_MS.filter((step) => playedMs >= step).length;
 }
 
 /**
@@ -114,6 +116,7 @@ export function yearStats(allSessions: Session[], year: number, play: YearPlay):
     idleMs: sum((day) => day.idleMs),
     sessionsCount: inYear.length,
     days,
+    played: new Map(Object.entries(play.played)),
     daysPlayed: play.days_played,
     longestStreak: streak
       ? { days: streak.days, start: parseVaultimeDate(streak.start), end: parseVaultimeDate(streak.end) }

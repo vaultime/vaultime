@@ -36,20 +36,33 @@ const MONTH_SHORT = new Intl.DateTimeFormat(UI_LOCALE, { month: "short" });
 const MONTH_NARROW = new Intl.DateTimeFormat(UI_LOCALE, { month: "narrow" });
 const dayName = (day: Date) => DAY_NAME.format(day);
 
+/** A day's time played, from `played` or, for one game, from its runtime. */
+function playedOn(key: string, days: Map<string, BucketPlay>, played: Map<string, number> | undefined): number {
+  return played ? (played.get(key) ?? 0) : (days.get(key)?.runtimeMs ?? 0);
+}
+
 /**
- * The year as a calendar, one square per day, brighter the more active time
- * it had. Pointing at a day, or moving to it with the arrow keys, shows what
- * was played. A click or Enter opens its week in the journal.
+ * The year as a calendar, one square per day, brighter the more time was
+ * played, the time the journal shows for the day. Pointing at a day, or
+ * moving to it with the arrow keys, shows what was played. A click or Enter
+ * opens its week in the journal.
  */
 export const YearHeatmap = memo(function YearHeatmap({
   year,
   days,
+  played,
   now,
   labelOf,
   onOpenDay,
 }: {
   year: number;
+  /** Each game's time per day, for the cards. */
   days: Map<string, BucketPlay>;
+  /**
+   * Time with a game running per day, games side by side counted once.
+   * Left out for one game, whose runtime is its time played.
+   */
+  played?: Map<string, number>;
   now: Date;
   labelOf: (gameId: string) => GameLabel;
   onOpenDay: (day: Date) => void;
@@ -97,7 +110,7 @@ export const YearHeatmap = memo(function YearHeatmap({
       <div ref={frame} className="relative">
         <div
           role="grid"
-          aria-label={`Active time on every day of ${year}. Arrow keys move between days, Enter opens the week in the journal.`}
+          aria-label={`Time played on every day of ${year}. Arrow keys move between days, Enter opens the week in the journal.`}
           aria-activedescendant={focused ? cellId(focused) : undefined}
           tabIndex={0}
           onKeyDown={onKeyDown}
@@ -115,6 +128,7 @@ export const YearHeatmap = memo(function YearHeatmap({
             year={year}
             today={today.getTime()}
             days={days}
+            played={played}
             labelOf={labelOf}
             ringed={focused && shown?.byKeyboard ? toDayKey(focused) : null}
             onPoint={show}
@@ -125,6 +139,7 @@ export const YearHeatmap = memo(function YearHeatmap({
           <PlayCard
             label={dayName(shown.day)}
             play={days.get(toDayKey(shown.day))}
+            playedMs={playedOn(toDayKey(shown.day), days, played)}
             labelOf={labelOf}
             hint={shown.byKeyboard ? "Enter opens this week in the journal" : "Click to open this week in the journal"}
             style={shown.style}
@@ -148,6 +163,7 @@ const HeatmapRows = memo(function HeatmapRows({
   year,
   today,
   days,
+  played,
   labelOf,
   ringed,
   onPoint,
@@ -158,6 +174,7 @@ const HeatmapRows = memo(function HeatmapRows({
   /** Midnight of today, in milliseconds. Later days are blank. */
   today: number;
   days: Map<string, BucketPlay>;
+  played: Map<string, number> | undefined;
   labelOf: (gameId: string) => GameLabel;
   /** The day the keyboard is on, by `toDayKey`. */
   ringed: string | null;
@@ -198,8 +215,8 @@ const HeatmapRows = memo(function HeatmapRows({
           {weeks.map((week) => {
             const day = week[weekday];
             const inYear = day.getFullYear() === year;
-            const played = day.getTime() <= today;
-            if (!inYear || !played) {
+            const past = day.getTime() <= today;
+            if (!inYear || !past) {
               return (
                 <span
                   key={day.getTime()}
@@ -210,17 +227,18 @@ const HeatmapRows = memo(function HeatmapRows({
             }
             const key = toDayKey(day);
             const play = days.get(key);
+            const playedMs = playedOn(key, days, played);
             return (
               <span
                 key={day.getTime()}
                 id={cellId(day)}
                 role="gridcell"
-                aria-label={describePlay(dayName(day), play, labelOf)}
+                aria-label={describePlay(dayName(day), play, labelOf, playedMs)}
                 onMouseEnter={(event) => onPoint(day, false, event.currentTarget)}
                 onClick={() => onOpenDay(day)}
                 className={cn(
                   "aspect-square cursor-pointer rounded-[2px] transition-shadow",
-                  LEVELS[heatLevel(play?.activeMs ?? 0)],
+                  LEVELS[heatLevel(playedMs)],
                   key === ringed && "ring-2 ring-text ring-offset-1 ring-offset-ink",
                 )}
               />

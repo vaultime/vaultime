@@ -5,7 +5,7 @@
 //! library and today for the live bar and the tray. Time counts on the day
 //! it happened.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{NaiveDate, TimeDelta, TimeZone};
 use rusqlite::params;
@@ -44,6 +44,9 @@ pub struct YearPlay {
     pub hours: Vec<PlayTotal>,
     /// Clock time with a game running, games side by side counted once.
     pub played_ms: i64,
+    /// The same by local day, "2026-10-05", as the journal's days count it.
+    /// Days without play are left out.
+    pub played: BTreeMap<String, i64>,
     pub days_played: usize,
     /// The longest run of days with play in the year, the earliest on a tie.
     pub longest_streak: Option<Streak>,
@@ -244,6 +247,7 @@ pub fn year_play<Tz: TimeZone>(
         longest_streak: longest_run(&played_days),
         current_streak: current_streak(db, live, tz, (today, now_ms), STREAK_FIRST_LOOK_DAYS)?,
         days: totals.games,
+        played: totals.played,
     })
 }
 

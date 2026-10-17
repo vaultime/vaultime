@@ -213,7 +213,14 @@ export function StatsPage() {
 
           <div className="px-8 xl:px-14">
             <PageSection wide title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
-              <YearHeatmap year={year} days={stats.days} now={shownAt} labelOf={labelOf} onOpenDay={openDay} />
+              <YearHeatmap
+                year={year}
+                days={stats.days}
+                played={stats.played}
+                now={shownAt}
+                labelOf={labelOf}
+                onOpenDay={openDay}
+              />
             </PageSection>
 
             <PageSection title="When you play" description={rhythm ? <PhraseText phrase={rhythm} /> : undefined}>

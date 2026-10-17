@@ -314,6 +314,8 @@ export interface YearPlay {
   hours: PlayTotal[];
   /** Clock time with a game running, games side by side counted once. */
   played_ms: number;
+  /** The same by local day, "2026-10-05", as the journal's days count it. Days without play are left out. */
+  played: Record<string, number>;
   days_played: number;
   longest_streak: Streak | null;
   /** Days in a row with play up to today, or up to yesterday while today has none yet. */

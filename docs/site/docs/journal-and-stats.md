@@ -62,7 +62,7 @@ Played on a Steam Deck or a PC without Vaultime? On the game's page, **Add a ses
 The stats page shows one year at a time, with **Previous year** and **Next year** to move. At the top are the hours played, the days you played, your longest streak and your longest session.
 
 Every day
-: A calendar of the year with a square for each day. Point at a day to see what you played, and click it to read its week in the journal.
+: A calendar of the year with a square for each day, brighter the more you played. A day counts the time the journal shows for it, games side by side once. Point at a day to see what you played, and click it to read its week in the journal.
 
 When you play
 : Your week by hour, so you can see whether you are a weekday evening or a weekend afternoon player.

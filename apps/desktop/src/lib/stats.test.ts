@@ -6,7 +6,7 @@ import { MINUTE_MS } from "@/lib/constants";
 import { estimatePlayTotals } from "@/test/play-totals";
 import { at, session } from "@/test/sessions";
 import type { Session, YearPlay } from "@/lib/types";
-import { daysSoFar, shapeOf, yearStats } from "./stats";
+import { daysSoFar, heatLevel, shapeOf, yearStats } from "./stats";
 
 const now = new Date(2026, 8, 30, 21, 0);
 
@@ -17,6 +17,7 @@ function statsFor(sessions: Session[], year = 2026, play: Partial<YearPlay> = {}
     days: estimatePlayTotals(sessions, from, to, "day", null, now),
     hours: estimatePlayTotals(sessions, from, to, "hour_of_week", null, now),
     played_ms: 0,
+    played: {},
     days_played: 0,
     longest_streak: null,
     current_streak: 0,
@@ -39,6 +40,13 @@ describe("yearStats", () => {
     expect(stats.months[2].games.map((game) => game.gameId)).toEqual(["a", "b"]);
     expect(stats.games.map((game) => game.gameId)).toEqual(["b", "a"]);
     expect(stats.games.map((game) => game.sessionsCount)).toEqual([1, 1]);
+  });
+
+  it("brightens a day by its time played, as the journal counts the day", () => {
+    const stats = statsFor([], 2026, { played: { "2026-03-02": 90 * MINUTE_MS } });
+    expect(stats.played.get("2026-03-02")).toBe(90 * MINUTE_MS);
+    expect(heatLevel(stats.played.get("2026-03-02") ?? 0)).toBe(3);
+    expect(heatLevel(stats.played.get("2026-03-03") ?? 0)).toBe(0);
   });
 
   it("spreads active time over the hours on the clock", () => {
