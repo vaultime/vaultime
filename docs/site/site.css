@@ -20,8 +20,9 @@
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
-html { background: var(--ink); color-scheme: dark; }
-body { font-family: var(--sans); color: var(--text); background: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+/* Keeps iOS from enlarging the text when a phone turns sideways. */
+html { background: var(--ink); color-scheme: dark; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { font-family: var(--sans); color: var(--text); background: var(--ink); line-height: 1.55; overflow-wrap: break-word; -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
 /* One focus ring for every link, button and control a keyboard reaches. */
 :focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
@@ -39,6 +40,7 @@ header .wrap { display: flex; align-items: center; justify-content: space-betwee
 nav { display: flex; gap: 24px; font-size: 14px; }
 nav a { color: var(--faint); text-decoration: none; }
 nav a:hover { color: var(--text); }
+nav.top a { padding: 12px 0; }
 
 .hero { padding: 88px 0 72px; border-bottom: 1px solid var(--rule);
   background: radial-gradient(110% 120% at 85% 0%, #1f1733 0%, var(--ink) 60%); }
@@ -89,8 +91,9 @@ section.doc .lead { margin-top: 10px; font-size: 14px; color: var(--faint); }
 /* Beta application */
 .apply { display: flex; flex-direction: column; gap: 22px; max-width: 560px; }
 .field { display: flex; flex-direction: column; gap: 8px; border: 0; }
+/* Below 16px, iOS zooms into a field when it is tapped. */
 .field input, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid var(--field-edge); border-radius: 12px;
-  background: var(--surface); color: var(--text); font: inherit; font-size: 15px; }
+  background: var(--surface); color: var(--text); font: inherit; font-size: 16px; }
 .field textarea { resize: vertical; min-height: 88px; }
 .field input:focus, .field textarea:focus { outline: 2px solid var(--violet); outline-offset: 1px; border-color: transparent; }
 .choices { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 15px; }
@@ -117,7 +120,9 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--violet); width
 
 footer { padding: 40px 0 56px; font-size: 13px; color: var(--faint); }
 footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
-footer nav { gap: 20px; font-size: 13px; }
+footer nav { flex-wrap: wrap; gap: 20px; font-size: 13px; }
+/* A taller tap area that leaves the layout as it is. */
+footer nav a { padding: 10px 0; margin: -10px 0; }
 nav a[aria-current="page"] { color: var(--text); }
 
 /* The app as it looks, under the hero. */
@@ -185,12 +190,13 @@ nav a[aria-current="page"] { color: var(--text); }
 .docs-article figure { margin-top: 28px; }
 .docs-article figure img { display: block; width: 100%; height: auto; border: 1px solid var(--hairline); border-radius: 12px; }
 .docs-article figcaption { margin-top: 10px; font-size: 13px; color: var(--faint); }
-.toc-inline { display: none; margin-top: 28px; padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.toc-inline { display: none; margin-top: 28px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
 .toc-inline summary, .docs-menu summary { cursor: pointer; list-style: none; }
+.toc-inline summary { padding: 12px 0; }
 .toc-inline summary::-webkit-details-marker, .docs-menu summary::-webkit-details-marker { display: none; }
 .toc-inline summary::after, .docs-menu summary::after { content: "+"; float: right; font-family: var(--mono); font-size: 14px; color: var(--faint); }
 .toc-inline[open] summary::after, .docs-menu[open] summary::after { content: "\2212"; }
-.toc-inline ol { list-style: none; margin-top: 8px; padding: 0; }
+.toc-inline ol { list-style: none; margin-top: -4px; padding: 0 0 12px; }
 .toc-inline li { margin-top: 0; font-size: 14px; }
 .toc-inline .toc-3 { padding-left: 14px; }
 .toc-inline a { display: block; padding: 4px 0; color: var(--soft); }
@@ -222,7 +228,7 @@ nav a[aria-current="page"] { color: var(--text); }
 }
 
 @media (max-width: 860px) {
-  .docs, .docs.has-toc { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 16px; }
+  .docs, .docs.has-toc { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .docs-side { position: static; max-height: none; overflow: visible; padding: 0; }
   .docs-side .docs-nav { display: none; }
   .docs-menu { display: block; border-bottom: 1px solid var(--rule); }
@@ -239,7 +245,7 @@ nav a[aria-current="page"] { color: var(--text); }
 }
 
 @media (max-width: 760px) {
-  .wrap { padding: 0 16px; }
+  .wrap, .docs { padding: 0 16px; }
   nav.top { gap: 18px; }
   nav.top a:not(.keep) { display: none; }
   .shot { margin-top: 40px; }
@@ -249,4 +255,16 @@ nav a[aria-current="page"] { color: var(--text); }
   .entry .when { grid-column: 1 / -1; width: auto; }
   .entry .line { font-size: 21px; }
   .row { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .pager { grid-template-columns: minmax(0, 1fr); }
+  .pager .next { grid-column: 1; }
+}
+
+/* The narrowest phones, like a folded Galaxy Fold. */
+@media (max-width: 340px) {
+  .brand { gap: 8px; }
+  .brand svg { width: 24px; height: 24px; }
+  .brand span { font-size: 20px; }
+  nav.top { gap: 14px; }
+  footer nav { column-gap: 16px; }
+  .docs-article h1 { font-size: 30px; }
 }
