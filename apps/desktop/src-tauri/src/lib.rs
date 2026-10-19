@@ -277,6 +277,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         Ok(count) => info!("worked out the play slices of {count} sessions"),
         Err(error) => log::warn!("play slices not built: {error}"),
     }
+    // Also before tracking, as it rewrites the file.
+    if let Err(error) = db::upkeep::reclaim_space(&database) {
+        log::warn!("database space not given back: {error}");
+    }
 
     let live = Arc::new(LiveSessions::default());
     let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone(), Arc::clone(&live));
@@ -371,6 +375,9 @@ fn start_automatic_backups(database: Arc<Database>, assets: AssetManager, contex
                     backup::auto::back_up_if_due(&database, &assets, &context, AUTO_BACKUP_INTERVAL)
                 {
                     log::warn!("automatic backup failed: {error}");
+                }
+                if let Err(error) = db::upkeep::optimize(&database) {
+                    log::warn!("database statistics not refreshed: {error}");
                 }
                 std::thread::sleep(AUTO_BACKUP_CHECK_INTERVAL);
             }

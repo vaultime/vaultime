@@ -129,6 +129,15 @@ pub const PLAY_SLICES_VERSION_SETTING: &str = "play_slices_version";
 
 /// The database in Vaultime's data folder, under the same name in backups.
 pub const DATABASE_FILE: &str = "vaultime.db";
+/// Size the write-ahead log is cut back to after a large write, like a
+/// restore, so it does not keep that size on disk.
+pub const WAL_SIZE_LIMIT_BYTES: i64 = 32 * 1024 * 1024;
+/// Unused space in the database file at which a start gives it back to the
+/// disk, together with `VACUUM_MIN_FREE_PERCENT`.
+pub const VACUUM_MIN_FREE_BYTES: i64 = 8 * 1024 * 1024;
+/// Share of the database file, in percent, that has to be unused before a
+/// start gives the space back.
+pub const VACUUM_MIN_FREE_PERCENT: i64 = 25;
 /// Folder of cached artwork in Vaultime's data folder, under the same name
 /// in backups.
 pub const ASSET_CACHE_DIR: &str = "asset-cache";

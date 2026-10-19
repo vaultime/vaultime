@@ -7,3 +7,4 @@ pub mod connection;
 pub mod migrate;
 pub mod models;
 pub mod repo;
+pub mod upkeep;
