@@ -252,7 +252,10 @@ pub fn year_play<Tz: TimeZone>(
         .into_iter()
         .filter_map(date_of)
         .collect();
-    let started = started_sessions(db, live, tz, first, Some(next), now_ms)?;
+    let mut started = started_sessions(db, live, tz, first, Some(next), now_ms)?;
+    // A finished session whose time was all set aside counts nowhere, as on
+    // the library and the game pages.
+    started.retain(|session| session.ended_at_wall.is_none() || shown_runtime(session) > 0);
     let links = games::links(db)?;
     let mut sessions_by_game: BTreeMap<String, usize> = BTreeMap::new();
     let mut session_lengths = [0; 5];
@@ -516,6 +519,26 @@ mod tests {
         let before = year(2025);
         assert_eq!(before.sessions_count, 1);
         assert_eq!(before.sessions_by_game, BTreeMap::from([(one, 1)]));
+    }
+
+    #[test]
+    fn a_launcher_session_set_aside_whole_is_no_session_of_the_year() {
+        let db = database();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        played(&db, &match_game, "2026-03-02T15:30:00Z", 120);
+        played(&db, &client, "2026-03-02T16:00:00Z", 60);
+        let year = year_play(
+            &db,
+            &LiveSessions::default(),
+            &Berlin,
+            2026,
+            date("2026-10-01"),
+            utc("2026-10-01T12:00:00Z").timestamp_millis(),
+        )
+        .unwrap();
+        assert_eq!(year.sessions_count, 1);
+        assert_eq!(year.sessions_by_game, BTreeMap::from([(match_game, 1)]));
     }
 
     #[test]
