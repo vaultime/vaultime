@@ -13,9 +13,8 @@ import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
-import { useSettings } from "@/features/settings/settings-context";
+import { useFinishRestore } from "@/features/settings/use-finish-restore";
 import type { CloudBackupRecord, CloudStorage } from "@/lib/types";
-import { continuesAs } from "@/lib/devices";
 import { getThisPc } from "@/lib/tauri";
 import { describeError } from "@/lib/utils";
 import { capitalize } from "@/lib/words";
@@ -53,7 +52,7 @@ export function CloudPage() {
     uploadRemoteBackup,
   } = useCloudSession();
   const { thisDeviceId: deviceId } = useLibrary();
-  const { reload: reloadSettings } = useSettings();
+  const finishRestore = useFinishRestore();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
@@ -69,9 +68,18 @@ export function CloudPage() {
   const [deleteTarget, setDeleteTarget] = useState<CloudBackupRecord | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [restartRequired, setRestartRequired] = useState(false);
-  // A PC without history of its own continues as the PC of the backup it restores.
-  const [freshInstall, setFreshInstall] = useState(false);
+  // A PC without history of its own continues as the PC of the backup it
+  // restores. Null while the restore dialog still asks the core.
+  const [freshInstall, setFreshInstall] = useState<boolean | null>(false);
   const [takeOver, setTakeOver] = useState(true);
+  // The core takes over only what the dialog offered, so a check that failed
+  // or a backup without its PC never takes over unasked.
+  const takesOver =
+    freshInstall === true &&
+    deviceId !== null &&
+    restoreTarget !== null &&
+    backupSource(restoreTarget) !== null &&
+    backupSource(restoreTarget) !== deviceId;
 
   function requestBackups(accountId: string) {
     getStorage()
@@ -229,16 +237,13 @@ export function CloudPage() {
     setStatusMessage(null);
 
     try {
-      const result = await restoreRemoteBackup(restoreTarget.id, takeOver);
+      const result = await restoreRemoteBackup(restoreTarget.id, takeOver && takesOver);
       setRestoreDialogOpen(false);
       setRestoreTarget(null);
-      const takeover = result.restored_summary.continues_as;
-      setStatusMessage(takeover ? `Cloud backup restored. ${continuesAs(takeover)}` : "Cloud backup restored.");
       if (result.restored_summary.restart_required) {
         setRestartRequired(true);
       }
-      // A restore replaces the settings that are not kept per PC.
-      await reloadSettings().catch(() => {});
+      setStatusMessage(await finishRestore("Cloud backup", result.restored_summary));
     } catch (error) {
       setErrorMessage(describeError(error));
     } finally {
@@ -285,11 +290,11 @@ export function CloudPage() {
   function openRestoreDialog(backup: CloudBackupRecord) {
     setRestoreTarget(backup);
     setRestoreDialogOpen(true);
-    setFreshInstall(false);
+    setFreshInstall(null);
     setTakeOver(true);
     getThisPc()
       .then((pc) => setFreshInstall(pc.fresh))
-      .catch(() => {});
+      .catch(() => setFreshInstall(false));
   }
 
   function openDeleteDialog(backup: CloudBackupRecord) {
@@ -543,13 +548,8 @@ export function CloudPage() {
           }
         }}
         target={restoreTarget}
-        takesOver={
-          freshInstall &&
-          deviceId !== null &&
-          restoreTarget !== null &&
-          backupSource(restoreTarget) !== null &&
-          backupSource(restoreTarget) !== deviceId
-        }
+        takesOver={takesOver}
+        ready={freshInstall !== null}
         takeOver={takeOver}
         onTakeOverChange={setTakeOver}
         busy={remoteBackupBusy}

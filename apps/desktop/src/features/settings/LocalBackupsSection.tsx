@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
 import { TakeoverChoice } from "@/features/settings/TakeoverChoice";
+import { useFinishRestore } from "@/features/settings/use-finish-restore";
 import { AUTO_BACKUP_KEEP, SETTING_KEYS } from "@/lib/constants";
 import { continuesAs } from "@/lib/devices";
 import * as api from "@/lib/tauri";
@@ -37,8 +38,9 @@ export function LocalBackupsSection({
   onError: (message: string | null) => void;
   onRestartRequired: () => void;
 }) {
-  const { refresh, thisDeviceId } = useLibrary();
-  const { save, reload: reloadSettings } = useSettings();
+  const { thisDeviceId } = useLibrary();
+  const { save } = useSettings();
+  const finishRestore = useFinishRestore();
   const [autoBackup, setAutoBackup] = useState(initial.autoBackup);
   const [folder, setFolder] = useState(initial.folder);
   const [snapshots, setSnapshots] = useState(initial.snapshots);
@@ -109,14 +111,13 @@ export function LocalBackupsSection({
   const restore = () =>
     run(async () => {
       if (!restorePreview) return;
-      const summary = await api.importLocalBackup(restorePreview.backup_path, takeOver);
+      // Only a takeover the preview offered, as in the cloud restore.
+      const offered = Boolean(restorePreview.continues_as);
+      const summary = await api.importLocalBackup(restorePreview.backup_path, takeOver && offered);
       setRestorePreview(null);
-      setMessage(summary.continues_as ? `Backup restored. ${continuesAs(summary.continues_as)}` : "Backup restored.");
       if (summary.restart_required) onRestartRequired();
-      // A restore replaces the settings that are not kept per PC.
-      await reloadSettings().catch(() => {});
+      setMessage(await finishRestore("Backup", summary));
       setSnapshots(await api.listBackupSnapshots());
-      await refresh();
     });
 
   return (

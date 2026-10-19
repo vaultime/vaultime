@@ -5,6 +5,13 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- **A cloud restore asks before it takes over.** A fresh install that restores a cloud backup only continues as the backup's PC when the restore showed that choice. It used to take over even when the check behind the choice failed, or when the backup did not name its PC and the choice never showed. Restore waits until that check is done.
+- **The library is current after a cloud restore.** The library, journal and stats show the restored history right away, as after a local restore. They used to show the old history until a game started or stopped.
+
 ## [0.5.0] - 2026-10-17
 
 ### Library

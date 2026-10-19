@@ -77,6 +77,7 @@ export function RestoreBackupDialog({
   onOpenChange,
   target,
   takesOver,
+  ready,
   takeOver,
   onTakeOverChange,
   busy,
@@ -88,6 +89,8 @@ export function RestoreBackupDialog({
   target: CloudBackupRecord | null;
   /** This PC has no history yet and the backup names another PC, which this one continues as if its ledger is sound. */
   takesOver: boolean;
+  /** Whether it is known yet if this PC has history, so the choice above can be shown. */
+  ready: boolean;
   /** The player keeps the takeover, checked by default. */
   takeOver: boolean;
   onTakeOverChange: (takeOver: boolean) => void;
@@ -139,7 +142,7 @@ export function RestoreBackupDialog({
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="button" variant="destructive" onClick={onRestore} disabled={busy || !target}>
+          <Button type="button" variant="destructive" onClick={onRestore} disabled={busy || !target || !ready}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ArchiveRestore className="size-4" />}
             {busy ? "Restoring" : "Replace with this backup"}
           </Button>
