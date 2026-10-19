@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
+import { Button } from "@/components/ui/button";
 import { scrollMotion } from "@/lib/anchors";
 import { LIVE_TOTALS_REFRESH_MS, RECENT_DAYS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
@@ -70,6 +71,21 @@ export function LibraryPage() {
 
   // Waits for the last days too, so the hero's sentence does not change as it shows.
   if (!loaded || (featured && !recent)) return null;
+
+  // Nothing came in, which says nothing about whether there are games.
+  if (error && summaries.length === 0) {
+    return (
+      <div className="px-8 pt-12 xl:px-14">
+        <h1 className="font-display text-4xl">Your library did not load</h1>
+        <p role="alert" className="mt-3 max-w-[560px] text-amber">
+          {error}
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => void refresh()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-16">

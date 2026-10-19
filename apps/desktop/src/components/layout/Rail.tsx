@@ -34,7 +34,7 @@ const PAGES = [
 ] as const;
 
 export function Rail({ onSearch }: { onSearch: () => void }) {
-  const { visible: summaries } = useLibrary();
+  const { visible: summaries, error: libraryError } = useLibrary();
   const playing = usePlaying();
   const { enabled: cloudEnabled, session } = useCloudSession();
   const pages = PAGES.filter((page) => cloudEnabled || page.to !== "/cloud");
@@ -121,7 +121,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
             </DropdownMenu>
           )}
         </div>
-        {summaries.length === 0 && (
+        {summaries.length === 0 && !libraryError && (
           <p className="px-3 text-[13px] text-faint">Games you add show up here.</p>
         )}
         <ul className="no-scrollbar -mr-2 flex min-h-0 flex-col gap-0.5 overflow-y-auto pr-2">

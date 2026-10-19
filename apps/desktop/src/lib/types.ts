@@ -470,6 +470,24 @@ export interface TrackingDiagnostics {
   poll_interval_seconds: number;
 }
 
+/** Kinds of failure the core reports. Same as `VaultimeError::kind` in error.rs. */
+export type CoreErrorKind =
+  | "database"
+  | "backup"
+  | "tracking"
+  | "integrity"
+  | "asset"
+  | "cloud"
+  | "offline"
+  | "not_found"
+  | "invalid";
+
+/** How a failed command of the core reaches the page. */
+export interface CoreError {
+  kind: CoreErrorKind;
+  message: string;
+}
+
 /** Summary returned by local backup export/import/inspection commands. */
 export interface LocalBackupSummary {
   backup_id: string;

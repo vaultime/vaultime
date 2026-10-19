@@ -23,6 +23,7 @@
 // ?autodiscover=first as on the first look. They come once, as in the app.
 // The fourth game has a GOG install linked to it, and ?discover=1&scan=1&same=1
 // shows a discovered Xbox copy of it marked as the same game.
+// ?loadfail=1 fails to load the library, as the core reports it.
 // ?offline=1 leaves the cloud server out of reach. ?cloud=off turns cloud
 // backup off, so the Cloud page leaves the menu, and ?cloudfresh=1 leaves the
 // switch unset, as on a PC from before it.
@@ -1488,6 +1489,7 @@ mockIPC((cmd, payload) => {
       thisPc = { ...thisPc, name: String(args.name).trim().slice(0, DEVICE_NAME_MAX_CHARS) || thisPc.name };
       return thisPc;
     case "list_games":
+      if (params.has("loadfail")) throw { kind: "database", message: "Database is locked" };
       // A linked game counts as the game it is linked to.
       return allGames.filter((game) => !gameLinks.some((link) => link.game_id === game.id));
     case "list_earlier_playtime":

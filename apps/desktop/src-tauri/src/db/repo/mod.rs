@@ -19,5 +19,10 @@ pub mod settings;
 use crate::error::VaultimeError;
 
 pub(crate) fn map_db(error: rusqlite::Error) -> VaultimeError {
-    VaultimeError::Database(error.to_string())
+    match error {
+        rusqlite::Error::QueryReturnedNoRows => {
+            VaultimeError::NotFound("it is no longer there, it may have been removed".into())
+        }
+        error => VaultimeError::Database(error.to_string()),
+    }
 }

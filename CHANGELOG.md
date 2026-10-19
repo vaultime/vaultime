@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Failures say why.** A status change that fails on a game's page or from the command palette now says why, and the palette stays open to show it. A correction whose preview cannot be worked out says so, instead of claiming that nothing changes. Smaller failures, like a setting saved as Vaultime closes, go to the log instead of vanishing.
 - **A database that does not open is no dead end.** When Vaultime cannot open its database at start, it says why and offers to set it aside and start from the newest automatic backup. The file set aside stays next to the new one, and a restore that fails changes nothing. Other problems at start show a message, where Vaultime used to close without a word.
 - **An older Vaultime leaves newer data alone.** Started after a newer version changed the database, an older Vaultime asks for the newer version instead of working on data it does not fully know.
+- **A library that does not load says so.** When Vaultime cannot read your games, the library says why and offers to try again, instead of greeting you as if you had no games yet.
+- **Plainer messages.** Something removed in the meantime reads "It is no longer there" instead of a database message, and a cloud server out of reach during a backup or restore says to check the connection.
 - **The library is current after a cloud restore.** The library, journal and stats show the restored history right away, as after a local restore. They used to show the old history until a game started or stopped.
 
 ## [0.5.0] - 2026-10-17
