@@ -498,6 +498,39 @@ fn counted_once(slices: &[(&str, Slice)]) -> Vec<Slice> {
     counted
 }
 
+/// Brings sessions to the tracker's latest tick and to what counts of them,
+/// each shown as the game it counts as, the way every page gets them.
+pub fn as_shown(
+    db: &Database,
+    live: &LiveSessions,
+    sessions: &mut [Session],
+    now_ms: i64,
+) -> Result<()> {
+    for session in sessions.iter_mut() {
+        live.apply(session);
+    }
+    show_counted(db, live, sessions, now_ms)?;
+    show_linked_games(db, sessions)
+}
+
+/// Shows a session of a linked game, another install here or a game of
+/// another PC, as one of the game it is linked to, and says which game
+/// recorded it. Only the shown game changes, the session's history keeps
+/// the game it was recorded with.
+fn show_linked_games(db: &Database, sessions: &mut [Session]) -> Result<()> {
+    let links = games::links(db)?;
+    if links.is_empty() {
+        return Ok(());
+    }
+    for session in sessions {
+        if let Some(linked) = links.get(&session.game_id) {
+            let recorded = std::mem::replace(&mut session.game_id, linked.clone());
+            session.recorded_game_id = Some(recorded);
+        }
+    }
+    Ok(())
+}
+
 /// Brings sessions to what pages show, which is what counts: runtime, active
 /// and idle time without the time set aside, which `set_aside_*` keeps, and
 /// in `counted_*` what each adds to totals, time shared with another copy
@@ -978,6 +1011,28 @@ mod tests {
         DateTime::parse_from_rfc3339(text)
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn a_session_of_a_linked_install_shows_as_the_game_it_counts_as() {
+        let db = testing::database();
+        let (steam, gog) = (
+            testing::game(&db, "Steam copy"),
+            testing::game(&db, "GOG copy"),
+        );
+        testing::played(&db, &gog, "2026-09-28T16:00:00Z", 60);
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        let mut all = sessions::list_all_sessions(&db).unwrap();
+        as_shown(
+            &db,
+            &LiveSessions::default(),
+            &mut all,
+            utc("2026-09-30T12:00:00Z").timestamp_millis(),
+        )
+        .unwrap();
+        assert_eq!(all[0].game_id, steam);
+        assert_eq!(all[0].recorded_game_id.as_deref(), Some(gog.as_str()));
+        assert_eq!(all[0].counted_runtime_ms, 60 * MINUTE);
     }
 
     struct Library {

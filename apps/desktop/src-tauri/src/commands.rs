@@ -24,8 +24,8 @@ use crate::backup::merge::{GameChoice, MergePreview, MergeSummary};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self, LocalBackupSummary};
 use crate::constants::{
-    BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, PLAY_SLICES_VERSION_SETTING,
-    POLL_INTERVAL, RECENT_PLAY_MAX_DAYS, STEAM_SOURCE, WINDOW_SIZE_SETTING,
+    BACKUP_HISTORY_LIMIT, CLOUD_API_BASE_URL, PAGE_SETTINGS, POLL_INTERVAL, RECENT_PLAY_MAX_DAYS,
+    STEAM_SOURCE, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::models::{
@@ -43,6 +43,7 @@ use crate::discovery::{self, DiscoveredGame};
 use crate::earlier;
 use crate::error::VaultimeError;
 use crate::integrity::ledger::{self, LedgerReport};
+use crate::library;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::platform::controller;
 use crate::playtime;
@@ -88,9 +89,7 @@ pub fn link_game(
     game_id: String,
     linked_game_id: Option<String>,
 ) -> Result<(), VaultimeError> {
-    games::link_game(&db, &game_id, linked_game_id.as_deref())?;
-    let shown = db.with_conn(|conn| games::shown_id(conn, &game_id))?;
-    playtime::slices::rebuild_for_game(&db, &shown)
+    library::link_game(&db, &game_id, linked_game_id.as_deref())
 }
 
 /// What merging another PC's backup would bring in.
@@ -238,17 +237,7 @@ pub fn delete_game(
     asset_manager: State<'_, AssetManager>,
     id: String,
 ) -> Result<bool, VaultimeError> {
-    // Games that stepped aside for it count that time again.
-    let spans = playtime::slices::spans_beside(&db, &id)?;
-    let deleted = assets::delete_game(&db, &asset_manager, &id)?;
-    if let Err(error) = playtime::slices::rebuild_aside_around_spans(&db, &spans) {
-        // The game is gone either way, so the next start builds every slice.
-        warn!("slices beside a deleted game not rebuilt: {error}");
-        if let Err(error) = settings::set_setting(&db, PLAY_SLICES_VERSION_SETTING, "0") {
-            warn!("slices not marked for a rebuild: {error}");
-        }
-    }
-    Ok(deleted)
+    library::delete_game(&db, &asset_manager, &id)
 }
 
 /// Makes a game count only while no other game runs, like a launcher, or
@@ -259,9 +248,7 @@ pub fn set_game_steps_aside(
     game_id: String,
     steps_aside: bool,
 ) -> Result<Game, VaultimeError> {
-    let game = games::set_steps_aside(&db, &game_id, steps_aside)?;
-    playtime::slices::rebuild_for_game(&db, &game_id)?;
-    Ok(game)
+    library::set_steps_aside(&db, &game_id, steps_aside)
 }
 
 #[tauri::command(async)]
@@ -362,7 +349,7 @@ pub fn list_sessions(
     recent_days: u32,
 ) -> Result<SessionList, VaultimeError> {
     let mut all = sessions::list_all_sessions(&db)?;
-    as_of_now(&db, &live, &mut all)?;
+    playtime::totals::as_shown(&db, &live, &mut all, chrono::Utc::now().timestamp_millis())?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
     let recent_since = chrono::Utc::now() - chrono::TimeDelta::days(i64::from(recent_days));
     Ok(SessionList {
@@ -485,7 +472,12 @@ pub fn get_active_sessions(
     app_context: State<'_, AppContext>,
 ) -> Result<ActiveSessions, VaultimeError> {
     let mut active = sessions::get_active_sessions(&db, &app_context.device_id)?;
-    as_of_now(&db, &live, &mut active)?;
+    playtime::totals::as_shown(
+        &db,
+        &live,
+        &mut active,
+        chrono::Utc::now().timestamp_millis(),
+    )?;
     let now_ms = chrono::Utc::now().timestamp_millis();
     let played_today_ms = playtime::summaries::played_on(
         &db,
@@ -498,39 +490,6 @@ pub fn get_active_sessions(
         sessions: active,
         played_today_ms,
     })
-}
-
-/// Brings sessions to the tracker's latest tick and to what counts of them,
-/// each shown as the game it counts as.
-fn as_of_now(
-    db: &Database,
-    live: &LiveSessions,
-    sessions: &mut [Session],
-) -> Result<(), VaultimeError> {
-    for session in sessions.iter_mut() {
-        live.apply(session);
-    }
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    playtime::totals::show_counted(db, live, sessions, now_ms)?;
-    show_linked_games(db, sessions)
-}
-
-/// Shows a session of a linked game, another install here or a game of
-/// another PC, as one of the game it is linked to, and says which game
-/// recorded it. Only the shown game changes, the session's history keeps
-/// the game it was recorded with.
-fn show_linked_games(db: &Database, sessions: &mut [Session]) -> Result<(), VaultimeError> {
-    let links = games::links(db)?;
-    if links.is_empty() {
-        return Ok(());
-    }
-    for session in sessions {
-        if let Some(linked) = links.get(&session.game_id) {
-            let recorded = std::mem::replace(&mut session.game_id, linked.clone());
-            session.recorded_game_id = Some(recorded);
-        }
-    }
-    Ok(())
 }
 
 /// The events of a game's sessions and those of the games linked to it,
@@ -610,7 +569,7 @@ pub fn import_local_backup(
     path: String,
     take_over: bool,
 ) -> Result<LocalBackupSummary, VaultimeError> {
-    let summary = with_tracking_paused(&db, &engine, &app_context.device_id, || {
+    let summary = engine.while_paused(&db, &app_context.device_id, || {
         backup::import_local_backup(
             &db,
             &asset_manager,
@@ -700,7 +659,8 @@ pub async fn restore_remote_backup(
     on_blocking_pool(move || {
         let db = app.state::<Arc<Database>>();
         let device_id = app.state::<AppContext>().device_id.clone();
-        let result = with_tracking_paused(&db, &app.state::<TrackingEngine>(), &device_id, || {
+        let engine = app.state::<TrackingEngine>();
+        let result = engine.while_paused(&db, &device_id, || {
             backup::remote::restore_remote_backup(
                 &db,
                 &app.state::<AssetManager>(),
@@ -724,30 +684,6 @@ pub async fn restore_remote_backup(
         Ok(result)
     })
     .await
-}
-
-/// Runs a restore with tracking paused. Refuses while a game is being tracked,
-/// because the restore replaces the session tables. After a restore that
-/// made this PC continue as another one, tracking waits for the restart, as
-/// the tracker still records with the id it started with.
-fn with_tracking_paused<T>(
-    db: &Database,
-    engine: &TrackingEngine,
-    device_id: &str,
-    restore: impl FnOnce() -> Result<T, VaultimeError>,
-) -> Result<T, VaultimeError> {
-    engine.pause();
-    let result = match sessions::get_active_sessions(db, device_id) {
-        Ok(active) if !active.is_empty() => Err(VaultimeError::Backup(
-            "close all running games before restoring a backup".into(),
-        )),
-        Ok(_) => restore(),
-        Err(error) => Err(error),
-    };
-    if !ledger::this_device().is_ok_and(|now| now != device_id) {
-        engine.resume();
-    }
-    result
 }
 
 /// Records a backup in the local history. A failure here must not fail the backup.

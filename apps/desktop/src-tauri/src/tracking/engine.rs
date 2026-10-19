@@ -210,6 +210,31 @@ impl TrackingEngine {
         info!("tracking resumed");
     }
 
+    /// Runs a restore with tracking paused. Refuses while a game of
+    /// `device_id` is being tracked, because the restore replaces the session
+    /// tables. After a restore that made this PC continue as another one,
+    /// tracking waits for the restart, as the tracker still records with the
+    /// id it started with.
+    pub fn while_paused<T>(
+        &self,
+        db: &Database,
+        device_id: &str,
+        restore: impl FnOnce() -> crate::error::Result<T>,
+    ) -> crate::error::Result<T> {
+        self.pause();
+        let result = match sessions::get_active_sessions(db, device_id) {
+            Ok(active) if !active.is_empty() => Err(VaultimeError::Backup(
+                "close all running games before restoring a backup".into(),
+            )),
+            Ok(_) => restore(),
+            Err(error) => Err(error),
+        };
+        if !integrity::ledger::this_device().is_ok_and(|now| now != device_id) {
+            self.resume();
+        }
+        result
+    }
+
     /// True while the tracker thread runs and is not paused.
     pub fn is_running(&self) -> bool {
         let alive = self
@@ -1140,6 +1165,28 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn a_restore_waits_for_running_games_and_tracking_goes_on_after() {
+        integrity::ledger::act_as(Some(&integrity::ledger::test_pc("device")));
+        let (db, game_id) = library_with("Restored Game");
+        let db = Arc::new(db);
+        // The engine tracks a PC of its own, so it leaves the session alone.
+        let engine = TrackingEngine::start(Arc::clone(&db), "engine-pc".into(), Arc::default());
+        let open = sessions::create_session(&db, &game_id, "device").unwrap();
+
+        let refused = engine.while_paused(&db, "device", || Ok(()));
+        assert!(refused.is_err());
+        assert!(engine.is_running());
+
+        sessions::end_session(&db, &open.id, 0, 0, 0, integrity::STATUS_LOCAL).unwrap();
+        assert_eq!(engine.while_paused(&db, "device", || Ok(7)).unwrap(), 7);
+        assert!(engine.is_running());
+        // A restore that made this PC another one leaves tracking paused.
+        engine.while_paused(&db, "another-pc", || Ok(())).unwrap();
+        assert!(!engine.is_running());
+        engine.shutdown();
     }
 
     #[test]
