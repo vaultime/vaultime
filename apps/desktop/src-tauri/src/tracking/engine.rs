@@ -61,6 +61,9 @@ struct ActiveSession {
     stored_at: Instant,
     /// Ticks in a row the game was missing from the process list.
     missed_ticks: u32,
+    /// The wall time of the first of them, where the session ends when the
+    /// game stays gone. A later tick may come only after the PC slept.
+    missing_since: Option<DateTime<Utc>>,
 }
 
 impl ActiveSession {
@@ -90,6 +93,7 @@ impl ActiveSession {
             stored: Checkpoint::default(),
             stored_at: now,
             missed_ticks: 0,
+            missing_since: None,
         }
     }
 
@@ -301,7 +305,7 @@ fn poll_loop(
     }
 
     for session in active.into_values() {
-        end_active_session(db, live, &session);
+        end_active_session(db, live, &session, None);
     }
 
     info!("tracking engine stopped");
@@ -426,7 +430,7 @@ fn poll_tick(
         }
     }
 
-    end_finished_sessions(db, live, active, &observed_games);
+    end_finished_sessions(db, live, active, &observed_games, clocks.wall);
 
     debug!(
         "poll tick: {} tracked, {} running, {} active sessions",
@@ -442,13 +446,15 @@ fn poll_tick(
 }
 
 /// Ends the sessions of games that were missing for
-/// `MISSED_TICKS_BEFORE_END` ticks in a row. A session the database fails to
-/// close stays to be ended on the next tick, as long as its row is still open.
+/// `MISSED_TICKS_BEFORE_END` ticks in a row, as of the first of them. A
+/// session the database fails to close stays to be ended on the next tick,
+/// as long as its row is still open.
 fn end_finished_sessions(
     db: &Database,
     live: &LiveSessions,
     active: &mut HashMap<String, ActiveSession>,
     observed_games: &HashMap<String, GameObservation>,
+    wall: DateTime<Utc>,
 ) {
     let mut finished = Vec::new();
     for (game_id, session) in active.iter_mut() {
@@ -457,9 +463,11 @@ fn end_finished_sessions(
             .is_some_and(|observation| observation.is_running);
         if running {
             session.missed_ticks = 0;
+            session.missing_since = None;
             continue;
         }
         session.missed_ticks += 1;
+        session.missing_since.get_or_insert(wall);
         if session.missed_ticks >= MISSED_TICKS_BEFORE_END {
             finished.push(game_id.clone());
         }
@@ -469,7 +477,8 @@ fn end_finished_sessions(
         let Some(session) = active.get(&game_id) else {
             continue;
         };
-        if (end_active_session(db, live, session) || !still_open(db, session))
+        if (end_active_session(db, live, session, session.missing_since)
+            || !still_open(db, session))
             && let Some(session) = active.remove(&game_id)
         {
             live.remove(&session.session_id);
@@ -477,16 +486,20 @@ fn end_finished_sessions(
     }
 }
 
-/// Closes a session with the counters of its last counted tick. Returns
-/// whether it closed.
-fn end_active_session(db: &Database, live: &LiveSessions, session: &ActiveSession) -> bool {
-    let ended = sessions::end_session(
+/// Closes a session with the counters of its last counted tick, as of
+/// `ended_at` or now. Returns whether it closed.
+fn end_active_session(
+    db: &Database,
+    live: &LiveSessions,
+    session: &ActiveSession,
+    ended_at: Option<DateTime<Utc>>,
+) -> bool {
+    let ended = sessions::end_session_at(
         db,
         &session.session_id,
-        session.runtime_ms,
-        session.active_ms,
-        session.idle_ms,
+        (session.runtime_ms, session.active_ms, session.idle_ms),
         &session.integrity_status,
+        &ended_at.map_or_else(integrity::now_timestamp, integrity::format_timestamp),
     );
     match ended {
         Ok(_) => {
@@ -1225,20 +1238,51 @@ mod tests {
         let running = HashMap::from([(f.game_id.clone(), PLAYING)]);
 
         for _ in 1..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing);
+            end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
         }
         assert!(active.contains_key(&f.game_id));
         // Back in the list, so missing again starts the count over.
-        end_finished_sessions(&f.db, &live, &mut active, &running);
+        end_finished_sessions(&f.db, &live, &mut active, &running, Utc::now());
         for _ in 1..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing);
+            end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
         }
         assert!(active.contains_key(&f.game_id));
         assert!(is_open(&f));
 
-        end_finished_sessions(&f.db, &live, &mut active, &missing);
+        end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
         assert!(active.is_empty());
         assert!(!is_open(&f));
+    }
+
+    #[test]
+    fn a_session_ends_where_its_game_went_missing_also_across_a_sleep() {
+        let f = fixture();
+        let live = LiveSessions::default();
+        let mut active = tracked(&f);
+        let running = HashMap::from([(f.game_id.clone(), PLAYING)]);
+        let missing = HashMap::new();
+        let first = Utc::now() + chrono::Duration::minutes(1);
+        let gone = first + chrono::Duration::minutes(10);
+
+        // Missing once, back again, then gone for good.
+        end_finished_sessions(&f.db, &live, &mut active, &missing, first);
+        end_finished_sessions(&f.db, &live, &mut active, &running, first);
+        end_finished_sessions(&f.db, &live, &mut active, &missing, gone);
+        // The next tick came only after the PC slept for hours.
+        let woke = gone + chrono::Duration::hours(5);
+        for _ in 1..MISSED_TICKS_BEFORE_END {
+            end_finished_sessions(&f.db, &live, &mut active, &missing, woke);
+        }
+        assert!(active.is_empty());
+        let stored =
+            f.db.with_conn(|conn| {
+                sessions::stored_session(conn, &f.session_id).map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+        assert_eq!(
+            stored.ended_at_wall,
+            Some(integrity::format_timestamp(gone))
+        );
     }
 
     #[test]
@@ -1257,13 +1301,13 @@ mod tests {
         );
 
         for _ in 0..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing);
+            end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
         }
         assert!(active.contains_key(&f.game_id));
         assert!(is_open(&f));
 
         refuse("DROP TRIGGER refuse_end;");
-        end_finished_sessions(&f.db, &live, &mut active, &missing);
+        end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
         assert!(active.is_empty());
         assert!(!is_open(&f));
     }
@@ -1276,7 +1320,7 @@ mod tests {
         sessions::end_session(&f.db, &f.session_id, 0, 0, 0, integrity::STATUS_LOCAL).unwrap();
 
         for _ in 0..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &HashMap::new());
+            end_finished_sessions(&f.db, &live, &mut active, &HashMap::new(), Utc::now());
         }
         assert!(active.is_empty());
     }

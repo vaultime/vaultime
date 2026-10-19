@@ -112,7 +112,7 @@ pub fn create_session_at(
     })
 }
 
-/// Closes an open session, recording its final timing data.
+/// Closes an open session now, recording its final timing data.
 pub fn end_session(
     db: &Database,
     session_id: &str,
@@ -121,8 +121,24 @@ pub fn end_session(
     idle_ms: i64,
     integrity_status: &str,
 ) -> Result<Session> {
-    let ended_at_wall = integrity::now_timestamp();
+    end_session_at(
+        db,
+        session_id,
+        (runtime_ms, active_ms, idle_ms),
+        integrity_status,
+        &integrity::now_timestamp(),
+    )
+}
 
+/// Closes an open session as of `ended_at_wall`, with its runtime, active
+/// and idle time.
+pub fn end_session_at(
+    db: &Database,
+    session_id: &str,
+    (runtime_ms, active_ms, idle_ms): (i64, i64, i64),
+    integrity_status: &str,
+    ended_at_wall: &str,
+) -> Result<Session> {
     db.with_transaction(|conn| {
         let updated = conn
             .execute(
@@ -156,7 +172,7 @@ pub fn end_session(
             conn,
             session_id,
             "ended",
-            &ended_at_wall,
+            ended_at_wall,
             Some(runtime_ms),
             &json!({
                 "runtime_ms": runtime_ms,
