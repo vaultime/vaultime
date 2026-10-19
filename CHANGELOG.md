@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Backups
+
+- **Cloud backup only when you want it.** Cloud backup has its own switch under Settings, Cloud backup. Turned off, the Cloud page leaves the menu and the command palette, and Vaultime neither signs in nor uploads backups, nor reads a saved sign-in from the keyring. New installs start with it off, as accounts are invite-only. A PC that is signed in keeps it on until you sign out, and the switch stays with each PC when you restore a backup.
+
 ### Fixes
 
 - **A cloud restore asks before it takes over.** A fresh install that restores a cloud backup only continues as the backup's PC when the restore showed that choice. It used to take over even when the check behind the choice failed, or when the backup did not name its PC and the choice never showed. Restore waits until that check is done.

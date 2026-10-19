@@ -9,8 +9,10 @@ import { StatsPage } from "@/features/stats/StatsPage";
 import { CloudPage } from "@/features/cloud/CloudPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { GameDetailsPage } from "@/features/game-details/GameDetailsPage";
+import { useCloudSession } from "@/features/cloud/cloud-context";
 
 export function App() {
+  const { enabled: cloudEnabled } = useCloudSession();
   return (
     <Routes>
       <Route element={<AppLayout />}>
@@ -21,7 +23,10 @@ export function App() {
         <Route path="sessions" element={<Navigate to="/journal" replace />} />
         <Route path="stats" element={<StatsPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="cloud" element={<CloudPage />} />
+        <Route
+          path="cloud"
+          element={cloudEnabled ? <CloudPage /> : <Navigate to="/settings#cloud-backup" replace />}
+        />
       </Route>
     </Routes>
   );

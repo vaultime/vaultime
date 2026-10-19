@@ -36,7 +36,8 @@ const PAGES = [
 export function Rail({ onSearch }: { onSearch: () => void }) {
   const { visible: summaries } = useLibrary();
   const playing = usePlaying();
-  const { session } = useCloudSession();
+  const { enabled: cloudEnabled, session } = useCloudSession();
+  const pages = PAGES.filter((page) => cloudEnabled || page.to !== "/cloud");
   const location = useLocation();
   const { values, save } = useSettings();
   const [appVersion, setAppVersion] = useState("");
@@ -70,7 +71,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
       </button>
 
       <div className="flex flex-col gap-0.5">
-        {PAGES.map(({ to, label, icon: Icon }) => (
+        {pages.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

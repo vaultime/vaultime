@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
 import { AppearanceSection } from "@/features/settings/AppearanceSection";
+import { CloudBackupSection } from "@/features/settings/CloudBackupSection";
 import { DetectionSection } from "@/features/settings/DetectionSection";
 import { EarlierPlaytimeSection } from "@/features/settings/EarlierPlaytimeSection";
 import { ExportSection } from "@/features/settings/ExportSection";
@@ -337,6 +338,8 @@ export function SettingsPage() {
           onError={setError}
           onRestartRequired={() => setRestartRequired(true)}
         />
+
+        <CloudBackupSection onError={setError} />
 
         <ExportSection start={intent === "export-csv" ? "csv" : intent === "export-json" ? "json" : null} />
 

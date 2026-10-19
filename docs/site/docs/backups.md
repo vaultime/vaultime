@@ -44,6 +44,10 @@ Vaultime refuses a backup that is damaged or holds database parts it never write
 > [!NOTE]
 > Cloud backup is a free private beta for people we invite. It may end at any time, and Vaultime works fully without it. You can apply for an invite on the [start page](https://vaultime.codfishcloud.de/#beta).
 
+### Turning it on
+
+Cloud backup is off on a new install, and the menu has no Cloud page. Turn on **Use cloud backup** under Settings, Cloud backup, and the Cloud page joins the menu. Turned off, Vaultime neither signs in nor uploads backups, and it does not read a saved sign-in from the keyring. A PC that is signed in keeps cloud backup until you sign out. PCs that used Vaultime before the switch existed keep cloud backup on while they are signed in.
+
 ### Signing up
 
 On the Cloud page, **Create an account** asks for your email, a password, your invite code and a backup passphrase. The password signs you in. The passphrase encrypts your backups and is at least 12 characters long.

@@ -43,7 +43,7 @@ Updates
 : Vaultime asks the Vaultime server whether a new version is out when it starts and every few hours. Updates are signed, and Vaultime only installs ones that carry the right signature.
 
 Cloud backup
-: Only when you sign in. Backups are encrypted on your PC before they are uploaded, see [Backups](backups.md#cloud-backup).
+: Only when you turn it on and sign in. Backups are encrypted on your PC before they are uploaded, see [Backups](backups.md#cloud-backup).
 
 Nothing else
 : No analytics, no telemetry, no crash reports and no ads. Covers come from Steam's files on your PC and from your game folders, not from the internet.

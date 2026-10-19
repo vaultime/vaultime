@@ -15,6 +15,8 @@ import type {
 } from "@/lib/types";
 
 export interface CloudSessionContextValue {
+  /** Whether this PC uses cloud backup, which brings the Cloud page. Off on new installs. */
+  enabled: boolean;
   apiBaseUrl: string;
   initializing: boolean;
   session: CloudAuthSession | null;

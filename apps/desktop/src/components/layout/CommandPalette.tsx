@@ -6,6 +6,7 @@ import { matchPath, useLocation, useNavigate } from "react-router";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Search } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
+import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
 import { useUpdates } from "@/features/updates/update-context";
 import { PALETTE_GAMES_IDLE, PALETTE_GAMES_SEARCHING } from "@/lib/constants";
@@ -44,6 +45,7 @@ const FIXED: Command[] = [
   { id: "setting-this-pc", label: "This PC", hint: "Its name and the ledger of its sessions", kind: "Setting", to: "/settings#this-pc" },
   { id: "setting-other-pcs", label: "Other PCs", hint: "Merge the sessions of another PC from its backup", kind: "Setting", to: "/settings#other-pcs" },
   { id: "setting-backups", label: "Local backups", hint: "Save, restore and where daily backups go", kind: "Setting", to: "/settings#local-backups" },
+  { id: "setting-cloud", label: "Cloud backup", hint: "Turn the Cloud page on or off", kind: "Setting", to: "/settings#cloud-backup" },
   { id: "setting-appearance", label: "Appearance", hint: "Light or dark, ground, accent and background", kind: "Setting", to: "/settings#appearance" },
   { id: "setting-window", label: "Window size", hint: "Compact to Extra large, or free", kind: "Setting", to: "/settings#window" },
   { id: "setting-ignored", label: "Ignored programs", hint: "Programs that are no game", kind: "Setting", to: "/settings#ignored-programs" },
@@ -56,6 +58,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const location = useLocation();
   const { visible: summaries, summaries: everyGame, setStatus, refresh } = useLibrary();
   const updates = useUpdates();
+  const { enabled: cloudEnabled } = useCloudSession();
   // On a game's page, things to do with that game come first.
   const pageGameId = matchPath("/library/:gameId", location.pathname)?.params.gameId;
   const pageGame = everyGame.find((summary) => summary.game.id === pageGameId);
@@ -79,7 +82,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         cover: { title: game.title, src: cover },
       }));
     const fixed: Command[] = [
-      ...FIXED,
+      ...FIXED.filter((command) => cloudEnabled || command.id !== "page-cloud"),
       {
         id: "action-updates",
         label: "Check for updates",
@@ -131,7 +134,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       ...games,
       ...fixed.filter((command) => matches(command.label) || matches(command.hint)),
     ];
-  }, [query, summaries, pageGame, setStatus, refresh, updates.check]);
+  }, [query, summaries, pageGame, setStatus, refresh, updates.check, cloudEnabled]);
 
   const active = Math.min(selected, Math.max(results.length - 1, 0));
 

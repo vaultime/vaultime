@@ -366,6 +366,9 @@ pub const CLOSE_TO_TRAY_SETTING: &str = "close_to_tray";
 /// Setting that turns daily cloud backups off with `false`. Same as
 /// `SETTING_KEYS.cloudAutoBackup` in `lib/constants.ts`.
 pub const CLOUD_AUTO_BACKUP_SETTING: &str = "cloud_auto_backup_enabled";
+/// Setting that shows the Cloud page and lets this PC sign in with `true`.
+/// Same as `SETTING_KEYS.cloudBackup` in `lib/constants.ts`.
+pub const CLOUD_BACKUP_SETTING: &str = "cloud_backup";
 /// Setting with how the rail sorts the games. Same as `SETTING_KEYS.railSort`
 /// in `lib/constants.ts`.
 pub const RAIL_SORT_SETTING: &str = "rail_sort";
@@ -384,6 +387,7 @@ pub const PAGE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_ENABLED_SETTING,
     AUTO_BACKUP_FOLDER_SETTING,
     CLOUD_AUTO_BACKUP_SETTING,
+    CLOUD_BACKUP_SETTING,
     RAIL_SORT_SETTING,
     AUTO_DISCOVER_SETTING,
     APPEARANCE_MODE_SETTING,

@@ -26,8 +26,8 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
-    DATABASE_FILE, HASH_BUFFER_BYTES, PLAY_SLICES_VERSION_SETTING, WINDOW_LOOK_SETTING,
-    WINDOW_SIZE_SETTING,
+    CLOUD_BACKUP_SETTING, DATABASE_FILE, HASH_BUFFER_BYTES, PLAY_SLICES_VERSION_SETTING,
+    WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -40,10 +40,12 @@ const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 /// Settings that belong to this PC. A restore keeps the local values, so a
 /// backup cannot send the daily backups to a folder of its choosing, the
-/// look stays with the background picture, which backups leave out, and the
-/// window keeps a size made for this screen.
+/// look stays with the background picture, which backups leave out, the
+/// window keeps a size made for this screen, and cloud backup stays as this
+/// PC's sign in has it.
 const DEVICE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
+    CLOUD_BACKUP_SETTING,
     APPEARANCE_MODE_SETTING,
     APPEARANCE_GROUND_SETTING,
     APPEARANCE_ACCENT_SETTING,

@@ -62,13 +62,18 @@ import {
 } from "./session-store";
 
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
-  const [initializing, setInitializing] = useState(true);
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
   const { values, save } = useSettings();
+  // Unset on PCs from before the switch, until the first start decides.
+  const cloudSetting = values[SETTING_KEYS.cloudBackup];
+  const enabled = cloudSetting === "true";
+  // Turned off, there is no saved session to look for.
+  const initializing = cloudSetting !== "false" && bootstrapping;
   const [autoBackup, setAutoBackupState] = useState(() => values[SETTING_KEYS.cloudAutoBackup] !== "false");
   const [autoBackupError, setAutoBackupError] = useState<string | null>(null);
   const sessionRef = useRef<CloudAuthSession | null>(null);
@@ -156,7 +161,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (bootstrappedRef.current) {
+    // Turned off, this PC never reads a saved session or reaches the server.
+    if (cloudSetting === "false" || bootstrappedRef.current) {
       return;
     }
     // The ref makes this run once, also through React's development double
@@ -165,8 +171,14 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     async function restoreStoredSession() {
       const stored = await loadPersistedSession();
+      // A PC from before the switch keeps cloud backup while it is signed in.
+      if (cloudSetting === undefined) {
+        await save(SETTING_KEYS.cloudBackup, String(stored !== null)).catch(
+          logFailure("deciding whether this PC uses cloud backup"),
+        );
+      }
       if (!stored) {
-        setInitializing(false);
+        setBootstrapping(false);
         return;
       }
 
@@ -176,7 +188,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       if (isExpired(stored.refresh_expires_at, 0)) {
         applyClearedSession();
         void forgetStoredSession();
-        setInitializing(false);
+        setBootstrapping(false);
         return;
       }
 
@@ -200,12 +212,12 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
           registerOnRenewalRef.current = true;
         }
       } finally {
-        setInitializing(false);
+        setBootstrapping(false);
       }
     }
 
     void restoreStoredSession();
-  }, [refreshWithToken]);
+  }, [cloudSetting, refreshWithToken, save]);
 
   function applySession(next: CloudAuthSession) {
     sessionRef.current = next;
@@ -587,6 +599,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const value: CloudSessionContextValue = {
+    enabled,
     apiBaseUrl: CLOUD_API_BASE_URL,
     initializing,
     session,

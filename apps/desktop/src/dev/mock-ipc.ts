@@ -23,7 +23,9 @@
 // ?autodiscover=first as on the first look. They come once, as in the app.
 // The fourth game has a GOG install linked to it, and ?discover=1&scan=1&same=1
 // shows a discovered Xbox copy of it marked as the same game.
-// ?offline=1 leaves the cloud server out of reach.
+// ?offline=1 leaves the cloud server out of reach. ?cloud=off turns cloud
+// backup off, so the Cloud page leaves the menu, and ?cloudfresh=1 leaves the
+// switch unset, as on a PC from before it.
 // ?takeover=1 makes this PC a fresh install, so restoring the Laptop's backup,
 // a local one or one in the cloud, asks whether this PC is the Laptop set up again.
 
@@ -64,6 +66,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const params = new URLSearchParams(window.location.search);
 const scenario = params.get("mock");
 const signedIn = params.get("cloud") === "1" || params.has("password");
+let cloudBackupSetting: string | null = params.has("cloudfresh") ? null : params.get("cloud") === "off" ? "false" : "true";
 const takeoverPreview = params.get("takeover") === "1";
 
 const titles =
@@ -865,6 +868,7 @@ function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
       if (String(args.key).startsWith("appearance_") || String(args.key).startsWith("background_")) {
         appearanceValues.set(String(args.key), String(args.value));
       }
+      if (args.key === "cloud_backup") cloudBackupSetting = String(args.value);
       return true;
     case "get_background_image":
       return backgroundPicture;
@@ -1592,6 +1596,7 @@ mockIPC((cmd, payload) => {
     case "list_settings":
       return [
         { key: "idle_threshold_seconds", value: "300", updated_at: iso(now) },
+        ...(cloudBackupSetting === null ? [] : [{ key: "cloud_backup", value: cloudBackupSetting, updated_at: iso(now) }]),
         ...[...appearanceValues].map(([key, value]) => ({ key, value, updated_at: iso(now) })),
       ];
     case "get_tracking_diagnostics":
