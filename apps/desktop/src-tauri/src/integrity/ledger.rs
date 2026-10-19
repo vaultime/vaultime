@@ -70,13 +70,20 @@ const RESTATING_EVENTS: [&str; 2] = ["recovered", "corrected"];
 /// counts as its own from then on.
 const ENTRY_TOOK_OVER: &str = "took_over";
 
-static KEY: OnceLock<SigningKey> = OnceLock::new();
-/// The device id this PC's ledger names, which a takeover changes.
+/// Who this PC is in its ledger.
+#[derive(Clone)]
+struct Identity {
+    key: SigningKey,
+    /// The device id its ledger names, which a takeover changes.
+    device: String,
+    /// Keys it counts as its own besides the current one: the ones it signed
+    /// with before and the ones it took over.
+    own: HashSet<String>,
+}
+
+/// This PC's identity, from when its key is loaded.
 #[cfg(not(test))]
-static DEVICE: Mutex<Option<String>> = Mutex::new(None);
-/// Every key this PC counts as its own besides the current one.
-#[cfg(not(test))]
-static OWN_KEYS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+static IDENTITY: Mutex<Option<Identity>> = Mutex::new(None);
 
 /// Loads this PC's signing key from `app_dir`, or makes one on the first
 /// start, and remembers the device id its ledger names. Backups leave the
@@ -118,14 +125,11 @@ pub fn load_key(app_dir: &Path, device_id: &str) -> Result<()> {
     };
     let key = SigningKey::from_bytes(&seed);
     let own = remember_own_key(app_dir, &key)?;
-    let _ = KEY.set(key);
-    #[cfg(not(test))]
-    {
-        *OWN_KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Some(own);
-        *DEVICE.lock().unwrap_or_else(PoisonError::into_inner) = Some(device_id.to_owned());
-    }
-    #[cfg(test)]
-    let _ = (own, device_id);
+    install(Identity {
+        key,
+        device: device_id.to_owned(),
+        own,
+    });
     Ok(())
 }
 
@@ -187,18 +191,19 @@ fn write_private(path: &Path, contents: &str) -> Result<()> {
     })
 }
 
-/// This PC's signing key and device id.
+/// Runs `f` on this PC's identity.
 #[cfg(not(test))]
-fn identity() -> Result<(SigningKey, String)> {
-    let key = KEY
-        .get()
+fn with_identity<T>(f: impl FnOnce(&mut Identity) -> T) -> Result<T> {
+    let mut held = IDENTITY.lock().unwrap_or_else(PoisonError::into_inner);
+    let identity = held
+        .as_mut()
         .ok_or_else(|| VaultimeError::Integrity("this PC's ledger key is not loaded".into()))?;
-    let device = DEVICE
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-        .ok_or_else(|| VaultimeError::Integrity("this PC's device id is not known".into()))?;
-    Ok((key.clone(), device))
+    Ok(f(identity))
+}
+
+#[cfg(not(test))]
+fn install(identity: Identity) {
+    *IDENTITY.lock().unwrap_or_else(PoisonError::into_inner) = Some(identity);
 }
 
 #[cfg(test)]
@@ -206,27 +211,46 @@ thread_local! {
     /// The PC a test acts as, so one test can play several PCs.
     static TEST_PC: std::cell::RefCell<Option<(SigningKey, String)>> =
         const { std::cell::RefCell::new(None) };
-    /// What test PCs took over, by their key: the device id they continue
-    /// as and the keys they count as their own.
-    static TEST_TAKEN: std::cell::RefCell<HashMap<String, (String, HashSet<String>)>> =
+    /// Each PC a test played, by its key, as takeovers left it.
+    static TEST_IDENTITIES: std::cell::RefCell<HashMap<String, Identity>> =
         std::cell::RefCell::new(HashMap::new());
 }
 
-/// Tests share one key, made up on first use, unless they act as a PC of
-/// their own.
+/// The key of the PC tests share unless they act as one of their own.
 #[cfg(test)]
-fn identity() -> Result<(SigningKey, String)> {
+static SHARED_TEST_KEY: OnceLock<SigningKey> = OnceLock::new();
+
+/// Runs `f` on the identity of the PC this test thread acts as.
+#[cfg(test)]
+fn with_identity<T>(f: impl FnOnce(&mut Identity) -> T) -> Result<T> {
     let (key, device) = TEST_PC.with(|pc| pc.borrow().clone()).unwrap_or_else(|| {
-        let key = KEY.get_or_init(|| SigningKey::from_bytes(&random_seed().unwrap()));
+        let key = SHARED_TEST_KEY.get_or_init(|| SigningKey::from_bytes(&random_seed().unwrap()));
         (key.clone(), "test-pc".to_owned())
     });
-    let taken = TEST_TAKEN.with(|taken| {
-        taken
-            .borrow()
-            .get(&hex::encode(key.verifying_key().as_bytes()))
-            .map(|(device, _)| device.clone())
+    TEST_IDENTITIES.with(|identities| {
+        let mut identities = identities.borrow_mut();
+        let identity = identities
+            .entry(hex::encode(key.verifying_key().as_bytes()))
+            .or_insert_with(|| Identity {
+                key,
+                device,
+                own: HashSet::new(),
+            });
+        Ok(f(identity))
+    })
+}
+
+/// A test thread that loads a key acts as that PC from then on.
+#[cfg(test)]
+fn install(identity: Identity) {
+    let pc = (identity.key.clone(), identity.device.clone());
+    TEST_IDENTITIES.with(|identities| {
+        identities.borrow_mut().insert(
+            hex::encode(identity.key.verifying_key().as_bytes()),
+            identity,
+        );
     });
-    Ok((key, taken.unwrap_or(device)))
+    act_as(Some(&pc));
 }
 
 /// A PC for tests, with a key of its own.
@@ -244,6 +268,11 @@ pub(crate) fn act_as(pc: Option<&(SigningKey, String)>) {
     TEST_PC.with(|current| *current.borrow_mut() = pc.cloned());
 }
 
+/// This PC's signing key and device id.
+fn identity() -> Result<(SigningKey, String)> {
+    with_identity(|identity| (identity.key.clone(), identity.device.clone()))
+}
+
 /// This PC's public key in hex, which names its ledger.
 pub fn key_id() -> Result<String> {
     Ok(hex::encode(identity()?.0.verifying_key().as_bytes()))
@@ -251,30 +280,12 @@ pub fn key_id() -> Result<String> {
 
 /// Every key this PC counts as its own: the ones it has signed with, the
 /// current one included, and the ones it took over.
-#[cfg(not(test))]
 pub(crate) fn own_keys() -> Result<HashSet<String>> {
-    let mut keys = OWN_KEYS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-        .unwrap_or_default();
-    keys.insert(key_id()?);
-    Ok(keys)
-}
-
-/// A test PC signs with one key only, and counts the ones it took over.
-#[cfg(test)]
-pub(crate) fn own_keys() -> Result<HashSet<String>> {
-    let key = key_id()?;
-    let mut keys = TEST_TAKEN.with(|taken| {
-        taken
-            .borrow()
-            .get(&key)
-            .map(|(_, keys)| keys.clone())
-            .unwrap_or_default()
-    });
-    keys.insert(key);
-    Ok(keys)
+    with_identity(|identity| {
+        let mut keys = identity.own.clone();
+        keys.insert(hex::encode(identity.key.verifying_key().as_bytes()));
+        keys
+    })
 }
 
 /// The device id this PC's ledger names.
@@ -284,37 +295,17 @@ pub fn this_device() -> Result<String> {
 
 /// Makes this PC continue as `device_id`, counting `keys` as its own too,
 /// for as long as this process runs. Returns what it was before.
-#[cfg(not(test))]
 fn switch_identity(device_id: &str, keys: &HashSet<String>) -> Result<(String, HashSet<String>)> {
-    let before = (this_device()?, own_keys()?);
-    let mut own = before.1.clone();
-    own.extend(keys.iter().cloned());
-    *OWN_KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Some(own);
-    *DEVICE.lock().unwrap_or_else(PoisonError::into_inner) = Some(device_id.to_owned());
-    Ok(before)
+    with_identity(|identity| {
+        let before = (identity.device.clone(), identity.own.clone());
+        identity.own.extend(keys.iter().cloned());
+        device_id.clone_into(&mut identity.device);
+        before
+    })
 }
 
-#[cfg(not(test))]
 fn restore_identity(before: (String, HashSet<String>)) {
-    *OWN_KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Some(before.1);
-    *DEVICE.lock().unwrap_or_else(PoisonError::into_inner) = Some(before.0);
-}
-
-#[cfg(test)]
-fn switch_identity(device_id: &str, keys: &HashSet<String>) -> Result<(String, HashSet<String>)> {
-    let before = (this_device()?, own_keys()?);
-    let mut own = before.1.clone();
-    own.extend(keys.iter().cloned());
-    let key = key_id()?;
-    TEST_TAKEN.with(|taken| taken.borrow_mut().insert(key, (device_id.to_owned(), own)));
-    Ok(before)
-}
-
-#[cfg(test)]
-fn restore_identity(before: (String, HashSet<String>)) {
-    if let Ok(key) = key_id() {
-        TEST_TAKEN.with(|taken| taken.borrow_mut().insert(key, before));
-    }
+    let _ = with_identity(|identity| (identity.device, identity.own) = before);
 }
 
 fn entry_hash(
@@ -2093,6 +2084,36 @@ mod tests {
             fs::read_to_string(dir.join(DEVICE_KEY_FILE)).unwrap(),
             fresh
         );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_loaded_key_counts_the_keys_this_pc_signed_with_before() {
+        let dir = std::env::temp_dir().join(format!("vaultime-key-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let earlier = hex::encode(test_pc("before").0.verifying_key().as_bytes());
+        fs::write(
+            dir.join(DEVICE_KEYS_FILE),
+            format!("{earlier}\nnot a key\n"),
+        )
+        .unwrap();
+
+        load_key(&dir, "this-pc").unwrap();
+        let current = key_id().unwrap();
+        assert_eq!(this_device().unwrap(), "this-pc");
+        assert_eq!(
+            own_keys().unwrap(),
+            HashSet::from([earlier.clone(), current.clone()])
+        );
+
+        // A takeover adds keys and a device id until it is undone.
+        let taken = hex::encode(test_pc("desktop").0.verifying_key().as_bytes());
+        let before = switch_identity("desktop", &HashSet::from([taken.clone()])).unwrap();
+        assert_eq!(this_device().unwrap(), "desktop");
+        assert!(own_keys().unwrap().contains(&taken));
+        restore_identity(before);
+        assert_eq!(this_device().unwrap(), "this-pc");
+        assert_eq!(own_keys().unwrap(), HashSet::from([earlier, current]));
         fs::remove_dir_all(&dir).ok();
     }
 
