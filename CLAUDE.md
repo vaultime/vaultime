@@ -55,7 +55,8 @@ Frontend, from `apps/desktop`:
 - `npm run typecheck`, `npm run lint`, `npm test` and `npm run build`
 - Tests live next to the code as `*.test.ts` and run in six time zones (see
   `vitest.config.ts`) with a German locale, so code that mixes up local and
-  UTC days fails somewhere.
+  UTC days fails somewhere. Component tests are `*.test.tsx`, render with
+  Testing Library in happy-dom and run once.
 - `VITE_MOCK_IPC=1 npx vite build --outDir dist-mock`, then
   `npx vite preview --outDir dist-mock` shows the UI in a browser with sample
   data. `bash ../../scripts/ui-screenshots.sh <folder> [page ...]` captures
