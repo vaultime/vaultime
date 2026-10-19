@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The numbers of the stats page, from the core's year of play and the
-// sessions on this PC.
+// The numbers of the stats page, from the core's year of play.
 
 import {
   DAYS_PER_WEEK,
@@ -15,11 +14,10 @@ import {
   SESSION_SHORT_MAX_MS,
 } from "@/lib/constants";
 import { groupByBucket, sumByGame, type BucketPlay, type GamePlay } from "@/lib/play-totals";
-import { countsAsPlay } from "@/lib/sessions";
 import { calendarDaysAgo, parseVaultimeDate, startOfDay } from "@/lib/time";
 import type { Session, YearPlay } from "@/lib/types";
 
-/** Session lengths from a quick look to a marathon, shortest first. */
+/** Session lengths from a quick look to a marathon, shortest first, as the core sorts them. */
 export const SESSION_SHAPES = ["quick", "short", "plain", "long", "marathon"] as const;
 export type SessionShape = (typeof SESSION_SHAPES)[number];
 
@@ -60,6 +58,7 @@ export interface YearStats {
   longest: Session | null;
 }
 
+/** How long one session reads, for its line in the journal. The stats page gets its counts from the core. */
 export function shapeOf(session: Session): SessionShape {
   const ms = session.runtime_ms;
   if (ms < SESSION_QUICK_MAX_MS) return "quick";
@@ -76,13 +75,11 @@ export function heatLevel(playedMs: number): number {
 }
 
 /**
- * Everything the stats page shows for `year`. Time and streaks come from the
- * core and count on the day they happened. Sessions count in the year they
- * started.
+ * Everything the stats page shows for `year`, from the core's year of play.
+ * Time and streaks count on the day they happened, sessions in the year they
+ * started. `sessions` holds the longest one to show.
  */
-export function yearStats(allSessions: Session[], year: number, play: YearPlay): YearStats {
-  const sessions = allSessions.filter(countsAsPlay);
-  const inYear = sessions.filter((session) => parseVaultimeDate(session.started_at_wall).getFullYear() === year);
+export function yearStats(sessions: Session[], year: number, play: YearPlay): YearStats {
   const days = groupByBucket(play.days);
   const monthsByKey = groupByBucket(play.days.map((total) => ({ ...total, bucket: total.bucket.slice(0, 7) })));
   const months = Array.from({ length: MONTHS_PER_YEAR }, (_, index) => {
@@ -95,15 +92,13 @@ export function yearStats(allSessions: Session[], year: number, play: YearPlay):
     if (weekClock[weekday]?.[hour] !== undefined) weekClock[weekday][hour] += total.active_ms;
   }
 
-  const sessionsByGame = new Map<string, number>();
-  const shapes = Object.fromEntries(SESSION_SHAPES.map((shape) => [shape, 0])) as Record<SessionShape, number>;
-  let longest: Session | null = null;
-  for (const session of inYear) {
-    sessionsByGame.set(session.game_id, (sessionsByGame.get(session.game_id) ?? 0) + 1);
-    shapes[shapeOf(session)] += 1;
-    if (!longest || session.runtime_ms > longest.runtime_ms) longest = session;
-  }
-  const games = sumByGame(play.days).map((game) => ({ ...game, sessionsCount: sessionsByGame.get(game.gameId) ?? 0 }));
+  const shapes = Object.fromEntries(
+    SESSION_SHAPES.map((shape, index) => [shape, play.session_lengths[index] ?? 0]),
+  ) as Record<SessionShape, number>;
+  const games = sumByGame(play.days).map((game) => ({
+    ...game,
+    sessionsCount: play.sessions_by_game[game.gameId] ?? 0,
+  }));
 
   const sum = (pick: (day: BucketPlay) => number) => [...days.values()].reduce((total, day) => total + pick(day), 0);
   const streak = play.longest_streak;
@@ -114,7 +109,7 @@ export function yearStats(allSessions: Session[], year: number, play: YearPlay):
     runtimeMs: sum((day) => day.runtimeMs),
     activeMs: sum((day) => day.activeMs),
     idleMs: sum((day) => day.idleMs),
-    sessionsCount: inYear.length,
+    sessionsCount: play.sessions_count,
     days,
     played: new Map(Object.entries(play.played)),
     daysPlayed: play.days_played,
@@ -126,7 +121,7 @@ export function yearStats(allSessions: Session[], year: number, play: YearPlay):
     months,
     games,
     shapes,
-    longest,
+    longest: sessions.find((session) => session.id === play.longest_session_id) ?? null,
   };
 }
 

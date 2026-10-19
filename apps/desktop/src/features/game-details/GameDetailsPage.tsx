@@ -23,11 +23,11 @@ import { StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, STEAM_LAUNCHER } from "@/lib/constants";
 import { launchersOf, linkedTo, whereFrom } from "@/lib/links";
+import { runtimeByHour } from "@/lib/play-totals";
 import { gamePlaytime } from "@/lib/sentences";
-import { countsAsPlay } from "@/lib/sessions";
 import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
-import { compareTimes, formatCalendarDay, formatHoursMinutes } from "@/lib/time";
+import { compareTimes, formatCalendarDay, formatHoursMinutes, parseVaultimeDate, startOfDay, toDayKey } from "@/lib/time";
 import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
 import { describeError, logFailure } from "@/lib/utils";
 import { capitalize } from "@/lib/words";
@@ -80,6 +80,26 @@ function GamePage({ gameId }: { gameId: string }) {
     };
   }, [gameId, sessions]);
 
+  // When the game is played, from the core, for the sentence under its title.
+  const firstPlayedAt = summary?.firstPlayedAt ?? null;
+  const [hours, setHours] = useState<number[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const tomorrow = toDayKey(startOfDay(new Date(), 1));
+    const from = firstPlayedAt ? toDayKey(parseVaultimeDate(firstPlayedAt)) : tomorrow;
+    (firstPlayedAt ? api.getPlayTotals(from, tomorrow, "hour_of_week", gameId) : Promise.resolve([]))
+      .then((totals) => {
+        if (!cancelled) setHours(runtimeByHour(totals));
+      })
+      .catch((error: unknown) => {
+        logFailure("loading when the game is played")(error);
+        if (!cancelled) setHours([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, firstPlayedAt, sessions]);
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -113,9 +133,6 @@ function GamePage({ gameId }: { gameId: string }) {
 
   const { game, cover, tint } = summary;
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
-  const firstPlayed = sessions.filter(countsAsPlay).at(-1)?.started_at_wall;
-  const longest = sessions.reduce((best, session) => Math.max(best, session.runtime_ms), 0);
-  const idleMs = sessions.reduce((sum, session) => sum + session.counted_idle_ms, 0);
 
   function onAssetsChanged(next: GameAssetView[]) {
     setAssets(next);
@@ -174,7 +191,7 @@ function GamePage({ gameId }: { gameId: string }) {
             <TintedTitle tint={tint} text={game.title} />
             {/* Room for two lines, so the header keeps its height from game to game. */}
             <TintedSentence tint={tint} className="min-h-[2.6em]">
-              <PhraseText phrase={gamePlaytime(sessions)} />
+              {hours && <PhraseText phrase={gamePlaytime(summary, hours)} />}
             </TintedSentence>
             <div className="mt-6">
               <StatusPicker
@@ -265,12 +282,15 @@ function GamePage({ gameId }: { gameId: string }) {
             {summary.earlier && <TotalRow label="In all" value={formatHoursMinutes(summary.totalMs)} />}
             <TotalRow label={summary.earlier ? "Tracked here" : "Runtime"} value={formatHoursMinutes(summary.runtimeMs)} />
             <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
-            <TotalRow label="Idle" value={formatHoursMinutes(idleMs)} />
+            <TotalRow label="Idle" value={formatHoursMinutes(summary.idleMs)} />
             <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
             <TotalRow label="Suspicious" value={String(summary.suspiciousCount)} />
             <TotalRow label="Recovered" value={String(summary.recoveredCount)} />
-            <TotalRow label="Longest" value={formatHoursMinutes(longest)} />
-            <TotalRow label="First played" value={firstPlayed ? formatCalendarDay(firstPlayed) : "Not yet"} />
+            <TotalRow label="Longest" value={formatHoursMinutes(summary.longestSessionMs)} />
+            <TotalRow
+              label="First played"
+              value={summary.firstPlayedAt ? formatCalendarDay(summary.firstPlayedAt) : "Not yet"}
+            />
           </AsideSection>
 
           {summary.earlier && <EarlierSection earlier={summary.earlier} />}

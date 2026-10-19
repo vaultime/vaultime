@@ -116,7 +116,7 @@ pub struct GameAsset {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
     pub game_id: String,

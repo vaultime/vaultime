@@ -11,9 +11,13 @@ use chrono::{NaiveDate, TimeDelta, TimeZone};
 use rusqlite::params;
 use serde::Serialize;
 
-use crate::constants::STREAK_FIRST_LOOK_DAYS;
+use crate::constants::{
+    SESSION_LONG_MAX_MS, SESSION_PLAIN_MAX_MS, SESSION_QUICK_MAX_MS, SESSION_SHORT_MAX_MS,
+    STREAK_FIRST_LOOK_DAYS,
+};
 use crate::db::connection::Database;
 use crate::db::models::Session;
+use crate::db::repo::games;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
@@ -53,6 +57,14 @@ pub struct YearPlay {
     /// Days in a row with play up to today, or up to yesterday while today
     /// has none yet, however far back they go.
     pub current_streak: i64,
+    /// Sessions with play that started in the year.
+    pub sessions_count: usize,
+    /// The same by the game each counts as.
+    pub sessions_by_game: BTreeMap<String, usize>,
+    /// The same by length: quick looks, short, plain, long and marathons.
+    pub session_lengths: [usize; 5],
+    /// The longest session that started in the year.
+    pub longest_session_id: Option<String>,
 }
 
 /// The last few days of play, for the library.
@@ -240,6 +252,15 @@ pub fn year_play<Tz: TimeZone>(
         .into_iter()
         .filter_map(date_of)
         .collect();
+    let started = started_sessions(db, live, tz, first, Some(next), now_ms)?;
+    let links = games::links(db)?;
+    let mut sessions_by_game: BTreeMap<String, usize> = BTreeMap::new();
+    let mut session_lengths = [0; 5];
+    for session in &started {
+        let shown = links.get(&session.game_id).unwrap_or(&session.game_id);
+        *sessions_by_game.entry(shown.clone()).or_default() += 1;
+        session_lengths[length_class(shown_runtime(session))] += 1;
+    }
     Ok(YearPlay {
         hours: play_totals(db, live, tz, first, next, Bucket::HourOfWeek, None, now_ms)?,
         played_ms: totals.played_ms(),
@@ -248,7 +269,74 @@ pub fn year_play<Tz: TimeZone>(
         current_streak: current_streak(db, live, tz, (today, now_ms), STREAK_FIRST_LOOK_DAYS)?,
         days: totals.games,
         played: totals.played,
+        sessions_count: started.len(),
+        sessions_by_game,
+        session_lengths,
+        longest_session_id: longest_of(&started),
     })
+}
+
+/// Sessions with play that started from the local day `from` on, up to but
+/// not including `to`, running ones as of the tracker's latest tick, each
+/// with the time it set aside.
+fn started_sessions<Tz: TimeZone>(
+    db: &Database,
+    live: &LiveSessions,
+    tz: &Tz,
+    from: NaiveDate,
+    to: Option<NaiveDate>,
+    now_ms: i64,
+) -> Result<Vec<Session>> {
+    let wall_of = |day: NaiveDate| {
+        chrono::DateTime::from_timestamp_millis(day_start_ms(tz, day))
+            .map_or_else(String::new, integrity::format_timestamp)
+    };
+    let from_wall = wall_of(from);
+    // Past every stored time, which all start with a four digit year.
+    let to_wall = to.map_or_else(|| "~".to_owned(), wall_of);
+    let mut started: Vec<Session> = db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT * FROM sessions
+                 WHERE started_at_wall >= ?1 AND started_at_wall < ?2
+                   AND (ended_at_wall IS NULL OR runtime_ms > 0)",
+            )
+            .map_err(map_db)?;
+        stmt.query_map(params![from_wall, to_wall], row_to_session)
+            .map_err(map_db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_db)
+    })?;
+    for session in &mut started {
+        live.apply(session);
+    }
+    fill_set_aside(db, live, &mut started, now_ms)?;
+    Ok(started)
+}
+
+/// A session's runtime as the pages show it, without the time set aside.
+fn shown_runtime(session: &Session) -> i64 {
+    session.runtime_ms - session.set_aside_ms
+}
+
+fn longest_of(sessions: &[Session]) -> Option<String> {
+    sessions
+        .iter()
+        .max_by_key(|session| shown_runtime(session))
+        .map(|session| session.id.clone())
+}
+
+/// Which of `YearPlay::session_lengths` a session of `runtime_ms` counts in.
+fn length_class(runtime_ms: i64) -> usize {
+    [
+        SESSION_QUICK_MAX_MS,
+        SESSION_SHORT_MAX_MS,
+        SESSION_PLAIN_MAX_MS,
+        SESSION_LONG_MAX_MS,
+    ]
+    .iter()
+    .take_while(|&&max| runtime_ms >= max)
+    .count()
 }
 
 /// The last `days` local days of play, today included.
@@ -262,28 +350,8 @@ pub fn recent_play<Tz: TimeZone>(
 ) -> Result<RecentPlay> {
     let from = today - TimeDelta::days(i64::from(days.max(1)) - 1);
     let totals = day_totals(db, live, tz, from, today + TimeDelta::days(1), now_ms)?;
-    let from_wall = chrono::DateTime::from_timestamp_millis(day_start_ms(tz, from))
-        .map_or_else(String::new, integrity::format_timestamp);
-    let mut started: Vec<Session> = db.with_conn(|conn| {
-        let mut stmt = conn
-            .prepare_cached(
-                "SELECT * FROM sessions
-                 WHERE started_at_wall >= ?1 AND (ended_at_wall IS NULL OR runtime_ms > 0)",
-            )
-            .map_err(map_db)?;
-        stmt.query_map(params![from_wall], row_to_session)
-            .map_err(map_db)?
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(map_db)
-    })?;
-    for session in &mut started {
-        live.apply(session);
-    }
-    fill_set_aside(db, live, &mut started, now_ms)?;
-    let longest = started
-        .iter()
-        .max_by_key(|session| session.runtime_ms - session.set_aside_ms)
-        .map(|session| session.id.clone());
+    let started = started_sessions(db, live, tz, from, None, now_ms)?;
+    let longest = longest_of(&started);
     let games = crate::playtime::journal::game_times(&totals);
     Ok(RecentPlay {
         played_ms: totals.played_ms(),
@@ -415,6 +483,39 @@ mod tests {
         assert_eq!(year.current_streak, 2);
         assert_eq!(year.days_played, 6);
         assert_eq!(year.played_ms, 180 * MINUTE);
+    }
+
+    #[test]
+    fn counts_sessions_in_the_year_they_started_by_game_and_length() {
+        let db = database();
+        let (one, two) = (game(&db, "One"), game(&db, "Two"));
+        // 23:30 on New Year's Eve in Berlin: it counts in the year it started.
+        played(&db, &one, "2025-12-31T22:30:00Z", 90);
+        played(&db, &one, "2026-03-02T18:00:00Z", 10);
+        let long = played(&db, &two, "2026-03-03T18:00:00Z", 300);
+        played(&db, &two, "2026-03-04T18:00:00Z", 90);
+        let year = |year| {
+            year_play(
+                &db,
+                &LiveSessions::default(),
+                &Berlin,
+                year,
+                date("2026-10-01"),
+                utc("2026-10-01T12:00:00Z").timestamp_millis(),
+            )
+            .unwrap()
+        };
+        let this = year(2026);
+        assert_eq!(this.sessions_count, 3);
+        assert_eq!(
+            this.sessions_by_game,
+            BTreeMap::from([(one.clone(), 1), (two, 2)])
+        );
+        assert_eq!(this.session_lengths, [1, 0, 1, 0, 1]);
+        assert_eq!(this.longest_session_id, Some(long));
+        let before = year(2025);
+        assert_eq!(before.sessions_count, 1);
+        assert_eq!(before.sessions_by_game, BTreeMap::from([(one, 1)]));
     }
 
     #[test]

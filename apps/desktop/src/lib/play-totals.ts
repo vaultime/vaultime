@@ -3,6 +3,7 @@
 
 // Play totals from the core, grouped for charts and hover cards.
 
+import { HOURS_PER_DAY } from "@/lib/constants";
 import type { PlayTotal } from "@/lib/types";
 
 /** A game's time in one bucket. */
@@ -41,6 +42,16 @@ export function groupByBucket(totals: PlayTotal[]): Map<string, BucketPlay> {
     bucket.games.sort((a, b) => b.activeMs - a.activeMs || b.runtimeMs - a.runtimeMs);
   }
   return buckets;
+}
+
+/** Runtime by hour of the day, from hour of the week totals ("4-21"), every weekday added up. */
+export function runtimeByHour(totals: PlayTotal[]): number[] {
+  const hours = Array<number>(HOURS_PER_DAY).fill(0);
+  for (const total of totals) {
+    const hour = Number(total.bucket.split("-")[1]);
+    if (hours[hour] !== undefined) hours[hour] += total.runtime_ms;
+  }
+  return hours;
 }
 
 /** Each game's time over all the totals, the most runtime first. */

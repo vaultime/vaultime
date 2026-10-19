@@ -12,11 +12,18 @@ import {
 } from "@/lib/constants";
 import { useSettings } from "@/features/settings/settings-context";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
-import { normalizeIntegrityStatus } from "@/lib/integrity";
-import { countsAsPlay } from "@/lib/sessions";
 import { compareTitles } from "@/lib/game-sort";
 import { compareTimes, toDayKey } from "@/lib/time";
-import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
+import type {
+  Device,
+  EarlierPlaytime,
+  Game,
+  GameLink,
+  GameStatus,
+  GameStatusChange,
+  GameTotals,
+  Session,
+} from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { describeError } from "@/lib/utils";
@@ -33,6 +40,7 @@ import {
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [totals, setTotals] = useState<GameTotals[]>([]);
   const [earlier, setEarlier] = useState<EarlierPlaytime[]>([]);
   const [statusChanges, setStatusChanges] = useState<GameStatusChange[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -59,10 +67,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextGames, nextSessions, assets, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
+      const [nextGames, history, assets, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
         await Promise.all([
           api.listGames(),
-          api.listSessions(),
+          api.listSessions(TRUST_BADGE_RECENT_DAYS),
           api.listPreferredGameAssets(),
           api.listEarlierPlaytime(),
           api.listStatusChanges(),
@@ -75,7 +83,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setLinks(nextLinks);
       setThisDeviceId(deviceId);
       setGames(nextGames);
-      setSessions(nextSessions);
+      setSessions(history.sessions);
+      setTotals(history.games);
       setEarlier(nextEarlier);
       setStatusChanges(nextChanges);
       setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
@@ -166,50 +175,32 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   }, [covers]);
 
   const summaries = useMemo(() => {
-    const recentSince = new Date();
-    recentSince.setDate(recentSince.getDate() - TRUST_BADGE_RECENT_DAYS);
-    const recentSinceWall = recentSince.toISOString();
+    const totalsByGame = new Map(totals.map((total) => [total.game_id, total]));
     const byGame = new Map<string, GameSummary>();
     for (const game of games) {
+      // The core adds up the sessions, two installs running at once counted once.
+      const total = totalsByGame.get(game.id);
       byGame.set(game.id, {
         game,
         otherTitles: [],
         cover: covers[game.id] ?? null,
         tint: artTints[game.id] ?? tintForTitle(game.title),
-        runtimeMs: 0,
-        activeMs: 0,
+        runtimeMs: total?.runtime_ms ?? 0,
+        activeMs: total?.active_ms ?? 0,
+        idleMs: total?.idle_ms ?? 0,
+        longestSessionMs: total?.longest_session_ms ?? 0,
+        firstPlayedAt: total?.first_played_at ?? null,
         earlier: null,
         totalMs: 0,
         status: null,
         statusSince: null,
-        sessionsCount: 0,
-        suspiciousCount: 0,
-        recoveredCount: 0,
-        recentSuspiciousCount: 0,
-        recentRecoveredCount: 0,
-        lastPlayedAt: null,
+        sessionsCount: total?.sessions_count ?? 0,
+        suspiciousCount: total?.suspicious_count ?? 0,
+        recoveredCount: total?.recovered_count ?? 0,
+        recentSuspiciousCount: total?.recent_suspicious_count ?? 0,
+        recentRecoveredCount: total?.recent_recovered_count ?? 0,
+        lastPlayedAt: total?.last_played_at ?? null,
       });
-    }
-    for (const session of sessions) {
-      const summary = byGame.get(session.game_id);
-      if (!summary || !countsAsPlay(session)) continue;
-      // Two installs of the game running at once count once, as in the stats.
-      summary.runtimeMs += session.counted_runtime_ms;
-      summary.activeMs += session.counted_active_ms;
-      summary.sessionsCount += 1;
-      const trust = normalizeIntegrityStatus(session.integrity_status);
-      const recent = session.started_at_wall >= recentSinceWall;
-      if (trust === "suspicious") {
-        summary.suspiciousCount += 1;
-        if (recent) summary.recentSuspiciousCount += 1;
-      }
-      if (trust === "recovered") {
-        summary.recoveredCount += 1;
-        if (recent) summary.recentRecoveredCount += 1;
-      }
-      if (!summary.lastPlayedAt || session.started_at_wall > summary.lastPlayedAt) {
-        summary.lastPlayedAt = session.started_at_wall;
-      }
     }
     for (const link of links) {
       const summary = byGame.get(link.linked_game_id);
@@ -237,7 +228,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (b.lastPlayedAt) return 1;
       return compareTitles(a.game.title, b.game.title);
     });
-  }, [games, sessions, covers, artTints, earlier, statusChanges, links]);
+  }, [games, totals, covers, artTints, earlier, statusChanges, links]);
 
   const setStatus = useCallback(
     async (gameId: string, status: GameStatus | "none") => {

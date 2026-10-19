@@ -6,6 +6,7 @@
 //! them, from totals to the journal's days.
 
 pub mod beside;
+pub mod games;
 pub mod journal;
 pub mod slices;
 pub mod strip;

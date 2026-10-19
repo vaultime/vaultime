@@ -5,9 +5,8 @@
 // session-lines.ts, the sentences of the stats page in year-sentences.ts.
 
 import { HABIT_MIN_SESSIONS, HABIT_MIN_SHARE, HOUR_MS, MINUTE_MS, WEEK_TOP_GAME_MIN_SHARE } from "@/lib/constants";
-import { countsAsPlay } from "@/lib/sessions";
-import { dayPartOf, formatHoursMinutes, formatRelativeDay, parseVaultimeDate, type DayPart } from "@/lib/time";
-import type { GameStatus, LedgerReport, Session, SideBySideGroup } from "@/lib/types";
+import { dayPartOfHour, formatHoursMinutes, formatRelativeDay, type DayPart } from "@/lib/time";
+import type { GameStatus, LedgerReport, SideBySideGroup } from "@/lib/types";
 import { amountWords, capitalize, countWords, DAY_PART_WORDS, durationWords, numberWords } from "@/lib/words";
 
 /** A sentence with an optional part set in italics. */
@@ -30,35 +29,36 @@ export function libraryPlaytime(runtimeMs: number, weekRuntimeMs: number): Phras
   return { before: `${total}, `, em: numberWords(weekHours), after: " of them this past week." };
 }
 
-/** "Thirty-eight hours across twenty-one sessions. You mostly play it *late at night*." */
-export function gamePlaytime(allSessions: Session[]): Phrase {
-  const sessions = allSessions.filter(countsAsPlay);
-  if (sessions.length === 0) {
+/**
+ * "Thirty-eight hours across twenty-one sessions. You mostly play it *late
+ * at night*." `hours` is the game's runtime by hour of the day, as the core
+ * places it on the clock.
+ */
+export function gamePlaytime(game: { runtimeMs: number; sessionsCount: number }, hours: number[]): Phrase {
+  const { runtimeMs, sessionsCount } = game;
+  if (sessionsCount === 0) {
     return { before: "Not played yet. Start it however you usually do and the clock starts on its own." };
   }
-  const runtimeMs = sessions.reduce((sum, session) => sum + session.counted_runtime_ms, 0);
   const lead =
-    sessions.length === 1
+    sessionsCount === 1
       ? `${capitalize(amountWords(runtimeMs))} in one session.`
-      : `${capitalize(amountWords(runtimeMs))} across ${countWords(sessions.length, "session")}.`;
-  const habit = habitOf(sessions);
+      : `${capitalize(amountWords(runtimeMs))} across ${countWords(sessionsCount, "session")}.`;
+  const habit = sessionsCount >= HABIT_MIN_SESSIONS ? habitOf(hours) : null;
   if (!habit) return { before: lead };
   return { before: `${lead} You mostly play it `, em: DAY_PART_WORDS[habit].adverb, after: "." };
 }
 
 /** The part of the day that holds most of the playtime, when there is a clear one. */
-function habitOf(sessions: Session[]): DayPart | null {
-  if (sessions.length < HABIT_MIN_SESSIONS) return null;
+function habitOf(hours: number[]): DayPart | null {
   const byPart = new Map<DayPart, number>();
   let total = 0;
-  for (const session of sessions) {
-    const part = dayPartOf(parseVaultimeDate(session.started_at_wall));
-    const runtimeMs = session.counted_runtime_ms;
+  hours.forEach((runtimeMs, hour) => {
+    const part = dayPartOfHour(hour);
     byPart.set(part, (byPart.get(part) ?? 0) + runtimeMs);
     total += runtimeMs;
-  }
-  const [part, runtime] = [...byPart.entries()].sort((a, b) => b[1] - a[1])[0];
-  return total > 0 && runtime / total >= HABIT_MIN_SHARE ? part : null;
+  });
+  const [part, runtime] = [...byPart.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+  return part && total > 0 && runtime / total >= HABIT_MIN_SHARE ? part : null;
 }
 
 /** "Elden Ring, Hades II and Balatro". */

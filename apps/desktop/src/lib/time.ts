@@ -156,7 +156,11 @@ export function formatHoursMinutes(ms: number): string {
 export type DayPart = "morning" | "afternoon" | "evening" | "night";
 
 export function dayPartOf(date: Date): DayPart {
-  const hour = date.getHours();
+  return dayPartOfHour(date.getHours());
+}
+
+/** The part of the day an hour from 0 to 23 belongs to. */
+export function dayPartOfHour(hour: number): DayPart {
   const { morning, afternoon, evening, night } = DAY_PART_HOURS;
   if (hour < morning || hour >= night) return "night";
   if (hour < afternoon) return "morning";

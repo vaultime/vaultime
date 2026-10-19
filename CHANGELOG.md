@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An older Vaultime leaves newer data alone.** Started after a newer version changed the database, an older Vaultime asks for the newer version instead of working on data it does not fully know.
 - **A library that does not load says so.** When Vaultime cannot read your games, the library says why and offers to try again, instead of greeting you as if you had no games yet.
 - **Plainer messages.** Something removed in the meantime reads "It is no longer there" instead of a database message, and a cloud server out of reach during a backup or restore says to check the connection.
+- **A game's habit goes by the clock.** "You mostly play it late at night" on a game's page now counts each session's time in the hours it fell in, as the week clock on the Stats page does. It used to put a whole session in the part of the day it started in.
 - **The library is current after a cloud restore.** The library, journal and stats show the restored history right away, as after a local restore. They used to show the old history until a game started or stopped.
 
 ## [0.5.0] - 2026-10-17

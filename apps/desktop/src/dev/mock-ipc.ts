@@ -34,7 +34,13 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, DEVICE_NAME_MAX_CHARS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
-import { estimateJournalWeek, estimatePlayedToday, estimateRecentPlay, estimateYearPlay } from "@/test/play-estimates";
+import {
+  estimateGameTotals,
+  estimateJournalWeek,
+  estimatePlayedToday,
+  estimateRecentPlay,
+  estimateYearPlay,
+} from "@/test/play-estimates";
 import { estimatePlayTotals } from "@/test/play-totals";
 import type {
   ArtworkSource,
@@ -1531,9 +1537,11 @@ mockIPC((cmd, payload) => {
       if (game && typeof input.is_hidden === "boolean") game.is_hidden = input.is_hidden;
       return game ?? null;
     }
-    case "list_sessions":
+    case "list_sessions": {
       // Copies, as the real IPC sends, so corrections show up as new data.
-      return shownSessions();
+      const sessions = shownSessions();
+      return { sessions, games: estimateGameTotals(sessions, Number(args.recentDays)) };
+    }
     case "export_sessions":
       return allSessions.filter((session) => session.ended_at_wall).length;
     case "save_share_image":

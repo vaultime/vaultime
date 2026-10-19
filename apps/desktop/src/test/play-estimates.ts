@@ -6,13 +6,21 @@
 // time by the session events, this spreads each session evenly over its
 // span instead, and nothing steps aside here.
 
-import { DAYS_PER_WEEK } from "@/lib/constants";
+import {
+  DAY_MS,
+  DAYS_PER_WEEK,
+  SESSION_LONG_MAX_MS,
+  SESSION_PLAIN_MAX_MS,
+  SESSION_QUICK_MAX_MS,
+  SESSION_SHORT_MAX_MS,
+} from "@/lib/constants";
 import { countsAsPlay } from "@/lib/sessions";
 import { parseVaultimeDate, startOfDay, toDayKey } from "@/lib/time";
 import type {
   DayShare,
   GameStatusChange,
   GameTime,
+  GameTotals,
   JournalDayPlay,
   JournalWeekPlay,
   PlayRun,
@@ -320,7 +328,74 @@ export function estimateYearPlay(sessions: Session[], year: number, now = Date.n
     days_played: inYear.length,
     longest_streak: longest,
     current_streak: current,
+    ...estimateYearSessions(sessions, year),
   };
+}
+
+/** What `get_year_play` says about the sessions with play that started in `year`. */
+export function estimateYearSessions(
+  sessions: Session[],
+  year: number,
+): Pick<YearPlay, "sessions_count" | "sessions_by_game" | "session_lengths" | "longest_session_id"> {
+  const started = sessions
+    .filter(countsAsPlay)
+    .filter((session) => parseVaultimeDate(session.started_at_wall).getFullYear() === year);
+  const byGame: Record<string, number> = {};
+  const lengths: YearPlay["session_lengths"] = [0, 0, 0, 0, 0];
+  let longest: Session | null = null;
+  for (const session of started) {
+    byGame[session.game_id] = (byGame[session.game_id] ?? 0) + 1;
+    const limits = [SESSION_QUICK_MAX_MS, SESSION_SHORT_MAX_MS, SESSION_PLAIN_MAX_MS, SESSION_LONG_MAX_MS];
+    lengths[limits.filter((max) => session.runtime_ms >= max).length] += 1;
+    if (!longest || session.runtime_ms > longest.runtime_ms) longest = session;
+  }
+  return {
+    sessions_count: started.length,
+    sessions_by_game: byGame,
+    session_lengths: lengths,
+    longest_session_id: longest?.id ?? null,
+  };
+}
+
+/** What `list_sessions` answers for each game, trust labels of the last `recentDays` days counting as recent. */
+export function estimateGameTotals(sessions: Session[], recentDays: number, now = Date.now()): GameTotals[] {
+  const recentSince = now - recentDays * DAY_MS;
+  const byGame = new Map<string, GameTotals>();
+  for (const session of sessions.filter(countsAsPlay)) {
+    const total = byGame.get(session.game_id) ?? {
+      game_id: session.game_id,
+      runtime_ms: 0,
+      active_ms: 0,
+      idle_ms: 0,
+      sessions_count: 0,
+      longest_session_ms: 0,
+      first_played_at: null,
+      last_played_at: null,
+      suspicious_count: 0,
+      recovered_count: 0,
+      recent_suspicious_count: 0,
+      recent_recovered_count: 0,
+    };
+    total.runtime_ms += session.counted_runtime_ms;
+    total.active_ms += session.counted_active_ms;
+    total.idle_ms += session.counted_idle_ms;
+    total.sessions_count += 1;
+    total.longest_session_ms = Math.max(total.longest_session_ms, session.runtime_ms);
+    const start = session.started_at_wall;
+    if (!total.first_played_at || start < total.first_played_at) total.first_played_at = start;
+    if (!total.last_played_at || start > total.last_played_at) total.last_played_at = start;
+    const recent = parseVaultimeDate(start).getTime() >= recentSince;
+    if (session.integrity_status === "suspicious") {
+      total.suspicious_count += 1;
+      if (recent) total.recent_suspicious_count += 1;
+    }
+    if (session.integrity_status === "recovered") {
+      total.recovered_count += 1;
+      if (recent) total.recent_recovered_count += 1;
+    }
+    byGame.set(session.game_id, total);
+  }
+  return [...byGame.values()];
 }
 
 /** What `get_recent_play` answers for the last `days` days. */

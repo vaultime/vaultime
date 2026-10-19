@@ -15,6 +15,10 @@ export interface GameSummary {
   /** Tracked by Vaultime. */
   runtimeMs: number;
   activeMs: number;
+  idleMs: number;
+  /** The runtime of the longest session. */
+  longestSessionMs: number;
+  firstPlayedAt: string | null;
   /** Playtime from before Vaultime, when it was imported. */
   earlier: EarlierPlaytime | null;
   /** Tracked and earlier playtime together. */

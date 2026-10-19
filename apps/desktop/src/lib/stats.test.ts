@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
+import { estimateYearSessions } from "@/test/play-estimates";
 import { estimatePlayTotals } from "@/test/play-totals";
 import { at, session } from "@/test/sessions";
 import type { Session, YearPlay } from "@/lib/types";
@@ -21,6 +22,7 @@ function statsFor(sessions: Session[], year = 2026, play: Partial<YearPlay> = {}
     days_played: 0,
     longest_streak: null,
     current_streak: 0,
+    ...estimateYearSessions(sessions, year),
     ...play,
   });
 }
@@ -81,11 +83,13 @@ describe("yearStats", () => {
     expect(stats.currentStreak).toBe(2);
   });
 
-  it("sorts sessions into lengths and finds the longest", () => {
-    const sessions = [10, 45, 90, 200, 300].map((minutes, index) => session(at(2026, 4, 1 + index, 20, 0), minutes));
-    const stats = statsFor(sessions);
+  it("takes session lengths and the longest session from the core", () => {
+    const sessions = [10, 45, 90, 200, 300].map((minutes, index) =>
+      session(at(2026, 4, 1 + index, 20, 0), minutes, { id: `s${index}` }),
+    );
+    const stats = statsFor(sessions, 2026, { session_lengths: [1, 1, 1, 1, 1], longest_session_id: "s2" });
     expect(stats.shapes).toEqual({ quick: 1, short: 1, plain: 1, long: 1, marathon: 1 });
-    expect(stats.longest?.runtime_ms).toBe(300 * MINUTE_MS);
+    expect(stats.longest?.id).toBe("s2");
   });
 });
 

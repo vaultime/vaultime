@@ -47,6 +47,7 @@ use crate::platform::activity::{foreground_detection_strategy, idle_detection_st
 use crate::platform::controller;
 use crate::playtime;
 use crate::playtime::beside::StepsAsideHint;
+use crate::playtime::games::GameTotals;
 use crate::playtime::journal::JournalWeek;
 use crate::playtime::summaries::{RecentPlay, YearPlay};
 use crate::playtime::totals::{Bucket, PlayTotal};
@@ -342,18 +343,32 @@ pub fn set_preferred_game_asset(
     assets::set_preferred_game_asset(&db, &game_id, &asset_id)
 }
 
+/// Every session and each game's totals of them.
+#[derive(Debug, Serialize)]
+pub struct SessionList {
+    pub sessions: Vec<Session>,
+    pub games: Vec<GameTotals>,
+}
+
 /// Every session, running ones as of the tracker's latest tick, each with
-/// the time it set aside and the time it shares with another copy of its game.
+/// the time it set aside and the time it shares with another copy of its
+/// game, and each game's totals. Trust labels of the last `recent_days` days
+/// count as recent too.
 #[tauri::command(async)]
 pub fn list_sessions(
     db: State<'_, Arc<Database>>,
     live: State<'_, Arc<LiveSessions>>,
     app_context: State<'_, AppContext>,
-) -> Result<Vec<Session>, VaultimeError> {
+    recent_days: u32,
+) -> Result<SessionList, VaultimeError> {
     let mut all = sessions::list_all_sessions(&db)?;
     as_of_now(&db, &live, &mut all)?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
-    Ok(all)
+    let recent_since = chrono::Utc::now() - chrono::TimeDelta::days(i64::from(recent_days));
+    Ok(SessionList {
+        games: playtime::games::game_totals(&all, recent_since),
+        sessions: all,
+    })
 }
 
 fn parse_day(text: &str) -> Result<chrono::NaiveDate, VaultimeError> {

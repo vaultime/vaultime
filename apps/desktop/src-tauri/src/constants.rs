@@ -109,6 +109,18 @@ pub const SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE: i64 = 10;
 pub const DAYS_PER_WEEK: i64 = 7;
 /// Most days the library's recent play may look back over.
 pub const RECENT_PLAY_MAX_DAYS: u32 = 366;
+/// Longest session that counts as a quick look on the stats page. Same as
+/// `SESSION_QUICK_MAX_MS` in `lib/constants.ts`.
+pub const SESSION_QUICK_MAX_MS: i64 = 20 * 60 * 1_000;
+/// Longest session that counts as short. Same as `SESSION_SHORT_MAX_MS` in
+/// `lib/constants.ts`.
+pub const SESSION_SHORT_MAX_MS: i64 = 60 * 60 * 1_000;
+/// Longest plain session, longer ones are long. Same as
+/// `SESSION_PLAIN_MAX_MS` in `lib/constants.ts`.
+pub const SESSION_PLAIN_MAX_MS: i64 = 2 * 60 * 60 * 1_000;
+/// Longest long session, longer ones are marathons. Same as
+/// `SESSION_LONG_MAX_MS` in `lib/constants.ts`.
+pub const SESSION_LONG_MAX_MS: i64 = 4 * 60 * 60 * 1_000;
 /// Days a current streak is first looked for in. A longer one is looked for
 /// in the whole history.
 pub const STREAK_FIRST_LOOK_DAYS: i64 = 400;

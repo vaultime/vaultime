@@ -30,6 +30,7 @@ import type {
   PlayTotal,
   RecentPlay,
   Session,
+  SessionList,
   SessionEvent,
   SessionNote,
   Setting,
@@ -195,8 +196,9 @@ export async function setPreferredGameAsset(
   });
 }
 
-export async function listSessions(): Promise<Session[]> {
-  return invoke<Session[]>("list_sessions");
+/** Every session and each game's totals. Trust labels of the last `recentDays` days count as recent. */
+export async function listSessions(recentDays: number): Promise<SessionList> {
+  return invoke<SessionList>("list_sessions", { recentDays });
 }
 
 /**

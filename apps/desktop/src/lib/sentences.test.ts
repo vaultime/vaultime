@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { HOUR_MS, MINUTE_MS } from "@/lib/constants";
 import type { LedgerReport } from "@/lib/types";
 import { phraseString } from "@/test/phrases";
-import { at, session } from "@/test/sessions";
 import {
   gamePlaytime,
   lastPlayedLine,
@@ -34,36 +33,37 @@ describe("libraryPlaytime", () => {
 });
 
 describe("gamePlaytime", () => {
+  /** Runtime by hour of the day, `minutes` in each of `hours`. */
+  function byHour(minutes: number, ...hours: number[]): number[] {
+    return Array.from({ length: 24 }, (_, hour) => (hours.includes(hour) ? minutes * MINUTE_MS : 0));
+  }
+
   it("names a clear habit", () => {
-    const evenings = [20, 21, 22].map((day) => session(at(2026, 9, day, 19, 0), 120));
-    expect(gamePlaytime(evenings)).toEqual({
+    expect(gamePlaytime({ runtimeMs: 6 * HOUR_MS, sessionsCount: 3 }, byHour(180, 19, 20))).toEqual({
       before: "Six hours across three sessions. You mostly play it ",
       em: "in the evening",
       after: ".",
     });
   });
 
-  it("counts two installs running at once once", () => {
-    const shared = { counted_runtime_ms: 30 * MINUTE_MS, counted_active_ms: 30 * MINUTE_MS };
-    const copies = [
-      session(at(2026, 9, 20, 9, 0), 60, { id: "steam", ...shared }),
-      session(at(2026, 9, 20, 9, 0), 60, { id: "gog", recorded_game_id: "gog", ...shared }),
-    ];
-    expect(gamePlaytime(copies)).toEqual({ before: "One hour across two sessions." });
+  it("goes by when the time fell, not when sessions started", () => {
+    // Started in the evening but mostly played past 22:00.
+    const late = byHour(10, 21).map((ms, hour) => ms + (hour === 23 || hour === 0 ? 2 * HOUR_MS : 0));
+    expect(gamePlaytime({ runtimeMs: 4 * HOUR_MS, sessionsCount: 3 }, late).em).toBe(
+      "late at night",
+    );
   });
 
-  it("skips the habit without a clear one", () => {
-    const mixed = [session(at(2026, 9, 20, 9, 0), 60), session(at(2026, 9, 21, 20, 0), 60)];
-    expect(gamePlaytime(mixed)).toEqual({ before: "Two hours across two sessions." });
-    expect(gamePlaytime([])).toEqual({
+  it("skips the habit without a clear one or with few sessions", () => {
+    expect(gamePlaytime({ runtimeMs: 2 * HOUR_MS, sessionsCount: 3 }, byHour(40, 9, 14, 20))).toEqual({
+      before: "Two hours across three sessions.",
+    });
+    expect(gamePlaytime({ runtimeMs: HOUR_MS, sessionsCount: 1 }, byHour(60, 20))).toEqual({
+      before: "One hour in one session.",
+    });
+    expect(gamePlaytime({ runtimeMs: 0, sessionsCount: 0 }, [])).toEqual({
       before: "Not played yet. Start it however you usually do and the clock starts on its own.",
     });
-  });
-
-  it("leaves out a session with all its time taken out", () => {
-    const played = session(at(2026, 9, 20, 9, 0), 60);
-    const discarded = session(at(2026, 9, 21, 20, 0), 60, { runtime_ms: 0, active_ms: 0, idle_ms: 0 });
-    expect(gamePlaytime([played, discarded])).toEqual({ before: "One hour in one session." });
   });
 });
 

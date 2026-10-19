@@ -320,6 +320,41 @@ export interface YearPlay {
   longest_streak: Streak | null;
   /** Days in a row with play up to today, or up to yesterday while today has none yet. */
   current_streak: number;
+  /** Sessions with play that started in the year. */
+  sessions_count: number;
+  /** The same by the game each counts as. */
+  sessions_by_game: Record<string, number>;
+  /** The same by length: quick looks, short, plain, long and marathons. */
+  session_lengths: [number, number, number, number, number];
+  /** The longest session that started in the year. */
+  longest_session_id: string | null;
+}
+
+/** One game's totals, every install that counts as it included. Mirrors the Rust `GameTotals` struct. */
+export interface GameTotals {
+  game_id: string;
+  /** Time that counts, a stretch two installs shared counted once. */
+  runtime_ms: number;
+  active_ms: number;
+  idle_ms: number;
+  /** Sessions with play. One whose time was all taken out is none. */
+  sessions_count: number;
+  /** The runtime of the longest session. */
+  longest_session_ms: number;
+  first_played_at: string | null;
+  last_played_at: string | null;
+  suspicious_count: number;
+  recovered_count: number;
+  /** Suspicious sessions of the recent days asked for. */
+  recent_suspicious_count: number;
+  /** Recovered sessions of the recent days asked for. */
+  recent_recovered_count: number;
+}
+
+/** Every session and each game's totals of them. */
+export interface SessionList {
+  sessions: Session[];
+  games: GameTotals[];
 }
 
 /** The last few days of play. Mirrors the Rust `RecentPlay` struct. */
