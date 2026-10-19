@@ -168,14 +168,14 @@ pub async fn load_cloud_session_secure() -> Result<Option<String>, VaultimeError
 }
 
 #[tauri::command]
-pub fn store_cloud_session_secure(session_json: String) -> Result<bool, VaultimeError> {
-    secure_storage::store_cloud_session(&session_json)?;
+pub async fn store_cloud_session_secure(session_json: String) -> Result<bool, VaultimeError> {
+    on_blocking_pool(move || secure_storage::store_cloud_session(&session_json)).await?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn clear_cloud_session_secure() -> Result<bool, VaultimeError> {
-    secure_storage::clear_cloud_session()?;
+pub async fn clear_cloud_session_secure() -> Result<bool, VaultimeError> {
+    on_blocking_pool(secure_storage::clear_cloud_session).await?;
     Ok(true)
 }
 
@@ -203,8 +203,8 @@ pub async fn store_cloud_backup_key_secure(
 }
 
 #[tauri::command]
-pub fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
-    secure_storage::clear_cloud_backup_key(&account_id)?;
+pub async fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
+    on_blocking_pool(move || secure_storage::clear_cloud_backup_key(&account_id)).await?;
     Ok(true)
 }
 

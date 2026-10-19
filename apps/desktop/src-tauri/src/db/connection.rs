@@ -3,7 +3,7 @@
 
 //! `SQLite` connection management.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use log::warn;
@@ -17,6 +17,8 @@ use super::migrate;
 /// Thread-safe wrapper around a `SQLite` connection.
 pub struct Database {
     conn: Mutex<Connection>,
+    /// The file, none for a database in memory.
+    path: Option<PathBuf>,
 }
 
 impl Database {
@@ -42,6 +44,7 @@ impl Database {
 
         let db = Self {
             conn: Mutex::new(conn),
+            path: Some(path.to_path_buf()),
         };
 
         migrate::run_migrations(&db)?;
@@ -60,11 +63,17 @@ impl Database {
 
         let db = Self {
             conn: Mutex::new(conn),
+            path: None,
         };
 
         migrate::run_migrations(&db)?;
 
         Ok(db)
+    }
+
+    /// The database file, none for a database in memory.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
     }
 
     pub fn with_conn<F, T>(&self, f: F) -> Result<T>

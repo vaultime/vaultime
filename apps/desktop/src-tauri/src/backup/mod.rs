@@ -632,12 +632,14 @@ const RESTORE_TABLES: &[&str] = &[
     "ledger_entries",
 ];
 
+/// Copies the database to `destination_path` as one consistent snapshot. A
+/// connection of its own reads it, so a long history does not hold up the
+/// tracker or the window, which write on meanwhile.
 fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()> {
     let destination = destination_path.to_string_lossy().to_string();
-
-    db.with_conn(|conn| {
+    let snapshot = |conn: &Connection| {
         conn.execute_batch(&format!(
-            "PRAGMA wal_checkpoint(FULL); VACUUM INTO '{}';",
+            "VACUUM INTO '{}';",
             sqlite_string_literal(&destination)
         ))
         .map_err(|error| {
@@ -645,10 +647,21 @@ fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()
                 "failed to export SQLite snapshot to {}: {error}",
                 destination_path.display()
             ))
-        })?;
-
-        Ok(())
-    })
+        })
+    };
+    match db.path() {
+        Some(path) => {
+            let reader =
+                Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .map_err(|error| {
+                        VaultimeError::Backup(format!(
+                            "failed to open the database to back it up: {error}"
+                        ))
+                    })?;
+            snapshot(&reader)
+        }
+        None => db.with_conn(snapshot),
+    }
 }
 
 fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()> {
@@ -1263,6 +1276,20 @@ mod tests {
             device_id: "test-device".into(),
             app_version: "0.1.0".into(),
         }
+    }
+
+    #[test]
+    fn a_snapshot_reads_without_the_database_lock() {
+        let context = test_paths();
+        let db = Database::open(&context.app_dir.join(DATABASE_FILE)).unwrap();
+        let destination = context.app_dir.join("snapshot.db");
+        // The tracker and the window keep the lock meanwhile, a snapshot that
+        // waited for it would never finish here.
+        db.with_conn(|_| export_database_snapshot(&db, &destination))
+            .unwrap();
+        assert_eq!(summarize_database(&destination).unwrap(), (0, 0, 0));
+        drop(db);
+        fs::remove_dir_all(&context.app_dir).unwrap();
     }
 
     #[test]
