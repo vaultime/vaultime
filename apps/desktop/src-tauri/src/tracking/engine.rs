@@ -151,6 +151,9 @@ pub struct TrackingEngine {
     paused: Arc<AtomicBool>,
     /// Held for the duration of every tick, so `pause` can wait for one to finish.
     tick_lock: Arc<Mutex<()>>,
+    /// Held through a restore, so a second one waits and the first cannot
+    /// let tracking go on while the second still swaps the history.
+    restoring: Mutex<()>,
     thread: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -177,6 +180,7 @@ impl TrackingEngine {
             running,
             paused,
             tick_lock,
+            restoring: Mutex::new(()),
             thread: Mutex::new(Some(thread)),
         }
     }
@@ -225,6 +229,10 @@ impl TrackingEngine {
         device_id: &str,
         restore: impl FnOnce() -> crate::error::Result<T>,
     ) -> crate::error::Result<T> {
+        let _restoring = self
+            .restoring
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         self.pause();
         let result = match sessions::get_active_sessions(db, device_id) {
             Ok(active) if !active.is_empty() => Err(VaultimeError::Backup(
@@ -477,11 +485,11 @@ fn end_finished_sessions(
         let Some(session) = active.get(&game_id) else {
             continue;
         };
-        if (end_active_session(db, live, session, session.missing_since)
-            || !still_open(db, session))
-            && let Some(session) = active.remove(&game_id)
-        {
+        if end_active_session(db, live, session, session.missing_since) {
+            active.remove(&game_id);
+        } else if !still_open(db, session) {
             live.remove(&session.session_id);
+            active.remove(&game_id);
         }
     }
 }
@@ -524,13 +532,18 @@ fn end_active_session(
     }
 }
 
-/// Whether the database still holds the session open, so ending it is worth
-/// another try. A session removed or closed meanwhile is not.
+/// Whether the database may still hold the session open, so ending it is
+/// worth another try. A session removed or closed meanwhile is not. One the
+/// database cannot even read is tried again, as letting it go would leave
+/// its row open until the next start.
 fn still_open(db: &Database, session: &ActiveSession) -> bool {
-    db.with_conn(|conn| {
+    match db.with_conn(|conn| {
         sessions::stored_session(conn, &session.session_id).map_err(crate::db::repo::map_db)
-    })
-    .is_ok_and(|stored| stored.ended_at_wall.is_none())
+    }) {
+        Ok(stored) => stored.ended_at_wall.is_none(),
+        Err(VaultimeError::NotFound(_)) => false,
+        Err(_) => true,
+    }
 }
 
 /// What each tracked game with an executable is doing right now.
