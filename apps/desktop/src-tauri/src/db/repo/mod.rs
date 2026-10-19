@@ -20,9 +20,28 @@ use crate::error::VaultimeError;
 
 pub(crate) fn map_db(error: rusqlite::Error) -> VaultimeError {
     match error {
-        rusqlite::Error::QueryReturnedNoRows => {
-            VaultimeError::NotFound("it is no longer there, it may have been removed".into())
-        }
+        rusqlite::Error::QueryReturnedNoRows => VaultimeError::NotFound(
+            "the record it looked for is missing, it may have been removed".into(),
+        ),
+        error if is_busy(&error) => busy(),
         error => VaultimeError::Database(error.to_string()),
     }
+}
+
+/// Whether `error` says another connection holds the database.
+pub(crate) fn is_busy(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(failure, _)
+            if matches!(
+                failure.code,
+                rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+            )
+    )
+}
+
+pub(crate) fn busy() -> VaultimeError {
+    VaultimeError::Busy(
+        "another program is using the database. Close it or wait a moment, then try again".into(),
+    )
 }

@@ -814,10 +814,16 @@ fn map_zip_error(error: zip::result::ZipError) -> VaultimeError {
 }
 
 fn map_cloud_http(error: reqwest::Error) -> VaultimeError {
-    if error.is_connect() || error.is_timeout() {
-        log::warn!("the cloud server did not answer: {error}");
+    if error.is_connect() {
+        log::warn!("no connection to the cloud server: {error}");
         return VaultimeError::Offline(
-            "could not reach the cloud server. Check your connection.".into(),
+            "could not connect to the cloud server. Check your connection.".into(),
+        );
+    }
+    if error.is_timeout() {
+        log::warn!("the cloud server took too long: {error}");
+        return VaultimeError::Cloud(
+            "the cloud server took too long to answer. Try again later.".into(),
         );
     }
     VaultimeError::Cloud(format!("HTTP request failed: {error}"))

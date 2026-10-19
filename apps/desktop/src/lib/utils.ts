@@ -4,7 +4,7 @@
 import { warn } from "@tauri-apps/plugin-log"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { CoreError, CoreErrorKind } from "@/lib/types"
+import type { CoreError } from "@/lib/types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -24,11 +24,6 @@ function isCoreError(error: unknown): error is CoreError {
 export function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : isCoreError(error) ? error.message : String(error);
   return message.charAt(0).toUpperCase() + message.slice(1);
-}
-
-/** What kind of failure the core reported, or null for any other error. */
-export function errorKind(error: unknown): CoreErrorKind | null {
-  return isCoreError(error) ? error.kind : null;
 }
 
 /**

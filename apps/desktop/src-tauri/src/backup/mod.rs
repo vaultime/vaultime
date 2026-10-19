@@ -26,8 +26,8 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
-    CLOUD_BACKUP_SETTING, DATABASE_FILE, HASH_BUFFER_BYTES, PLAY_SLICES_VERSION_SETTING,
-    WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
+    CLOUD_BACKUP_SETTING, DATABASE_BUSY_TIMEOUT, DATABASE_FILE, HASH_BUFFER_BYTES,
+    PLAY_SLICES_VERSION_SETTING, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -265,6 +265,31 @@ pub fn import_local_backup(
     let mut summary = summary_from_manifest(&manifest, &backup_dir, true);
     summary.continues_as = result?;
     Ok(summary)
+}
+
+/// Writes the settings that stay with a PC from a backup into `db`, as a
+/// restore keeps them from the database it replaces. For a backup of this PC
+/// restored into a new database, which has none of its own.
+pub(crate) fn take_device_settings(db: &Database, backup_path: &Path) -> Result<()> {
+    use rusqlite::OptionalExtension;
+    let backup_dir = resolve_backup_dir(backup_path)?;
+    let conn = Connection::open_with_flags(
+        backup_dir.join(DATABASE_FILE),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|error| VaultimeError::Backup(format!("failed to open the backup: {error}")))?;
+    for key in DEVICE_SETTINGS {
+        let value: Option<String> = conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(crate::db::repo::map_db)?;
+        if let Some(value) = value {
+            crate::db::repo::settings::set_setting(db, key, &value)?;
+        }
+    }
+    Ok(())
 }
 
 /// Removes a staging folder. It can hold a decrypted backup, so a failure is logged.
@@ -653,6 +678,10 @@ fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()
         Some(path) => {
             let reader =
                 Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .and_then(|reader| {
+                        reader.busy_timeout(DATABASE_BUSY_TIMEOUT)?;
+                        Ok(reader)
+                    })
                     .map_err(|error| {
                         VaultimeError::Backup(format!(
                             "failed to open the database to back it up: {error}"

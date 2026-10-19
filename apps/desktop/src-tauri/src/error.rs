@@ -22,6 +22,8 @@ pub enum VaultimeError {
     Offline(String),
     /// What the page asked about is gone, like a game deleted meanwhile.
     NotFound(String),
+    /// Another program holds the database for longer than a connection waits.
+    Busy(String),
     /// Input the core refuses, with a message for the user.
     Invalid(String),
 }
@@ -37,6 +39,7 @@ impl fmt::Display for VaultimeError {
             Self::Cloud(msg) => write!(f, "cloud error: {msg}"),
             Self::Offline(msg) => write!(f, "offline: {msg}"),
             Self::NotFound(msg) => write!(f, "not found: {msg}"),
+            Self::Busy(msg) => write!(f, "busy: {msg}"),
             Self::Invalid(msg) => write!(f, "{msg}"),
         }
     }
@@ -57,6 +60,7 @@ impl VaultimeError {
             Self::Cloud(_) => "cloud",
             Self::Offline(_) => "offline",
             Self::NotFound(_) => "not_found",
+            Self::Busy(_) => "busy",
             Self::Invalid(_) => "invalid",
         }
     }
@@ -72,6 +76,7 @@ impl VaultimeError {
         | Self::Cloud(message)
         | Self::Offline(message)
         | Self::NotFound(message)
+        | Self::Busy(message)
         | Self::Invalid(message)) = self;
         let mut chars = message.chars();
         chars.next().map_or_else(String::new, |first| {

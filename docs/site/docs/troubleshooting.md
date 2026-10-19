@@ -76,9 +76,13 @@ It cannot be recovered, and cloud backups made with it cannot be restored. Your 
 
 ## Starting
 
+### Vaultime says another program is using its database
+
+A program such as a sync tool or a virus scanner holds the database file. Close it, or wait a moment, and start Vaultime again. Nothing was changed.
+
 ### Vaultime says it could not open its database
 
-The database file is damaged, or another program holds it. When another program may be using it, such as a sync tool or a virus scanner, choose **Quit** and start Vaultime again later. Otherwise choose **Restore the backup**: Vaultime renames the database to `vaultime.db.damaged-` followed by the time, keeps it next to the new one and starts from the newest automatic backup. Play recorded after that backup stays only in the renamed file. Nothing is deleted, and when the restore fails, everything stays as it was.
+The database file is damaged, or a program keeps Vaultime from reading it. When a program may be using it, choose **Quit** and start Vaultime again later. Otherwise choose **Restore the backup**: Vaultime renames the database to `vaultime.db.damaged-` followed by the time, keeps it next to the new one and starts from the newest automatic backup. Play recorded after that backup stays only in the renamed file. Settings that stay with this PC, like the folder for automatic backups and the look, come back with it. Nothing is deleted, and when the restore fails, everything stays as it was.
 
 ### Vaultime says it is older than the one that last used its data
 

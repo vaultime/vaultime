@@ -20,6 +20,7 @@ use crate::backup::{self, BACKUP_MANIFEST_FILE, auto};
 use crate::constants::{AUTO_BACKUP_DIR, AUTO_BACKUP_FOLDER_SETTING, CLOUD_API_BASE_URL};
 use crate::db::connection::Database;
 use crate::db::migrate;
+use crate::error::VaultimeError;
 
 const TITLE: &str = "Vaultime";
 const RESTORE: &str = "Restore the backup";
@@ -82,6 +83,14 @@ fn open_or_restore(
         Err(failure) => failure,
     };
     error!("the database did not open: {failure}");
+    // Nothing is wrong with a database another program holds, so it is not
+    // set aside for an older backup.
+    if matches!(failure, VaultimeError::Busy(_)) {
+        return Err(Stop::Fatal(format!(
+            "Another program is using Vaultime's database, like a sync tool or a virus scanner. Close it or wait a moment, then start Vaultime again.\n\nThe database is {}.",
+            db_path.display()
+        )));
+    }
 
     let readable = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok();
     if let Some(newer) = readable
@@ -111,7 +120,8 @@ fn open_or_restore(
         return Err(Stop::Declined);
     }
 
-    let aside = set_aside(db_path).map_err(|problem| {
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let aside = set_aside(db_path, &stamp).map_err(|problem| {
         Stop::Fatal(format!(
             "Vaultime could not set its database aside. {problem}\n\nNothing changed. The database is {}.",
             db_path.display()
@@ -192,17 +202,27 @@ fn saved_at(backup: &Path) -> String {
         )
 }
 
-/// Renames the database with a time stamp, and its side files to match, so
-/// the copy set aside opens with everything it had. Returns its new name.
-fn set_aside(db_path: &Path) -> std::io::Result<PathBuf> {
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+/// Renames the database with `stamp`, and its side files to match, so the
+/// copy set aside opens with everything it had. Returns its new name. When
+/// one of them cannot be renamed, the ones renamed already go back, so
+/// nothing changed.
+fn set_aside(db_path: &Path, stamp: &str) -> std::io::Result<PathBuf> {
     let aside = PathBuf::from(format!("{}.damaged-{stamp}", db_path.display()));
-    fs::rename(db_path, &aside)?;
-    for suffix in DATABASE_SIDE_FILES {
-        let side = with_suffix(db_path, suffix);
-        if side.exists() {
-            fs::rename(&side, with_suffix(&aside, suffix))?;
+    let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for suffix in std::iter::once("").chain(DATABASE_SIDE_FILES) {
+        let (from, to) = (with_suffix(db_path, suffix), with_suffix(&aside, suffix));
+        if !suffix.is_empty() && !from.exists() {
+            continue;
         }
+        if let Err(problem) = fs::rename(&from, &to) {
+            for (from, to) in moved.iter().rev() {
+                if let Err(undo) = fs::rename(to, from) {
+                    warn!("could not put {} back: {undo}", from.display());
+                }
+            }
+            return Err(problem);
+        }
+        moved.push((from, to));
     }
     Ok(aside)
 }
@@ -243,6 +263,11 @@ fn restore_into_new(
     backup: &Path,
 ) -> crate::error::Result<Database> {
     let database = Database::open(db_path)?;
+    // A restore keeps the settings that stay with a PC from the database it
+    // replaces, here a new one without any. A backup of this PC has them.
+    if backup::inspect_local_backup(&database, backup)?.source_device_id == context.device_id {
+        backup::take_device_settings(&database, backup)?;
+    }
     backup::import_local_backup(&database, assets, context, backup, false)?;
     Ok(database)
 }
@@ -291,6 +316,8 @@ mod tests {
             crate::integrity::STATUS_LOCAL,
         )
         .unwrap();
+        crate::db::repo::settings::set_setting(&db, crate::constants::WINDOW_SIZE_SETTING, "large")
+            .unwrap();
         auto::back_up_now(&db, &assets, &context).unwrap();
         (context, assets, db_path)
     }
@@ -320,6 +347,16 @@ mod tests {
         assert_eq!(restored.len(), 1);
         assert_eq!(restored[0].runtime_ms, 60_000);
         assert_eq!(restored[0].integrity_status, crate::integrity::STATUS_LOCAL);
+        // The window size stays with this PC, as in the backup.
+        assert_eq!(
+            crate::db::repo::settings::get_setting(
+                &database,
+                crate::constants::WINDOW_SIZE_SETTING
+            )
+            .unwrap()
+            .as_deref(),
+            Some("large")
+        );
         let note = note.unwrap();
         let aside: Vec<_> = fs::read_dir(&context.app_dir)
             .unwrap()
@@ -416,7 +453,7 @@ mod tests {
         fs::write(&db_path, "damaged").unwrap();
         fs::write(with_suffix(&db_path, "-wal"), "log").unwrap();
 
-        let aside = set_aside(&db_path).unwrap();
+        let aside = set_aside(&db_path, "20261020T000000Z").unwrap();
         assert!(!db_path.exists());
         assert_eq!(fs::read_to_string(&aside).unwrap(), "damaged");
         assert_eq!(
@@ -436,6 +473,47 @@ mod tests {
         assert!(!with_suffix(&db_path, "-shm").exists());
         assert!(!aside.exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_database_that_cannot_be_set_aside_whole_stays_as_it_was() {
+        let root = folder();
+        let db_path = root.join("vaultime.db");
+        fs::write(&db_path, "damaged").unwrap();
+        fs::write(with_suffix(&db_path, "-wal"), "log").unwrap();
+        // Something in the way of the log's new name.
+        let stamp = "20261020T000000Z";
+        fs::create_dir_all(root.join(format!("vaultime.db.damaged-{stamp}-wal/inside"))).unwrap();
+
+        assert!(set_aside(&db_path, stamp).is_err());
+        assert_eq!(fs::read_to_string(&db_path).unwrap(), "damaged");
+        assert_eq!(
+            fs::read_to_string(with_suffix(&db_path, "-wal")).unwrap(),
+            "log"
+        );
+        assert!(!root.join(format!("vaultime.db.damaged-{stamp}")).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_database_another_program_holds_is_not_offered_for_a_restore() {
+        let (context, assets, db_path) = played_and_backed_up();
+        // A program that keeps the file to itself, so not even reading works.
+        let holder = Connection::open(&db_path).unwrap();
+        holder
+            .execute_batch("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE; CREATE TABLE held (x);")
+            .unwrap();
+        let refused = open_or_restore(&context, &assets, &db_path, |_, _| {
+            panic!("a busy database must not be offered for a restore")
+        })
+        .err();
+        assert!(
+            matches!(&refused, Some(Stop::Fatal(message)) if message.contains("Another program")),
+            "{refused:?}"
+        );
+        holder.execute_batch("ROLLBACK;").unwrap();
+        drop(holder);
+        fs::remove_dir_all(&context.app_dir).unwrap();
     }
 
     #[test]

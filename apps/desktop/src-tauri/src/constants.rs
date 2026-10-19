@@ -141,6 +141,9 @@ pub const PLAY_SLICES_VERSION_SETTING: &str = "play_slices_version";
 
 /// The database in Vaultime's data folder, under the same name in backups.
 pub const DATABASE_FILE: &str = "vaultime.db";
+/// How long a connection waits for another program's lock on the database
+/// before it gives up.
+pub const DATABASE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Size the write-ahead log is cut back to after a large write, like a
 /// restore, so it does not keep that size on disk.
 pub const WAL_SIZE_LIMIT_BYTES: i64 = 32 * 1024 * 1024;

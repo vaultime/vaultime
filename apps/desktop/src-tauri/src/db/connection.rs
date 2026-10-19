@@ -9,7 +9,8 @@ use std::sync::Mutex;
 use log::warn;
 use rusqlite::Connection;
 
-use crate::constants::WAL_SIZE_LIMIT_BYTES;
+use crate::constants::{DATABASE_BUSY_TIMEOUT, WAL_SIZE_LIMIT_BYTES};
+use crate::db::repo::{busy, is_busy};
 use crate::error::{Result, VaultimeError};
 
 use super::migrate;
@@ -24,9 +25,22 @@ pub struct Database {
 impl Database {
     /// Creates the database when it is missing and runs pending migrations.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path).map_err(|error| {
-            VaultimeError::Database(format!("failed to open database: {error}"))
-        })?;
+        let failed = |what: &str, error: rusqlite::Error| {
+            if is_busy(&error) {
+                busy()
+            } else {
+                VaultimeError::Database(format!("failed to {what}: {error}"))
+            }
+        };
+        let conn = Connection::open(path).map_err(|error| failed("open database", error))?;
+        // Tests wait only briefly, so one that holds the lock on purpose stays fast.
+        let busy_wait = if cfg!(test) {
+            std::time::Duration::from_millis(100)
+        } else {
+            DATABASE_BUSY_TIMEOUT
+        };
+        conn.busy_timeout(busy_wait)
+            .map_err(|error| failed("set the busy timeout", error))?;
 
         // WAL suits the tracker's frequent small writes. Every commit still
         // waits for the disk, so a power cut never takes back a checkpoint, a
@@ -35,7 +49,7 @@ impl Database {
             "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
              PRAGMA journal_size_limit={WAL_SIZE_LIMIT_BYTES};"
         ))
-        .map_err(|error| VaultimeError::Database(format!("failed to set pragmas: {error}")))?;
+        .map_err(|error| failed("set pragmas", error))?;
         // Test databases never have to outlast a power cut, so their commits
         // skip waiting for the disk, which halves the time of the merge tests.
         #[cfg(test)]

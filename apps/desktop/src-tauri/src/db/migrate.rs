@@ -9,6 +9,7 @@
 use log::info;
 use rusqlite::Connection;
 
+use crate::db::repo::{busy, is_busy};
 use crate::error::{Result, VaultimeError};
 
 use super::connection::Database;
@@ -116,6 +117,9 @@ fn apply_pending(conn: &Connection) -> Result<()> {
         );",
     )
     .map_err(|error| {
+        if is_busy(&error) {
+            return busy();
+        }
         VaultimeError::Database(format!("failed to create _migrations table: {error}"))
     })?;
 
@@ -149,6 +153,9 @@ fn apply_pending(conn: &Connection) -> Result<()> {
         ))
         .map_err(|error| {
             let _ = conn.execute_batch("ROLLBACK;");
+            if is_busy(&error) {
+                return busy();
+            }
             VaultimeError::Database(format!("migration {name} failed: {error}"))
         })?;
     }

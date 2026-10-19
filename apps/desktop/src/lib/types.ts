@@ -515,6 +515,7 @@ export type CoreErrorKind =
   | "cloud"
   | "offline"
   | "not_found"
+  | "busy"
   | "invalid";
 
 /** How a failed command of the core reaches the page. */
