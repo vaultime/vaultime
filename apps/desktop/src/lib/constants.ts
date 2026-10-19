@@ -113,6 +113,8 @@ export const INVITE_CODE_PREFIX = "VTLINV";
 
 /** Refresh the access token when it expires within this window. */
 export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;
+/** How long a request to the cloud server may take, its answer included. */
+export const CLOUD_REQUEST_TIMEOUT_MS = 30 * SECOND_MS;
 /** Age of the newest cloud backup at which the daily automatic one is due. */
 export const CLOUD_AUTO_BACKUP_INTERVAL_MS = DAY_MS;
 /** How often a signed in app checks whether the daily cloud backup is due. */

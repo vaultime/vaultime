@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { MIN_BACKUP_PASSPHRASE_CHARS, VAULTIME_URL } from "@/lib/constants";
+import { CLOUD_REQUEST_TIMEOUT_MS, MIN_BACKUP_PASSPHRASE_CHARS, VAULTIME_URL } from "@/lib/constants";
 import { sentence } from "@/lib/words";
 
 const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim();
@@ -11,6 +11,11 @@ export const CLOUD_API_BASE_URL = (
     ? configuredCloudApiBaseUrl
     : VAULTIME_URL
 ).replace(/\/+$/, "");
+
+/** Shown when the server cannot be reached. */
+export const CLOUD_UNREACHABLE = "Could not reach the cloud server. Check your connection.";
+/** Shown when the server took longer than `CLOUD_REQUEST_TIMEOUT_MS` to answer. */
+export const CLOUD_TIMED_OUT = "The cloud server did not answer in time. Try again later.";
 
 /** Shown when a backup passphrase is shorter than the minimum. */
 export const BACKUP_PASSPHRASE_TOO_SHORT = `The backup passphrase needs at least ${MIN_BACKUP_PASSPHRASE_CHARS} characters.`;
@@ -82,30 +87,51 @@ async function cloudRequest<T>(
     headers.set("Authorization", `Bearer ${options.accessToken}`);
   }
 
+  // A server that stops answering must not hold up the page or the daily
+  // backup, so every request, its body included, ends after the timeout.
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, CLOUD_REQUEST_TIMEOUT_MS);
+  const abort = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  const failed = () => new CloudApiError(timedOut ? CLOUD_TIMED_OUT : CLOUD_UNREACHABLE, 0);
+
   let response: Response;
+  let payload: unknown;
   try {
-    response = await fetch(new URL(path, CLOUD_API_BASE_URL), {
-      method: options.method ?? "GET",
-      headers,
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
-    });
-  } catch {
-    throw new CloudApiError(
-      "Could not reach the cloud server. Check your connection.",
-      0,
-    );
-  }
+    try {
+      response = await fetch(new URL(path, CLOUD_API_BASE_URL), {
+        method: options.method ?? "GET",
+        headers,
+        body:
+          options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: controller.signal,
+      });
+    } catch {
+      throw failed();
+    }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
+    if (response.status === 204) {
+      return undefined as T;
+    }
 
-  const contentType = response.headers.get("content-type") ?? "";
-  const payload = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
+    try {
+      payload = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
+    } catch (error) {
+      if (controller.signal.aborted) throw failed();
+      throw error;
+    }
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+  }
 
   if (!response.ok) {
     throw new CloudApiError(

@@ -23,6 +23,7 @@
 // ?autodiscover=first as on the first look. They come once, as in the app.
 // The fourth game has a GOG install linked to it, and ?discover=1&scan=1&same=1
 // shows a discovered Xbox copy of it marked as the same game.
+// ?offline=1 leaves the cloud server out of reach.
 // ?takeover=1 makes this PC a fresh install, so restoring the Laptop's backup,
 // a local one or one in the cloud, asks whether this PC is the Laptop set up again.
 
@@ -696,6 +697,7 @@ const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = new URL(input instanceof Request ? input.url : input.toString());
   if (url.origin !== new URL(CLOUD_API_BASE_URL).origin) return realFetch(input, init);
+  if (params.get("offline") === "1") throw new TypeError("Failed to fetch");
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, string>) : {};
   switch (url.pathname) {
     case "/v1/auth/refresh":

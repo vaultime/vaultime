@@ -36,6 +36,7 @@ export function CloudPage() {
     autoBackupError,
     backupKeyReady,
     deleteBackup,
+    connectionError,
     device,
     deviceError,
     forgetBackupPassphrase,
@@ -325,6 +326,11 @@ export function CloudPage() {
           </Notice>
         )}
         {statusMessage && <Notice className="mt-6">{statusMessage}</Notice>}
+        {connectionError && !errorMessage && (
+          <Notice tone="warning" className="mt-6">
+            {connectionError} Vaultime tries again with the next cloud action.
+          </Notice>
+        )}
         {restartRequired && (
           <Notice className="mt-6">
             Restart Vaultime to continue tracking with the restored history.

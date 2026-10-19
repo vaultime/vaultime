@@ -20,6 +20,8 @@ export interface CloudSessionContextValue {
   session: CloudAuthSession | null;
   device: CloudDevice | null;
   deviceError: string | null;
+  /** Why the saved session could not be renewed at start, until the next renewal works. */
+  connectionError: string | null;
   backupKeyReady: boolean;
   /** Whether a signed in PC uploads a backup once a day. */
   autoBackup: boolean;

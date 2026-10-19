@@ -66,6 +66,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
   const { values, save } = useSettings();
   const [autoBackup, setAutoBackupState] = useState(() => values[SETTING_KEYS.cloudAutoBackup] !== "false");
@@ -74,6 +75,9 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   // Counts sign-outs, so a refresh that finishes after one cannot sign back in.
   const signOutsRef = useRef(0);
   const bootstrappedRef = useRef(false);
+  // Set when the server could not be reached at start, so this PC registers
+  // once a later renewal of the session works.
+  const registerOnRenewalRef = useRef(false);
   const appVersionRef = useRef<string | null>(null);
   const [refreshWithToken] = useState(() =>
     createTokenRefresher<CloudAuthSession>(
@@ -96,6 +100,12 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    if (!registerOnRenewalRef.current || connectionError || !session) return;
+    registerOnRenewalRef.current = false;
+    void restoreDeviceRegistration(session);
+  }, [connectionError, session]);
 
 
   // Uploads a backup when the newest one on the server is a day old. Runs
@@ -186,7 +196,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
           applyClearedSession();
           void forgetStoredSession();
         } else {
-          setDeviceError(describeError(error));
+          setConnectionError(describeError(error));
+          registerOnRenewalRef.current = true;
         }
       } finally {
         setInitializing(false);
@@ -199,6 +210,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   function applySession(next: CloudAuthSession) {
     sessionRef.current = next;
     setSession(next);
+    setConnectionError(null);
   }
 
   function applyClearedSession() {
@@ -206,6 +218,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setDevice(null);
     setDeviceError(null);
+    setConnectionError(null);
     setBackupKeyReady(false);
   }
 
@@ -579,6 +592,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     session,
     device,
     deviceError,
+    connectionError,
     backupKeyReady,
     autoBackup,
     autoBackupError,
