@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import * as api from "@/lib/tauri";
 import type { Game } from "@/lib/types";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import { GameFields } from "./GameFields";
 
 /** What the dialog edits: a game, or another install that counts as one. */
@@ -62,7 +62,7 @@ export function EditGameDialog({
         install_folder: installFolder,
       });
       if (pathsChanged && (executablePath || installFolder)) {
-        await api.scanGameAssets(game.id).catch(() => {});
+        await api.scanGameAssets(game.id).catch(logFailure("looking for artwork in the game's folder"));
       }
       onSaved();
       onClose();

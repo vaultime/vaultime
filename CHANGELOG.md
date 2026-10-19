@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tracking keeps going after an error.** An unexpected error while Vaultime checks your games goes to the log, and the next check starts over. It used to stop tracking until Vaultime restarted, while Settings still said tracking was running. A session the database could not close is closed at the next check instead of staying open until the next start.
 - **Cloud requests give up after 30 seconds.** A cloud server that stops answering no longer leaves the Cloud page waiting for good or holds up the daily backup.
 - **An offline start says so.** When the cloud server cannot be reached as Vaultime starts, the Cloud page says that, instead of reporting that registering this PC failed. This PC registers once the server answers again.
+- **Failures say why.** A status change that fails on a game's page or from the command palette now says why, and the palette stays open to show it. A correction whose preview cannot be worked out says so, instead of claiming that nothing changes. Smaller failures, like a setting saved as Vaultime closes, go to the log instead of vanishing.
 - **The library is current after a cloud restore.** The library, journal and stats show the restored history right away, as after a local restore. They used to show the old history until a game started or stopped.
 
 ## [0.5.0] - 2026-10-17

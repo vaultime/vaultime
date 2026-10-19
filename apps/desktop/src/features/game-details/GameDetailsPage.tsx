@@ -29,7 +29,7 @@ import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { compareTimes, formatCalendarDay, formatHoursMinutes } from "@/lib/time";
 import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import { capitalize } from "@/lib/words";
 import { AsideSection, EarlierSection, TotalRow } from "./Aside";
 import { CoverPicker } from "./CoverPicker";
@@ -52,7 +52,8 @@ function GamePage({ gameId }: { gameId: string }) {
   const [addingSession, setAddingSession] = useState(false);
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
-  const [hideError, setHideError] = useState<string | null>(null);
+  // What went wrong with the last change made on the page, like hiding the game.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [steppingError, setSteppingError] = useState<string | null>(null);
 
   const summary = summaries.find((entry) => entry.game.id === gameId);
@@ -73,7 +74,7 @@ function GamePage({ gameId }: { gameId: string }) {
       .then((next) => {
         if (!cancelled) setEvents(next);
       })
-      .catch(() => {});
+      .catch(logFailure("loading what explains the game's flagged sessions"));
     return () => {
       cancelled = true;
     };
@@ -86,7 +87,7 @@ function GamePage({ gameId }: { gameId: string }) {
       .then((next) => {
         if (!cancelled) setAssets(next);
       })
-      .catch(() => {});
+      .catch(logFailure("loading the game's artwork"));
     return () => {
       cancelled = true;
     };
@@ -134,11 +135,20 @@ function GamePage({ gameId }: { gameId: string }) {
 
   async function setHidden(hidden: boolean) {
     try {
-      setHideError(null);
+      setActionError(null);
       await api.updateGame(game.id, { is_hidden: hidden });
       await refresh();
     } catch (error) {
-      setHideError(describeError(error));
+      setActionError(describeError(error));
+    }
+  }
+
+  async function changeStatus(status: Parameters<typeof setStatus>[1]) {
+    try {
+      setActionError(null);
+      await setStatus(game.id, status);
+    } catch (error) {
+      setActionError(describeError(error));
     }
   }
 
@@ -171,7 +181,7 @@ function GamePage({ gameId }: { gameId: string }) {
                 tint={tint}
                 status={summary.status}
                 since={summary.statusSince}
-                onChange={(status) => void setStatus(game.id, status).catch(() => {})}
+                onChange={(status) => void changeStatus(status)}
               />
             </div>
           </div>
@@ -186,7 +196,7 @@ function GamePage({ gameId }: { gameId: string }) {
 
       <div className="grid xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-10 px-8 pt-8 xl:pr-10 xl:pl-14">
-          {(game.is_hidden || hideError) && (
+          {(game.is_hidden || actionError) && (
             <div className="-mb-4 flex flex-col gap-3">
               {game.is_hidden && (
                 <Notice>
@@ -198,7 +208,7 @@ function GamePage({ gameId }: { gameId: string }) {
                   </Button>
                 </Notice>
               )}
-              {hideError && <Notice tone="warning">{hideError}</Notice>}
+              {actionError && <Notice tone="warning">{actionError}</Notice>}
             </div>
           )}
 

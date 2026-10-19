@@ -42,7 +42,7 @@ import type {
   CloudStorage,
 } from "@/lib/types";
 import { createTokenRefresher } from "@/lib/token-refresh";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import { useSettings } from "@/features/settings/settings-context";
 import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
 import {
@@ -131,7 +131,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   // The tray and taskbar icon turn violet while signed in, like the logo.
   const signedIn = session !== null;
   useEffect(() => {
-    setCloudSignedIn(signedIn).catch(() => {});
+    setCloudSignedIn(signedIn).catch(logFailure("coloring the tray icon for cloud backup"));
   }, [signedIn]);
 
   const accountId = session?.user.id ?? null;

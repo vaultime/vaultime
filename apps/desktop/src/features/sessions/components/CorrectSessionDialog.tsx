@@ -62,6 +62,7 @@ export function CorrectSessionDialog({
   // The core works out what a cut keeps, from the session's own record, so
   // the preview is exactly what saving does.
   const [preview, setPreview] = useState<{ end: string; runtime_ms: number; active_ms: number } | null>(null);
+  const [previewError, setPreviewError] = useState<{ end: string; message: string } | null>(null);
   useEffect(() => {
     if (!open || !endIso) return;
     let cancelled = false;
@@ -70,7 +71,9 @@ export function CorrectSessionDialog({
       .then((kept) => {
         if (!cancelled) setPreview({ end: endIso, ...kept });
       })
-      .catch(() => {});
+      .catch((previewFailure: unknown) => {
+        if (!cancelled) setPreviewError({ end: endIso, message: describeError(previewFailure) });
+      });
     return () => {
       cancelled = true;
     };
@@ -80,6 +83,7 @@ export function CorrectSessionDialog({
   const aside = session.set_aside_ms ?? 0;
   const recorded = session.runtime_ms + aside;
   const kept = mode === "discard" ? { runtime_ms: 0, active_ms: 0 } : preview?.end === endIso ? preview : null;
+  const previewFailed = mode === "trim" && !kept && previewError?.end === endIso ? previewError.message : null;
   const counts = kept?.runtime_ms ?? recorded;
   const activeAfter = kept?.active_ms ?? session.active_ms + (session.set_aside_active_ms ?? 0);
   const day = (date: Date) => formatDate(date, { weekday: "long", day: "numeric", month: "long" });
@@ -200,7 +204,9 @@ export function CorrectSessionDialog({
           </Field>
 
           <p className="text-sm text-soft">
-            {counts === recorded
+            {previewFailed
+              ? `What it would leave could not be worked out. ${previewFailed}`
+              : counts === recorded
               ? "Nothing changes yet."
               : aside >= MINUTE_MS
                 ? `Keeps ${formatHoursMinutes(counts)} of its ${formatHoursMinutes(recorded)} on record. Time beside other games stays set aside.`

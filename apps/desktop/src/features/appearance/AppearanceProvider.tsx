@@ -21,6 +21,7 @@ import {
   type Appearance,
   type ThemeMode,
 } from "@/lib/theme";
+import { logFailure } from "@/lib/utils";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
@@ -71,7 +72,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       .then((picture) => {
         if (!cancelled) setBackground(picture);
       })
-      .catch(() => {});
+      .catch(logFailure("loading the background picture"));
     return () => {
       cancelled = true;
     };
@@ -90,7 +91,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     return () => {
       for (const [key, { value, timer }] of waiting) {
         window.clearTimeout(timer);
-        save(key, value).catch(() => {});
+        save(key, value).catch(logFailure(`saving ${key}`));
       }
       waiting.clear();
     };
@@ -126,7 +127,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const send = () => {
       windowLookSentAt.current = performance.now();
-      api.setWindowLook(windowLook(mode, appearance.ground, appearance.accent, appearance.mode)).catch(() => {});
+      api
+        .setWindowLook(windowLook(mode, appearance.ground, appearance.accent, appearance.mode))
+        .catch(logFailure("coloring the window and its icons"));
     };
     const wait = windowLookSentAt.current + WINDOW_LOOK_INTERVAL_MS - performance.now();
     if (wait <= 0) {
@@ -153,7 +156,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         pending.current.delete(key);
         const saveNow = () => {
           pending.current.delete(key);
-          save(key, value).catch(() => {});
+          save(key, value).catch(logFailure(`saving ${key}`));
         };
         if (gradual) pending.current.set(key, { value, timer: window.setTimeout(saveNow, APPEARANCE_SAVE_DELAY_MS) });
         else saveNow();

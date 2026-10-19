@@ -15,7 +15,7 @@ import * as api from "@/lib/tauri";
 import { formatDate, isoWeekNumber, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
 import type { DayShare, JournalWeekPlay, Session, SessionEvent } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import { DaySection } from "./DaySection";
 import { entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
 
@@ -149,7 +149,7 @@ export function JournalPage() {
       .then((lists) => {
         if (!cancelled) setEvents(lists.flat());
       })
-      .catch(() => {});
+      .catch(logFailure("loading what explains the week's flagged sessions"));
     return () => {
       cancelled = true;
     };

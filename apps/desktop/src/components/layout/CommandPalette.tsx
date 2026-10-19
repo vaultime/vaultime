@@ -14,7 +14,7 @@ import { matchesGame, matchesSearch } from "@/lib/search";
 import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatHoursShort } from "@/lib/time";
-import { cn } from "@/lib/utils";
+import { cn, describeError, logFailure } from "@/lib/utils";
 
 interface Command {
   id: string;
@@ -61,6 +61,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const pageGame = everyGame.find((summary) => summary.game.id === pageGameId);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
+  // Why the last action failed. The palette stays open to say so.
+  const [failure, setFailure] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
 
   const results = useMemo(() => {
     const matches = (text: string) => matchesSearch(text, query);
@@ -137,14 +140,29 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     if (!next) {
       setQuery("");
       setSelected(0);
+      setFailure(null);
     }
   }
 
-  function run(command: Command | undefined) {
-    if (!command) return;
-    close(false);
-    if (command.run) void command.run().catch(() => {});
-    if (command.to) navigate(command.to);
+  async function run(command: Command | undefined) {
+    if (!command || running) return;
+    if (command.to) {
+      close(false);
+      // The page it goes to shows how it went, like Settings, About for the update check.
+      if (command.run) void command.run().catch(logFailure(command.label));
+      navigate(command.to);
+      return;
+    }
+    setRunning(true);
+    setFailure(null);
+    try {
+      await command.run?.();
+      close(false);
+    } catch (error) {
+      setFailure(`That did not work. ${describeError(error)}`);
+    } finally {
+      setRunning(false);
+    }
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -156,7 +174,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       setSelected((active - 1 + results.length) % Math.max(results.length, 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      run(results[active]);
+      void run(results[active]);
     }
   }
 
@@ -176,6 +194,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               onChange={(event) => {
                 setQuery(event.target.value);
                 setSelected(0);
+                setFailure(null);
               }}
               onKeyDown={onKeyDown}
               placeholder="Search games, pages and actions"
@@ -188,6 +207,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             />
             <kbd className="rounded-[5px] border border-hairline px-1.5 py-0.5 font-mono text-[11px]">Esc</kbd>
           </label>
+          {failure && (
+            <p role="alert" className="border-b border-rule px-5 py-3 text-sm text-amber">
+              {failure}
+            </p>
+          )}
 
           <ul id="command-results" role="listbox" aria-label="Results" className="max-h-[360px] overflow-y-auto p-1.5">
             {results.length === 0 && <li className="px-4 py-6 text-center text-sm text-faint">Nothing matches "{query}".</li>}
@@ -198,7 +222,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                 role="option"
                 aria-selected={index === active}
                 onMouseEnter={() => setSelected(index)}
-                onClick={() => run(command)}
+                onClick={() => void run(command)}
                 className={cn(
                   "flex min-h-[52px] cursor-pointer items-center gap-3 rounded-[10px] px-3.5 py-2",
                   index === active && "bg-raised",

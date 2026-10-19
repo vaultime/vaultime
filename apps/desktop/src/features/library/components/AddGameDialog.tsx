@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import * as api from "@/lib/tauri";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import { GameFields } from "./GameFields";
 
 /** "C:\Games\Hollow_Knight\hollow_knight.exe" gives "hollow knight". */
@@ -69,7 +69,7 @@ export function AddGameDialog({
         install_folder: installFolder || null,
       });
       if (executablePath || installFolder) {
-        await api.scanGameAssets(game.id).catch(() => {});
+        await api.scanGameAssets(game.id).catch(logFailure("looking for artwork in the game's folder"));
       }
       onOpenChange(false);
       onAdded();

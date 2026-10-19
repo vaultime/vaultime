@@ -15,6 +15,7 @@ import {
 } from "@/lib/tauri";
 import { compareTimes } from "@/lib/time";
 import type { CloudAuthSession, CloudBackupRecord } from "@/lib/types";
+import { logFailure } from "@/lib/utils";
 
 export async function loadPersistedSession(): Promise<CloudAuthSession | null> {
   try {
@@ -51,7 +52,9 @@ export async function forgetStoredSession(): Promise<void> {
 
 /** Ends a session a refresh returned after the player signed out. */
 export function revokeLateSession(late: CloudAuthSession) {
-  void cloudPostJson("/v1/auth/logout", { refresh_token: late.refresh_token }).catch(() => {});
+  void cloudPostJson("/v1/auth/logout", { refresh_token: late.refresh_token }).catch(
+    logFailure("signing out a session that was renewed after signing out"),
+  );
 }
 
 export async function clearPersistedSessionStorage(accountId?: string): Promise<void> {

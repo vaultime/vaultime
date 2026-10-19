@@ -13,7 +13,7 @@ import { linkTargets, linkedTo, whereFrom } from "@/lib/links";
 import * as api from "@/lib/tauri";
 import { formatHoursMinutes } from "@/lib/time";
 import type { Game, GameLink, Session, StepsAsideHint } from "@/lib/types";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 
 /** Why the last change in a row failed. */
 function RowError({ error }: { error: string | null }) {
@@ -66,7 +66,7 @@ export function StepsAsideRow({
       .then((next) => {
         if (!cancelled) setHint({ gameId: game.id, hint: next });
       })
-      .catch(() => {});
+      .catch(logFailure("asking whether the game looks like a launcher"));
     return () => {
       cancelled = true;
     };

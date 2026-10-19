@@ -36,7 +36,7 @@ import {
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import type { BackupSnapshot, TrackingDiagnostics } from "@/lib/types";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import { useScrollToAnchor } from "@/lib/anchors";
 import { numberWords } from "@/lib/words";
 
@@ -123,7 +123,7 @@ export function SettingsPage() {
       if (!pending) return;
       pendingIdle.current = null;
       window.clearTimeout(pending.timer);
-      save(SETTING_KEYS.idleThreshold, String(pending.seconds)).catch(() => {});
+      save(SETTING_KEYS.idleThreshold, String(pending.seconds)).catch(logFailure("saving the idle time"));
     },
     [save],
   );

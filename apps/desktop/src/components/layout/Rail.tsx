@@ -23,7 +23,7 @@ import { COPYRIGHT_NOTICE, SETTING_KEYS } from "@/lib/constants";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
-import { cn } from "@/lib/utils";
+import { cn, logFailure } from "@/lib/utils";
 
 const PAGES = [
   { to: "/library", label: "Library", icon: LibraryBig },
@@ -47,12 +47,12 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
   const games = sortGames(summaries, sort);
 
   useEffect(() => {
-    api.getAppVersion().then(setAppVersion).catch(() => {});
+    api.getAppVersion().then(setAppVersion).catch(logFailure("reading the version"));
   }, []);
 
   function changeSort(next: GameSort) {
     setSort(next);
-    save(SETTING_KEYS.railSort, next).catch(() => {});
+    save(SETTING_KEYS.railSort, next).catch(logFailure("saving the sort of the game list"));
   }
 
   return (

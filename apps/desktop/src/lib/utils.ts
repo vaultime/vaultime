@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { warn } from "@tauri-apps/plugin-log"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -12,6 +13,16 @@ export function cn(...inputs: ClassValue[]) {
 export function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.charAt(0).toUpperCase() + message.slice(1);
+}
+
+/**
+ * A catch handler for work whose failure the page has no place to show, like
+ * saving a setting as the window closes, so the failure still reaches the log.
+ */
+export function logFailure(what: string) {
+  return (error: unknown) => {
+    warn(`${what} failed: ${describeError(error)}`).catch(() => {});
+  };
 }
 
 /** A number that stays the same for the same text, to pick colors or wording without randomness. */

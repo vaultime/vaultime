@@ -6,6 +6,7 @@ import { useLibrary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
 import { continuesAs } from "@/lib/devices";
 import type { PcTakeover } from "@/lib/types";
+import { logFailure } from "@/lib/utils";
 
 /**
  * What every restore does once the core replaced the history: read the
@@ -19,7 +20,7 @@ export function useFinishRestore() {
   return useCallback(
     async (what: string, restored: { continues_as?: PcTakeover | null }) => {
       // A restore replaces the settings that are not kept per PC.
-      await reloadSettings().catch(() => {});
+      await reloadSettings().catch(logFailure("reading the restored settings"));
       await refresh();
       return restored.continues_as ? `${what} restored. ${continuesAs(restored.continues_as)}` : `${what} restored.`;
     },
