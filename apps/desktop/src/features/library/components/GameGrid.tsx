@@ -22,6 +22,7 @@ import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import { matchesGame } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort, formatRelativeDay } from "@/lib/time";
+import { scrollMotion } from "@/lib/anchors";
 import { cn } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
@@ -61,7 +62,7 @@ export function GameGrid({
   useEffect(
     () =>
       onFind(() => {
-        section.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+        section.current?.scrollIntoView({ block: "start", behavior: scrollMotion() });
         search.current?.focus({ preventScroll: true });
         search.current?.select();
       }),

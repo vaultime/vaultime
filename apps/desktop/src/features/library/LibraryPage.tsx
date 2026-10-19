@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
+import { scrollMotion } from "@/lib/anchors";
 import { LIVE_TOTALS_REFRESH_MS, RECENT_DAYS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import type { Game, RecentPlay } from "@/lib/types";
@@ -98,7 +99,7 @@ export function LibraryPage() {
           games={shelf}
           playing={playing}
           totalCount={visible.length}
-          onShowAll={() => document.getElementById("all-games")?.scrollIntoView({ behavior: "smooth" })}
+          onShowAll={() => document.getElementById("all-games")?.scrollIntoView({ behavior: scrollMotion() })}
         />
       )}
 

@@ -15,6 +15,7 @@ import * as api from "@/lib/tauri";
 import { formatDate, isoWeekNumber, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
 import type { DayShare, JournalWeekPlay, Session, SessionEvent } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
+import { scrollMotion } from "@/lib/anchors";
 import { describeError, logFailure } from "@/lib/utils";
 import { DaySection } from "./DaySection";
 import { entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
@@ -117,7 +118,7 @@ export function JournalPage() {
     jumpTarget.current = null;
     if (!target) return;
     target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "center", behavior: "smooth" });
+    target.scrollIntoView({ block: "center", behavior: scrollMotion() });
   });
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 

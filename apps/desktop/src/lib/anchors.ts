@@ -12,6 +12,11 @@ export function anchorOf(title: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/** Smooth scrolling, unless the system asks for less motion. */
+export function scrollMotion(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 /** Scrolls to the section the address names, once the page has drawn it. */
 export function useScrollToAnchor(ready: boolean) {
   const { hash } = useLocation();
