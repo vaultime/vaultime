@@ -46,7 +46,7 @@ function renderSection() {
   const reload = vi.fn(async () => {});
   const library = { refresh, thisDeviceId: "this-pc" } as unknown as NonNullable<ContextType<typeof LibraryContext>>;
   render(
-    <SettingsContext.Provider value={{ values: {}, save: vi.fn(async () => {}), reload }}>
+    <SettingsContext.Provider value={{ values: {}, read: true, save: vi.fn(async () => {}), reload }}>
       <LibraryContext.Provider value={library}>
         <LocalBackupsSection
           initial={{ autoBackup: true, folder: "C:\\Backups", snapshots: [] }}

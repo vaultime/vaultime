@@ -17,11 +17,14 @@ import { compareTimes } from "@/lib/time";
 import type { CloudAuthSession, CloudBackupRecord } from "@/lib/types";
 import { logFailure } from "@/lib/utils";
 
-export async function loadPersistedSession(): Promise<CloudAuthSession | null> {
+/** The saved session, and whether the system keyring could be read at all. */
+export async function loadPersistedSession(): Promise<{ session: CloudAuthSession | null; keyringRead: boolean }> {
+  let keyringRead = false;
   try {
     const secureRaw = await loadCloudSessionSecure();
+    keyringRead = true;
     if (secureRaw) {
-      return parseStoredSession(secureRaw);
+      return { session: parseStoredSession(secureRaw), keyringRead };
     }
   } catch {
     // Falls through to the older storage.
@@ -29,11 +32,7 @@ export async function loadPersistedSession(): Promise<CloudAuthSession | null> {
 
   // Older builds kept the session in localStorage.
   const legacyRaw = window.localStorage.getItem(CLOUD_SESSION_STORAGE_KEY);
-  if (!legacyRaw) {
-    return null;
-  }
-
-  return parseStoredSession(legacyRaw);
+  return { session: legacyRaw ? parseStoredSession(legacyRaw) : null, keyringRead };
 }
 
 export async function persistCloudSession(session: CloudAuthSession): Promise<void> {

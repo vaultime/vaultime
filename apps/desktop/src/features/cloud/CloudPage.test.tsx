@@ -81,7 +81,7 @@ function renderPage(backup: CloudBackupRecord, result: CloudBackupRestoreResult)
   } as unknown as CloudSessionContextValue;
   const library = { refresh, thisDeviceId: "this-pc" } as unknown as NonNullable<ContextType<typeof LibraryContext>>;
   render(
-    <SettingsContext.Provider value={{ values: {}, save: vi.fn(async () => {}), reload: vi.fn(async () => {}) }}>
+    <SettingsContext.Provider value={{ values: {}, read: true, save: vi.fn(async () => {}), reload: vi.fn(async () => {}) }}>
       <LibraryContext.Provider value={library}>
         <CloudSessionContext.Provider value={cloud}>
           <CloudPage />

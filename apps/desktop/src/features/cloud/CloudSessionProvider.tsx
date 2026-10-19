@@ -68,7 +68,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
-  const { values, save } = useSettings();
+  const { values, read: settingsRead, save } = useSettings();
   // Unset on PCs from before the switch, until the first start decides.
   const cloudSetting = values[SETTING_KEYS.cloudBackup];
   const enabled = cloudSetting === "true";
@@ -170,9 +170,11 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     bootstrappedRef.current = true;
 
     async function restoreStoredSession() {
-      const stored = await loadPersistedSession();
+      const { session: stored, keyringRead } = await loadPersistedSession();
       // A PC from before the switch keeps cloud backup while it is signed in.
-      if (cloudSetting === undefined) {
+      // Turning it off takes a keyring and settings that could be read, so a
+      // locked keyring at login or a failed read decides nothing for good.
+      if (cloudSetting === undefined && (stored !== null || (keyringRead && settingsRead))) {
         await save(SETTING_KEYS.cloudBackup, String(stored !== null)).catch(
           logFailure("deciding whether this PC uses cloud backup"),
         );
@@ -217,7 +219,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     }
 
     void restoreStoredSession();
-  }, [cloudSetting, refreshWithToken, save]);
+  }, [cloudSetting, settingsRead, refreshWithToken, save]);
 
   function applySession(next: CloudAuthSession) {
     sessionRef.current = next;

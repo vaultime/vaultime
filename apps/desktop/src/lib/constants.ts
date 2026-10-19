@@ -283,13 +283,13 @@ export const JOURNAL_LINK_FLASH_MS = 1800;
 
 // Time phrases
 
-/** Longest session that reads as a quick look. */
+/** Longest session that reads as a quick look. Same as SESSION_QUICK_MAX_MS in constants.rs. */
 export const SESSION_QUICK_MAX_MS = 20 * MINUTE_MS;
-/** Longest session that reads as short. */
+/** Longest session that reads as short. Same as SESSION_SHORT_MAX_MS in constants.rs. */
 export const SESSION_SHORT_MAX_MS = HOUR_MS;
-/** Longest session that reads as a plain session, longer ones are long. */
+/** Longest session that reads as a plain session, longer ones are long. Same as SESSION_PLAIN_MAX_MS in constants.rs. */
 export const SESSION_PLAIN_MAX_MS = 2 * HOUR_MS;
-/** Longest session that reads as long, longer ones are marathons. */
+/** Longest session that reads as long, longer ones are marathons. Same as SESSION_LONG_MAX_MS in constants.rs. */
 export const SESSION_LONG_MAX_MS = 4 * HOUR_MS;
 
 /** Time away from a game after which a session reads as a return. */
