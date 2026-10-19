@@ -99,10 +99,7 @@ fn write_backup(
     app_context: &AppContext,
     folder: &Path,
 ) -> Result<LocalBackupSummary> {
-    let previous = automatic_backups(folder)
-        .into_iter()
-        .rev()
-        .find(|backup| backup.join(BACKUP_MANIFEST_FILE).is_file());
+    let previous = newest_complete(folder);
     let summary = export_backup_to(
         db,
         asset_manager,
@@ -138,6 +135,15 @@ fn newest_age(folder: &Path) -> Option<Duration> {
         })
         .max()
         .map(|newest| SystemTime::now().duration_since(newest).unwrap_or_default())
+}
+
+/// The newest automatic backup in `folder` that finished, to start from
+/// when the database does not open.
+pub fn newest_complete(folder: &Path) -> Option<PathBuf> {
+    automatic_backups(folder)
+        .into_iter()
+        .rev()
+        .find(|backup| backup.join(BACKUP_MANIFEST_FILE).is_file())
 }
 
 /// Automatic backup folders, oldest first. Their names end in a timestamp

@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cloud requests give up after 30 seconds.** A cloud server that stops answering no longer leaves the Cloud page waiting for good or holds up the daily backup.
 - **An offline start says so.** When the cloud server cannot be reached as Vaultime starts, the Cloud page says that, instead of reporting that registering this PC failed. This PC registers once the server answers again.
 - **Failures say why.** A status change that fails on a game's page or from the command palette now says why, and the palette stays open to show it. A correction whose preview cannot be worked out says so, instead of claiming that nothing changes. Smaller failures, like a setting saved as Vaultime closes, go to the log instead of vanishing.
+- **A database that does not open is no dead end.** When Vaultime cannot open its database at start, it says why and offers to set it aside and start from the newest automatic backup. The file set aside stays next to the new one, and a restore that fails changes nothing. Other problems at start show a message, where Vaultime used to close without a word.
+- **An older Vaultime leaves newer data alone.** Started after a newer version changed the database, an older Vaultime asks for the newer version instead of working on data it does not fully know.
 - **The library is current after a cloud restore.** The library, journal and stats show the restored history right away, as after a local restore. They used to show the old history until a game started or stopped.
 
 ## [0.5.0] - 2026-10-17

@@ -11,7 +11,7 @@ rust-version = "1.98"
 name = "vaultime_lib"
 
 [build-dependencies]
-tauri-build = "2.7"
+tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
 tauri = { version = "2.12", features = ["image-png", "tray-icon"] }
@@ -34,6 +34,7 @@ hostname = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "gif", "tiff", "tga", "qoi", "pnm"] }
 keyring = "4.2"
 log = "0.4"
+rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 resvg = { version = "0.48", default-features = false }
 reqwest = { version = "0.13", features = ["blocking", "json"] }
 rusqlite = { version = "0.40", features = ["bundled"] }

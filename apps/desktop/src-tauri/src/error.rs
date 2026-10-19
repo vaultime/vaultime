@@ -38,7 +38,7 @@ impl std::error::Error for VaultimeError {}
 impl VaultimeError {
     /// The message for the page: without the category the logs carry, and
     /// starting with a capital letter.
-    fn user_message(&self) -> String {
+    pub fn user_message(&self) -> String {
         let (Self::Database(message)
         | Self::Backup(message)
         | Self::Tracking(message)

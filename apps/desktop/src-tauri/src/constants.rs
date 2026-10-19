@@ -428,8 +428,8 @@ pub const SHARE_IMAGE_MAX_BYTES: usize = 32 * 1024 * 1024;
 /// Bytes of the key check stored with each cloud backup, enough to tell two
 /// keys apart. Part of the backup format, changing it breaks the check.
 pub const KEY_CHECK_BYTES: usize = 16;
-/// Address of the cloud server. Release builds use only this one, whatever the
-/// page asks. Same as `VAULTIME_URL` in `lib/constants.ts`.
+/// Address of the website and the cloud server. Release builds use only this
+/// one, whatever the page asks. Same as `VAULTIME_URL` in `lib/constants.ts`.
 pub const CLOUD_API_BASE_URL: &str = "https://vaultime.codfishcloud.de";
 /// Most artwork ids asked about in one request. Same as
 /// `MAX_BLOB_IDS_PER_REQUEST` in the API's `constants.rs`.

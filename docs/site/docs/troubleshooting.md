@@ -74,6 +74,16 @@ The sign-in is kept in the system keyring. If an error mentions secure storage, 
 
 It cannot be recovered, and cloud backups made with it cannot be restored. Your local history and local backups do not depend on it.
 
+## Starting
+
+### Vaultime says it could not open its database
+
+The database file is damaged, or another program holds it. When another program may be using it, such as a sync tool or a virus scanner, choose **Quit** and start Vaultime again later. Otherwise choose **Restore the backup**: Vaultime renames the database to `vaultime.db.damaged-` followed by the time, keeps it next to the new one and starts from the newest automatic backup. Play recorded after that backup stays only in the renamed file. Nothing is deleted, and when the restore fails, everything stays as it was.
+
+### Vaultime says it is older than the one that last used its data
+
+A newer version of Vaultime changed the database, and an older one would not keep what it added. Install the newest version from the [website](https://vaultime.codfishcloud.de/#download).
+
 ## Window
 
 ### The window is too large or too small

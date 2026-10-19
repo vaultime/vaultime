@@ -17,6 +17,7 @@ pub mod hex;
 pub mod integrity;
 pub mod platform;
 pub mod playtime;
+pub mod recovery;
 pub mod secure_storage;
 pub mod share;
 pub mod tracking;
@@ -212,39 +213,58 @@ fn log_panics() {
 /// Opens the database, registers this device, starts tracking and creates the tray.
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     log_panics();
-    let app_dir = app
-        .path()
-        .app_data_dir()
-        .expect("failed to resolve app data directory");
-
-    fs::create_dir_all(&app_dir).expect("failed to create app data directory");
+    let app_dir = app.path().app_data_dir().unwrap_or_else(|error| {
+        recovery::fatal(&format!("Vaultime could not find its data folder. {error}"))
+    });
     let asset_cache_dir = app_dir.join(ASSET_CACHE_DIR);
     let appearance_dir = app_dir.join(APPEARANCE_DIR);
-    fs::create_dir_all(&asset_cache_dir).expect("failed to create asset cache directory");
+    fs::create_dir_all(&asset_cache_dir).unwrap_or_else(|error| {
+        recovery::fatal(&format!(
+            "Vaultime could not create its data folder {}. {error}",
+            asset_cache_dir.display()
+        ))
+    });
 
     let db_path = app_dir.join(DATABASE_FILE);
     let first_start = !db_path.exists();
     let device_id = device_id(&app_dir, !first_start);
-    let database = Arc::new(Database::open(&db_path).expect("failed to open database"));
-    app.manage(window_look::WindowLookState::load(&database));
-
+    // Before the database opens, as a restore at start checks sessions with it.
+    integrity::ledger::load_key(&app_dir, &device_id).unwrap_or_else(|error| {
+        recovery::fatal(&format!(
+            "Vaultime could not load the key of this PC's ledger. {}",
+            error.user_message()
+        ))
+    });
     let platform = std::env::consts::OS.to_string();
     let version = env!("CARGO_PKG_VERSION").to_string();
-    devices::ensure_device(&database, &device_id, &platform, &version)
-        .expect("failed to register device");
+    let context = AppContext {
+        app_dir,
+        device_id: device_id.clone(),
+        app_version: version.clone(),
+    };
+    let database = Arc::new(recovery::open_database(
+        &context,
+        &AssetManager::new(asset_cache_dir.clone()),
+        &db_path,
+    ));
+    app.manage(window_look::WindowLookState::load(&database));
+
+    let started = devices::ensure_device(&database, &device_id, &platform, &version)
+        .and_then(|_| integrity::ledger::key_id())
+        .and_then(|key_id| {
+            let pc_name = hostname::get().map_or_else(
+                |_| platform.clone(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+            devices::describe_this_device(&database, &device_id, &key_id, &pc_name)
+        });
+    if let Err(error) = started {
+        recovery::fatal(&format!(
+            "Vaultime could not register this PC in its database. {}",
+            error.user_message()
+        ));
+    }
     info!("device registered: {device_id} ({platform} v{version})");
-    integrity::ledger::load_key(&app_dir, &device_id).expect("failed to load the ledger key");
-    let pc_name = hostname::get().map_or_else(
-        |_| platform.clone(),
-        |name| name.to_string_lossy().into_owned(),
-    );
-    devices::describe_this_device(
-        &database,
-        &device_id,
-        &integrity::ledger::key_id().expect("ledger key loaded"),
-        &pc_name,
-    )
-    .expect("failed to describe this PC");
     match database.with_transaction(|conn| integrity::ledger::begin_if_empty(conn, "first_start")) {
         Ok(Some(count)) => info!("the ledger of this PC began with {count} sessions"),
         Ok(None) => {}
@@ -261,11 +281,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let live = Arc::new(LiveSessions::default());
     let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone(), Arc::clone(&live));
 
-    app.manage(AppContext {
-        app_dir,
-        device_id,
-        app_version: version,
-    });
+    app.manage(context);
     start_automatic_backups(
         Arc::clone(&database),
         AssetManager::new(asset_cache_dir.clone()),
