@@ -198,8 +198,20 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
     ]
 }
 
+/// Writes panics to the log file as well. Release builds on Windows have no
+/// console, where the default hook prints them.
+fn log_panics() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        log::error!("thread {} {info}", thread.name().unwrap_or("unnamed"));
+        default_hook(info);
+    }));
+}
+
 /// Opens the database, registers this device, starts tracking and creates the tray.
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    log_panics();
     let app_dir = app
         .path()
         .app_data_dir()

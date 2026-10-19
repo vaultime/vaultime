@@ -10,6 +10,10 @@ use std::time::Duration;
 /// How often the tracker polls running processes. The frontend polls at the
 /// same rate, see `ACTIVE_POLL_MS` in `lib/constants.ts`.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
+/// Ticks in a row a game has to be missing from the process list before its
+/// session ends, so a game that restarts itself or one bad process list does
+/// not split a session in two.
+pub const MISSED_TICKS_BEFORE_END: u32 = 2;
 /// Longest stretch between two checkpoints of a running session. A
 /// checkpoint is also written whenever its time switches between active and
 /// idle, before a tracking gap and when it is flagged, so the time between

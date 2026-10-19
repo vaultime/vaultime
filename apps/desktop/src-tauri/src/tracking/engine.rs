@@ -4,6 +4,7 @@
 //! Polls running processes and turns them into game sessions.
 
 use std::collections::HashMap;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -17,14 +18,15 @@ use crate::constants::{
     BACKGROUND_ACTIVE_SETTING, CHECKPOINT_INTERVAL, CLOCK_BACKWARDS_TOLERANCE_MS,
     CLOCK_STEP_TOLERANCE_MS, CLOCK_TOTAL_DRIFT_TOLERANCE_MS, DEFAULT_IDLE_THRESHOLD_SECS,
     FOLDER_MATCH_LAUNCHERS, FOREGROUND_GRACE, IDLE_THRESHOLD_SETTING, INSTALL_FOLDER_REFRESH,
-    MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS, POLL_INTERVAL, PROCESS_ACTIVITY_CPU_PERCENT,
-    SUSPEND_DETECT_MS,
+    MAX_TICK_GAP_MS, MIN_IDLE_THRESHOLD_SECS, MISSED_TICKS_BEFORE_END, POLL_INTERVAL,
+    PROCESS_ACTIVITY_CPU_PERCENT, SUSPEND_DETECT_MS,
 };
 use crate::db::connection::Database;
 use crate::db::models::Game;
 use crate::db::repo::sessions::Checkpoint;
 use crate::db::repo::{games, ignored, sessions, settings};
 use crate::discovery::metadata::is_likely_game_executable;
+use crate::error::VaultimeError;
 use crate::integrity;
 use crate::platform;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
@@ -57,6 +59,8 @@ struct ActiveSession {
     /// What the database holds, as of the last checkpoint.
     stored: Checkpoint,
     stored_at: Instant,
+    /// Ticks in a row the game was missing from the process list.
+    missed_ticks: u32,
 }
 
 impl ActiveSession {
@@ -85,6 +89,7 @@ impl ActiveSession {
             last_checkpoint_fields: Checkpoint::default(),
             stored: Checkpoint::default(),
             stored_at: now,
+            missed_ticks: 0,
         }
     }
 
@@ -207,7 +212,13 @@ impl TrackingEngine {
 
     /// True while the tracker thread runs and is not paused.
     pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst) && !self.paused.load(Ordering::SeqCst)
+        let alive = self
+            .thread
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .is_some_and(|thread| !thread.is_finished());
+        alive && self.running.load(Ordering::SeqCst) && !self.paused.load(Ordering::SeqCst)
     }
 }
 
@@ -241,17 +252,23 @@ fn poll_loop(
     let mut system = System::new();
     let mut folders = FolderCache::default();
 
-    close_orphaned_sessions(db, device_id);
+    run_guarded("closing the sessions left open", || {
+        close_orphaned_sessions(db, device_id);
+        Ok(())
+    });
 
     while running.load(Ordering::SeqCst) {
         if !paused.load(Ordering::SeqCst) {
             let _tick = tick_lock.lock().unwrap_or_else(PoisonError::into_inner);
             // Checked again because `pause` may have won the race for the lock.
             if !paused.load(Ordering::SeqCst)
-                && let Err(error) =
+                && run_guarded("tracking poll", || {
                     poll_tick(db, device_id, live, &mut system, &mut folders, &mut active)
+                }) == Guarded::Panicked
             {
-                error!("tracking poll error: {error}");
+                // The process list may be half refreshed, so it starts over.
+                system = System::new();
+                folders = FolderCache::default();
             }
         }
 
@@ -263,6 +280,30 @@ fn poll_loop(
     }
 
     info!("tracking engine stopped");
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Guarded {
+    Done,
+    Failed,
+    Panicked,
+}
+
+/// Runs one step of the tracker and logs how it failed. A panic from a
+/// platform API or a bug must not end tracking for the rest of the run, so it
+/// is caught here. The panic hook has logged where it happened.
+fn run_guarded(what: &str, step: impl FnOnce() -> crate::error::Result<()>) -> Guarded {
+    match catch_unwind(AssertUnwindSafe(step)) {
+        Ok(Ok(())) => Guarded::Done,
+        Ok(Err(error)) => {
+            error!("{what} failed: {error}");
+            Guarded::Failed
+        }
+        Err(_) => {
+            error!("{what} panicked, tracking carries on");
+            Guarded::Panicked
+        }
+    }
 }
 
 fn poll_tick(
@@ -278,7 +319,15 @@ fn poll_tick(
     // Programs the player said are no game never count, whatever matches
     // them. They are recognized the way games are, through links and Wine.
     let ignored = ignored::paths(db).unwrap_or_default();
-    let processes: Vec<RunningProcess> = refresh_running_processes(system)
+    let processes = refresh_running_processes(system);
+    // Vaultime itself always runs, so an empty list failed to load. Ending
+    // every session on it would split them all.
+    if processes.is_empty() {
+        return Err(VaultimeError::Tracking(
+            "the list of running processes came back empty".into(),
+        ));
+    }
+    let processes: Vec<RunningProcess> = processes
         .into_iter()
         .filter(|process| !ignored.iter().any(|path| matches_executable(process, path)))
         .collect();
@@ -342,7 +391,13 @@ fn poll_tick(
                 &clocks,
             );
             live.update(&session.session_id, session.counters());
-            applied?;
+            // One session that fails to store its tick holds up no other.
+            if let Err(error) = applied {
+                error!(
+                    "failed to count a tick of session {}: {error}",
+                    session.session_id
+                );
+            }
         }
     }
 
@@ -361,32 +416,45 @@ fn poll_tick(
     Ok(())
 }
 
-/// Ends the sessions of games that stopped running.
+/// Ends the sessions of games that were missing for
+/// `MISSED_TICKS_BEFORE_END` ticks in a row. A session the database fails to
+/// close stays to be ended on the next tick, as long as its row is still open.
 fn end_finished_sessions(
     db: &Database,
     live: &LiveSessions,
     active: &mut HashMap<String, ActiveSession>,
     observed_games: &HashMap<String, GameObservation>,
 ) {
-    let finished: Vec<String> = active
-        .keys()
-        .filter(|game_id| {
-            !observed_games
-                .get(*game_id)
-                .is_some_and(|observation| observation.is_running)
-        })
-        .cloned()
-        .collect();
+    let mut finished = Vec::new();
+    for (game_id, session) in active.iter_mut() {
+        let running = observed_games
+            .get(game_id)
+            .is_some_and(|observation| observation.is_running);
+        if running {
+            session.missed_ticks = 0;
+            continue;
+        }
+        session.missed_ticks += 1;
+        if session.missed_ticks >= MISSED_TICKS_BEFORE_END {
+            finished.push(game_id.clone());
+        }
+    }
 
     for game_id in finished {
-        if let Some(session) = active.remove(&game_id) {
-            end_active_session(db, live, &session);
+        let Some(session) = active.get(&game_id) else {
+            continue;
+        };
+        if (end_active_session(db, live, session) || !still_open(db, session))
+            && let Some(session) = active.remove(&game_id)
+        {
+            live.remove(&session.session_id);
         }
     }
 }
 
-/// Closes a session with the counters of its last counted tick.
-fn end_active_session(db: &Database, live: &LiveSessions, session: &ActiveSession) {
+/// Closes a session with the counters of its last counted tick. Returns
+/// whether it closed.
+fn end_active_session(db: &Database, live: &LiveSessions, session: &ActiveSession) -> bool {
     let ended = sessions::end_session(
         db,
         &session.session_id,
@@ -395,21 +463,36 @@ fn end_active_session(db: &Database, live: &LiveSessions, session: &ActiveSessio
         session.idle_ms,
         &session.integrity_status,
     );
-    live.remove(&session.session_id);
     match ended {
-        Ok(_) => info!(
-            "session ended for game {}: {} (runtime={}ms active={}ms idle={}ms)",
-            session.game_id,
-            session.session_id,
-            session.runtime_ms,
-            session.active_ms,
-            session.idle_ms
-        ),
-        Err(error) => error!(
-            "failed to end session {} for game {}: {error}",
-            session.session_id, session.game_id
-        ),
+        Ok(_) => {
+            live.remove(&session.session_id);
+            info!(
+                "session ended for game {}: {} (runtime={}ms active={}ms idle={}ms)",
+                session.game_id,
+                session.session_id,
+                session.runtime_ms,
+                session.active_ms,
+                session.idle_ms
+            );
+            true
+        }
+        Err(error) => {
+            error!(
+                "failed to end session {} for game {}: {error}",
+                session.session_id, session.game_id
+            );
+            false
+        }
     }
+}
+
+/// Whether the database still holds the session open, so ending it is worth
+/// another try. A session removed or closed meanwhile is not.
+fn still_open(db: &Database, session: &ActiveSession) -> bool {
+    db.with_conn(|conn| {
+        sessions::stored_session(conn, &session.session_id).map_err(crate::db::repo::map_db)
+    })
+    .is_ok_and(|stored| stored.ended_at_wall.is_none())
 }
 
 /// What each tracked game with an executable is doing right now.
@@ -1057,6 +1140,98 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn a_step_that_fails_or_panics_is_caught() {
+        assert_eq!(run_guarded("a step", || Ok(())), Guarded::Done);
+        assert_eq!(
+            run_guarded("a step", || Err(VaultimeError::Tracking("refused".into()))),
+            Guarded::Failed
+        );
+        assert_eq!(
+            run_guarded("a step", || panic!("a platform API went wrong")),
+            Guarded::Panicked
+        );
+    }
+
+    /// One running session of the fixture's game, as the tracker holds it.
+    fn tracked(f: &Fixture) -> HashMap<String, ActiveSession> {
+        HashMap::from([(
+            f.game_id.clone(),
+            session_after(f, Duration::from_secs(5), chrono::Duration::seconds(5)),
+        )])
+    }
+
+    fn is_open(f: &Fixture) -> bool {
+        !sessions::get_active_sessions(&f.db, "device")
+            .unwrap()
+            .is_empty()
+    }
+
+    #[test]
+    fn a_session_ends_only_once_its_game_was_missing_for_several_ticks() {
+        let f = fixture();
+        let live = LiveSessions::default();
+        let mut active = tracked(&f);
+        let missing = HashMap::new();
+        let running = HashMap::from([(f.game_id.clone(), PLAYING)]);
+
+        for _ in 1..MISSED_TICKS_BEFORE_END {
+            end_finished_sessions(&f.db, &live, &mut active, &missing);
+        }
+        assert!(active.contains_key(&f.game_id));
+        // Back in the list, so missing again starts the count over.
+        end_finished_sessions(&f.db, &live, &mut active, &running);
+        for _ in 1..MISSED_TICKS_BEFORE_END {
+            end_finished_sessions(&f.db, &live, &mut active, &missing);
+        }
+        assert!(active.contains_key(&f.game_id));
+        assert!(is_open(&f));
+
+        end_finished_sessions(&f.db, &live, &mut active, &missing);
+        assert!(active.is_empty());
+        assert!(!is_open(&f));
+    }
+
+    #[test]
+    fn a_session_the_database_failed_to_close_is_ended_on_a_later_tick() {
+        let f = fixture();
+        let live = LiveSessions::default();
+        let mut active = tracked(&f);
+        let missing = HashMap::new();
+        let refuse = |sql: &str| {
+            f.db.with_conn(|conn| conn.execute_batch(sql).map_err(crate::db::repo::map_db))
+                .unwrap();
+        };
+        refuse(
+            "CREATE TEMP TRIGGER refuse_end BEFORE UPDATE OF ended_at_wall ON sessions
+             BEGIN SELECT RAISE(ABORT, 'disk full'); END;",
+        );
+
+        for _ in 0..MISSED_TICKS_BEFORE_END {
+            end_finished_sessions(&f.db, &live, &mut active, &missing);
+        }
+        assert!(active.contains_key(&f.game_id));
+        assert!(is_open(&f));
+
+        refuse("DROP TRIGGER refuse_end;");
+        end_finished_sessions(&f.db, &live, &mut active, &missing);
+        assert!(active.is_empty());
+        assert!(!is_open(&f));
+    }
+
+    #[test]
+    fn a_session_closed_meanwhile_is_let_go() {
+        let f = fixture();
+        let live = LiveSessions::default();
+        let mut active = tracked(&f);
+        sessions::end_session(&f.db, &f.session_id, 0, 0, 0, integrity::STATUS_LOCAL).unwrap();
+
+        for _ in 0..MISSED_TICKS_BEFORE_END {
+            end_finished_sessions(&f.db, &live, &mut active, &HashMap::new());
+        }
+        assert!(active.is_empty());
     }
 
     #[test]

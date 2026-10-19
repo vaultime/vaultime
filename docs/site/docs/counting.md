@@ -35,6 +35,10 @@ A game turns idle 15 seconds after it leaves the front, so a quick look at anoth
 
 Time while your PC sleeps is never counted. When the time between two checks is longer than a minute, or the clock that keeps running through sleep jumps ahead of the one that does not, that stretch is left out and the session's log says so.
 
+## When a session ends
+
+A session ends once the game is missing at two checks in a row, so a game that restarts itself, after an update for example, stays one session when it is back within about ten seconds. The session's time counts up to the last check that saw the game.
+
 ## How a game is recognized
 
 Vaultime knows a game by the full path of its program. Games from launchers that give every game a folder of its own (Steam, Epic, GOG, Heroic, Battle.net, Riot, HoYoPlay, Ubisoft Connect, EA, Rockstar, the Xbox app, Amazon Games and itch.io) also count when any game program in their install folder runs, since these launchers often start a game in several steps. A game's page says which of the two applies. Vaultime goes by the file name alone only when Windows hides the full path or the game runs through Wine.

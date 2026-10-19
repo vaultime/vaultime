@@ -6,6 +6,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
+use log::warn;
 use rusqlite::Connection;
 
 use crate::error::{Result, VaultimeError};
@@ -68,9 +69,18 @@ impl Database {
     where
         F: FnOnce(&Connection) -> Result<T>,
     {
-        let conn = self.conn.lock().map_err(|error| {
-            VaultimeError::Database(format!("connection lock poisoned: {error}"))
-        })?;
+        let conn = self.conn.lock().unwrap_or_else(|poisoned| {
+            // A panic while the connection was in use. Dropping its
+            // transaction on the way out rolled it back, so the connection
+            // still works and every later call would fail for nothing.
+            let conn = poisoned.into_inner();
+            self.conn.clear_poison();
+            if !conn.is_autocommit() {
+                let _ = conn.execute_batch("ROLLBACK");
+            }
+            warn!("the database connection was in use during a panic and carries on");
+            conn
+        });
         f(&conn)
     }
 
@@ -89,5 +99,50 @@ impl Database {
             transaction.commit().map_err(failed)?;
             Ok(value)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::repo::map_db;
+
+    #[test]
+    fn a_panic_inside_a_transaction_leaves_the_connection_usable() {
+        let db = Database::open_in_memory().unwrap();
+        let write = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            db.with_transaction(|conn| -> Result<()> {
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('probe', 'half')",
+                    [],
+                )
+                .map_err(map_db)?;
+                panic!("in the middle of a write");
+            })
+        }));
+        assert!(write.is_err());
+
+        // The write was rolled back and the next ones go through.
+        let count = |db: &Database| -> i64 {
+            db.with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM settings WHERE key = 'probe'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(map_db)
+            })
+            .unwrap()
+        };
+        assert_eq!(count(&db), 0);
+        db.with_transaction(|conn| {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('probe', 'whole')",
+                [],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        assert_eq!(count(&db), 1);
     }
 }
