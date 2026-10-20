@@ -48,6 +48,11 @@ import type {
   YearPlay,
 } from "@/lib/types";
 
+/** Whether the core is a development build, with a cloud sign-in of its own. */
+export async function isDevelopmentBuild(): Promise<boolean> {
+  return invoke<boolean>("is_development_build");
+}
+
 /** The id of this PC, stored with its sessions and backups. */
 export async function getDeviceId(): Promise<string> {
   return invoke<string>("get_device_id");

@@ -4,7 +4,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsContext } from "@/features/settings/settings-context";
-import { loadCloudSessionSecure, mergeDueCloudBackups, uploadRemoteBackup } from "@/lib/tauri";
+import { isDevelopmentBuild, loadCloudSessionSecure, mergeDueCloudBackups, uploadRemoteBackup } from "@/lib/tauri";
 import { CloudSessionProvider } from "./CloudSessionProvider";
 
 vi.mock("@tauri-apps/plugin-log", () => ({ info: vi.fn(async () => {}), warn: vi.fn(async () => {}) }));
@@ -13,6 +13,7 @@ vi.mock("@/lib/tauri", () => ({
   clearCloudSessionSecure: vi.fn(async () => true),
   getAppVersion: vi.fn(async () => "0.5.0"),
   getDeviceId: vi.fn(async () => "this-pc"),
+  isDevelopmentBuild: vi.fn(async () => false),
   mergeDueCloudBackups: vi.fn(async () => []),
   hasCloudBackupKeySecure: vi.fn(async () => true),
   loadCloudSessionSecure: vi.fn(),
@@ -135,6 +136,15 @@ describe("deciding cloud backup on a PC from before the switch", () => {
   it("decides nothing when the settings could not be read", async () => {
     vi.mocked(loadCloudSessionSecure).mockResolvedValue(null);
     const save = start({}, false);
+    await waitFor(() => expect(loadCloudSessionSecure).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("decides nothing in a development build, whose keyring holds a sign-in of its own", async () => {
+    vi.mocked(isDevelopmentBuild).mockResolvedValueOnce(true);
+    vi.mocked(loadCloudSessionSecure).mockResolvedValue(null);
+    const save = start();
     await waitFor(() => expect(loadCloudSessionSecure).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(save).not.toHaveBeenCalled();

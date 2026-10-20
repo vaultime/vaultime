@@ -30,6 +30,7 @@ import {
   getAppVersion,
   getDeviceId,
   hasCloudBackupKeySecure,
+  isDevelopmentBuild,
   listCloudPcs as listCloudPcsCommand,
   mergeCloudBackup as mergeCloudBackupCommand,
   mergeDueCloudBackups,
@@ -195,8 +196,13 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       const { session: stored, keyringRead } = await loadPersistedSession();
       // A PC from before the switch keeps cloud backup while it is signed in.
       // Turning it off takes a keyring and settings that could be read, so a
-      // locked keyring at login or a failed read decides nothing for good.
-      if (cloudSetting === undefined && (stored !== null || (keyringRead && settingsRead))) {
+      // locked keyring at login or a failed read decides nothing for good. A
+      // development build reads a sign-in of its own, so it decides nothing.
+      if (
+        cloudSetting === undefined &&
+        (stored !== null || (keyringRead && settingsRead)) &&
+        !(await isDevelopmentBuild().catch(() => true))
+      ) {
         await save(SETTING_KEYS.cloudBackup, String(stored !== null)).catch(
           logFailure("deciding whether this PC uses cloud backup"),
         );

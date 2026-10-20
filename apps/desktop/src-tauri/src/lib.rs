@@ -121,6 +121,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
     tauri::generate_handler![
         commands::app::get_app_version,
         commands::app::get_device_id,
+        commands::app::is_development_build,
         commands::pcs::get_this_pc,
         commands::pcs::rename_this_pc,
         commands::pcs::list_devices,

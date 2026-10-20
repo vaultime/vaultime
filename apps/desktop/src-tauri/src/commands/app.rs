@@ -25,6 +25,14 @@ pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, Vau
     Ok(app_context.app_version.clone())
 }
 
+/// Whether this is a development build. It keeps its cloud sign-in apart
+/// from the installed app's but shares its settings, so what its own
+/// sign-in says must not decide a setting for both.
+#[tauri::command]
+pub fn is_development_build() -> bool {
+    cfg!(debug_assertions)
+}
+
 #[tauri::command]
 pub fn get_device_id(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
     Ok(app_context.device_id.clone())
