@@ -507,6 +507,10 @@ pub const WINDOW_ICON_PX: u32 = 256;
 /// Sizes in the icon file of this program's shortcuts, as Explorer, the
 /// Start menu and the taskbar pick them at every display scale.
 pub const SHORTCUT_ICON_SIZES_PX: [u32; 6] = [16, 24, 32, 48, 64, 256];
+/// How long shortcuts wait before they take a new logo, so a start, which
+/// learns whether this PC is signed in a moment after the window shows,
+/// changes them once.
+pub const SHORTCUT_ICON_DELAY: Duration = Duration::from_secs(10);
 /// How deep shortcuts are looked for in the Start menu, whose programs may
 /// sit in a folder of their own.
 pub const SHORTCUT_SEARCH_DEPTH: usize = 2;

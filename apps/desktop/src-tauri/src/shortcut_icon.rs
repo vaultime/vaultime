@@ -4,9 +4,10 @@
 //! The icon of this program's shortcuts. Windows shows an app started from
 //! the Start menu or a pin on the taskbar with the icon of its shortcut, not
 //! the one its window sets. So the shortcuts that start this program get the
-//! logo in the accent, from an icon file in the appearance folder. Shortcuts
-//! of other copies, like a development build, stay as they are, and so does
-//! everything else about a shortcut.
+//! logo the tray shows, in the accent and signed in to cloud backup or not,
+//! from an icon file in the appearance folder. Shortcuts of other copies,
+//! like a development build, stay as they are, and so does everything else
+//! about a shortcut.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,32 +26,42 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{GUID, HSTRING, Interface, PCWSTR};
 
-use crate::constants::{SHORTCUT_ICON_SIZES_PX, SHORTCUT_SEARCH_DEPTH};
+use crate::constants::{SHORTCUT_ICON_DELAY, SHORTCUT_ICON_SIZES_PX, SHORTCUT_SEARCH_DEPTH};
 use crate::platform::process::path_key;
 use crate::window_look::draw_logo;
 
 const ICON_PREFIX: &str = "shortcut-icon-";
+const SIGNED_IN_SUFFIX: &str = "-signed-in";
 const ICON_EXTENSION: &str = "ico";
 /// The pinned taskbar buttons, in the roaming app data folder.
 const TASKBAR_PINS: &str = r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar";
 /// Room for a path read from a shortcut, in UTF-16 units.
 const PATH_UNITS: usize = 1024;
 
-/// The accent the shortcuts should show next, with the appearance folder.
-static WANTED: Mutex<Option<(PathBuf, String)>> = Mutex::new(None);
+/// The logo the shortcuts should show next, with the appearance folder.
+static WANTED: Mutex<Option<(PathBuf, Logo)>> = Mutex::new(None);
 /// Held while shortcuts change, so two changes never overlap.
 static CHANGING: Mutex<()> = Mutex::new(());
 
-/// Gives this program's shortcuts the logo in `accent`, `#rrggbb`, off the
-/// calling thread. Of quick changes the last one wins.
-pub fn follow_accent(appearance_dir: PathBuf, accent: String) {
-    *WANTED.lock().unwrap_or_else(PoisonError::into_inner) = Some((appearance_dir, accent));
+/// The logo in an accent, `#rrggbb`, signed in to cloud backup or not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Logo {
+    pub accent: String,
+    pub signed_in: bool,
+}
+
+/// Gives this program's shortcuts `logo`, off the calling thread. It waits a
+/// moment first, as a start draws the window signed out before the page
+/// knows the cloud state, and of quick changes the last one wins.
+pub fn follow(appearance_dir: PathBuf, logo: Logo) {
+    *WANTED.lock().unwrap_or_else(PoisonError::into_inner) = Some((appearance_dir, logo));
     let spawned = std::thread::Builder::new()
         .name("shortcut-icon".into())
         .spawn(|| {
+            std::thread::sleep(SHORTCUT_ICON_DELAY);
             let _changing = CHANGING.lock().unwrap_or_else(PoisonError::into_inner);
             let wanted = WANTED.lock().unwrap_or_else(PoisonError::into_inner).take();
-            let Some((appearance_dir, accent)) = wanted else {
+            let Some((appearance_dir, logo)) = wanted else {
                 return;
             };
             let Ok(program) = std::env::current_exe() else {
@@ -58,7 +69,7 @@ pub fn follow_accent(appearance_dir: PathBuf, accent: String) {
             };
             let _com = Com::start();
             let folders = shortcut_folders();
-            point_shortcuts(&folders, &program, &appearance_dir, &accent);
+            point_shortcuts(&folders, &program, &appearance_dir, &logo);
         });
     if let Err(error) = spawned {
         warn!("could not start changing the shortcut icons: {error}");
@@ -93,12 +104,12 @@ fn known_folder(id: &GUID) -> Option<PathBuf> {
 }
 
 /// Points every shortcut in `folders` that starts `program` at the icon of
-/// `accent`, made once a shortcut needs it. Returns the shortcuts changed.
+/// `logo`, made once a shortcut needs it. Returns the shortcuts changed.
 fn point_shortcuts(
     folders: &[(PathBuf, usize)],
     program: &Path,
     appearance_dir: &Path,
-    accent: &str,
+    logo: &Logo,
 ) -> Vec<PathBuf> {
     let program_key = path_key(&program.to_string_lossy());
     let mut icon: Option<PathBuf> = None;
@@ -129,7 +140,7 @@ fn point_shortcuts(
             continue;
         }
         if icon.is_none() {
-            icon = write_icon(appearance_dir, accent);
+            icon = write_icon(appearance_dir, logo);
         }
         let Some(icon) = &icon else {
             return changed;
@@ -143,7 +154,7 @@ fn point_shortcuts(
         }
         match link.point_at(&shortcut, icon) {
             Ok(()) => {
-                info!("{} shows the icon in {accent} now", shortcut.display());
+                info!("{} shows the logo of {logo:?} now", shortcut.display());
                 changed.push(shortcut);
             }
             Err(error) => warn!(
@@ -158,11 +169,12 @@ fn point_shortcuts(
     changed
 }
 
-/// The icon file of `accent`, written when it is not there yet.
-fn write_icon(appearance_dir: &Path, accent: &str) -> Option<PathBuf> {
+/// The icon file of `logo`, written when it is not there yet.
+fn write_icon(appearance_dir: &Path, logo: &Logo) -> Option<PathBuf> {
     let name = format!(
-        "{ICON_PREFIX}{}.{ICON_EXTENSION}",
-        accent.trim_start_matches('#').to_ascii_lowercase()
+        "{ICON_PREFIX}{}{}.{ICON_EXTENSION}",
+        logo.accent.trim_start_matches('#').to_ascii_lowercase(),
+        if logo.signed_in { SIGNED_IN_SUFFIX } else { "" }
     );
     let path = appearance_dir.join(name);
     if path.is_file() {
@@ -171,12 +183,12 @@ fn write_icon(appearance_dir: &Path, accent: &str) -> Option<PathBuf> {
     let frames: Vec<IcoFrame<'_>> = SHORTCUT_ICON_SIZES_PX
         .iter()
         .filter_map(|&size| {
-            let rgba = draw_logo(accent, false, size)?;
+            let rgba = draw_logo(&logo.accent, logo.signed_in, size)?;
             IcoFrame::as_png(&rgba, size, size, ExtendedColorType::Rgba8).ok()
         })
         .collect();
     if frames.len() != SHORTCUT_ICON_SIZES_PX.len() {
-        warn!("could not draw the shortcut icon in {accent}");
+        warn!("could not draw the shortcut icon of {logo:?}");
         return None;
     }
     let mut bytes = Vec::new();
@@ -199,7 +211,7 @@ fn write_icon(appearance_dir: &Path, accent: &str) -> Option<PathBuf> {
     }
 }
 
-/// Removes the icon files of earlier accents.
+/// Removes the icon files of earlier logos.
 fn remove_other_icons(appearance_dir: &Path, keep: &Path) {
     let Ok(entries) = fs::read_dir(appearance_dir) else {
         return;
@@ -308,6 +320,13 @@ impl Drop for Com {
 mod tests {
     use super::*;
 
+    fn teal(signed_in: bool) -> Logo {
+        Logo {
+            accent: "#2BB5A0".into(),
+            signed_in,
+        }
+    }
+
     fn folder() -> PathBuf {
         let folder =
             std::env::temp_dir().join(format!("vaultime-shortcut-test-{}", uuid::Uuid::new_v4()));
@@ -332,8 +351,14 @@ mod tests {
     #[test]
     fn the_icon_file_holds_every_size() {
         let appearance = folder();
-        let icon = write_icon(&appearance, "#2BB5A0").unwrap();
+        let icon = write_icon(&appearance, &teal(false)).unwrap();
         assert_eq!(icon.file_name().unwrap(), "shortcut-icon-2bb5a0.ico");
+        let signed_in = write_icon(&appearance, &teal(true)).unwrap();
+        assert_eq!(
+            signed_in.file_name().unwrap(),
+            "shortcut-icon-2bb5a0-signed-in.ico"
+        );
+        assert_ne!(fs::read(&icon).unwrap(), fs::read(&signed_in).unwrap());
         let decoded = image::ImageReader::open(&icon)
             .unwrap()
             .with_guessed_format()
@@ -341,7 +366,11 @@ mod tests {
         assert_eq!(decoded.format(), Some(image::ImageFormat::Ico));
         // The decoder gives the largest image.
         assert_eq!(decoded.decode().unwrap().width(), 256);
-        assert!(write_icon(&appearance, "violet").is_none());
+        let not_a_color = Logo {
+            accent: "violet".into(),
+            signed_in: false,
+        };
+        assert!(write_icon(&appearance, &not_a_color).is_none());
         fs::remove_dir_all(appearance).unwrap();
     }
 
@@ -362,7 +391,7 @@ mod tests {
         fs::write(appearance.join("shortcut-icon-ff0000.ico"), b"old").unwrap();
 
         let folders = [(programs.clone(), SHORTCUT_SEARCH_DEPTH)];
-        let changed = point_shortcuts(&folders, &ours, &appearance, "#2BB5A0");
+        let changed = point_shortcuts(&folders, &ours, &appearance, &teal(false));
         assert_eq!(changed, [programs.join("Vaultime.lnk")]);
         let icon = appearance.join("shortcut-icon-2bb5a0.ico");
         let ours_icon = Shortcut::open(&programs.join("Vaultime.lnk"))
@@ -378,15 +407,28 @@ mod tests {
         assert!(!appearance.join("shortcut-icon-ff0000.ico").exists());
 
         // Nothing to do the second time.
-        assert!(point_shortcuts(&folders, &ours, &appearance, "#2BB5A0").is_empty());
+        assert!(point_shortcuts(&folders, &ours, &appearance, &teal(false)).is_empty());
+        // Signing in changes the logo, and the plain one goes.
+        assert_eq!(
+            point_shortcuts(&folders, &ours, &appearance, &teal(true)),
+            [programs.join("Vaultime.lnk")]
+        );
+        assert!(!icon.exists());
+        assert!(
+            appearance
+                .join("shortcut-icon-2bb5a0-signed-in.ico")
+                .exists()
+        );
         // Another program's shortcuts alone make no icon file.
-        fs::remove_file(&icon).unwrap();
         assert!(
             point_shortcuts(
                 &folders,
                 &root.join("elsewhere.exe"),
                 &appearance,
-                "#123456"
+                &Logo {
+                    accent: "#123456".into(),
+                    signed_in: false,
+                }
             )
             .is_empty()
         );

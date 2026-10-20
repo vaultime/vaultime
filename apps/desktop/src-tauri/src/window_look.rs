@@ -3,7 +3,7 @@
 
 //! The window around the page in the look the player picked. The icon of the
 //! tray, the taskbar and the title bar takes the accent, signed in to cloud
-//! backup or not, and on Windows so do the shortcuts of this program. On Windows the title bar follows dark or light mode, and on
+//! backup or not, and on Windows the shortcuts of this program show the same. On Windows the title bar follows dark or light mode, and on
 //! Windows 11 it takes the ground of the page and the window border the accent.
 //! Linux leaves the title bar to the desktop.
 
@@ -82,12 +82,9 @@ struct Drawn {
     look: Option<WindowLook>,
     /// The accent of the icon, none for the bundled one, and the cloud state.
     icon: Option<(Option<String>, bool)>,
-    /// The accent the shortcuts of this program were last given.
-    #[cfg_attr(
-        not(windows),
-        allow(dead_code, reason = "only Windows shortcuts take the accent")
-    )]
-    shortcut_accent: Option<String>,
+    /// The logo the shortcuts of this program were last given.
+    #[cfg(windows)]
+    shortcut_logo: Option<crate::shortcut_icon::Logo>,
 }
 
 /// The look and whether this PC is signed in, the two things the icon shows.
@@ -144,18 +141,24 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
         paint_title_bar(app, look);
         drawn.look = Some(look.clone());
     }
-    // Development builds leave the shortcuts alone, as they do login items.
+    // The shortcuts show what the tray shows. Development builds leave them
+    // alone, as they do login items.
     #[cfg(windows)]
     if !cfg!(debug_assertions)
         && let Some(look) = &look
-        && drawn.shortcut_accent.as_ref() != Some(&look.icon_accent)
         && let Some(context) = app.try_state::<crate::AppContext>()
     {
-        crate::shortcut_icon::follow_accent(
-            context.app_dir.join(crate::constants::APPEARANCE_DIR),
-            look.icon_accent.clone(),
-        );
-        drawn.shortcut_accent = Some(look.icon_accent.clone());
+        let logo = crate::shortcut_icon::Logo {
+            accent: look.icon_accent.clone(),
+            signed_in,
+        };
+        if drawn.shortcut_logo.as_ref() != Some(&logo) {
+            crate::shortcut_icon::follow(
+                context.app_dir.join(crate::constants::APPEARANCE_DIR),
+                logo.clone(),
+            );
+            drawn.shortcut_logo = Some(logo);
+        }
     }
     let icon = (look.map(|look| look.icon_accent), signed_in);
     if drawn.icon.as_ref() != Some(&icon) {
