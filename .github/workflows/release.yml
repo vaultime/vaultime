@@ -3,11 +3,12 @@
 
 name: Release
 
-# A version tag runs the CI checks, builds the Windows and Linux installers
-# into a draft release, installs the Linux packages on several distros, then
-# uploads the installers to the download server and publishes the release
-# once everything passed. A manual run builds and tests without publishing
-# and keeps the installers as workflow artifacts.
+# A version tag runs the CI checks, builds the Windows and Linux installers,
+# installs the Linux packages on several distros, then uploads the
+# installers to the download server and makes the GitHub release once
+# everything passed. The builds only keep their files as workflow
+# artifacts, so the release is made once, by the publish job. A manual run
+# does all of it but the upload and the release.
 
 on:
   push:
@@ -19,6 +20,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # What the release says, on GitHub and in the updater.
+  RELEASE_NOTES: The changes in this version are in the changelog at https://vaultime.codfishcloud.de/changelog.html.
 
 jobs:
   checks:
@@ -29,8 +32,6 @@ jobs:
     name: Build (Windows)
     needs: checks
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -74,14 +75,8 @@ jobs:
         with:
           projectPath: apps/desktop
           args: ${{ steps.signing.outputs.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: Vaultime ${{ github.ref_name }}
-          releaseBody: The changes in this version are in the changelog at https://vaultime.codfishcloud.de/changelog.html.
-          releaseDraft: true
-          updaterJsonPreferNsis: true
 
       - name: Keep installers
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: vaultime-windows
@@ -94,8 +89,6 @@ jobs:
     name: Build (Linux)
     needs: checks
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     # The oldest supported base keeps the glibc floor at 2.35, so the packages
     # run on Debian 12, Fedora, Arch, openSUSE and newer Ubuntu as well.
     container: ubuntu:22.04
@@ -153,10 +146,6 @@ jobs:
         with:
           projectPath: apps/desktop
           args: ${{ steps.signing.outputs.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: Vaultime ${{ github.ref_name }}
-          releaseBody: The changes in this version are in the changelog at https://vaultime.codfishcloud.de/changelog.html.
-          releaseDraft: true
 
       - name: Keep packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -211,7 +200,6 @@ jobs:
   publish:
     name: Publish release
     needs: [windows, linux, linux-smoke]
-    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -221,18 +209,38 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            apps/desktop/src-tauri/tauri.conf.json
+          sparse-checkout-cone-mode: false
 
-      - name: Download the draft
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: vaultime-*
+          path: artifacts
+
+      # The artifacts keep the bundle folders, the script wants one.
+      - name: Gather the installers
+        run: |
+          mkdir release
+          find artifacts -type f -exec mv -t release {} +
+          ls -l release
+
+      # A tag publishes its own version, a manual run checks the version it
+      # built.
+      - name: Check the release files
+        if: github.ref_type != 'tag'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir release
+          VAULTIME_RELEASE_NOTES: ${{ env.RELEASE_NOTES }}
+        run: bash scripts/publish-downloads.sh --check "$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)" release
 
-      # Installed apps look for updates on the download server, so a release
-      # is only published once its files are there.
+      # Installed apps look for updates on the download server, so the
+      # release is only made once its files are there.
       - name: Upload to the download server
+        if: github.ref_type == 'tag'
         env:
           SSH_KEY: ${{ secrets.VAULTIME_RELEASE_SSH_KEY }}
+          VAULTIME_RELEASE_NOTES: ${{ env.RELEASE_NOTES }}
         run: |
           if [ -z "$SSH_KEY" ]; then
             echo "::error::Add the VAULTIME_RELEASE_SSH_KEY secret before tagging a release."
@@ -245,7 +253,15 @@ jobs:
           export RSYNC_RSH="ssh -i $HOME/.ssh/release -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
           bash scripts/publish-downloads.sh "$GITHUB_REF_NAME" release
 
-      - name: Publish the draft
+      # A rerun finds the release of an earlier try and fills it in.
+      - name: Make the release
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Vaultime $GITHUB_REF_NAME" --notes "$RELEASE_NOTES"
+          fi
