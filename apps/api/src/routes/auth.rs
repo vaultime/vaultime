@@ -255,8 +255,10 @@ pub async fn refresh(
         _ => false,
     };
     if retried {
+        // Marked as replaced, so the unused token counts as reused should it
+        // ever come back, as it would in the hands of someone else.
         sqlx::query(
-            "UPDATE cloud_refresh_tokens SET revoked_at = NOW()
+            "UPDATE cloud_refresh_tokens SET revoked_at = NOW(), replaced_at = NOW()
              WHERE family_id = $1 AND revoked_at IS NULL",
         )
         .bind(row.family_id)

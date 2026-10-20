@@ -23,6 +23,8 @@ small_port=19006
 # Its storage and largest backup, in bytes.
 small_account_bytes=3145728
 small_backup_bytes=4194304
+# Its grace for a retried refresh, short so the test can wait it out.
+small_grace_secs=2
 # The port the API listens on inside its container, as in install-api.sh.
 api_port=9005
 # Random bytes in each test secret, as install-api.sh makes them.
@@ -203,7 +205,8 @@ small_url="http://127.0.0.1:$small_port"
 start_api "$small_api" "$small_port" \
   -e VAULTIME_MAX_ACCOUNT_BYTES="$small_account_bytes" \
   -e VAULTIME_MAX_BACKUP_BYTES="$small_backup_bytes" \
-  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=3
+  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=3 \
+  -e VAULTIME_REFRESH_REUSE_GRACE_SECONDS="$small_grace_secs"
 code=$(make_invite)
 small_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \
   -d "{\"email\":\"rotation@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
@@ -281,8 +284,14 @@ lost=$(renew "$first" | head -1 | field refresh_token)
 retry=$(renew "$first")
 [ "$(tail -1 <<<"$retry")" = 200 ] || { echo "a quick retry of a refresh was refused"; exit 1; }
 again=$(head -1 <<<"$retry" | field refresh_token)
+next=$(renew "$again")
+[ "$(tail -1 <<<"$next")" = 200 ] || { echo "the retried session was ended"; exit 1; }
+next=$(head -1 <<<"$next" | field refresh_token)
+# The unused token of the first refresh coming back later is a copy in
+# someone else's hands, so the whole session ends.
+sleep $((small_grace_secs + 1))
 [ "$(renew "$lost" | tail -1)" = 401 ] || { echo "the unused token of the first refresh still renews"; exit 1; }
-[ "$(renew "$again" | tail -1)" = 200 ] || { echo "the retried session was ended"; exit 1; }
+[ "$(renew "$next" | tail -1)" = 401 ] || { echo "a copied token did not end its session"; exit 1; }
 
 echo "== listing and removing devices"
 device() { curl -fsS -X POST "$small_url/v1/devices/register" -H "authorization: Bearer $small_token" \
