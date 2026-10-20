@@ -28,7 +28,7 @@ import {
   clearCloudBackupKeySecure,
   discardCloudMerge as discardCloudMergeCommand,
   getAppVersion,
-  getDeviceId,
+  getBackupDeviceId,
   hasCloudBackupKeySecure,
   isDevelopmentBuild,
   listCloudPcs as listCloudPcsCommand,
@@ -130,7 +130,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const checkCloud = useEffectEvent(async () => {
     if (autoBackup) {
       try {
-        const thisPc = await getDeviceId();
+        const thisPc = await getBackupDeviceId();
         const backups = await listBackups();
         const newest = backups
           .filter((backup) => backup.status === "complete" && backup.metadata_json?.source_device_id === thisPc)

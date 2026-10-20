@@ -1482,6 +1482,7 @@ mockIPC((cmd, payload) => {
     case "is_development_build":
       return false;
     case "get_device_id":
+    case "get_backup_device_id":
       return "preview";
     case "get_this_pc":
       return thisPc;

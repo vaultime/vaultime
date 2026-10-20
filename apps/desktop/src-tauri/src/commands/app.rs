@@ -15,6 +15,7 @@ use crate::db::connection::Database;
 use crate::db::models::Setting;
 use crate::db::repo::settings;
 use crate::error::VaultimeError;
+use crate::integrity::ledger;
 use crate::platform::activity::{foreground_detection_strategy, idle_detection_strategy};
 use crate::platform::controller;
 use crate::tracking::engine::TrackingEngine;
@@ -36,6 +37,13 @@ pub fn is_development_build() -> bool {
 #[tauri::command]
 pub fn get_device_id(app_context: State<'_, AppContext>) -> Result<String, VaultimeError> {
     Ok(app_context.device_id.clone())
+}
+
+/// The PC this one's backups name. A restore that takes over another PC
+/// changes it before the app restarts.
+#[tauri::command]
+pub fn get_backup_device_id(app_context: State<'_, AppContext>) -> String {
+    ledger::this_device().unwrap_or_else(|_| app_context.device_id.clone())
 }
 
 #[tauri::command(async)]

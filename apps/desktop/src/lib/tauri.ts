@@ -58,6 +58,11 @@ export async function getDeviceId(): Promise<string> {
   return invoke<string>("get_device_id");
 }
 
+/** The PC this one's backups name, which a restore that takes over another PC changes before the restart. */
+export async function getBackupDeviceId(): Promise<string> {
+  return invoke<string>("get_backup_device_id");
+}
+
 /** This PC's name and what its ledger says. */
 export async function getThisPc(): Promise<ThisPc> {
   return invoke<ThisPc>("get_this_pc");
