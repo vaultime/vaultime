@@ -83,13 +83,133 @@ pub fn is_choice(value: &str) -> bool {
     value == FREE_WINDOW || preset(value).is_some()
 }
 
-/// The saved choice, or the default when nothing valid was saved.
-pub fn parse_choice(saved: Option<&str>) -> &'static str {
+/// The saved choice, or `fallback` when nothing valid was saved.
+pub fn parse_choice(saved: Option<&str>, fallback: &'static str) -> &'static str {
     match saved {
         Some(FREE_WINDOW) => FREE_WINDOW,
-        Some(name) => preset(name).map_or(DEFAULT_WINDOW_PRESET, |preset| preset.name),
-        None => DEFAULT_WINDOW_PRESET,
+        Some(name) => preset(name).map_or(fallback, |preset| preset.name),
+        None => fallback,
     }
+}
+
+/// Window managers that tile, as they name themselves in the desktop
+/// variables or to X11. They place and size every window, so a locked
+/// preset only gets in their way.
+const TILING_WINDOW_MANAGERS: &[&str] = &[
+    "sway",
+    "hyprland",
+    "i3",
+    "bspwm",
+    "awesome",
+    "dwm",
+    "xmonad",
+    "qtile",
+    "herbstluftwm",
+    "river",
+    "niri",
+    "leftwm",
+    "spectrwm",
+];
+
+/// The window size a PC starts with: a free window under a tiling window
+/// manager, the standard preset everywhere else.
+pub fn default_choice() -> &'static str {
+    static DEFAULT: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+    DEFAULT.get_or_init(|| {
+        let names = desktop_names();
+        if tiling(&names) {
+            log::info!(
+                "a tiling window manager ({}) gets a free window",
+                names.join(", ")
+            );
+            FREE_WINDOW
+        } else {
+            DEFAULT_WINDOW_PRESET
+        }
+    })
+}
+
+/// Whether one of the desktop's names is a tiling window manager. Names come
+/// as "sway:wlroots" or as a session file's path, in any case.
+fn tiling(names: &[String]) -> bool {
+    names
+        .iter()
+        .flat_map(|name| name.split([':', '/', ';']))
+        .any(|part| TILING_WINDOW_MANAGERS.contains(&part.trim().to_ascii_lowercase().as_str()))
+}
+
+/// What the desktop calls itself: its variables, the sockets some tiling
+/// window managers leave for their programs, and the X11 window manager's
+/// name, as i3 started without a login manager sets no variable.
+#[cfg(target_os = "linux")]
+fn desktop_names() -> Vec<String> {
+    let mut names: Vec<String> = [
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+    ]
+    .iter()
+    .filter_map(|key| std::env::var(key).ok())
+    .collect();
+    for (socket, name) in [
+        ("SWAYSOCK", "sway"),
+        ("HYPRLAND_INSTANCE_SIGNATURE", "hyprland"),
+        ("I3SOCK", "i3"),
+        ("NIRI_SOCKET", "niri"),
+    ] {
+        if std::env::var_os(socket).is_some() {
+            names.push(name.to_owned());
+        }
+    }
+    names.extend(x11_window_manager());
+    names
+}
+
+#[cfg(not(target_os = "linux"))]
+fn desktop_names() -> Vec<String> {
+    Vec::new()
+}
+
+/// The name the X11 window manager gives on its check window.
+#[cfg(target_os = "linux")]
+fn x11_window_manager() -> Option<String> {
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
+
+    std::env::var_os("DISPLAY")?;
+    let (connection, screen) = x11rb::connect(None).ok()?;
+    let root = connection.setup().roots.get(screen)?.root;
+    let atom = |name: &[u8]| {
+        let atom = connection.intern_atom(true, name).ok()?.reply().ok()?.atom;
+        (atom != x11rb::NONE).then_some(atom)
+    };
+    let check = connection
+        .get_property(
+            false,
+            root,
+            atom(b"_NET_SUPPORTING_WM_CHECK")?,
+            AtomEnum::WINDOW,
+            0,
+            1,
+        )
+        .ok()?
+        .reply()
+        .ok()?
+        .value32()?
+        .next()?;
+    let name = connection
+        .get_property(
+            false,
+            check,
+            atom(b"_NET_WM_NAME")?,
+            atom(b"UTF8_STRING")?,
+            0,
+            u32::from(u8::MAX),
+        )
+        .ok()?
+        .reply()
+        .ok()?;
+    String::from_utf8(name.value).ok()
 }
 
 /// Whether a window with this page and the frame around it fits the screen.
@@ -172,7 +292,7 @@ pub struct WindowSizeState {
 }
 
 pub fn build_state(choice: &str, screen: Option<Screen>) -> WindowSizeState {
-    let choice = parse_choice(Some(choice));
+    let choice = parse_choice(Some(choice), default_choice());
     WindowSizeState {
         choice,
         applied: fitting_preset(choice, screen).map_or(FREE_WINDOW, |preset| preset.name),
@@ -193,7 +313,7 @@ pub fn saved_choice(db: &Database) -> &'static str {
         .inspect_err(|error| warn!("failed to read the window size: {error}"))
         .ok()
         .flatten();
-    parse_choice(saved.as_deref())
+    parse_choice(saved.as_deref(), default_choice())
 }
 
 /// Where a window is and what surrounds it.
@@ -444,6 +564,37 @@ mod tests {
     }
 
     #[test]
+    fn tiling_window_managers_are_known_by_any_of_their_names() {
+        let names = |list: &[&str]| {
+            list.iter()
+                .map(|name| (*name).to_owned())
+                .collect::<Vec<_>>()
+        };
+        assert!(tiling(&names(&["sway:wlroots"])));
+        assert!(tiling(&names(&["", "Hyprland"])));
+        assert!(tiling(&names(&["/usr/share/xsessions/i3"])));
+        assert!(tiling(&names(&["GNOME", "i3"])));
+        assert!(!tiling(&names(&[
+            "ubuntu:GNOME",
+            "KDE",
+            "XFCE",
+            "Mutter",
+            "KWin"
+        ])));
+        assert!(!tiling(&names(&["i3-like"])));
+        assert!(!tiling(&[]));
+    }
+
+    // Shows what the desktop it runs under is taken for:
+    // cargo test -- --ignored report_desktop --nocapture
+    #[test]
+    #[ignore = "reads the desktop it runs under"]
+    fn report_desktop() {
+        let names = desktop_names();
+        println!("desktop names {names:?}, tiling {}", tiling(&names));
+    }
+
+    #[test]
     fn presets_go_from_small_to_large_in_one_shape() {
         let all: Vec<_> = presets().collect();
         assert!(all.windows(2).all(|pair| pair[0].width < pair[1].width));
@@ -470,11 +621,26 @@ mod tests {
 
     #[test]
     fn unknown_choices_fall_back_to_the_default() {
-        assert_eq!(parse_choice(None), DEFAULT_WINDOW_PRESET);
-        assert_eq!(parse_choice(Some("huge")), DEFAULT_WINDOW_PRESET);
-        assert_eq!(parse_choice(Some("")), DEFAULT_WINDOW_PRESET);
-        assert_eq!(parse_choice(Some(FREE_WINDOW)), FREE_WINDOW);
-        assert_eq!(parse_choice(Some("large")), "large");
+        assert_eq!(
+            parse_choice(None, DEFAULT_WINDOW_PRESET),
+            DEFAULT_WINDOW_PRESET
+        );
+        assert_eq!(
+            parse_choice(Some("huge"), DEFAULT_WINDOW_PRESET),
+            DEFAULT_WINDOW_PRESET
+        );
+        assert_eq!(
+            parse_choice(Some(""), DEFAULT_WINDOW_PRESET),
+            DEFAULT_WINDOW_PRESET
+        );
+        assert_eq!(
+            parse_choice(Some(FREE_WINDOW), DEFAULT_WINDOW_PRESET),
+            FREE_WINDOW
+        );
+        assert_eq!(parse_choice(Some("large"), DEFAULT_WINDOW_PRESET), "large");
+        // Under a tiling window manager nothing saved means a free window.
+        assert_eq!(parse_choice(None, FREE_WINDOW), FREE_WINDOW);
+        assert_eq!(parse_choice(Some("large"), FREE_WINDOW), "large");
         assert!(is_choice("compact") && is_choice(FREE_WINDOW));
         assert!(!is_choice("Compact") && !is_choice("1280x800"));
     }
@@ -557,8 +723,8 @@ mod tests {
         assert_eq!(fitting, [true, false, false, false]);
 
         let unknown = build_state("tiny", None);
-        assert_eq!(unknown.choice, DEFAULT_WINDOW_PRESET);
-        assert_eq!(unknown.applied, DEFAULT_WINDOW_PRESET);
+        assert_eq!(unknown.choice, default_choice());
+        assert_eq!(unknown.applied, default_choice());
         assert!(unknown.presets.iter().all(|preset| preset.fits));
     }
 }

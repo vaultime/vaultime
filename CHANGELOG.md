@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Less motion when your system asks for it.** With animations turned off in Windows or reduced motion on your Linux desktop, dialogs, menus and scrolling no longer move.
 - **All time on the stats page.** Next to the years, All time sums up everything since your first session: hours, days played, the longest streak across New Year, your games, when you play, session lengths and a bar for each year.
+- **A free window on tiling desktops.** Under a tiling window manager like i3, Sway, Hyprland, bspwm or niri, Vaultime starts with a free window instead of a fixed size, as the window manager sizes every window itself. A size you picked stays.
 - **Straight to the day.** Go to a day in the journal and a click on a day in a calendar on the stats or game page now scroll to that day and mark its name for a moment, instead of opening the top of its week.
 
 ### Fixes
