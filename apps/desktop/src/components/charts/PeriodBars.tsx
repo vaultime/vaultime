@@ -4,37 +4,38 @@
 import { useRef, useState, type CSSProperties } from "react";
 import { CHART_MIN_BAR_PERCENT } from "@/lib/constants";
 import type { BucketPlay } from "@/lib/play-totals";
-import { UI_LOCALE } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { cardPosition, describePlay, type GameLabel } from "./play-card";
 import { PlayCard } from "./PlayCard";
 
-// Made once, since the bars name every month twice on each render.
-const MONTH_FORMATS = {
-  short: new Intl.DateTimeFormat(UI_LOCALE, { month: "short" }),
-  long: new Intl.DateTimeFormat(UI_LOCALE, { month: "long" }),
-};
+/** A month or a year on the bars, with its short name under it and its long one for the card. */
+export interface PeriodColumn {
+  short: string;
+  long: string;
+  play: BucketPlay;
+}
 
 /**
- * One column per month, active time in violet with idle time stacked on
- * top. Pointing at a month, or tabbing to it, shows what was played.
+ * One column per month or year, active time in violet with idle time
+ * stacked on top. Pointing at a column, or tabbing to it, shows what was
+ * played.
  */
-export function MonthBars({
-  months,
-  year,
+export function PeriodBars({
+  columns,
+  label,
   labelOf,
 }: {
-  months: BucketPlay[];
-  year: number;
+  columns: PeriodColumn[];
+  /** What the columns are, for screen readers: "Active and idle time for each month of 2026". */
+  label: string;
   labelOf: (gameId: string) => GameLabel;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState<{ index: number; style: CSSProperties } | null>(null);
-  const totals = months.map((month) => month.activeMs + month.idleMs);
+  const totals = columns.map((column) => column.play.activeMs + column.play.idleMs);
   const max = Math.max(1, ...totals);
   const busiest = totals.indexOf(Math.max(...totals));
   const height = (ms: number) => `${Math.max(CHART_MIN_BAR_PERCENT, (ms / max) * 100)}%`;
-  const name = (index: number, style: "short" | "long") => MONTH_FORMATS[style].format(new Date(year, index, 1));
   const show = (index: number, column: Element) => {
     if (!frame.current) return;
     setShown({ index, style: cardPosition(column.getBoundingClientRect(), frame.current.getBoundingClientRect()) });
@@ -44,15 +45,15 @@ export function MonthBars({
     <figure className="flex flex-col gap-2.5">
       <div ref={frame} className="relative">
         <ol
-          aria-label={`Active and idle time for each month of ${year}`}
+          aria-label={label}
           onMouseLeave={() => setShown(null)}
           className="flex h-[150px] items-end gap-2.5 border-b border-hairline"
         >
-          {months.map((month, index) => (
+          {columns.map(({ long, play: month }, index) => (
             <li
-              key={index}
+              key={long}
               tabIndex={0}
-              aria-label={describePlay(`${name(index, "long")} ${year}`, month, labelOf)}
+              aria-label={describePlay(long, month, labelOf)}
               onMouseEnter={(event) => show(index, event.currentTarget)}
               onFocus={(event) => show(index, event.currentTarget)}
               onBlur={() => setShown(null)}
@@ -67,20 +68,20 @@ export function MonthBars({
         </ol>
         {shown && (
           <PlayCard
-            label={`${name(shown.index, "long")} ${year}`}
-            play={months[shown.index]}
+            label={columns[shown.index].long}
+            play={columns[shown.index].play}
             labelOf={labelOf}
             style={shown.style}
           />
         )}
       </div>
       <figcaption aria-hidden="true" className="flex gap-2.5 font-mono text-[11px] text-faint">
-        {months.map((_, index) => (
+        {columns.map(({ short, long }, index) => (
           <span
-            key={index}
+            key={long}
             className={cn("min-w-0 flex-1 text-center", index === busiest && totals[index] > 0 && "text-text")}
           >
-            {name(index, "short")}
+            {short}
           </span>
         ))}
       </figcaption>

@@ -85,6 +85,22 @@ pub fn get_year_play(
     )
 }
 
+/// Every day with play up to today, for the stats page's all time view.
+#[tauri::command(async)]
+pub fn get_all_time_play(
+    db: State<'_, Arc<Database>>,
+    live: State<'_, Arc<LiveSessions>>,
+) -> Result<YearPlay, VaultimeError> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    playtime::summaries::all_time_play(
+        &db,
+        &live,
+        &chrono::Local,
+        playtime::summaries::today_of(&chrono::Local, now_ms),
+        now_ms,
+    )
+}
+
 /// The last `days` local days of play, today included, for the library.
 #[tauri::command(async)]
 pub fn get_recent_play(

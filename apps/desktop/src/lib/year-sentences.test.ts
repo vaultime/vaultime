@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { HOUR_MS } from "@/lib/constants";
 import { phraseString } from "@/test/phrases";
 import {
+  allTimeSentence,
   busiestMonthSentence,
+  busiestYearSentence,
   rhythmSentence,
   shapesSentence,
   shareSentence,
@@ -24,6 +26,39 @@ describe("stats sentences", () => {
     });
     expect(yearSentence({ ...year, playedMs: 0, topTitle: null }).before).toBe("Nothing played this year yet.");
     expect(yearSentence({ ...year, playedMs: 0, topTitle: null, current: false }).before).toBe("Nothing played in 2026.");
+  });
+
+  it("sums up all time from the first month with play", () => {
+    const all = { daysPlayed: 210, topMs: 90 * HOUR_MS, gamesCount: 7, since: new Date(2024, 2, 3) };
+    expect(allTimeSentence({ ...all, playedMs: 400 * HOUR_MS, topTitle: "Elden Ring" })).toEqual({
+      before: "Four hundred hours on two hundred ten days since March 2024. ",
+      em: "Elden Ring",
+      after: " led with ninety hours.",
+    });
+    expect(allTimeSentence({ ...all, playedMs: 3 * HOUR_MS, topTitle: "Celeste", gamesCount: 1 })).toEqual({
+      before: "Three hours on two hundred ten days since March 2024. All of it in ",
+      em: "Celeste",
+      after: ".",
+    });
+    expect(allTimeSentence({ ...all, playedMs: 0, topTitle: null, since: null }).before).toBe("Nothing played yet.");
+  });
+
+  it("names the busiest year only when there are two to compare", () => {
+    const play = (hours: number) => ({ activeMs: hours * HOUR_MS, idleMs: 0 });
+    expect(
+      busiestYearSentence([
+        { year: 2024, play: play(20) },
+        { year: 2025, play: play(300) },
+        { year: 2026, play: play(120) },
+      ]),
+    ).toBe("2025 was your busiest year, three hundred hours.");
+    expect(busiestYearSentence([{ year: 2026, play: play(120) }])).toBeNull();
+    expect(
+      busiestYearSentence([
+        { year: 2025, play: play(0) },
+        { year: 2026, play: play(120) },
+      ]),
+    ).toBeNull();
   });
 
   it("writes streaks within and across months", () => {

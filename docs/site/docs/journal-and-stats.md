@@ -59,7 +59,7 @@ Played on a Steam Deck or a PC without Vaultime? On the game's page, **Add a ses
 
 ![The stats page with the year calendar and the hours you play](../../../assets/screenshots/stats.png "Stats for a year: a calendar of every day and the hours you play.")
 
-The stats page shows one year at a time, with **Previous year** and **Next year** to move. At the top are the hours played, the days you played, your longest streak and your longest session.
+The stats page shows one year at a time, with **Previous year** and **Next year** to move, or **All time** for everything since your first session. At the top are the hours played, the days you played, your longest streak and your longest session.
 
 Every day
 : A calendar of the year with a square for each day, brighter the more you played. A day counts the time the journal shows for it, games side by side once. Point at a day to see what you played, and click it to read that day in the journal.
@@ -68,10 +68,13 @@ When you play
 : Your week by hour, so you can see whether you are a weekday evening or a weekend afternoon player.
 
 Games
-: The eight games you played most that year.
+: The eight games you played most that year, or of all time.
 
 Month by month
 : Each month's hours. Point at a month to see its games.
+
+Year by year
+: Only in All time, in place of the calendar and the months: each year's hours since your first session. Point at a year to see its games. Streaks there run across New Year.
 
 Session lengths
 : How your sessions split into quick looks, short, medium and long sessions and marathons.

@@ -22,7 +22,11 @@ export interface BucketPlay {
   games: GamePlay[];
 }
 
-/** The totals by bucket, each with its games. */
+/**
+ * The totals by bucket, each with its games. A game that comes up more than
+ * once in a bucket, as days do in the month they are grouped into, is added
+ * up into one.
+ */
 export function groupByBucket(totals: PlayTotal[]): Map<string, BucketPlay> {
   const buckets = new Map<string, BucketPlay>();
   for (const total of totals) {
@@ -30,12 +34,19 @@ export function groupByBucket(totals: PlayTotal[]): Map<string, BucketPlay> {
     bucket.runtimeMs += total.runtime_ms;
     bucket.activeMs += total.active_ms;
     bucket.idleMs += total.idle_ms;
-    bucket.games.push({
-      gameId: total.game_id,
-      runtimeMs: total.runtime_ms,
-      activeMs: total.active_ms,
-      idleMs: total.idle_ms,
-    });
+    const game = bucket.games.find((each) => each.gameId === total.game_id);
+    if (game) {
+      game.runtimeMs += total.runtime_ms;
+      game.activeMs += total.active_ms;
+      game.idleMs += total.idle_ms;
+    } else {
+      bucket.games.push({
+        gameId: total.game_id,
+        runtimeMs: total.runtime_ms,
+        activeMs: total.active_ms,
+        idleMs: total.idle_ms,
+      });
+    }
     buckets.set(total.bucket, bucket);
   }
   for (const bucket of buckets.values()) {

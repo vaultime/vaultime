@@ -32,8 +32,8 @@ export interface Streak {
   end: Date;
 }
 
-export interface YearStats {
-  year: number;
+/** What the stats page shows for a year or for all time. */
+export interface PlayStats {
   /** Time with a game running, games side by side counted once. */
   playedMs: number;
   runtimeMs: number;
@@ -50,13 +50,26 @@ export interface YearStats {
   currentStreak: number;
   /** Active time by weekday, Monday first, then by hour of the day. */
   weekClock: number[][];
-  /** What was played in each month, January first. */
-  months: BucketPlay[];
   /** Most runtime first. */
   games: GameYear[];
   shapes: Record<SessionShape, number>;
   longest: Session | null;
 }
+
+export interface YearStats extends PlayStats {
+  year: number;
+  /** What was played in each month, January first. */
+  months: BucketPlay[];
+}
+
+export interface AllTimeStats extends PlayStats {
+  /** The first day with play, null without any. */
+  firstDay: Date | null;
+  /** What was played in each year from the first one with play up to this one, oldest first. */
+  years: { year: number; play: BucketPlay }[];
+}
+
+const NO_PLAY: BucketPlay = { runtimeMs: 0, activeMs: 0, idleMs: 0, games: [] };
 
 /** How long one session reads, for its line in the journal. The stats page gets its counts from the core. */
 export function shapeOf(session: Session): SessionShape {
@@ -80,12 +93,29 @@ export function heatLevel(playedMs: number): number {
  * started. `sessions` holds the longest one to show.
  */
 export function yearStats(sessions: Session[], year: number, play: YearPlay): YearStats {
-  const days = groupByBucket(play.days);
   const monthsByKey = groupByBucket(play.days.map((total) => ({ ...total, bucket: total.bucket.slice(0, 7) })));
   const months = Array.from({ length: MONTHS_PER_YEAR }, (_, index) => {
     const key = `${year}-${String(index + 1).padStart(2, "0")}`;
-    return monthsByKey.get(key) ?? { runtimeMs: 0, activeMs: 0, idleMs: 0, games: [] };
+    return monthsByKey.get(key) ?? NO_PLAY;
   });
+  return { ...playStats(sessions, play), year, months };
+}
+
+/** Everything the stats page shows for all time, from the core's play of every day up to `now`. */
+export function allTimeStats(sessions: Session[], play: YearPlay, now = new Date()): AllTimeStats {
+  const keys = [...play.days.map((total) => total.bucket), ...Object.keys(play.played)].sort();
+  const firstDay = keys.length > 0 ? parseVaultimeDate(keys[0]) : null;
+  const byYear = groupByBucket(play.days.map((total) => ({ ...total, bucket: total.bucket.slice(0, 4) })));
+  const firstYear = firstDay?.getFullYear() ?? now.getFullYear();
+  const years = Array.from({ length: now.getFullYear() - firstYear + 1 }, (_, index) => {
+    const year = firstYear + index;
+    return { year, play: byYear.get(String(year)) ?? NO_PLAY };
+  });
+  return { ...playStats(sessions, play), firstDay, years };
+}
+
+function playStats(sessions: Session[], play: YearPlay): PlayStats {
+  const days = groupByBucket(play.days);
   const weekClock = Array.from({ length: DAYS_PER_WEEK }, () => Array<number>(HOURS_PER_DAY).fill(0));
   for (const total of play.hours) {
     const [weekday, hour] = total.bucket.split("-").map(Number);
@@ -104,7 +134,6 @@ export function yearStats(sessions: Session[], year: number, play: YearPlay): Ye
   const streak = play.longest_streak;
 
   return {
-    year,
     playedMs: play.played_ms,
     runtimeMs: sum((day) => day.runtimeMs),
     activeMs: sum((day) => day.activeMs),
@@ -118,7 +147,6 @@ export function yearStats(sessions: Session[], year: number, play: YearPlay): Ye
       : null,
     currentStreak: play.current_streak,
     weekClock,
-    months,
     games,
     shapes,
     longest: sessions.find((session) => session.id === play.longest_session_id) ?? null,

@@ -225,6 +225,11 @@ export async function getYearPlay(year: number): Promise<YearPlay> {
   return invoke<YearPlay>("get_year_play", { year });
 }
 
+/** Every day with play up to today, for the stats page's all time view. */
+export async function getAllTimePlay(): Promise<YearPlay> {
+  return invoke<YearPlay>("get_all_time_play");
+}
+
 /** The last `days` local days of play, today included. */
 export async function getRecentPlay(days: number): Promise<RecentPlay> {
   return invoke<RecentPlay>("get_recent_play", { days });

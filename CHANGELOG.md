@@ -14,10 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Interface
 
 - **Less motion when your system asks for it.** With animations turned off in Windows or reduced motion on your Linux desktop, dialogs, menus and scrolling no longer move.
+- **All time on the stats page.** Next to the years, All time sums up everything since your first session: hours, days played, the longest streak across New Year, your games, when you play, session lengths and a bar for each year.
 - **Straight to the day.** Go to a day in the journal and a click on a day in a calendar on the stats or game page now scroll to that day and mark its name for a moment, instead of opening the top of its week.
 
 ### Fixes
 
+- **Each game once on the month bars.** Pointing at a month on the stats page listed a game once for every day you played it, so a busy month showed one game many times. It now shows each game once with its time for the month.
 - **A cloud restore asks before it takes over.** A fresh install that restores a cloud backup only continues as the backup's PC when the restore showed that choice. It used to take over even when the check behind the choice failed, or when the backup did not name its PC and the choice never showed. Restore waits until that check is done.
 - **A quick restart stays one session.** A game has to be missing at two checks in a row, about ten seconds, before its session ends. A game that restarted itself after an update, or a single check that missed it, used to split the session in two.
 - **Tracking keeps going after an error.** An unexpected error while Vaultime checks your games goes to the log, and the next check starts over. It used to stop tracking until Vaultime restarted, while Settings still said tracking was running. A session the database could not close is closed at the next check instead of staying open until the next start.

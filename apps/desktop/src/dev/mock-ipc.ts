@@ -39,6 +39,7 @@ import {
   estimateJournalWeek,
   estimatePlayedToday,
   estimateRecentPlay,
+  estimateAllTimePlay,
   estimateYearPlay,
 } from "@/test/play-estimates";
 import { estimatePlayTotals } from "@/test/play-totals";
@@ -1598,6 +1599,8 @@ mockIPC((cmd, payload) => {
       );
     case "get_year_play":
       return estimateYearPlay(sessionsNow(), Number(args.year));
+    case "get_all_time_play":
+      return estimateAllTimePlay(sessionsNow());
     case "get_recent_play":
       return estimateRecentPlay(sessionsNow(), Number(args.days));
     case "get_steps_aside_hint":

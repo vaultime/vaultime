@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChevronLeft, ChevronRight, Share } from "lucide-react";
 import { ActiveIdleLegend } from "@/components/charts/PlayBars";
-import { MonthBars } from "@/components/charts/MonthBars";
+import { PeriodBars, type PeriodColumn } from "@/components/charts/PeriodBars";
 import { WeekClock } from "@/components/charts/WeekClock";
 import { YearHeatmap } from "@/components/charts/YearHeatmap";
 import { Notice, PageHeader, PageSection, StepButton } from "@/components/layout/Page";
@@ -29,20 +29,40 @@ import {
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { countsAsPlay } from "@/lib/sessions";
-import { daysSoFar, SESSION_SHAPES, yearStats, type GameYear, type SessionShape } from "@/lib/stats";
+import {
+  allTimeStats,
+  daysSoFar,
+  SESSION_SHAPES,
+  yearStats,
+  type AllTimeStats,
+  type GameYear,
+  type SessionShape,
+  type YearStats,
+} from "@/lib/stats";
 import * as api from "@/lib/tauri";
 import {
+  calendarDaysAgo,
+  formatDate,
   formatDayAndMonth,
   formatDayRange,
   formatHoursMinutes,
   formatHoursShort,
   parseVaultimeDate,
+  startOfDay,
   toDayKey,
 } from "@/lib/time";
 import type { YearPlay } from "@/lib/types";
-import { describeError } from "@/lib/utils";
+import { cn, describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
-import { busiestMonthSentence, rhythmSentence, shapesSentence, streakSentence, yearSentence } from "@/lib/year-sentences";
+import {
+  allTimeSentence,
+  busiestMonthSentence,
+  busiestYearSentence,
+  rhythmSentence,
+  shapesSentence,
+  streakSentence,
+  yearSentence,
+} from "@/lib/year-sentences";
 import { ShareYearDialog } from "./ShareYearDialog";
 
 const SHAPES: Record<SessionShape, { label: string; range: string }> = {
@@ -57,33 +77,56 @@ function percent(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 100) : 0;
 }
 
-/** A year of play in numbers and sentences. */
+/** Whether the page shows one year or every day with play. */
+type View = "year" | "all";
+
+const VIEWS: Record<View, string> = { year: "Year", all: "All time" };
+
+/** The bars of a year, one per month, named for the card with the year. */
+function monthColumns(stats: YearStats): PeriodColumn[] {
+  return stats.months.map((play, index) => {
+    const month = new Date(stats.year, index, 1);
+    return {
+      short: formatDate(month, { month: "short" }),
+      long: formatDate(month, { month: "long", year: "numeric" }),
+      play,
+    };
+  });
+}
+
+function yearColumns(stats: AllTimeStats): PeriodColumn[] {
+  return stats.years.map(({ year, play }) => ({ short: String(year), long: String(year), play }));
+}
+
+/** A year of play, or all of it, in numbers and sentences. */
 export function StatsPage() {
   const { sessions, summaries, covers, today, loaded } = useLibrary();
   const playing = usePlaying().size > 0;
   const { accentHues, mode } = useAppearance();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  // Opened from the button or the command palette.
+  // Opened from the button or the command palette, which also shows the year.
   const sharing = params.get("share") === "1";
   const setSharing = (open: boolean) => setParams(open ? { share: "1" } : {}, { replace: true });
+  const [chosenView, setView] = useState<View>("year");
+  const view: View = sharing ? "year" : chosenView;
   // 0 is this year, -1 the year before and so on.
   const [offset, setOffset] = useState(0);
-  const [play, setPlay] = useState<(YearPlay & { year: number }) | null>(null);
+  const [play, setPlay] = useState<{ key: string; play: YearPlay } | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const now = new Date();
   const year = now.getFullYear() + offset;
+  const key = view === "all" ? "all" : String(year);
   // Reads again while a game runs and the window is seen, and when it shows again.
   const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
 
   // Read again whenever a session starts or ends.
   useEffect(() => {
     let cancelled = false;
-    api
-      .getYearPlay(year)
+    (key === "all" ? api.getAllTimePlay() : api.getYearPlay(Number(key)))
       .then((next) => {
         if (cancelled) return;
-        setPlay({ ...next, year });
+        setPlay({ key, play: next });
         setPlayError(null);
       })
       .catch((error) => {
@@ -92,22 +135,25 @@ export function StatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [year, sessions, refreshed]);
+  }, [key, sessions, refreshed]);
 
   const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
   const titleOf = useCallback((gameId: string) => byGame.get(gameId)?.game.title ?? "a removed game", [byGame]);
-  const yearPlay = play?.year === year ? play : null;
+  const shownPlay = play?.key === key ? play.play : null;
   // Worked out again when the play or the day changes, not each time the
   // share dialog opens or closes.
   const shown = useMemo(() => {
-    if (!yearPlay) return null;
-    return { stats: yearStats(sessions, year, yearPlay), now: new Date() };
+    if (!shownPlay) return null;
+    const at = new Date();
+    return key === "all"
+      ? { all: allTimeStats(sessions, shownPlay, at), year: null, now: at }
+      : { all: null, year: yearStats(sessions, Number(key), shownPlay), now: at };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a new day changes the year so far
-  }, [sessions, year, yearPlay, today]);
-  // A color per game for the year, the main color of its art, nudged only
-  // where two games of the year would look alike.
+  }, [sessions, key, shownPlay, today]);
+  // A color per game for what is shown, the main color of its art, nudged
+  // only where two of its games would look alike.
   const labelOf = useMemo(() => {
-    const games = shown?.stats.games ?? [];
+    const games = (shown?.all ?? shown?.year)?.games ?? [];
     const paletteOf = (gameId: string) => {
       const summary = byGame.get(gameId);
       return (summary?.tint ?? tintForTitle(summary?.game.title ?? "")).colors;
@@ -127,25 +173,36 @@ export function StatsPage() {
   if (playError) {
     return (
       <div className="px-8 pt-12 xl:px-14">
-        <Notice tone="warning">The year could not be read: {playError}</Notice>
+        <Notice tone="warning">
+          {view === "all" ? "Your play" : "The year"} could not be read: {playError}
+        </Notice>
       </div>
     );
   }
   if (!shown) return null;
 
-  const { stats, now: shownAt } = shown;
-
+  const { all, year: yearShown, now: shownAt } = shown;
+  const stats = all ?? yearShown;
   const current = offset === 0;
   const top = stats.games[0];
-  const sentence = yearSentence({
-    playedMs: stats.playedMs,
-    daysPlayed: stats.daysPlayed,
-    topTitle: top ? titleOf(top.gameId) : null,
-    topMs: top?.runtimeMs ?? 0,
-    gamesCount: stats.games.length,
-    year,
-    current,
-  });
+  const sentence = all
+    ? allTimeSentence({
+        playedMs: all.playedMs,
+        daysPlayed: all.daysPlayed,
+        topTitle: top ? titleOf(top.gameId) : null,
+        topMs: top?.runtimeMs ?? 0,
+        gamesCount: all.games.length,
+        since: all.firstDay,
+      })
+    : yearSentence({
+        playedMs: stats.playedMs,
+        daysPlayed: stats.daysPlayed,
+        topTitle: top ? titleOf(top.gameId) : null,
+        topMs: top?.runtimeMs ?? 0,
+        gamesCount: stats.games.length,
+        year,
+        current,
+      });
   const streak = stats.longestStreak;
   const longest = stats.longest;
   const rhythm = rhythmSentence(stats.weekClock);
@@ -153,36 +210,62 @@ export function StatsPage() {
     .filter((game) => game.runtimeMs >= STATS_IDLE_MIN_RUNTIME_MS && game.idleMs / game.runtimeMs >= STATS_IDLE_MIN_SHARE)
     .sort((a, b) => b.idleMs / b.runtimeMs - a.idleMs / a.runtimeMs)
     .slice(0, STATS_IDLE_GAMES);
+  const daysOf = all
+    ? {
+        count: all.firstDay ? calendarDaysAgo(all.firstDay, startOfDay(shownAt, 1)) : 0,
+        since: all.firstDay ? ` since ${formatDate(all.firstDay, { month: "short", year: "numeric" })}` : "",
+      }
+    : { count: daysSoFar(year, shownAt), since: current ? " so far" : "" };
 
   return (
     <div className="pb-16">
       <PageHeader
-        overline={`Stats, ${year}`}
-        title={current ? "This year" : offset === -1 ? "Last year" : String(year)}
+        overline={all ? (all.firstDay ? `Stats, since ${all.firstDay.getFullYear()}` : "Stats") : `Stats, ${year}`}
+        title={all ? "All time" : current ? "This year" : offset === -1 ? "Last year" : String(year)}
         aside={
           <>
-            <Button variant="outline" className="mr-1 h-11" onClick={() => setSharing(true)}>
-              <Share strokeWidth={1.8} />
-              Share your year
-            </Button>
-            <StepButton label="Previous year" disabled={earliest >= year} onClick={() => setOffset((value) => value - 1)}>
-              <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
-            </StepButton>
-            <StepButton label="Next year" disabled={current} onClick={() => setOffset((value) => value + 1)}>
-              <ChevronRight className="size-[18px]" strokeWidth={1.8} />
-            </StepButton>
+            <div role="group" aria-label="Show stats for" className="mr-1 flex rounded-full border border-hairline p-0.5">
+              {(Object.keys(VIEWS) as View[]).map((each) => (
+                <button
+                  key={each}
+                  type="button"
+                  aria-pressed={view === each}
+                  onClick={() => setView(each)}
+                  className={cn(
+                    "h-9 rounded-full px-4 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
+                    view === each ? "bg-raised text-text" : "text-faint hover:text-soft",
+                  )}
+                >
+                  {VIEWS[each]}
+                </button>
+              ))}
+            </div>
+            {!all && (
+              <>
+                <Button variant="outline" className="mr-1 h-11" onClick={() => setSharing(true)}>
+                  <Share strokeWidth={1.8} />
+                  Share your year
+                </Button>
+                <StepButton label="Previous year" disabled={earliest >= year} onClick={() => setOffset((value) => value - 1)}>
+                  <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
+                </StepButton>
+                <StepButton label="Next year" disabled={current} onClick={() => setOffset((value) => value + 1)}>
+                  <ChevronRight className="size-[18px]" strokeWidth={1.8} />
+                </StepButton>
+              </>
+            )}
           </>
         }
       >
         <PhraseText phrase={sentence} />
       </PageHeader>
 
-      <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={stats} now={shownAt} />
+      {yearShown && <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={yearShown} now={shownAt} />}
 
       {stats.sessionsCount > 0 && (
         <>
           <StatTiles
-            label={`${year} in numbers`}
+            label={all ? "All time in numbers" : `${year} in numbers`}
             tiles={[
               {
                 label: "Played",
@@ -192,7 +275,7 @@ export function StatsPage() {
               {
                 label: "Days played",
                 value: String(stats.daysPlayed),
-                note: `of ${daysSoFar(year, shownAt)} ${current ? "so far" : "days"}`,
+                note: `of ${daysOf.count} ${daysOf.count === 1 ? "day" : "days"}${daysOf.since}`,
                 accent: true,
               },
               {
@@ -204,23 +287,37 @@ export function StatsPage() {
                 label: "Longest session",
                 value: formatHoursMinutes(longest?.runtime_ms ?? 0),
                 note: longest
-                  ? `${titleOf(longest.game_id)}, ${formatDayAndMonth(parseVaultimeDate(longest.started_at_wall))}`
+                  ? `${titleOf(longest.game_id)}, ${
+                      all
+                        ? formatDate(parseVaultimeDate(longest.started_at_wall), {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : formatDayAndMonth(parseVaultimeDate(longest.started_at_wall))
+                    }`
                   : "",
               },
             ]}
           />
 
           <div className="px-8 xl:px-14">
-            <PageSection wide title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
-              <YearHeatmap
-                year={year}
-                days={stats.days}
-                played={stats.played}
-                now={shownAt}
-                labelOf={labelOf}
-                onOpenDay={openDay}
-              />
-            </PageSection>
+            {all ? (
+              <PageSection title="Year by year" description={busiestYearSentence(all.years) ?? undefined}>
+                <PeriodBars columns={yearColumns(all)} label="Active and idle time for each year" labelOf={labelOf} />
+              </PageSection>
+            ) : (
+              <PageSection wide title="Every day" description={streakSentence(streak, stats.currentStreak, current)}>
+                <YearHeatmap
+                  year={year}
+                  days={stats.days}
+                  played={stats.played}
+                  now={shownAt}
+                  labelOf={labelOf}
+                  onOpenDay={openDay}
+                />
+              </PageSection>
+            )}
 
             <PageSection title="When you play" description={rhythm ? <PhraseText phrase={rhythm} /> : undefined}>
               <WeekClock weekClock={stats.weekClock} />
@@ -249,9 +346,15 @@ export function StatsPage() {
               </ol>
             </PageSection>
 
-            <PageSection title="Month by month" description={busiestMonthSentence(stats.months, year) ?? undefined}>
-              <MonthBars months={stats.months} year={year} labelOf={labelOf} />
-            </PageSection>
+            {yearShown && (
+              <PageSection title="Month by month" description={busiestMonthSentence(yearShown.months, year) ?? undefined}>
+                <PeriodBars
+                  columns={monthColumns(yearShown)}
+                  label={`Active and idle time for each month of ${year}`}
+                  labelOf={labelOf}
+                />
+              </PageSection>
+            )}
 
             <PageSection title="Session lengths" description={shapesSentence(stats.shapes) ?? undefined}>
               <ShapeRows shapes={stats.shapes} />

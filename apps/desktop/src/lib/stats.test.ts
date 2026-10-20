@@ -3,11 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 import { MINUTE_MS } from "@/lib/constants";
-import { estimateYearSessions } from "@/test/play-estimates";
+import { estimateAllTimePlay, estimateYearSessions } from "@/test/play-estimates";
 import { estimatePlayTotals } from "@/test/play-totals";
 import { at, session } from "@/test/sessions";
 import type { Session, YearPlay } from "@/lib/types";
-import { daysSoFar, heatLevel, shapeOf, yearStats } from "./stats";
+import { allTimeStats, daysSoFar, heatLevel, shapeOf, yearStats } from "./stats";
 
 const now = new Date(2026, 8, 30, 21, 0);
 
@@ -27,6 +27,32 @@ function statsFor(sessions: Session[], year = 2026, play: Partial<YearPlay> = {}
   });
 }
 
+describe("allTimeStats", () => {
+  it("counts every year from the first one with play, years without play as nothing", () => {
+    const sessions = [
+      session(at(2024, 6, 1, 20, 0), 60, { game_id: "a" }),
+      session(at(2026, 3, 2, 20, 0), 120, { game_id: "b" }),
+      session(at(2026, 3, 3, 20, 0), 30, { game_id: "a" }),
+    ];
+    const stats = allTimeStats(sessions, estimateAllTimePlay(sessions, now.getTime()), now);
+    expect(stats.firstDay).toEqual(new Date(2024, 5, 1));
+    expect(stats.years.map((year) => year.year)).toEqual([2024, 2025, 2026]);
+    expect(stats.years.map((year) => year.play.activeMs / MINUTE_MS)).toEqual([60, 0, 150]);
+    expect(stats.sessionsCount).toBe(3);
+    expect(stats.games.map((game) => [game.gameId, game.sessionsCount])).toEqual([
+      ["b", 1],
+      ["a", 2],
+    ]);
+  });
+
+  it("has no first day and only this year without play", () => {
+    const stats = allTimeStats([], estimateAllTimePlay([], now.getTime()), now);
+    expect(stats.firstDay).toBeNull();
+    expect(stats.years.map((year) => year.year)).toEqual([2026]);
+    expect(stats.sessionsCount).toBe(0);
+  });
+});
+
 describe("yearStats", () => {
   it("counts time in the year it happened and sessions in the year they started", () => {
     const stats = statsFor([
@@ -42,6 +68,18 @@ describe("yearStats", () => {
     expect(stats.months[2].games.map((game) => game.gameId)).toEqual(["a", "b"]);
     expect(stats.games.map((game) => game.gameId)).toEqual(["b", "a"]);
     expect(stats.games.map((game) => game.sessionsCount)).toEqual([1, 1]);
+  });
+
+  it("names each game of a month once, with the time of all its days", () => {
+    const stats = statsFor([
+      session(at(2026, 3, 2, 20, 0), 60, { game_id: "a" }),
+      session(at(2026, 3, 9, 20, 0), 30, { game_id: "a" }),
+      session(at(2026, 3, 10, 20, 0), 45, { game_id: "b" }),
+    ]);
+    expect(stats.months[2].games.map((game) => [game.gameId, game.activeMs / MINUTE_MS])).toEqual([
+      ["a", 90],
+      ["b", 45],
+    ]);
   });
 
   it("brightens a day by its time played, as the journal counts the day", () => {

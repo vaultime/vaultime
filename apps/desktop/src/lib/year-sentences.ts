@@ -36,6 +36,29 @@ export function yearSentence({
   return { before: `${lead} `, em: topTitle, after: ` led with ${amountWords(topMs)}.` };
 }
 
+/** "Four hundred hours on 210 days since March 2024. *Elden Ring* led with ninety hours." */
+export function allTimeSentence({
+  playedMs,
+  daysPlayed,
+  topTitle,
+  topMs,
+  gamesCount,
+  since,
+}: {
+  playedMs: number;
+  daysPlayed: number;
+  topTitle: string | null;
+  topMs: number;
+  gamesCount: number;
+  /** The first day with play. */
+  since: Date | null;
+}): Phrase {
+  if (playedMs < MINUTE_MS || !topTitle || !since) return { before: "Nothing played yet." };
+  const lead = `${capitalize(amountWords(playedMs))} on ${countWords(daysPlayed, "day")} since ${formatDate(since, { month: "long", year: "numeric" })}.`;
+  if (gamesCount === 1) return { before: `${lead} All of it in `, em: topTitle, after: "." };
+  return { before: `${lead} `, em: topTitle, after: ` led with ${amountWords(topMs)}.` };
+}
+
 /** "Your longest streak was twelve days, 3 to 14 March. Right now you are on four days in a row." */
 export function streakSentence(longest: Streak | null, current: number, showCurrent: boolean): string {
   if (!longest) return "No days played yet.";
@@ -124,6 +147,16 @@ export function busiestMonthSentence(months: { activeMs: number; idleMs: number 
   if (busiest < 0 || totals[busiest] < MINUTE_MS) return null;
   const name = formatDate(new Date(year, busiest, 1), { month: "long" });
   return `${name} was your busiest month, ${amountWords(totals[busiest])}.`;
+}
+
+/** "2025 was your busiest year, three hundred hours." Null with fewer than two years to compare. */
+export function busiestYearSentence(years: { year: number; play: { activeMs: number; idleMs: number } }[]): string | null {
+  const played = years.filter(({ play }) => play.activeMs + play.idleMs >= MINUTE_MS);
+  if (played.length < 2) return null;
+  const busiest = played.reduce((best, each) =>
+    each.play.activeMs + each.play.idleMs > best.play.activeMs + best.play.idleMs ? each : best,
+  );
+  return `${busiest.year} was your busiest year, ${amountWords(busiest.play.activeMs + busiest.play.idleMs)}.`;
 }
 
 const SHAPE_WORDS: Record<SessionShape, string> = {

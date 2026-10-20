@@ -295,9 +295,22 @@ function playedDays(sessions: Session[], now: number): Set<string> {
 
 /** What `get_year_play` answers for `year`. */
 export function estimateYearPlay(sessions: Session[], year: number, now = Date.now()): YearPlay {
-  const [from, to] = [`${year}-01-01`, `${year + 1}-01-01`];
+  return estimatePlayBetween(sessions, `${year}-01-01`, `${year + 1}-01-01`, now);
+}
+
+/** What `get_all_time_play` says: every day from the first session up to today. */
+export function estimateAllTimePlay(sessions: Session[], now = Date.now()): YearPlay {
+  const first = sessions.reduce(
+    (min, session) => Math.min(min, parseVaultimeDate(session.started_at_wall).getTime()),
+    now,
+  );
+  return estimatePlayBetween(sessions, toDayKey(new Date(first)), toDayKey(startOfDay(new Date(now), 1)), now);
+}
+
+/** The stats page's numbers for the local days `from` up to but not including `to`, both "2026-01-01". */
+function estimatePlayBetween(sessions: Session[], from: string, to: string, now: number): YearPlay {
   const days = playedDays(sessions, now);
-  const inYear = [...days].filter((day) => day.startsWith(`${year}-`)).sort();
+  const inYear = [...days].filter((day) => day >= from && day < to).sort();
   let longest: Streak | null = null;
 
   let runStart = 0;
@@ -315,20 +328,21 @@ export function estimateYearPlay(sessions: Session[], year: number, now = Date.n
     day = startOfDay(day, -1);
   }
   const spans = sessions.filter(countsAsPlay).map((session) => spanOf(session, now));
+  const [start, end] = [parseVaultimeDate(from), parseVaultimeDate(to)];
   const played: Record<string, number> = {};
-  for (let day = new Date(year, 0, 1); day.getFullYear() === year; day = startOfDay(day, 1)) {
+  for (let day = start; day < end; day = startOfDay(day, 1)) {
     const ms = playedBetween(spans, day.getTime(), startOfDay(day, 1).getTime());
     if (ms > 0) played[toDayKey(day)] = ms;
   }
   return {
     days: estimatePlayTotals(sessions, from, to, "day", null, new Date(now)),
     hours: estimatePlayTotals(sessions, from, to, "hour_of_week", null, new Date(now)),
-    played_ms: playedBetween(spans, new Date(year, 0, 1).getTime(), new Date(year + 1, 0, 1).getTime()),
+    played_ms: playedBetween(spans, start.getTime(), end.getTime()),
     played,
     days_played: inYear.length,
     longest_streak: longest,
     current_streak: current,
-    ...estimateYearSessions(sessions, year),
+    ...estimateSessionsBetween(sessions, start, end),
   };
 }
 
@@ -337,9 +351,18 @@ export function estimateYearSessions(
   sessions: Session[],
   year: number,
 ): Pick<YearPlay, "sessions_count" | "sessions_by_game" | "session_lengths" | "longest_session_id"> {
-  const started = sessions
-    .filter(countsAsPlay)
-    .filter((session) => parseVaultimeDate(session.started_at_wall).getFullYear() === year);
+  return estimateSessionsBetween(sessions, new Date(year, 0, 1), new Date(year + 1, 0, 1));
+}
+
+function estimateSessionsBetween(
+  sessions: Session[],
+  from: Date,
+  to: Date,
+): Pick<YearPlay, "sessions_count" | "sessions_by_game" | "session_lengths" | "longest_session_id"> {
+  const started = sessions.filter(countsAsPlay).filter((session) => {
+    const at = parseVaultimeDate(session.started_at_wall);
+    return at >= from && at < to;
+  });
   const byGame: Record<string, number> = {};
   const lengths: YearPlay["session_lengths"] = [0, 0, 0, 0, 0];
   let longest: Session | null = null;

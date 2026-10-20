@@ -150,6 +150,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::playtime::get_play_totals,
         commands::playtime::get_journal_week,
         commands::playtime::get_year_play,
+        commands::playtime::get_all_time_play,
         commands::playtime::get_recent_play,
         commands::playtime::get_steps_aside_hint,
         commands::games::set_game_steps_aside,

@@ -39,7 +39,8 @@ pub struct Streak {
     pub end: String,
 }
 
-/// A year of play for the stats page.
+/// A year of play for the stats page, or all of it. "The year" below means
+/// whichever the page asked for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct YearPlay {
     /// Each game's time per day.
@@ -246,6 +247,52 @@ pub fn year_play<Tz: TimeZone>(
 ) -> Result<YearPlay> {
     let first = NaiveDate::from_ymd_opt(year, 1, 1).unwrap_or(today);
     let next = NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap_or(today);
+    play_between(db, live, tz, (first, next), today, now_ms)
+}
+
+/// Every day from the first session up to today, for the stats page's all
+/// time view, counted as a year is.
+pub fn all_time_play<Tz: TimeZone>(
+    db: &Database,
+    live: &LiveSessions,
+    tz: &Tz,
+    today: NaiveDate,
+    now_ms: i64,
+) -> Result<YearPlay> {
+    let first = first_session_day(db, tz)?.map_or(today, |day| day.min(today));
+    play_between(
+        db,
+        live,
+        tz,
+        (first, today + TimeDelta::days(1)),
+        today,
+        now_ms,
+    )
+}
+
+/// The local day the earliest session started on, of any PC.
+fn first_session_day<Tz: TimeZone>(db: &Database, tz: &Tz) -> Result<Option<NaiveDate>> {
+    let earliest: Option<String> = db.with_conn(|conn| {
+        conn.query_row("SELECT MIN(started_at_wall) FROM sessions", [], |row| {
+            row.get(0)
+        })
+        .map_err(map_db)
+    })?;
+    Ok(earliest
+        .and_then(|wall| chrono::DateTime::parse_from_rfc3339(&wall).ok())
+        .and_then(|time| local_day(tz, time.timestamp_millis())))
+}
+
+/// The stats page's numbers for the local days `first` up to but not
+/// including `next`.
+fn play_between<Tz: TimeZone>(
+    db: &Database,
+    live: &LiveSessions,
+    tz: &Tz,
+    (first, next): (NaiveDate, NaiveDate),
+    today: NaiveDate,
+    now_ms: i64,
+) -> Result<YearPlay> {
     let totals = day_totals(db, live, tz, first, next, now_ms)?;
     let played_days: BTreeSet<NaiveDate> = totals
         .days_played()
@@ -539,6 +586,50 @@ mod tests {
         .unwrap();
         assert_eq!(year.sessions_count, 1);
         assert_eq!(year.sessions_by_game, BTreeMap::from([(match_game, 1)]));
+    }
+
+    #[test]
+    fn all_time_counts_every_year_and_streaks_across_new_year() {
+        let db = database();
+        let (one, two) = (game(&db, "One"), game(&db, "Two"));
+        played(&db, &one, "2024-06-01T18:00:00Z", 60);
+        played(&db, &one, "2025-12-30T18:00:00Z", 30);
+        played(&db, &two, "2025-12-31T18:00:00Z", 30);
+        let long = played(&db, &two, "2026-01-01T18:00:00Z", 200);
+        let today = date("2026-10-01");
+        let now = utc("2026-10-01T12:00:00Z").timestamp_millis();
+        let live = LiveSessions::default();
+        let all = all_time_play(&db, &live, &Berlin, today, now).unwrap();
+        assert_eq!(all.sessions_count, 4);
+        assert_eq!(all.days_played, 4);
+        assert_eq!(all.played_ms, 320 * MINUTE);
+        assert_eq!(
+            all.sessions_by_game,
+            BTreeMap::from([(one.clone(), 2), (two, 2)])
+        );
+        assert_eq!(all.longest_session_id, Some(long));
+        assert_eq!(
+            all.longest_streak,
+            Some(Streak {
+                days: 3,
+                start: "2025-12-30".into(),
+                end: "2026-01-01".into()
+            })
+        );
+        // A year alone cuts the streak at New Year.
+        let year = year_play(&db, &live, &Berlin, 2026, today, now).unwrap();
+        assert_eq!(year.longest_streak.map(|streak| streak.days), Some(1));
+    }
+
+    #[test]
+    fn all_time_without_sessions_is_empty() {
+        let db = database();
+        let today = date("2026-10-01");
+        let now = utc("2026-10-01T12:00:00Z").timestamp_millis();
+        let all = all_time_play(&db, &LiveSessions::default(), &Berlin, today, now).unwrap();
+        assert_eq!(all.sessions_count, 0);
+        assert_eq!(all.days_played, 0);
+        assert!(all.days.is_empty());
     }
 
     #[test]
