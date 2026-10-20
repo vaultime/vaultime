@@ -312,11 +312,16 @@ fn poll_loop(
         wait_for_next_tick(running);
     }
 
-    for session in active.into_values() {
-        end_active_session(db, live, &session, None);
-    }
-
+    end_all_sessions(db, live, active);
     info!("tracking engine stopped");
+}
+
+/// Ends every tracked session as tracking stops, one whose game went missing
+/// where it did.
+fn end_all_sessions(db: &Database, live: &LiveSessions, active: HashMap<String, ActiveSession>) {
+    for session in active.into_values() {
+        end_active_session(db, live, &session, session.missing_since);
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1287,6 +1292,26 @@ mod tests {
             end_finished_sessions(&f.db, &live, &mut active, &missing, woke);
         }
         assert!(active.is_empty());
+        let stored =
+            f.db.with_conn(|conn| {
+                sessions::stored_session(conn, &f.session_id).map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+        assert_eq!(
+            stored.ended_at_wall,
+            Some(integrity::format_timestamp(gone))
+        );
+    }
+
+    #[test]
+    fn a_session_whose_game_went_missing_ends_there_when_tracking_stops() {
+        let f = fixture();
+        let live = LiveSessions::default();
+        let mut active = tracked(&f);
+        let gone = Utc::now() + chrono::Duration::minutes(1);
+        end_finished_sessions(&f.db, &live, &mut active, &HashMap::new(), gone);
+
+        end_all_sessions(&f.db, &live, active);
         let stored =
             f.db.with_conn(|conn| {
                 sessions::stored_session(conn, &f.session_id).map_err(crate::db::repo::map_db)
