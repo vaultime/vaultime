@@ -228,6 +228,9 @@ pub const DISCOVERY_SCAN_DEPTH: usize = 4;
 pub const REGISTRY_SEARCH_DEPTH: usize = 6;
 /// Folder depth searched for the main executable of a launcher game.
 pub const EXECUTABLE_SCAN_DEPTH: usize = 5;
+/// Folder depth of the Wargaming.net Game Center's apps folder, a folder
+/// per game with a file per install.
+pub const WARGAMING_APPS_DEPTH: usize = 3;
 /// Most threads that look up the programs of launcher games at once. The
 /// lookups mostly wait on the disk.
 pub const PROGRAM_LOOKUP_THREADS_MAX: usize = 8;

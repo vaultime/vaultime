@@ -12,11 +12,10 @@ use std::path::{Path, PathBuf};
 
 use super::xml::{attribute, elements, read_text, texts};
 use super::{DiscoveredGame, find_main_executable};
+use crate::constants::WARGAMING_APPS_DEPTH;
 use crate::platform::process::path_key;
 
 const APPS_FOLDER: &str = r"Wargaming.net\GameCenter\apps";
-/// The apps folder holds a folder per game with a file per install.
-const APPS_DEPTH: usize = 3;
 const GAME_INFO: &str = "game_info.xml";
 const METADATA: &str = r"game_metadata\metadata.xml";
 /// Marks the programs of the Game Center for macOS, which runs the Windows
@@ -44,7 +43,7 @@ fn games_in(apps: &Path, existing: &HashSet<String>) -> Vec<DiscoveredGame> {
 /// The folders the files in the apps folder hold.
 fn app_folders(apps: &Path) -> Vec<PathBuf> {
     walkdir::WalkDir::new(apps)
-        .max_depth(APPS_DEPTH)
+        .max_depth(WARGAMING_APPS_DEPTH)
         .follow_links(false)
         .into_iter()
         .filter_map(std::result::Result::ok)

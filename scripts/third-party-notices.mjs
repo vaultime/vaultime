@@ -22,6 +22,10 @@ const output = join(desktop, "public/third-party-notices.txt");
 // base styles and Vite's module loader.
 const BUILD_OUTPUT_PACKAGES = ["tailwindcss", "vite"];
 const LICENSE_FILE = /^(licen[cs]e|copying|notice)/i;
+// Room for the output of `cargo metadata`, which lists every crate.
+const CARGO_METADATA_MAX_BYTES = 256 * 1024 * 1024;
+// Width of the rule above each license text.
+const RULE_CHARS = 72;
 
 /** The license files of a package folder, each as trimmed text. */
 function licenseTexts(folder) {
@@ -39,7 +43,7 @@ function crates() {
     execFileSync("cargo", ["metadata", "--format-version", "1", "--locked"], {
       cwd: join(desktop, "src-tauri"),
       encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
+      maxBuffer: CARGO_METADATA_MAX_BYTES,
     }),
   );
   const packages = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
@@ -129,7 +133,7 @@ for (const [title, packages] of groups) {
 }
 lines.push(`License texts (${texts.size})`, "");
 for (const { text, users } of texts.values()) {
-  lines.push("-".repeat(72), `For ${users.join(", ")}:`, "", text, "");
+  lines.push("-".repeat(RULE_CHARS), `For ${users.join(", ")}:`, "", text, "");
 }
 writeFileSync(output, `${lines.join("\n").trimEnd()}\n`);
 console.log(`third-party notices: ${groups.map(([title, packages]) => `${packages.length} ${title.toLowerCase()}`).join(", ")}, ${texts.size} license texts`);
