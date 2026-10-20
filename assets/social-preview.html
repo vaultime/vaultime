@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- The picture links to the website and the repository show, 1280 by 640.
+     scripts/social-preview.sh draws it into social-preview.png. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vaultime social preview</title>
+  <style>
+    @font-face { font-family: "Mona Sans"; font-weight: 200 900; font-stretch: 75% 125%; src: url("../apps/desktop/node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-standard-normal.woff2") format("woff2"); }
+    @font-face { font-family: "Geist"; font-weight: 100 900; src: url("../apps/desktop/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2"); }
+    @font-face { font-family: "Geist Mono"; font-weight: 100 900; src: url("../apps/desktop/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2"); }
+    /* The colors of the website, site.css. */
+    :root {
+      --ink: #0e0b14; --hairline: #2a2238; --rule: #231c31;
+      --text: #eee8f6; --soft: #d9d1e6; --faint: #a99fbc; --violet: #9d7cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1280px; height: 640px; overflow: hidden; }
+    body {
+      position: relative;
+      font-family: "Geist", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(720px 520px at 82% 38%, rgb(157 124 255 / 0.16), transparent 70%),
+        var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+    .text { position: absolute; left: 72px; top: 64px; width: 470px; }
+    .lockup { display: block; height: 40px; width: auto; }
+    .caps { font-size: 13px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+    .label { margin-top: 64px; }
+    h1 {
+      margin-top: 16px;
+      font-family: "Mona Sans", sans-serif; font-stretch: 125%; font-weight: 500;
+      font-size: 46px; line-height: 1.08; letter-spacing: -0.02em;
+    }
+    h1 em { font-style: normal; color: var(--violet); }
+    .times { margin-top: 36px; width: 340px; border-top: 1px solid var(--rule); }
+    .times div {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 11px 0; border-bottom: 1px solid var(--rule);
+    }
+    .times b { font-family: "Geist Mono", monospace; font-weight: 400; font-size: 20px; color: var(--soft); }
+    .times .active b { color: var(--violet); }
+    .site {
+      position: absolute; left: 72px; bottom: 56px;
+      font-family: "Geist Mono", monospace; font-size: 18px; color: var(--soft);
+    }
+    .site::before {
+      content: ""; display: inline-block; width: 8px; height: 8px; margin: 0 12px 2px 0;
+      border-radius: 50%; background: var(--violet);
+    }
+    .shot {
+      position: absolute; left: 596px; top: 120px; width: 640px; height: 400px;
+      border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden;
+    }
+    .shot img { display: block; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="text">
+    <img class="lockup" src="vaultime-lockup-light.svg" alt="Vaultime" />
+    <div class="caps label">Free playtime tracker for Windows and Linux</div>
+    <h1>Every hour you play, <em>honestly counted.</em></h1>
+    <div class="times">
+      <div><span class="caps">Runtime</span><b>4 h 05</b></div>
+      <div class="active"><span class="caps">Active</span><b>3 h 41</b></div>
+      <div><span class="caps">Idle</span><b>24 min</b></div>
+    </div>
+  </div>
+  <div class="site">vaultime.codfishcloud.de</div>
+  <div class="shot"><img src="screenshots/library.png" alt="" /></div>
+</body>
+</html>

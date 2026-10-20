@@ -42,8 +42,9 @@ deploy/vps/       Server install script, systemd unit and admin tools
 docs/             Legal pages, landing page and documentation (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
 scripts/          Dev helpers: Linux checks, packaging, cloud round trip, API and
-                  site deploy, release upload, logo, UI screenshots
-assets/           Brand assets and the README screenshots
+                  site deploy, release upload, logo, UI screenshots, social
+                  preview
+assets/           Brand assets, the README screenshots and the social preview
 ```
 
 ## Commands
