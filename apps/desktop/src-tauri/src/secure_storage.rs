@@ -11,7 +11,13 @@ use crate::constants::BACKUP_KEY_BYTES;
 use crate::error::{Result, VaultimeError};
 
 // Renaming the service or an account would lose the stored logins and keys.
-const KEYRING_SERVICE: &str = "de.codfish.vaultime";
+// Development builds keep their own entries, as a renewal from one would end
+// the sign-in of the installed app.
+const KEYRING_SERVICE: &str = if cfg!(debug_assertions) {
+    "de.codfish.vaultime.dev"
+} else {
+    "de.codfish.vaultime"
+};
 const CLOUD_SESSION_ACCOUNT: &str = "cloud-session";
 const CLOUD_BACKUP_KEY_ACCOUNT_PREFIX: &str = "cloud-backup-key:";
 const LEGACY_CLOUD_BACKUP_KEY_ACCOUNT: &str = "cloud-backup-key";
@@ -152,6 +158,12 @@ mod tests {
         reopened.delete_credential().unwrap();
         let gone = Entry::new("de.codfish.vaultime.test", "round-trip").unwrap();
         assert_eq!(load_password(gone).unwrap(), None);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn development_builds_leave_the_installed_apps_entries_alone() {
+        assert_eq!(super::KEYRING_SERVICE, "de.codfish.vaultime.dev");
     }
 
     // Existing cloud backups must stay decryptable across crate upgrades.
