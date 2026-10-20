@@ -51,7 +51,9 @@ assets/           Brand assets and the README screenshots
 Frontend, from `apps/desktop`:
 
 - `npm ci`
-- `npm run tauri dev` starts the app
+- `npm run tauri dev` starts the app. Debug builds keep their cloud sign-in
+  in their own keyring entries, so trying one never signs out an installed
+  Vaultime.
 - `npm run typecheck`, `npm run lint`, `npm test` and `npm run build`
 - Tests live next to the code as `*.test.ts` and run in six time zones (see
   `vitest.config.ts`) with a German locale, so code that mixes up local and
