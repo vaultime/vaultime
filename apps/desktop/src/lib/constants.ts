@@ -189,6 +189,7 @@ export const FOLDER_MATCH_LAUNCHERS = [
   "xbox",
   "amazon",
   "itch",
+  "wargaming",
 ];
 
 /** Sessions listed before "Show all". */

@@ -3,17 +3,18 @@
 
 //! Games that launchers register with Windows instead of keeping library
 //! files: Battle.net, Rockstar, Riot, `HoYoPlay`, Ubisoft Connect, Legacy Games
-//! and Big Fish. The registry is read first, the program of each game is
-//! looked up on disk afterwards.
+//! and Big Fish, with what Battle.net and Ubisoft Connect add from their own
+//! caches. The registry is read first, the program of each game is looked up
+//! on disk afterwards.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path, PathBuf};
 
 use windows_registry::{CURRENT_USER, Key, LOCAL_MACHINE};
 
-use super::{DiscoveredGame, find_main_executable, look_up_all, metadata};
-use crate::constants::REGISTRY_SEARCH_DEPTH;
+use super::{DiscoveredGame, battlenet, find_main_executable, look_up_all, metadata, ubisoft};
+use crate::constants::{EXECUTABLE_SCAN_DEPTH, REGISTRY_SEARCH_DEPTH};
 use crate::platform::process::path_key;
 
 /// One entry of the Windows list of installed programs.
@@ -53,6 +54,7 @@ const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 const UNINSTALL_32: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
 /// The global launcher and the one for mainland China.
 const HOYOPLAY: [&str; 2] = [r"Software\Cognosphere\HYP", r"Software\miHoYo\HYP"];
+const UBISOFT_LAUNCHER: &str = r"SOFTWARE\WOW6432Node\Ubisoft\Launcher";
 const UBISOFT_INSTALLS: &str = r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs";
 const LEGACY_GAMES: &str = r"Software\Legacy Games";
 const BIG_FISH_GAMES: &str = r"SOFTWARE\WOW6432Node\Big Fish Games\Persistence\GameDB";
@@ -238,25 +240,71 @@ pub(crate) fn hoyoplay(
 }
 
 /// Ubisoft Connect games from their ids and install folders, titled by the
-/// "Uplay Install <id>" uninstall entry.
+/// "Uplay Install <id>" uninstall entry or the launcher's cache, which also
+/// names the program each starts.
 pub(crate) fn ubisoft(
     installs: &[(String, String)],
     programs: &[InstalledProgram],
+    cache: &HashMap<String, ubisoft::Product>,
 ) -> Vec<Candidate> {
     installs
         .iter()
-        .map(|(id, folder)| Candidate {
-            title: programs
-                .iter()
-                .find(|program| {
-                    program.key.strip_prefix(UBISOFT_INSTALL) == Some(id.as_str())
-                        && !program.name.is_empty()
-                })
-                .map_or_else(|| folder_title(folder), |program| program.name.clone()),
-            folder: clean_folder(folder),
-            program: None,
-            source: "ubisoft",
-            source_id: id.clone(),
+        .map(|(id, folder)| {
+            let cached = cache.get(id);
+            let folder = clean_folder(folder);
+            Candidate {
+                title: programs
+                    .iter()
+                    .find(|program| {
+                        program.key.strip_prefix(UBISOFT_INSTALL) == Some(id.as_str())
+                            && !program.name.is_empty()
+                    })
+                    .map(|program| program.name.clone())
+                    .or_else(|| cached.and_then(|product| product.name.clone()))
+                    .unwrap_or_else(|| folder_title(&folder)),
+                program: cached
+                    .and_then(|product| product.programs.first())
+                    .map(|program| {
+                        Path::new(&folder)
+                            .join(program)
+                            .to_string_lossy()
+                            .into_owned()
+                    }),
+                folder,
+                source: "ubisoft",
+                source_id: id.clone(),
+            }
+        })
+        .collect()
+}
+
+/// Battle.net games of its own list that no uninstall entry among
+/// `registered` covers, titled by their folder. The folder name is also the
+/// id, as the uninstall entries of Battle.net games are named that way.
+pub(crate) fn battlenet_unregistered(
+    installs: &[battlenet::Install],
+    registered: &[Candidate],
+) -> Vec<Candidate> {
+    let known: HashSet<String> = registered
+        .iter()
+        .filter(|candidate| candidate.source == "battlenet")
+        .map(|candidate| path_key(&candidate.folder))
+        .collect();
+    installs
+        .iter()
+        .filter_map(|install| {
+            let folder = clean_folder(&install.folder);
+            if known.contains(&path_key(&folder)) {
+                return None;
+            }
+            let title = folder_title(&folder);
+            Some(Candidate {
+                source_id: title.clone(),
+                title,
+                folder,
+                program: None,
+                source: "battlenet",
+            })
         })
         .collect()
 }
@@ -294,15 +342,23 @@ fn folder_title(folder: &str) -> String {
     )
 }
 
-/// Looks up the game program on disk. A program the launcher named wins,
-/// otherwise the most likely one in the install folder.
+/// Looks up the game program on disk. A program the launcher named wins, also
+/// when it sits in a folder inside the install folder, otherwise the most
+/// likely one there.
 fn resolve(candidate: &Candidate, existing: &HashSet<String>) -> Option<DiscoveredGame> {
+    let folder = Path::new(&candidate.folder);
     let program = candidate
         .program
         .as_deref()
         .map(PathBuf::from)
-        .filter(|program| program.is_file())
-        .or_else(|| find_main_executable(Path::new(&candidate.folder), &candidate.title))?;
+        .and_then(|named| {
+            if named.is_file() {
+                Some(named)
+            } else {
+                find_named(folder, &named)
+            }
+        })
+        .or_else(|| find_main_executable(folder, &candidate.title))?;
     Some(DiscoveredGame::new(
         existing,
         candidate.title.clone(),
@@ -311,6 +367,18 @@ fn resolve(candidate: &Candidate, existing: &HashSet<String>) -> Option<Discover
         candidate.source,
         Some(candidate.source_id.clone()),
     ))
+}
+
+/// A file named like `program` in `folder` or below it.
+fn find_named(folder: &Path, program: &Path) -> Option<PathBuf> {
+    let name = program.file_name()?;
+    walkdir::WalkDir::new(folder)
+        .max_depth(EXECUTABLE_SCAN_DEPTH)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+        .find(|entry| entry.file_type().is_file() && entry.file_name().eq_ignore_ascii_case(name))
+        .map(walkdir::DirEntry::into_path)
 }
 
 /// Every registered game whose program exists. Games that share a program,
@@ -330,10 +398,17 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
 fn candidates() -> Vec<Candidate> {
     let programs = installed_programs();
     let mut candidates = by_publisher(&programs);
+    candidates.extend(battlenet_unregistered(&battlenet::installs(), &candidates));
     candidates.extend(rockstar(&programs));
     candidates.extend(riot(&programs, &riot_products()));
     candidates.extend(hoyoplay(&hoyoplay_installs(), &programs));
-    candidates.extend(ubisoft(&ubisoft_installs(), &programs));
+    candidates.extend(ubisoft(
+        &ubisoft_installs(),
+        &programs,
+        &ubisoft_launcher_folder()
+            .map(|folder| ubisoft::read_cache(&folder))
+            .unwrap_or_default(),
+    ));
     candidates.extend(legacy_games());
     candidates.extend(big_fish_games());
     candidates
@@ -479,6 +554,11 @@ fn collect_game_paths(key: &Key, name: &str, depth: usize, found: &mut Vec<(Stri
             collect_game_paths(&sub, &child, depth - 1, found);
         }
     }
+}
+
+fn ubisoft_launcher_folder() -> Option<PathBuf> {
+    let folder = text(&LOCAL_MACHINE.open(UBISOFT_LAUNCHER).ok()?, "InstallDir");
+    (!folder.is_empty()).then(|| PathBuf::from(folder))
 }
 
 fn ubisoft_installs() -> Vec<(String, String)> {
@@ -720,9 +800,84 @@ mod tests {
     #[test]
     fn ubisoft_titles_by_install_id() {
         let installs = [("1081".to_owned(), "C:/Games/Ubisoft/Far Cry 6/".to_owned())];
-        let games = ubisoft(&installs, &sample());
+        let games = ubisoft(&installs, &sample(), &HashMap::new());
         assert_eq!(games[0].title, "Far Cry 6");
         assert_eq!(games[0].folder, clean_folder("C:/Games/Ubisoft/Far Cry 6"));
+        assert_eq!(games[0].program, None);
+    }
+
+    #[test]
+    fn ubisoft_takes_the_name_and_program_from_the_cache() {
+        let installs = [
+            ("420".to_owned(), r"D:\Ubisoft\Far Cry 4".to_owned()),
+            ("1081".to_owned(), r"D:\Ubisoft\Far Cry 6".to_owned()),
+        ];
+        let cache = HashMap::from([
+            (
+                "420".to_owned(),
+                ubisoft::Product {
+                    name: Some("Far Cry® 4".into()),
+                    programs: vec!["FarCry4.exe".into()],
+                },
+            ),
+            (
+                "1081".to_owned(),
+                ubisoft::Product {
+                    name: Some("Far Cry® 6".into()),
+                    programs: Vec::new(),
+                },
+            ),
+        ]);
+        let games = ubisoft(&installs, &sample(), &cache);
+        assert_eq!(games[0].title, "Far Cry® 4");
+        assert_eq!(
+            games[0].program.as_deref(),
+            Some(r"D:\Ubisoft\Far Cry 4\FarCry4.exe")
+        );
+        // The uninstall entry's name goes first.
+        assert_eq!(games[1].title, "Far Cry 6");
+    }
+
+    #[test]
+    fn battlenet_adds_installs_without_an_uninstall_entry() {
+        let registered = by_publisher(&sample());
+        let installs = [
+            battlenet::Install {
+                uid: "fenris".into(),
+                folder: "E:/BlizzardLibrary/Diablo IV".into(),
+            },
+            battlenet::Install {
+                uid: "pro".into(),
+                folder: "D:/Games/Overwatch/".into(),
+            },
+        ];
+        let added = battlenet_unregistered(&installs, &registered);
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0].title, "Overwatch");
+        assert_eq!(added[0].source_id, "Overwatch");
+        assert_eq!(added[0].folder, clean_folder("D:/Games/Overwatch"));
+    }
+
+    #[test]
+    fn a_named_program_is_found_in_a_folder_inside_the_game() {
+        let root =
+            std::env::temp_dir().join(format!("vaultime-named-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("bin")).unwrap();
+        fs::write(root.join(r"bin\FarCry4.exe"), b"MZ").unwrap();
+        fs::write(root.join("Uninstall.exe"), b"MZ").unwrap();
+        let candidate = Candidate {
+            title: "Far Cry 4".into(),
+            folder: root.to_string_lossy().into_owned(),
+            program: Some(root.join("farcry4.exe").to_string_lossy().into_owned()),
+            source: "ubisoft",
+            source_id: "420".into(),
+        };
+        let game = resolve(&candidate, &HashSet::new()).unwrap();
+        assert_eq!(
+            Path::new(&game.executable_path),
+            root.join(r"bin\FarCry4.exe")
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

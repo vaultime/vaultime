@@ -21,6 +21,7 @@ const LAUNCHER_NAMES: Record<string, string> = {
   xbox: "Xbox",
   amazon: "Amazon Games",
   itch: "itch.io",
+  wargaming: "Wargaming Game Center",
   gog: "GOG",
   heroic: "Heroic",
   lutris: "Lutris",

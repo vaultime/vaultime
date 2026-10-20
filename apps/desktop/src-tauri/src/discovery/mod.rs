@@ -8,6 +8,8 @@
 pub mod amazon;
 pub mod auto;
 #[cfg(windows)]
+mod battlenet;
+#[cfg(windows)]
 pub mod ea;
 pub mod epic;
 mod fuel;
@@ -18,10 +20,16 @@ pub mod itch;
 pub mod lutris;
 pub mod metadata;
 #[cfg(windows)]
+mod protobuf;
+#[cfg(windows)]
 pub mod registry;
 pub mod scanner;
 pub mod steam;
+#[cfg(windows)]
+mod ubisoft;
 mod vdf;
+#[cfg(windows)]
+pub mod wargaming;
 #[cfg(windows)]
 pub mod xbox;
 #[cfg(windows)]
@@ -259,6 +267,7 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
         games.extend(xbox::discover(&existing));
         games.extend(ea::discover(&existing));
         games.extend(amazon::discover(&existing));
+        games.extend(wargaming::discover(&existing));
     }
     #[cfg(target_os = "linux")]
     games.extend(lutris::discover(&existing));

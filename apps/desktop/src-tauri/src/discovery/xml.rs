@@ -60,13 +60,21 @@ pub(crate) fn attribute(tag: &str, name: &str) -> Option<String> {
 
 /// The trimmed text of every `<name>...</name>` element.
 pub(crate) fn texts(xml: &str, name: &str) -> Vec<String> {
+    elements(xml, name)
+        .into_iter()
+        .map(|(_, text)| text)
+        .collect()
+}
+
+/// Every `<name ...>...</name>` element as its attributes and trimmed text.
+pub(crate) fn elements<'a>(xml: &'a str, name: &str) -> Vec<(&'a str, String)> {
     let close = format!("</{name}>");
     open_tags(xml, name)
         .into_iter()
         .filter(|(attributes, _)| !attributes.ends_with('/'))
-        .filter_map(|(_, start)| {
+        .filter_map(|(attributes, start)| {
             let rest = &xml[start..];
-            Some(unescape(rest[..rest.find(&close)?].trim()))
+            Some((attributes, unescape(rest[..rest.find(&close)?].trim())))
         })
         .collect()
 }

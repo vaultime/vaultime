@@ -41,7 +41,7 @@ A session ends once the game is missing at two checks in a row, so a game that r
 
 ## How a game is recognized
 
-Vaultime knows a game by the full path of its program. Games from launchers that give every game a folder of its own (Steam, Epic, GOG, Heroic, Battle.net, Riot, HoYoPlay, Ubisoft Connect, EA, Rockstar, the Xbox app, Amazon Games and itch.io) also count when any game program in their install folder runs, since these launchers often start a game in several steps. A game's page says which of the two applies. Vaultime goes by the file name alone only when Windows hides the full path or the game runs through Wine.
+Vaultime knows a game by the full path of its program. Games from launchers that give every game a folder of its own (Steam, Epic, GOG, Heroic, Battle.net, Riot, HoYoPlay, Ubisoft Connect, EA, Rockstar, the Xbox app, Amazon Games, itch.io and the Wargaming Game Center) also count when any game program in their install folder runs, since these launchers often start a game in several steps. A game's page says which of the two applies. Vaultime goes by the file name alone only when Windows hides the full path or the game runs through Wine.
 
 Ignored programs never count, and games that came from [another PC](several-pcs.md) are never tracked here.
 

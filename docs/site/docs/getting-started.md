@@ -44,7 +44,7 @@ The library starts empty and says so: **Start your library**, with two buttons, 
 Games found through a launcher start checked. Games found in a plain folder start unchecked, because such folders also hold tools, setup programs and mod loaders. Games you already have are marked **In library**.
 
 Launchers read directly
-: Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, Legacy Games, Big Fish, Heroic and Lutris. Flatpak installs of Steam, Heroic, Lutris and itch.io are found too.
+: Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot, Rockstar, Amazon Games, itch.io, HoYoPlay, the Wargaming Game Center, Legacy Games, Big Fish, Heroic and Lutris. Flatpak installs of Steam, Heroic, Lutris and itch.io are found too.
 
 Folders scanned on Windows
 : `Games`, `Epic Games`, `GOG Games`, `XboxGames` and the default game folders of Epic, GOG Galaxy, EA, Ubisoft and Battle.net, on every fixed drive.

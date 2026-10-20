@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A free window on tiling desktops.** Under a tiling window manager like i3, Sway, Hyprland, bspwm or niri, Vaultime starts with a free window instead of a fixed size, as the window manager sizes every window itself. A size you picked stays.
 - **Straight to the day.** Go to a day in the journal and a click on a day in a calendar on the stats or game page now scroll to that day and mark its name for a moment, instead of opening the top of its week.
 
+### Discovery
+
+- **Wargaming Game Center.** World of Tanks, World of Warships and the other games the Game Center installed are found, with their own program.
+- **More from Battle.net and Ubisoft Connect.** Battle.net games without an uninstall entry are found through Battle.net's own list. Ubisoft Connect games take their name and the program they start from the launcher's cache, so Vaultime no longer guesses the program from the folder, also when it sits in a folder like `bin`.
+
 ### Fixes
 
 - **Each game once on the month bars.** Pointing at a month on the stats page listed a game once for every day you played it, so a busy month showed one game many times. It now shows each game once with its time for the month.

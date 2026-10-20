@@ -33,7 +33,7 @@ pub const MANUAL_SESSION_MAX: Duration = Duration::from_hours(24);
 /// Launchers that give every game a folder of its own, so any game program
 /// in it counts for the game, whichever build or launcher step runs. Same
 /// as `FOLDER_MATCH_LAUNCHERS` in `lib/constants.ts`.
-pub const FOLDER_MATCH_LAUNCHERS: [&str; 13] = [
+pub const FOLDER_MATCH_LAUNCHERS: [&str; 14] = [
     "steam",
     "epic",
     "gog",
@@ -47,6 +47,7 @@ pub const FOLDER_MATCH_LAUNCHERS: [&str; 13] = [
     "xbox",
     "amazon",
     "itch",
+    "wargaming",
 ];
 /// Grace period so a quick alt-tab does not count as idle.
 pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
