@@ -143,10 +143,15 @@ pub async fn merge_cloud_backup(
     .await
 }
 
-/// Lets go of a cloud backup downloaded for a merge that did not happen.
-#[tauri::command(async)]
-pub fn discard_cloud_merge(app: AppHandle, backup_id: String) {
-    backup::cloud_merge::discard_cloud_merge(&app.state::<AppContext>(), &backup_id);
+/// Lets go of a cloud backup downloaded for a merge that did not happen. It
+/// waits for a merge that holds the downloaded copies.
+#[tauri::command]
+pub async fn discard_cloud_merge(app: AppHandle, backup_id: String) -> Result<(), VaultimeError> {
+    on_blocking_pool(move || {
+        backup::cloud_merge::discard_cloud_merge(&app.state::<AppContext>(), &backup_id);
+        Ok(())
+    })
+    .await
 }
 
 /// Merges the newer backups of the PCs merged here before, as far as they

@@ -3,10 +3,11 @@
 
 //! Merging the backups other PCs keep in the cloud. The first merge of a PC
 //! goes through the player, with the game choices and the key check. After
-//! that the newest backup of a PC merged before comes in by itself once a
-//! day. One that brings keys the player has to vouch for, or sessions that
-//! fail their check, waits for the player instead. A new game then links
-//! only to a game of the same launcher with the same launcher id.
+//! that the newest backup of a PC merged before comes in by itself at the
+//! next check, which a signed in app runs every hour. One that brings keys
+//! the player has to vouch for, or sessions that fail their check, waits for
+//! the player instead. A new game then links only to a game of the same
+//! launcher with the same launcher id.
 //!
 //! The keys a first merge takes at their word are the ones the backup's PC
 //! registered with the server, see `merge::preview_from_cloud`.
@@ -14,12 +15,12 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
-use chrono::{DateTime, Utc};
 use log::{info, warn};
 use serde::Serialize;
 
-use super::merge::{self, GameChoice, MergePreview, MergeSummary};
+use super::merge::{self, GameChoice, MergePreview, MergeSummary, instant};
 use super::remote::{self, CLOUD_STAGING_DIR, PC_NAME_FIELD, RemoteBackupRecord, SOURCE_PC_FIELD};
 use super::{cleanup_staging_dir, crypto, load_and_validate_manifest};
 use crate::AppContext;
@@ -35,6 +36,18 @@ use crate::secure_storage;
 /// The launcher match that links a new game of an automatic merge.
 const SAME_LAUNCHER: &str = "launcher";
 
+/// Held while a downloaded backup is staged, checked, merged or let go, so
+/// no call reads a copy another one is removing.
+static STAGING: Mutex<()> = Mutex::new(());
+
+/// The backups the last automatic merge left for the player, by PC, so the
+/// next check does not download them again.
+static WAITING: LazyLock<Mutex<HashMap<String, AutoMerge>>> = LazyLock::new(Mutex::default);
+
+fn staging() -> MutexGuard<'static, ()> {
+    STAGING.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// The newest cloud backup of another PC.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CloudPc {
@@ -45,8 +58,9 @@ pub struct CloudPc {
     pub backup_id: String,
     pub backup_created_at: String,
     pub sessions_count: i64,
-    /// Whether this PC merged it before, so its newer backups come in by
-    /// themselves.
+    /// Whether this PC merged a backup of it before, so its newer backups
+    /// come in by themselves. Its sessions coming along in another PC's
+    /// backup do not count.
     pub merged_before: bool,
     /// Whether the backup is newer than the last one merged here.
     pub newer: bool,
@@ -105,10 +119,7 @@ fn cloud_pcs(
         .into_iter()
         .map(|(device, backup)| {
             let here = known.get(device);
-            let last = merged.get(device).and_then(|created| instant(created));
-            let merged_at = here
-                .and_then(|device| device.merged_at.as_deref())
-                .and_then(instant);
+            let last = merged.get(device).map(|created| instant(created));
             CloudPc {
                 device_id: device.to_owned(),
                 name: metadata_text(backup, PC_NAME_FIELD)
@@ -121,12 +132,8 @@ fn cloud_pcs(
                     .as_ref()
                     .and_then(|metadata| metadata.get("sessions_count")?.as_i64())
                     .unwrap_or_default(),
-                merged_before: last.is_some() || merged_at.is_some(),
-                newer: match (last, merged_at) {
-                    (Some(last), _) => instant(&backup.backup_created_at) > Some(last),
-                    (None, Some(merged_at)) => instant(&backup.uploaded_at) > Some(merged_at),
-                    (None, None) => true,
-                },
+                merged_before: last.is_some(),
+                newer: last.is_none_or(|last| instant(&backup.backup_created_at) > last),
             }
         })
         .collect();
@@ -170,6 +177,7 @@ fn preview_with(
     backup_id: &str,
     trust_new_keys: bool,
 ) -> Result<MergePreview> {
+    let _staging = staging();
     let (folder, source) = staged(app_context, cloud, backup_id)?;
     let registered = registered_keys_of(cloud, &source)?;
     merge::preview_from_cloud(db, app_context, &folder, trust_new_keys, &registered)
@@ -215,6 +223,7 @@ fn merge_with(
     choices: &[GameChoice],
     trust_new_keys: bool,
 ) -> Result<MergeSummary> {
+    let _staging = staging();
     let (folder, source) = staged(app_context, cloud, backup_id)?;
     let registered = registered_keys_of(cloud, &source)?;
     let summary = merge::apply_from_cloud(
@@ -226,12 +235,17 @@ fn merge_with(
         trust_new_keys,
         &registered,
     );
-    discard_cloud_merge(app_context, backup_id);
+    discard(app_context, backup_id);
     summary
 }
 
 /// Lets the downloaded copy of the cloud backup `backup_id` go.
 pub fn discard_cloud_merge(app_context: &AppContext, backup_id: &str) {
+    let _staging = staging();
+    discard(app_context, backup_id);
+}
+
+fn discard(app_context: &AppContext, backup_id: &str) {
     if let Ok(folder) = staging_folder(app_context, backup_id)
         && folder.exists()
     {
@@ -240,7 +254,8 @@ pub fn discard_cloud_merge(app_context: &AppContext, backup_id: &str) {
 }
 
 /// Merges the newest backup of every PC merged here before that has a newer
-/// one, as far as it needs no choice of the player.
+/// one, as far as it needs no choice of the player. Returns what it did,
+/// with the backups that still wait for the player.
 pub fn merge_due_cloud_backups(
     db: &Database,
     asset_manager: &AssetManager,
@@ -264,57 +279,93 @@ fn merge_due_with(
     app_context: &AppContext,
     cloud: &Cloud,
 ) -> Result<Vec<AutoMerge>> {
+    let _staging = staging();
     let backups = remote::list_backups(cloud.api_base_url, cloud.access_token)?;
-    let due: Vec<CloudPc> = cloud_pcs(db, &backups, cloud.key)?
-        .into_iter()
-        .filter(|pc| pc.merged_before && pc.newer)
-        .collect();
-    if due.is_empty() {
-        return Ok(Vec::new());
-    }
-    let registered = remote::registered_keys(cloud.api_base_url, cloud.access_token)?;
+    let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
     let mut done = Vec::new();
-    for pc in due {
-        let keys = registered.get(&pc.device_id).cloned().unwrap_or_default();
-        let merged = staged(app_context, cloud, &pc.backup_id).and_then(|(folder, _)| {
-            merge_by_itself(db, asset_manager, app_context, &folder, &keys)
-        });
-        discard_cloud_merge(app_context, &pc.backup_id);
-        let mut outcome = AutoMerge {
-            device_id: pc.device_id.clone(),
-            name: pc.name.clone(),
-            backup_id: pc.backup_id.clone(),
-            outcome: "merged",
-            sessions_added: 0,
-            sessions_grown: 0,
-        };
-        match merged {
-            Ok(Ok(summary)) => {
-                info!(
-                    "merged the cloud backup of {} by itself: {} new, {} grown",
-                    pc.device_id, summary.sessions_added, summary.sessions_grown
-                );
-                outcome.sessions_added = summary.sessions_added;
-                outcome.sessions_grown = summary.sessions_grown;
-            }
-            Ok(Err(reason)) => {
-                info!(
-                    "the cloud backup of {} waits for the player: {reason}",
-                    pc.device_id
-                );
-                outcome.outcome = reason;
-            }
-            Err(error) => {
-                warn!(
-                    "the cloud backup of {} did not merge: {error}",
-                    pc.device_id
-                );
-                continue;
+    let mut due = Vec::new();
+    for pc in cloud_pcs(db, &backups, cloud.key)? {
+        if !(pc.merged_before && pc.newer) {
+            continue;
+        }
+        match waiting.get(&pc.device_id) {
+            Some(left) if left.backup_id == pc.backup_id => done.push(left.clone()),
+            _ => due.push(pc),
+        }
+    }
+    if !due.is_empty() {
+        let registered = remote::registered_keys(cloud.api_base_url, cloud.access_token)?;
+        for pc in due {
+            if let Some(outcome) = merge_one(db, asset_manager, app_context, cloud, &registered, pc)
+            {
+                done.push(outcome);
             }
         }
-        done.push(outcome);
     }
+    *waiting = done
+        .iter()
+        .filter(|merge| merge.outcome != "merged")
+        .map(|merge| (merge.device_id.clone(), merge.clone()))
+        .collect();
     Ok(done)
+}
+
+/// Merges the newest backup of `pc` without the player, as far as it can.
+/// Nothing when the backup could not be read.
+fn merge_one(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    cloud: &Cloud,
+    registered: &HashMap<String, HashSet<String>>,
+    pc: CloudPc,
+) -> Option<AutoMerge> {
+    let merged = staged(app_context, cloud, &pc.backup_id).and_then(|(folder, source)| {
+        // The listing names the PC its uploader gave. The keys go by the PC
+        // the backup itself names, and the two have to agree.
+        if source != pc.device_id {
+            return Err(VaultimeError::Backup(format!(
+                "the backup is of {source}, not of {}",
+                pc.device_id
+            )));
+        }
+        let keys = registered.get(&source).cloned().unwrap_or_default();
+        merge_by_itself(db, asset_manager, app_context, &folder, &keys)
+    });
+    discard(app_context, &pc.backup_id);
+    let mut outcome = AutoMerge {
+        device_id: pc.device_id,
+        name: pc.name,
+        backup_id: pc.backup_id,
+        outcome: "merged",
+        sessions_added: 0,
+        sessions_grown: 0,
+    };
+    match merged {
+        Ok(Ok(summary)) => {
+            info!(
+                "merged the cloud backup of {} by itself: {} new, {} grown",
+                outcome.device_id, summary.sessions_added, summary.sessions_grown
+            );
+            outcome.sessions_added = summary.sessions_added;
+            outcome.sessions_grown = summary.sessions_grown;
+        }
+        Ok(Err(reason)) => {
+            info!(
+                "the cloud backup of {} waits for the player: {reason}",
+                outcome.device_id
+            );
+            outcome.outcome = reason;
+        }
+        Err(error) => {
+            warn!(
+                "the cloud backup of {} did not merge: {error}",
+                outcome.device_id
+            );
+            return None;
+        }
+    }
+    Some(outcome)
 }
 
 /// Merges the staged backup in `folder` without the player, or says why it
@@ -430,14 +481,6 @@ fn metadata_text<'a>(backup: &'a RemoteBackupRecord, field: &str) -> Option<&'a 
     backup.metadata_json.as_ref()?.get(field)?.as_str()
 }
 
-/// A time the server or a manifest gave, comparable whatever its digits.
-/// Anything unreadable comes first.
-fn instant(text: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(text)
-        .ok()
-        .map(|time| time.with_timezone(&Utc))
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -543,6 +586,20 @@ mod tests {
         );
         assert_eq!(pcs[0].sessions_count, 3);
 
+        // Its sessions came along in another PC's backup, which is no merge of it.
+        devices::ensure_device(&db, "deck", "linux", "0.6.0").unwrap();
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE devices SET merged_at = '2026-10-19T09:00:00Z' WHERE id = 'deck'",
+                [],
+            )
+            .map_err(crate::db::repo::map_db)
+        })
+        .unwrap();
+        let deck = cloud_pcs(&db, &backups(), &KEY).unwrap().remove(1);
+        assert_eq!(deck.device_id, "deck");
+        assert!(!deck.merged_before && deck.newer);
+
         // Merged before: newer only past the backup merged last, whatever its digits.
         settings::set_setting(
             &db,
@@ -642,6 +699,11 @@ mod tests {
             )
             .unwrap()
         }
+
+        fn merge_due(&self, cloud: &Cloud) -> Vec<AutoMerge> {
+            self.act();
+            merge_due_with(&self.db, &self.assets, &self.context, cloud).unwrap()
+        }
     }
 
     impl Drop for Pc {
@@ -663,7 +725,7 @@ mod tests {
             access_token: &token,
             key: &[3; BACKUP_KEY_BYTES],
         };
-        let laptop = Pc::new("laptop-e2e", "Laptop");
+        let mut laptop = Pc::new("laptop-e2e", "Laptop");
         let desktop = Pc::new("desktop-e2e", "Desktop");
         laptop.act();
         let hades = crate::db::repo::games::create_game(
@@ -720,17 +782,12 @@ mod tests {
                 .unwrap()
                 .exists()
         );
-        assert!(
-            merge_due_with(&desktop.db, &desktop.assets, &desktop.context, &cloud)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(desktop.merge_due(&cloud).is_empty());
 
         // A newer backup of the laptop comes in by itself.
         let second = laptop.play(&hades);
         let newest = laptop.upload(&cloud);
-        desktop.act();
-        let done = merge_due_with(&desktop.db, &desktop.assets, &desktop.context, &cloud).unwrap();
+        let done = desktop.merge_due(&cloud);
         assert_eq!(done.len(), 1, "{done:?}");
         assert_eq!((done[0].outcome, done[0].sessions_added), ("merged", 1));
         let here: Vec<String> = crate::db::repo::sessions::list_all_sessions(&desktop.db)
@@ -745,7 +802,44 @@ mod tests {
         desktop.upload(&cloud);
         let kept = remote::list_backups(&api, &token).unwrap();
         assert!(kept.iter().any(|backup| backup.id == newest.backup.id));
+
+        a_new_key_waits_for_the_player(&mut laptop, &desktop, &cloud, &hades);
         ledger::act_as(None);
+    }
+
+    /// The laptop lost its key file. Its next backup waits for the player,
+    /// and the check after that knows without downloading it again.
+    fn a_new_key_waits_for_the_player(laptop: &mut Pc, desktop: &Pc, cloud: &Cloud, game: &str) {
+        laptop.me = ledger::test_pc("laptop-e2e");
+        laptop.play(game);
+        let renewed = laptop.upload(cloud);
+        let done = desktop.merge_due(cloud);
+        assert_eq!(done.len(), 1, "{done:?}");
+        assert_eq!(
+            (done[0].outcome, done[0].backup_id.as_str()),
+            ("new_key", renewed.backup.id.as_str())
+        );
+        assert!(
+            !staging_folder(&desktop.context, &renewed.backup.id)
+                .unwrap()
+                .exists()
+        );
+        assert!(WAITING.lock().unwrap().contains_key("laptop-e2e"));
+        assert_eq!(desktop.merge_due(cloud), done);
+
+        // Merged by hand, it waits no more.
+        merge_with(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            cloud,
+            &renewed.backup.id,
+            &[],
+            true,
+        )
+        .unwrap();
+        assert!(desktop.merge_due(cloud).is_empty());
+        assert!(WAITING.lock().unwrap().is_empty());
     }
 
     #[test]

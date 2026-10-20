@@ -93,7 +93,8 @@ export function MergeDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    // A merge that runs holds the downloaded backup, so the dialog stays until it ends.
+    <Dialog open onOpenChange={(open) => !open && !merging && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Merge from {sourceName(preview)}</DialogTitle>
@@ -165,7 +166,7 @@ export function MergeDialog({
         )}
         {error && <p className="text-[13px] text-amber">{error}</p>}
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" disabled={merging} onClick={onClose}>
             {nothing ? "Close" : "Cancel"}
           </Button>
           {!nothing && (

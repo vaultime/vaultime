@@ -30,6 +30,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Utc};
 use log::warn;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -393,7 +394,6 @@ fn apply_checked(
     Ok(summary)
 }
 
-/// Refuses backups that cannot be merged, then sorts every session in it.
 /// When the newest backup of each PC that was merged here was made, by PC.
 pub(crate) fn last_merged(db: &Database) -> HashMap<String, String> {
     settings::get_setting(db, MERGED_BACKUPS_SETTING)
@@ -403,6 +403,14 @@ pub(crate) fn last_merged(db: &Database) -> HashMap<String, String> {
         .unwrap_or_default()
 }
 
+/// A time a server or a manifest gave, comparable whatever its digits.
+/// Anything unreadable comes first.
+pub(crate) fn instant(text: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(text)
+        .ok()
+        .map(|time| time.with_timezone(&Utc))
+}
+
 /// Notes that the backup of `device_id` made at `created_at` was merged, so
 /// automatic merges wait for a newer one. The merge itself is done, so a
 /// failure here only costs a merge that brings nothing.
@@ -410,7 +418,7 @@ fn remember_merged(db: &Database, device_id: &str, created_at: &str) {
     let mut merged = last_merged(db);
     if merged
         .get(device_id)
-        .is_some_and(|known| known.as_str() >= created_at)
+        .is_some_and(|known| instant(known) >= instant(created_at))
     {
         return;
     }
@@ -421,6 +429,7 @@ fn remember_merged(db: &Database, device_id: &str, created_at: &str) {
     }
 }
 
+/// Refuses backups that cannot be merged, then sorts every session in it.
 fn plan(
     db: &Database,
     staged: &Staged,
@@ -1244,7 +1253,7 @@ fn copy_artwork(staged: &Staged, asset_manager: &AssetManager, copied: &[(String
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, TimeDelta, Utc};
+    use chrono::TimeDelta;
     use ed25519_dalek::SigningKey;
     use serde_json::json;
 
