@@ -40,11 +40,11 @@ use super::{
 };
 use crate::AppContext;
 use crate::assets::{AssetManager, is_plain_name};
-use crate::constants::{ASSET_CACHE_DIR, DATABASE_FILE};
+use crate::constants::{ASSET_CACHE_DIR, DATABASE_FILE, MERGED_BACKUPS_SETTING};
 use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::sessions::{row_to_session, stored_session};
-use crate::db::repo::{games, map_db};
+use crate::db::repo::{games, map_db, settings};
 use crate::error::{Result, VaultimeError};
 use crate::integrity::{self, ledger};
 use crate::platform::process::file_name;
@@ -54,7 +54,7 @@ use crate::playtime::slices;
 const SOURCE: &str = "merge_source";
 
 /// A game that comes with the merged sessions.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct MergeGame {
     pub game_id: String,
     pub title: String,
@@ -88,7 +88,7 @@ pub struct MergeConflict {
 }
 
 /// What a merge would bring in, without changing anything.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct MergePreview {
     pub backup_path: String,
     pub backup_created_at: String,
@@ -245,7 +245,21 @@ pub fn preview(
     trust_new_keys: bool,
 ) -> Result<MergePreview> {
     let staged = Staged::open(app_context, backup_path)?;
-    Ok(plan(db, &staged, trust_new_keys)?.preview)
+    Ok(plan(db, &staged, trust_new_keys, None)?.preview)
+}
+
+/// `preview` for a backup from the cloud. `registered` are the keys its PC
+/// registered with the server, the only ones a first merge takes at their
+/// word.
+pub(crate) fn preview_from_cloud(
+    db: &Database,
+    app_context: &AppContext,
+    backup_path: &Path,
+    trust_new_keys: bool,
+    registered: &HashSet<String>,
+) -> Result<MergePreview> {
+    let staged = Staged::open(app_context, backup_path)?;
+    Ok(plan(db, &staged, trust_new_keys, Some(registered))?.preview)
 }
 
 /// Merges the backup at `backup_path`, with the player's choice for each
@@ -260,8 +274,50 @@ pub fn apply(
     choices: &[GameChoice],
     trust_new_keys: bool,
 ) -> Result<MergeSummary> {
+    apply_checked(
+        db,
+        asset_manager,
+        app_context,
+        backup_path,
+        choices,
+        trust_new_keys,
+        None,
+    )
+}
+
+/// `apply` for a backup from the cloud, with the keys its PC registered as
+/// in `preview_from_cloud`.
+pub(crate) fn apply_from_cloud(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    backup_path: &Path,
+    choices: &[GameChoice],
+    trust_new_keys: bool,
+    registered: &HashSet<String>,
+) -> Result<MergeSummary> {
+    apply_checked(
+        db,
+        asset_manager,
+        app_context,
+        backup_path,
+        choices,
+        trust_new_keys,
+        Some(registered),
+    )
+}
+
+fn apply_checked(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    backup_path: &Path,
+    choices: &[GameChoice],
+    trust_new_keys: bool,
+    registered: Option<&HashSet<String>>,
+) -> Result<MergeSummary> {
     let mut staged = Staged::open(app_context, backup_path)?;
-    let plan = plan(db, &staged, trust_new_keys)?;
+    let plan = plan(db, &staged, trust_new_keys, registered)?;
     let links = chosen_links(db, &plan, choices)?;
     let source = staged.manifest.source_device_id.clone();
     let mut summary = MergeSummary {
@@ -280,6 +336,7 @@ pub fn apply(
         safety_backup_path: None,
     };
     if plan.sessions.is_empty() {
+        remember_merged(db, &source, &staged.manifest.created_at);
         return Ok(summary);
     }
     summary.safety_backup_path =
@@ -312,6 +369,7 @@ pub fn apply(
         Ok(copied)
     })?;
     integrity::forget_checks();
+    remember_merged(db, &source, &staged.manifest.created_at);
     copy_artwork(&staged, asset_manager, &copied_assets);
     // Quarter hours are a cache, worked out in small batches after the copy.
     let merged: Vec<String> = plan
@@ -336,7 +394,39 @@ pub fn apply(
 }
 
 /// Refuses backups that cannot be merged, then sorts every session in it.
-fn plan(db: &Database, staged: &Staged, trust_new_keys: bool) -> Result<Plan> {
+/// When the newest backup of each PC that was merged here was made, by PC.
+pub(crate) fn last_merged(db: &Database) -> HashMap<String, String> {
+    settings::get_setting(db, MERGED_BACKUPS_SETTING)
+        .ok()
+        .flatten()
+        .and_then(|stored| serde_json::from_str(&stored).ok())
+        .unwrap_or_default()
+}
+
+/// Notes that the backup of `device_id` made at `created_at` was merged, so
+/// automatic merges wait for a newer one. The merge itself is done, so a
+/// failure here only costs a merge that brings nothing.
+fn remember_merged(db: &Database, device_id: &str, created_at: &str) {
+    let mut merged = last_merged(db);
+    if merged
+        .get(device_id)
+        .is_some_and(|known| known.as_str() >= created_at)
+    {
+        return;
+    }
+    merged.insert(device_id.to_owned(), created_at.to_owned());
+    let stored = serde_json::to_string(&merged).unwrap_or_default();
+    if let Err(error) = settings::set_setting(db, MERGED_BACKUPS_SETTING, &stored) {
+        warn!("could not note the merged backup of {device_id}: {error}");
+    }
+}
+
+fn plan(
+    db: &Database,
+    staged: &Staged,
+    trust_new_keys: bool,
+    registered: Option<&HashSet<String>>,
+) -> Result<Plan> {
     let source = staged.manifest.source_device_id.clone();
     let staged_db = staged.db()?;
     // Trust recorded in a ledger that fails its check cannot be relied on.
@@ -346,7 +436,9 @@ fn plan(db: &Database, staged: &Staged, trust_new_keys: bool) -> Result<Plan> {
         ));
     }
     let (trust, unknown_keys) = staged_db.with_conn(|staged_conn| {
-        db.with_conn(|local| ledger::Trust::new(local, staged_conn, &source, trust_new_keys))
+        db.with_conn(|local| {
+            ledger::Trust::new(local, staged_conn, &source, trust_new_keys, registered)
+        })
     })?;
     // Sessions this PC recorded before it was set up again and took over its
     // old keys may come back, when the backup's PC took them in after
@@ -2091,6 +2183,68 @@ mod tests {
         assert!(preview.unknown_keys);
         desktop.merge(&backup, &[]);
         assert_eq!(desktop.status(&forged.id), integrity::STATUS_SUSPICIOUS);
+    }
+
+    #[test]
+    fn a_cloud_merge_takes_only_the_keys_the_pc_registered_at_their_word() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        let session = laptop.play(&game, 20);
+        let backup = laptop.back_up();
+        laptop.act();
+        let registered = ledger::own_keys().unwrap();
+        let (manifest, _) = super::super::load_and_validate_manifest(&backup).unwrap();
+
+        desktop.act();
+        // The laptop never registered a key, so its ledger is not taken at its word.
+        let nothing = HashSet::new();
+        let doubted =
+            preview_from_cloud(&desktop.db, &desktop.context, &backup, false, &nothing).unwrap();
+        assert!(doubted.first_merge && doubted.unknown_keys);
+        assert_eq!(doubted.failing, 1);
+        let vouched =
+            preview_from_cloud(&desktop.db, &desktop.context, &backup, true, &nothing).unwrap();
+        assert!(!vouched.unknown_keys);
+        assert_eq!(vouched.failing, 0);
+
+        let preview =
+            preview_from_cloud(&desktop.db, &desktop.context, &backup, false, &registered).unwrap();
+        assert!(preview.first_merge && !preview.unknown_keys);
+        assert_eq!((preview.new_sessions, preview.failing), (1, 0));
+        apply_from_cloud(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            &[],
+            false,
+            &registered,
+        )
+        .unwrap();
+        assert_eq!(desktop.status(&session), STATUS_LOCAL);
+        assert!(desktop.adopted(&session));
+        assert_eq!(
+            last_merged(&desktop.db).get(&manifest.source_device_id),
+            Some(&manifest.created_at)
+        );
+    }
+
+    #[test]
+    fn a_merge_that_brings_nothing_new_still_notes_its_backup() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        laptop.play(&game, 20);
+        desktop.merge(&laptop.back_up(), &[]);
+        let again = laptop.back_up();
+        let (manifest, _) = super::super::load_and_validate_manifest(&again).unwrap();
+        let summary = desktop.merge(&again, &[]);
+        assert_eq!(summary.sessions_added, 0);
+        assert_eq!(
+            last_merged(&desktop.db).get(&manifest.source_device_id),
+            Some(&manifest.created_at)
+        );
     }
 
     #[test]

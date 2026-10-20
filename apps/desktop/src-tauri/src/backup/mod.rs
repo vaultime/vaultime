@@ -4,6 +4,7 @@
 //! Local backup export, inspection and restore.
 
 pub mod auto;
+pub mod cloud_merge;
 pub(crate) mod crypto;
 pub mod merge;
 pub mod remote;
@@ -459,7 +460,13 @@ fn take_in_restored(
     let this = integrity::ledger::this_device()?;
     let (trust, _) = staged.with_conn(|staged_conn| {
         db.with_conn(|local| {
-            integrity::ledger::Trust::new(local, staged_conn, &manifest.source_device_id, false)
+            integrity::ledger::Trust::new(
+                local,
+                staged_conn,
+                &manifest.source_device_id,
+                false,
+                None,
+            )
         })
     })?;
     let seen = db.with_conn(integrity::ledger::seen_pcs)?;

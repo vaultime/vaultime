@@ -497,6 +497,10 @@ pub const BACKGROUND_SOURCE_MAX_BYTES: u64 = 64 * 1024 * 1024;
 /// keeps it, so the next start draws the icons and the title bar before the
 /// page loads. Belongs to this PC, a restore keeps it.
 pub const WINDOW_LOOK_SETTING: &str = "window_look";
+/// Setting with when the newest merged backup of each PC was made, as JSON,
+/// so automatic merges from the cloud wait for a newer one. Goes with the
+/// history in backups and restores.
+pub const MERGED_BACKUPS_SETTING: &str = "merged_backups";
 /// Size the icon of the tray, the taskbar and the title bar is drawn at, the
 /// size of `icons/signed-in.png`.
 pub const WINDOW_ICON_PX: u32 = 256;

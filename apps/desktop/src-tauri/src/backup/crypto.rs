@@ -41,6 +41,7 @@ const LAST_CHUNK: u8 = 1;
 /// Derives the key that names artwork from the backup key.
 const ARTWORK_ID_LABEL: &[u8] = b"vaultime artwork id v1";
 const KEY_CHECK_LABEL: &[u8] = b"vaultime key check v1";
+const SEALED_TEXT_AAD: &[u8] = b"vaultime sealed text v1";
 
 /// Encrypts `input_path` into `output_path` with the current scheme.
 pub fn encrypt_file(
@@ -175,6 +176,43 @@ pub fn key_check(key: &[u8; BACKUP_KEY_BYTES]) -> Result<String> {
     ))
 }
 
+/// A short text sealed with the backup key, like a PC's name in the
+/// metadata the server stores readable: a random nonce and the ciphertext,
+/// as hex.
+pub fn seal_text(text: &str, key: &[u8; BACKUP_KEY_BYTES]) -> Result<String> {
+    let cipher = XChaCha20Poly1305::new(key.into());
+    let mut nonce = [0_u8; V2_NONCE_BYTES];
+    getrandom::fill(&mut nonce)
+        .map_err(|error| VaultimeError::Backup(format!("no randomness for encryption: {error}")))?;
+    let sealed = cipher
+        .encrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: text.as_bytes(),
+                aad: SEALED_TEXT_AAD,
+            },
+        )
+        .map_err(|error| VaultimeError::Backup(format!("failed to encrypt: {error}")))?;
+    Ok(crate::hex::encode(&[&nonce[..], &sealed].concat()))
+}
+
+/// The text `seal_text` sealed. `None` with another key or when it was changed.
+pub fn open_text(sealed: &str, key: &[u8; BACKUP_KEY_BYTES]) -> Option<String> {
+    let bytes = crate::hex::decode(sealed)?;
+    let (nonce, ciphertext) = bytes.split_at_checked(V2_NONCE_BYTES)?;
+    let nonce: [u8; V2_NONCE_BYTES] = nonce.try_into().ok()?;
+    let text = XChaCha20Poly1305::new(key.into())
+        .decrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: ciphertext,
+                aad: SEALED_TEXT_AAD,
+            },
+        )
+        .ok()?;
+    String::from_utf8(text).ok()
+}
+
 fn new_mac(key: &[u8]) -> Result<Hmac<Sha256>> {
     <Hmac<Sha256> as hmac::KeyInit>::new_from_slice(key)
         .map_err(|error| VaultimeError::Backup(format!("invalid artwork key: {error}")))
@@ -307,6 +345,26 @@ mod tests {
         encrypt_file(&plain, &sealed, &KEY)?;
         decrypt_file(&sealed, &opened, &KEY)?;
         Ok(fs::read(opened).unwrap())
+    }
+
+    #[test]
+    fn sealed_texts_open_with_their_key_only() {
+        let key = [7_u8; BACKUP_KEY_BYTES];
+        let sealed = seal_text("Laptop", &key).unwrap();
+        assert_ne!(
+            sealed,
+            seal_text("Laptop", &key).unwrap(),
+            "every seal has its own nonce"
+        );
+        assert!(!sealed.contains("Laptop"));
+        assert_eq!(open_text(&sealed, &key).as_deref(), Some("Laptop"));
+        assert_eq!(open_text(&sealed, &[8_u8; BACKUP_KEY_BYTES]), None);
+        let mut changed = sealed.clone();
+        let last = changed.pop().unwrap();
+        changed.push(if last == '0' { '1' } else { '0' });
+        assert_eq!(open_text(&changed, &key), None);
+        assert_eq!(open_text("not hex", &key), None);
+        assert_eq!(open_text("00", &key), None);
     }
 
     #[test]

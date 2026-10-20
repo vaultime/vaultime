@@ -11,6 +11,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
+use log::warn;
 use reqwest::StatusCode;
 use reqwest::blocking::{Body, Client, Response};
 use reqwest::header::CONTENT_TYPE;
@@ -31,10 +32,14 @@ use crate::constants::{
     MAX_ARTWORK_IDS_PER_REQUEST,
 };
 use crate::db::connection::Database;
+use crate::db::repo::devices;
 use crate::error::{Result, VaultimeError};
+use crate::integrity::ledger;
 use crate::secure_storage;
 
-const CLOUD_STAGING_DIR: &str = ".cloud-staging";
+/// Where cloud transfers stage their files, and cloud backups wait between
+/// their merge preview and their merge.
+pub(crate) const CLOUD_STAGING_DIR: &str = ".cloud-staging";
 const ARCHIVE_FORMAT: &str = "zip";
 /// Maps every artwork file of a backup to the blob that holds it.
 const ARTWORK_INDEX_FILE: &str = "artwork.json";
@@ -177,7 +182,7 @@ pub fn upload_remote_backup(
 }
 
 #[expect(clippy::too_many_arguments)]
-fn upload_with_key(
+pub(crate) fn upload_with_key(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
@@ -223,10 +228,17 @@ fn upload_with_key(
             artwork.iter().map(|file| file.bytes).sum(),
         );
         let blob_ids = unique_blob_ids(&artwork);
+        register_ledger_keys(&api, &payload_summary.source_device_id);
+        let pc_name = devices::get_device(db, &payload_summary.source_device_id)
+            .ok()
+            .and_then(|device| device.name)
+            .map(|name| crypto::seal_text(&name, backup_key))
+            .transpose()?;
         let request = UploadRequest {
             client_device_id,
             label,
             key_check: &key_check,
+            pc_name: pc_name.as_deref(),
             payload_summary: &payload_summary,
             blob_ids: &blob_ids,
             archive_path: &encrypted_path,
@@ -291,45 +303,16 @@ fn restore_with_key(
     backup_id: &str,
     take_over: bool,
 ) -> Result<RemoteBackupRestoreResult> {
-    // The id comes from the server and ends up in request paths.
-    let backup_id = uuid::Uuid::parse_str(backup_id)
-        .map_err(|_| VaultimeError::Cloud("the server listed an invalid backup id".into()))?
-        .to_string();
     let staging_dir = create_staging_dir(&app_context.app_dir, "restore")?;
 
     let result = (|| {
-        let api = Api::new(api_base_url, access_token)?;
-        let backup = send_json::<RemoteBackupRecord>(
-            api.client
-                .get(api.url(&format!("/v1/backups/{backup_id}")))
-                .bearer_auth(api.access_token),
+        let (backup, extracted_dir) = fetch_backup(
+            api_base_url,
+            access_token,
+            backup_key,
+            backup_id,
+            &staging_dir,
         )?;
-
-        if backup.status != "complete" {
-            return Err(VaultimeError::Cloud(
-                "this cloud backup is not complete yet".into(),
-            ));
-        }
-
-        let archive_path = staging_dir.join("backup.enc");
-        api.download(
-            &format!("/v1/backups/{backup_id}/download?attachment=false"),
-            &archive_path,
-        )?;
-
-        let (_, actual_checksum) = hash_file(&archive_path)?;
-        if actual_checksum != backup.checksum {
-            return Err(VaultimeError::Backup(
-                "the downloaded cloud backup is damaged, try again".into(),
-            ));
-        }
-
-        let decrypted_archive_path = staging_dir.join("backup.zip");
-        crypto::decrypt_file(&archive_path, &decrypted_archive_path, backup_key)?;
-
-        let extracted_dir = staging_dir.join("extracted");
-        extract_archive(&decrypted_archive_path, &extracted_dir)?;
-        restore_artwork(&api, &extracted_dir, backup_key, &staging_dir)?;
 
         // The manifest check in the import confirms every artwork file too.
         let local_summary =
@@ -347,7 +330,139 @@ fn restore_with_key(
 
 /// Field of a backup's metadata that holds the key check.
 const KEY_CHECK_FIELD: &str = "key_check";
+/// Field of a backup's metadata that holds its PC's name, sealed with the
+/// backup key, so the server never reads it.
+pub(crate) const PC_NAME_FIELD: &str = "pc_name";
+/// Field of a backup's metadata that names its PC.
+pub(crate) const SOURCE_PC_FIELD: &str = "source_device_id";
 const WRONG_PASSPHRASE: &str = "The backup passphrase on this PC does not open your cloud backups. Change it on the Cloud page, under This PC.";
+
+/// Downloads the complete cloud backup `backup_id` into `staging_dir`,
+/// checks and decrypts it and puts its artwork in place. Returns its record
+/// and the folder of the backup, ready to restore or merge.
+pub(crate) fn fetch_backup(
+    api_base_url: &str,
+    access_token: &str,
+    backup_key: &[u8; BACKUP_KEY_BYTES],
+    backup_id: &str,
+    staging_dir: &Path,
+) -> Result<(RemoteBackupRecord, PathBuf)> {
+    // The id comes from the server and ends up in request paths.
+    let backup_id = uuid::Uuid::parse_str(backup_id)
+        .map_err(|_| VaultimeError::Cloud("the server listed an invalid backup id".into()))?
+        .to_string();
+    let api = Api::new(api_base_url, access_token)?;
+    let backup = send_json::<RemoteBackupRecord>(
+        api.client
+            .get(api.url(&format!("/v1/backups/{backup_id}")))
+            .bearer_auth(api.access_token),
+    )?;
+
+    if backup.status != "complete" {
+        return Err(VaultimeError::Cloud(
+            "this cloud backup is not complete yet".into(),
+        ));
+    }
+
+    let archive_path = staging_dir.join("backup.enc");
+    api.download(
+        &format!("/v1/backups/{backup_id}/download?attachment=false"),
+        &archive_path,
+    )?;
+
+    let (_, actual_checksum) = hash_file(&archive_path)?;
+    if actual_checksum != backup.checksum {
+        return Err(VaultimeError::Backup(
+            "the downloaded cloud backup is damaged, try again".into(),
+        ));
+    }
+
+    let decrypted_archive_path = staging_dir.join("backup.zip");
+    crypto::decrypt_file(&archive_path, &decrypted_archive_path, backup_key)?;
+
+    let extracted_dir = staging_dir.join("extracted");
+    extract_archive(&decrypted_archive_path, &extracted_dir)?;
+    restore_artwork(&api, &extracted_dir, backup_key, staging_dir)?;
+    Ok((backup, extracted_dir))
+}
+
+/// Every backup of the account, the newest upload first.
+pub(crate) fn list_backups(
+    api_base_url: &str,
+    access_token: &str,
+) -> Result<Vec<RemoteBackupRecord>> {
+    let api = Api::new(api_base_url, access_token)?;
+    send_json::<Vec<RemoteBackupRecord>>(
+        api.client
+            .get(api.url("/v1/backups"))
+            .bearer_auth(api.access_token),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct LedgerKeysRecord {
+    ledger_device_id: String,
+    public_keys: Vec<String>,
+}
+
+/// The ledger keys each PC of the account registered, by PC. A server from
+/// before ledger keys knows none.
+pub(crate) fn registered_keys(
+    api_base_url: &str,
+    access_token: &str,
+) -> Result<HashMap<String, HashSet<String>>> {
+    let api = Api::new(api_base_url, access_token)?;
+    let response = api
+        .client
+        .get(api.url("/v1/ledger-keys"))
+        .bearer_auth(api.access_token)
+        .send()
+        .map_err(map_cloud_http)?;
+    if response.status() == StatusCode::NOT_FOUND {
+        return Ok(HashMap::new());
+    }
+    let records = ensure_success(response)?
+        .json::<Vec<LedgerKeysRecord>>()
+        .map_err(|error| VaultimeError::Cloud(format!("failed to parse API response: {error}")))?;
+    Ok(records
+        .into_iter()
+        .map(|record| {
+            (
+                record.ledger_device_id,
+                record.public_keys.into_iter().collect(),
+            )
+        })
+        .collect())
+}
+
+/// Registers the keys this PC's ledger signs with as the keys of
+/// `device_id`, so another PC merging its backups counts them. The server
+/// keeps every key it was given. A server from before ledger keys, or one
+/// that refuses them, never stops an upload.
+fn register_ledger_keys(api: &Api, device_id: &str) {
+    let mut keys: Vec<String> = match ledger::own_keys() {
+        Ok(keys) => keys.into_iter().collect(),
+        Err(error) => {
+            warn!("this PC's ledger keys are not registered: {error}");
+            return;
+        }
+    };
+    keys.sort();
+    let sent = api
+        .client
+        .post(api.url("/v1/ledger-keys"))
+        .bearer_auth(api.access_token)
+        .json(&serde_json::json!({ "ledger_device_id": device_id, "public_keys": keys }))
+        .send();
+    match sent {
+        Ok(response) if response.status().is_success() => {}
+        Ok(response) => warn!(
+            "the cloud server did not take this PC's ledger keys: {}",
+            response.status()
+        ),
+        Err(error) => warn!("this PC's ledger keys are not registered: {error}"),
+    }
+}
 
 /// The key check of the newest complete backup. `None` when it has none,
 /// like backups from before key checks.
@@ -573,6 +688,8 @@ struct UploadRequest<'a> {
     client_device_id: Option<&'a str>,
     label: Option<&'a str>,
     key_check: &'a str,
+    /// The PC's name, sealed with the backup key.
+    pc_name: Option<&'a str>,
     payload_summary: &'a RemoteBackupPayloadSummary,
     blob_ids: &'a [String],
     archive_path: &'a Path,
@@ -589,6 +706,9 @@ fn create_and_upload_backup(
     })?;
     if let Some(metadata) = metadata_json.as_object_mut() {
         metadata.insert(KEY_CHECK_FIELD.into(), upload.key_check.into());
+        if let Some(pc_name) = upload.pc_name {
+            metadata.insert(PC_NAME_FIELD.into(), pc_name.into());
+        }
     }
     let request = CreateBackupRequest {
         label: upload

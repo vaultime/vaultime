@@ -140,6 +140,19 @@ if ! VAULTIME_E2E_API="$url" VAULTIME_E2E_TOKEN="$token" \
   docker logs "$api" 2>&1 | tail -"$log_tail_lines"
   exit 1
 fi
+echo "== two PCs merge through the cloud"
+if ! VAULTIME_E2E_API="$url" VAULTIME_E2E_TOKEN="$token" \
+  cargo test --lib two_pcs_merge_through_the_cloud -- --ignored --nocapture; then
+  echo "== API log"
+  docker logs "$api" 2>&1 | tail -"$log_tail_lines"
+  exit 1
+fi
+register_keys() { curl -s -o /dev/null -w '%{http_code}' -X POST "$url/v1/ledger-keys" \
+  -H "authorization: Bearer $token" -H "content-type: application/json" -d "$1"; }
+[ "$(register_keys '{"ledger_device_id":"pc","public_keys":["not-a-key"]}')" = 400 ] \
+  || { echo "a malformed ledger key was taken"; exit 1; }
+[ "$(register_keys '{"ledger_device_id":"","public_keys":[]}')" = 400 ] \
+  || { echo "ledger keys without a PC were taken"; exit 1; }
 echo "== beta application form"
 apply() { curl -s -o /dev/null -w '%{redirect_url}' -X POST "$url/v1/beta/apply" "$@"; }
 [[ $(apply -d email=tester@example.com -d platform=linux -d consent=yes -d note=e2e) == */applied.html ]] \

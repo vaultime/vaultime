@@ -10,6 +10,8 @@ use tauri::{AppHandle, Manager};
 use super::backups::record_snapshot;
 use crate::AppContext;
 use crate::assets::AssetManager;
+use crate::backup::cloud_merge::{AutoMerge, CloudPc};
+use crate::backup::merge::{GameChoice, MergePreview, MergeSummary};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self};
 use crate::constants::CLOUD_API_BASE_URL;
@@ -69,6 +71,104 @@ pub async fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, V
 #[tauri::command(async)]
 pub fn set_cloud_signed_in(app: AppHandle, signed_in: bool) {
     crate::tray::show_cloud_state(&app, signed_in);
+}
+
+/// The newest cloud backup of every other PC of the account.
+#[tauri::command]
+pub async fn list_cloud_pcs(
+    app: AppHandle,
+    api_base_url: String,
+    access_token: String,
+    account_id: String,
+) -> Result<Vec<CloudPc>, VaultimeError> {
+    on_blocking_pool(move || {
+        backup::cloud_merge::list_cloud_pcs(
+            &app.state::<Arc<Database>>(),
+            cloud_api_base_url(&api_base_url),
+            &access_token,
+            &account_id,
+        )
+    })
+    .await
+}
+
+/// What merging another PC's cloud backup would bring in.
+#[tauri::command]
+pub async fn preview_cloud_merge(
+    app: AppHandle,
+    api_base_url: String,
+    access_token: String,
+    account_id: String,
+    backup_id: String,
+    trust_new_keys: bool,
+) -> Result<MergePreview, VaultimeError> {
+    on_blocking_pool(move || {
+        backup::cloud_merge::preview_cloud_merge(
+            &app.state::<Arc<Database>>(),
+            &app.state::<AppContext>(),
+            cloud_api_base_url(&api_base_url),
+            &access_token,
+            &account_id,
+            &backup_id,
+            trust_new_keys,
+        )
+    })
+    .await
+}
+
+/// Merges another PC's cloud backup with the player's choice for each game.
+#[tauri::command]
+pub async fn merge_cloud_backup(
+    app: AppHandle,
+    api_base_url: String,
+    access_token: String,
+    account_id: String,
+    backup_id: String,
+    choices: Vec<GameChoice>,
+    trust_new_keys: bool,
+) -> Result<MergeSummary, VaultimeError> {
+    on_blocking_pool(move || {
+        backup::cloud_merge::merge_cloud_backup(
+            &app.state::<Arc<Database>>(),
+            &app.state::<AssetManager>(),
+            &app.state::<AppContext>(),
+            cloud_api_base_url(&api_base_url),
+            &access_token,
+            &account_id,
+            &backup_id,
+            &choices,
+            trust_new_keys,
+        )
+    })
+    .await
+}
+
+/// Lets go of a cloud backup downloaded for a merge that did not happen.
+#[tauri::command(async)]
+pub fn discard_cloud_merge(app: AppHandle, backup_id: String) {
+    backup::cloud_merge::discard_cloud_merge(&app.state::<AppContext>(), &backup_id);
+}
+
+/// Merges the newer backups of the PCs merged here before, as far as they
+/// need no choice of the player.
+#[tauri::command]
+pub async fn merge_due_cloud_backups(
+    app: AppHandle,
+    api_base_url: String,
+    access_token: String,
+    account_id: String,
+) -> Result<Vec<AutoMerge>, VaultimeError> {
+    on_blocking_pool(move || {
+        backup::cloud_merge::merge_due_cloud_backups(
+            &app.state::<Arc<Database>>(),
+            &app.state::<AssetManager>(),
+            &app.state::<AppContext>(),
+            cloud_api_base_url(&api_base_url),
+            &access_token,
+            &account_id,
+        )
+    })
+    .await
 }
 
 /// Release builds talk only to the Vaultime server, whatever the page asks.

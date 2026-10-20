@@ -1346,11 +1346,15 @@ impl Trust {
     /// `local` trusts and the keys the backup's ledgers in `staged` claim.
     /// With `trust_new_keys`, the player vouches that new keys claiming that
     /// PC are its own. Also returns whether the backup holds such new keys.
+    /// With `registered`, the keys that PC registered with the cloud server,
+    /// a first merge takes only those at their word and treats the others as
+    /// new keys.
     pub(crate) fn new(
         local: &Connection,
         staged: &Connection,
         source: &str,
         trust_new_keys: bool,
+        registered: Option<&HashSet<String>>,
     ) -> Result<(Self, bool)> {
         let this = this_device()?;
         let own = own_keys()?;
@@ -1362,7 +1366,13 @@ impl Trust {
         let (source_keys, unknown) = if source == this {
             (own.clone(), false)
         } else if first_merge {
-            (claimed, false)
+            match registered {
+                Some(registered) if !trust_new_keys => {
+                    let unknown = !claimed.is_subset(registered);
+                    (claimed.intersection(registered).cloned().collect(), unknown)
+                }
+                _ => (claimed, false),
+            }
         } else {
             // Once the player vouches for them, new keys are not unknown.
             let unknown = !trust_new_keys && !claimed.is_subset(&trusted);

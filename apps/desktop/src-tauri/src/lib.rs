@@ -167,6 +167,11 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::backups::import_local_backup,
         commands::cloud::upload_remote_backup,
         commands::cloud::restore_remote_backup,
+        commands::cloud::list_cloud_pcs,
+        commands::cloud::preview_cloud_merge,
+        commands::cloud::merge_cloud_backup,
+        commands::cloud::discard_cloud_merge,
+        commands::cloud::merge_due_cloud_backups,
         commands::app::list_settings,
         commands::app::set_setting,
         commands::app::get_tracking_diagnostics,
@@ -229,6 +234,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         ))
     });
 
+    backup::cloud_merge::sweep(&app_dir);
     let db_path = app_dir.join(DATABASE_FILE);
     let first_start = !db_path.exists();
     let device_id = device_id(&app_dir, !first_start);
