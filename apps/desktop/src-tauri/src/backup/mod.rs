@@ -54,6 +54,16 @@ const DEVICE_SETTINGS: &[&str] = &[
     WINDOW_SIZE_SETTING,
     WINDOW_LOOK_SETTING,
 ];
+/// The settings of the look among them. A PC that never chose a look takes
+/// the backup's, so a new PC looks like the one it came from. The window
+/// colors follow from these once the page loads.
+const LOOK_SETTINGS: &[&str] = &[
+    APPEARANCE_MODE_SETTING,
+    APPEARANCE_GROUND_SETTING,
+    APPEARANCE_ACCENT_SETTING,
+    BACKGROUND_DIM_SETTING,
+    BACKGROUND_BLUR_SETTING,
+];
 /// Where a restore keeps the current artwork until the new one is in place.
 const PREVIOUS_CACHE_DIR: &str = "previous-asset-cache";
 /// Why sessions that a backup caught while they ran are closed after a restore.
@@ -736,11 +746,26 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
 /// older versions restore too.
 fn restore_statements(conn: &Connection) -> Result<String> {
     let mut statements = String::from("PRAGMA foreign_keys=OFF;\nBEGIN IMMEDIATE;\n");
-    let kept_settings = DEVICE_SETTINGS
-        .iter()
-        .map(|key| format!("'{}'", sqlite_string_literal(key)))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let quoted = |keys: &mut dyn Iterator<Item = &&str>| {
+        keys.map(|key| format!("'{}'", sqlite_string_literal(key)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let chose_look: bool = conn
+        .query_row(
+            &format!(
+                "SELECT EXISTS(SELECT 1 FROM main.settings WHERE key IN ({}))",
+                quoted(&mut LOOK_SETTINGS.iter())
+            ),
+            [],
+            |row| row.get(0),
+        )
+        .map_err(crate::db::repo::map_db)?;
+    let kept_settings = quoted(
+        &mut DEVICE_SETTINGS
+            .iter()
+            .filter(|key| chose_look || !LOOK_SETTINGS.contains(key)),
+    );
     // Slices and stretches belong to the history they were built from. The
     // next start builds them for the restored one, since the version setting
     // goes too.
@@ -1632,6 +1657,41 @@ mod tests {
         let setting = |key| crate::db::repo::settings::get_setting(&fixture.db, key).unwrap();
         assert_eq!(setting(APPEARANCE_ACCENT_SETTING).as_deref(), Some("rose"));
         assert_eq!(setting(APPEARANCE_MODE_SETTING).as_deref(), Some("light"));
+        fixture.finish();
+    }
+
+    #[test]
+    fn a_pc_that_never_chose_a_look_takes_the_backups() {
+        let fixture = Fixture::new();
+        for (key, value) in [
+            (APPEARANCE_ACCENT_SETTING, "teal"),
+            (APPEARANCE_GROUND_SETTING, "moss"),
+            (BACKGROUND_DIM_SETTING, "0.4"),
+            (WINDOW_SIZE_SETTING, "large"),
+        ] {
+            crate::db::repo::settings::set_setting(&fixture.db, key, value).unwrap();
+        }
+        let fixture = fixture.back_up();
+        // As on a new PC: no look of its own, a window size for its screen.
+        fixture
+            .db
+            .with_conn(|conn| {
+                conn.execute(
+                    "DELETE FROM settings WHERE key LIKE 'appearance_%' OR key LIKE 'background_%'",
+                    [],
+                )
+                .map_err(crate::db::repo::map_db)
+            })
+            .unwrap();
+        crate::db::repo::settings::set_setting(&fixture.db, WINDOW_SIZE_SETTING, "compact")
+            .unwrap();
+
+        fixture.restore().unwrap();
+        let setting = |key| crate::db::repo::settings::get_setting(&fixture.db, key).unwrap();
+        assert_eq!(setting(APPEARANCE_ACCENT_SETTING).as_deref(), Some("teal"));
+        assert_eq!(setting(APPEARANCE_GROUND_SETTING).as_deref(), Some("moss"));
+        assert_eq!(setting(BACKGROUND_DIM_SETTING).as_deref(), Some("0.4"));
+        assert_eq!(setting(WINDOW_SIZE_SETTING).as_deref(), Some("compact"));
         fixture.finish();
     }
 

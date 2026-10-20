@@ -43,12 +43,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setValues((current) => ({ ...current, [key]: value }));
   }, []);
 
+  const [reloads, setReloads] = useState(0);
   const reload = useCallback(async () => {
     setValues(byKey(await api.listSettings()));
     setRead(true);
+    setReloads((count) => count + 1);
   }, []);
 
-  const state = useMemo(() => (values ? { values, read, save, reload } : null), [values, read, save, reload]);
+  const state = useMemo(
+    () => (values ? { values, read, save, reload, reloads } : null),
+    [values, read, save, reload, reloads],
+  );
   if (!state) return null;
   return <SettingsContext.Provider value={state}>{children}</SettingsContext.Provider>;
 }

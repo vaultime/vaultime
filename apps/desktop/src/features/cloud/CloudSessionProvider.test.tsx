@@ -33,7 +33,7 @@ const SESSION = JSON.stringify({
 function start(values: Record<string, string> = {}, read = true) {
   const save = vi.fn(async () => {});
   render(
-    <SettingsContext.Provider value={{ values, read, save, reload: vi.fn(async () => {}) }}>
+    <SettingsContext.Provider value={{ values, read, save, reload: vi.fn(async () => {}), reloads: 0 }}>
       <CloudSessionProvider>
         <span />
       </CloudSessionProvider>

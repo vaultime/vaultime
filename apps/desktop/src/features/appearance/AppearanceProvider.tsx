@@ -58,8 +58,14 @@ function applyLook(mode: ThemeMode, tokens: Record<string, string>) {
 
 /** Dark or light, a ground tone, an accent and a background picture, for the whole app. */
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const { values, save } = useSettings();
+  const { values, save, reloads } = useSettings();
   const [appearance, setAppearance] = useState<Appearance>(() => appearanceFromSettings(values));
+  // A restore onto a PC that never chose a look brings the look of the backup.
+  const [seenReloads, setSeenReloads] = useState(reloads);
+  if (reloads !== seenReloads) {
+    setSeenReloads(reloads);
+    setAppearance(appearanceFromSettings(values));
+  }
   const [systemDark, setSystemDark] = useState(systemIsDark);
   const [background, setBackground] = useState<string | null>(null);
   // Drags wait a moment before they are saved, so a slider saves once.

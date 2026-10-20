@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Backups
 
+- **A new PC looks like your old one.** Restoring a backup on a PC where the look was never changed brings the backup's mode, ground tone and accent along, with the dim and blur for a background picture. The picture itself stays out of backups, and a PC that has a look of its own keeps it.
 - **Cloud backup only when you want it.** Cloud backup has its own switch under Settings, Cloud backup. Turned off, the Cloud page leaves the menu and the command palette, and Vaultime neither signs in nor uploads backups, nor reads a saved sign-in from the keyring. New installs start with it off, as accounts are invite-only. A PC that is signed in keeps it on until you sign out, and the switch stays with each PC when you restore a backup.
 
 ### Interface

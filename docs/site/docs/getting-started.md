@@ -105,4 +105,4 @@ On Linux the tray needs `libayatana-appindicator3`, and GNOME shows tray icons o
 
 Settings, Appearance picks dark, light or the system's mode, one of six ground tones, an accent color and a background picture with its own dim and blur. Settings, Window picks a fixed window size, from Compact at 1024 by 640 to Extra large at 1920 by 1200, or Free for a window you resize yourself.
 
-The look, the background picture and the window size belong to the PC you set them on. A restore keeps this PC's own, and the background picture never goes into a backup.
+The look, the background picture and the window size belong to the PC you set them on. A restore keeps this PC's own, and the background picture never goes into a backup. Only a PC that never had its look changed takes the look of the backup it restores.

@@ -12,6 +12,8 @@ export interface SettingsState {
   save: (key: string, value: string) => Promise<void>;
   /** Reads the settings again, after a restore replaced those that are not kept per PC. */
   reload: () => Promise<void>;
+  /** How many times `reload` read them, so state taken from them once can follow a restore. */
+  reloads: number;
 }
 
 export const SettingsContext = createContext<SettingsState | null>(null);
