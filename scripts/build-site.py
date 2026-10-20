@@ -13,9 +13,15 @@ with the site, so visitors make no requests to font services.
 The documentation lives in docs/site/docs, one Markdown file per page. Its
 sidebar, page order and groups come from DOCS_NAV below, so a new page is a
 new file plus one line there.
+
+Every page gets its own search title, description, canonical address and
+Open Graph tags with assets/social-preview.png, which
+scripts/social-preview.sh draws. The landing page also describes the app
+for search engines, and sitemap.xml and robots.txt list what they may show.
 """
 
 import html
+import json
 import re
 import shutil
 from pathlib import Path
@@ -27,6 +33,9 @@ SCREENSHOTS = ROOT / "assets/screenshots"
 OUT = ROOT / "dist-site"
 FONTS = ROOT / "apps/desktop/node_modules/@fontsource-variable"
 REPO_URL = "https://github.com/vaultime/vaultime"
+SITE_URL = "https://vaultime.codfishcloud.de"
+SOCIAL_PREVIEW = ROOT / "assets/social-preview.png"
+TAURI_CONFIG = ROOT / "apps/desktop/src-tauri/tauri.conf.json"
 
 FONT_FILES = {
     "mona-sans-normal.woff2": FONTS / "mona-sans/files/mona-sans-latin-standard-normal.woff2",
@@ -39,16 +48,21 @@ FONT_FILES = {
     "geist-mono-LICENSE.txt": FONTS / "geist-mono/LICENSE",
 }
 
-# Output page, title and Markdown source of every text page.
+# Output page, title, Markdown source and search description of every text
+# page. A page without a description stays out of search results.
 PAGES = [
-    ("privacy.html", "Privacy policy", ROOT / "docs/legal/privacy-policy.md"),
-    ("terms.html", "Terms of service", ROOT / "docs/legal/terms-of-service.md"),
-    ("changelog.html", "Changelog", ROOT / "CHANGELOG.md"),
-    ("applied.html", "Thanks for applying", SITE / "pages/applied.md"),
-    ("apply-failed.html", "That did not go through", SITE / "pages/apply-failed.md"),
-    ("download-soon.html", "Download not available", SITE / "pages/download-soon.md"),
-    ("404.html", "Page not found", SITE / "pages/404.md"),
+    ("privacy.html", "Privacy policy", ROOT / "docs/legal/privacy-policy.md",
+     "What Vaultime keeps on your PC, what the optional cloud backup service stores and how to reach the person responsible for it."),
+    ("terms.html", "Terms of service", ROOT / "docs/legal/terms-of-service.md",
+     "The terms for the Vaultime website and the optional invite-only cloud backup service."),
+    ("changelog.html", "Changelog", ROOT / "CHANGELOG.md",
+     "Every Vaultime release and what changed in it, newest first."),
+    ("applied.html", "Thanks for applying", SITE / "pages/applied.md", None),
+    ("apply-failed.html", "That did not go through", SITE / "pages/apply-failed.md", None),
+    ("download-soon.html", "Download not available", SITE / "pages/download-soon.md", None),
+    ("404.html", "Page not found", SITE / "pages/404.md", None),
 ]
+UNLISTED = {name for name, _, _, description in PAGES if description is None}
 
 # The documentation in sidebar order: groups of source file and sidebar label.
 DOCS_NAV = [
@@ -87,7 +101,7 @@ def doc_url(source):
 
 
 # Links between the Markdown files point at their pages instead.
-URL_FOR_SOURCE = {source.name: f"/{page}" for page, _, source in PAGES}
+URL_FOR_SOURCE = {source.name: f"/{page}" for page, _, source, _ in PAGES}
 URL_FOR_SOURCE.update({source: doc_url(source) for _, entries in DOCS_NAV for source, _ in entries})
 
 
@@ -295,13 +309,33 @@ def markdown(text, anchors=False, rendered=None):
     return out
 
 
-def page(template, title, main, description=None, current=None, body_class=None):
+def set_content(head, attribute, value):
+    """Sets the content of the one meta tag with `attribute` in `head`."""
+    head, count = re.subn(
+        rf'(<meta {re.escape(attribute)} content=")[^"]*', lambda match: match.group(1) + html.escape(value), head
+    )
+    if count != 1:
+        raise ValueError(f"the page template has {count} meta tags with {attribute}")
+    return head
+
+
+def page(template, title, main, path, description=None, current=None, body_class=None):
     head_end = template.index("</head>")
     header = template[template.index("<header>"):template.index("</header>") + len("</header>")]
     footer = template[template.index("<footer>"):template.index("</footer>") + len("</footer>")]
-    head = re.sub(r"<title>.*?</title>", f"<title>{html.escape(title)}, Vaultime</title>", template[:head_end])
+    full_title = f"{title}, Vaultime"
+    head = re.sub(r"<title>.*?</title>", f"<title>{html.escape(full_title)}</title>", template[:head_end])
+    head = set_content(head, 'property="og:title"', full_title)
     if description:
-        head = re.sub(r'(<meta name="description" content=")[^"]*', lambda match: match.group(1) + html.escape(description), head)
+        head = set_content(head, 'name="description"', description)
+        head = set_content(head, 'property="og:description"', description)
+    url = SITE_URL + path
+    head = set_content(head, 'property="og:url"', url)
+    if path.removeprefix("/") in UNLISTED:
+        head = re.sub(r'\n\s*<link rel="canonical"[^>]*>', "", head)
+        head += '  <meta name="robots" content="noindex" />\n'
+    else:
+        head = re.sub(r'(<link rel="canonical" href=")[^"]*', lambda match: match.group(1) + html.escape(url), head)
     # Anchors of the landing page live on the landing page.
     header = header.replace('href="#', 'href="/#')
     if current:
@@ -310,9 +344,55 @@ def page(template, title, main, description=None, current=None, body_class=None)
     return f"{head}</head>\n{body}\n  {header}\n\n{main}\n\n  {footer}\n</body>\n</html>\n"
 
 
-def text_page(template, title, body):
+def text_page(template, title, body, path, description):
     main = f'  <main class="page">\n    <div class="wrap prose">\n{body}\n    </div>\n  </main>'
-    return page(template, title, main)
+    return page(template, title, main, path, description)
+
+
+def landing_page(template):
+    """The landing page with what search engines show about the app."""
+    description = html.unescape(re.search(r'<meta name="description" content="([^"]*)"', template).group(1))
+    app = {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Vaultime",
+        "description": description,
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Windows, Linux",
+        "softwareVersion": json.loads(TAURI_CONFIG.read_text(encoding="utf8"))["version"],
+        "url": f"{SITE_URL}/",
+        "downloadUrl": f"{SITE_URL}/#download",
+        "image": f"{SITE_URL}/social-preview.png",
+        "screenshot": f"{SITE_URL}/screenshots/library.png",
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "isAccessibleForFree": True,
+        "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"},
+        "author": {"@type": "Person", "name": "Dominik Schwimmbeck"},
+        "sameAs": [REPO_URL],
+    }
+    # A data block, so the site's content security policy leaves it alone.
+    data = json.dumps(app, indent=2).replace("</", "<\\/")
+    block = f'  <script type="application/ld+json">\n{data}\n  </script>\n'
+    head_end = template.index("</head>")
+    return template[:head_end] + block + template[head_end:]
+
+
+def sitemap():
+    """Every page search engines may show, for sitemap.xml."""
+    paths = ["/"]
+    paths += [doc_url(source) for _, entries in DOCS_NAV for source, _ in entries]
+    paths += [f"/{name}" for name, _, _, _ in PAGES if name not in UNLISTED]
+    urls = "".join(f"  <url><loc>{html.escape(SITE_URL + path)}</loc></url>\n" for path in paths)
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n'
+
+
+# The API and the installers are no pages to show.
+ROBOTS = f"""User-agent: *
+Disallow: /v1/
+Disallow: /downloads/
+
+Sitemap: {SITE_URL}/sitemap.xml
+"""
 
 
 def docs_nav(current):
@@ -391,7 +471,9 @@ def build_docs(template):
         title = rendered.title if source != "index.md" else "Documentation"
         target = OUT / "docs" / ("" if source == "index.md" else source.removesuffix(".md")) / "index.html"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(page(template, title, main, rendered.lead, "/docs/", "docs-page"), encoding="utf8", newline="\n")
+        target.write_text(
+            page(template, title, main, doc_url(source), rendered.lead, "/docs/", "docs-page"), encoding="utf8", newline="\n"
+        )
 
 
 def main():
@@ -407,15 +489,21 @@ def main():
     for name, source in FONT_FILES.items():
         shutil.copyfile(source, OUT / "fonts" / name)
     shutil.copytree(SCREENSHOTS, OUT / "screenshots")
-    shutil.copyfile(SITE / "index.html", OUT / "index.html")
+    shutil.copyfile(SOCIAL_PREVIEW, OUT / "social-preview.png")
     for asset in ("site.css", "site.js"):
         shutil.copyfile(SITE / asset, OUT / asset)
+    # Search Console verification files, served as they are.
+    for verification in SITE.glob("google*.html"):
+        shutil.copyfile(verification, OUT / verification.name)
 
     template = (SITE / "index.html").read_text(encoding="utf8")
-    for name, title, source in PAGES:
+    (OUT / "index.html").write_text(landing_page(template), encoding="utf8", newline="\n")
+    for name, title, source, description in PAGES:
         body = "\n".join(markdown(source.read_text(encoding="utf8")).blocks)
-        (OUT / name).write_text(text_page(template, title, body), encoding="utf8", newline="\n")
+        (OUT / name).write_text(text_page(template, title, body, f"/{name}", description), encoding="utf8", newline="\n")
     build_docs(template)
+    (OUT / "sitemap.xml").write_text(sitemap(), encoding="utf8", newline="\n")
+    (OUT / "robots.txt").write_text(ROBOTS, encoding="utf8", newline="\n")
     print("wrote", ", ".join(sorted(path.name for path in OUT.iterdir())))
 
 
