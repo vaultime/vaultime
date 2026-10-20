@@ -13,13 +13,22 @@ Play on more than one PC and bring it together in one history. Each PC keeps rec
 Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. It is one of the automatic backups, so it is deleted once seven newer ones are there. Merge again later and only what is new comes in. Sessions you removed here never come back.
 
 > [!NOTE]
-> A merge is not a sync. Nothing happens on its own, and the other PC does not change.
+> A merge is not a sync. The other PC never changes, and a merge from a folder happens only when you start it.
+
+### From the cloud
+
+With cloud backup on both PCs, Settings, Other PCs lists the newest cloud backup of each of your other PCs, with its name. Pick **Merge** and the same dialog shows what would come in. After that first merge, newer backups of that PC come in by themselves within the hour:
+
+- A game that is new here counts as one of yours only when it comes from the same launcher with the same launcher id. Otherwise it stays on its own, and you can link it on its game page.
+- A backup that brings a key this PC does not trust, or sessions that fail their check, waits for you. The row says why, and **Merge** opens the dialog.
+
+Each PC uploads its own backup once a day, and the server always keeps the newest backup of every PC, so the others can merge it.
 
 ## Which sessions count
 
 Sessions come over exactly as the other PC recorded them, byte for byte. This PC's ledger then vouches only for those that pass their check with the keys it trusts for the PC that recorded them. A session that fails comes in Suspicious and stays visible, so nothing is laundered by a merge.
 
-- The first time Vaultime sees a PC, it takes that PC at its word, since it cannot know it yet. Its keys are trusted from then on.
+- The first time Vaultime sees a PC, it takes that PC at its word, since it cannot know it yet. Its keys are trusted from then on. From the cloud it counts only the keys that PC registered with the cloud server, which keeps every key a PC ever registered. Any other key needs you to confirm it, as described under New keys.
 - A PC this one trusts also vouches for the sessions it took in from PCs this one has no keys for.
 - Only this PC's own keys count for its own sessions. A backup of this PC cannot be merged, and when you restore one, its keys vouch for nothing.
 

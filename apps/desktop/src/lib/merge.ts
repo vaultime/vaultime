@@ -36,11 +36,15 @@ export function mergeHeadline(preview: MergePreview): string {
 }
 
 /** What stays as it is, and what comes in without this PC vouching for it. */
-export function mergeNotes(preview: MergePreview): string[] {
+export function mergeNotes(preview: MergePreview, { fromCloud = false } = {}): string[] {
   const from = sourceName(preview);
   const notes = [];
   if (preview.first_merge) {
-    notes.push(`Vaultime has not seen ${from} before, so it takes its ledger at its word, as it does for any new PC.`);
+    notes.push(
+      fromCloud
+        ? `Vaultime has not seen ${from} before, so it takes its ledger at its word for the keys ${from} registered with the cloud.`
+        : `Vaultime has not seen ${from} before, so it takes its ledger at its word, as it does for any new PC.`,
+    );
   }
   if (preview.failing > 0) {
     notes.push(
@@ -54,7 +58,11 @@ export function mergeNotes(preview: MergePreview): string[] {
     );
   }
   if (preview.unknown_keys) {
-    notes.push(`${from} signs with a key this PC does not trust for it, so that key vouches for nothing here unless you say so below.`);
+    notes.push(
+      fromCloud && preview.first_merge
+        ? `${from} signs with a key it never registered with the cloud, so that key vouches for nothing here unless you say so below.`
+        : `${from} signs with a key this PC does not trust for it, so that key vouches for nothing here unless you say so below.`,
+    );
   }
   if (preview.overlapping_manual > 0) {
     const one = preview.overlapping_manual === 1;

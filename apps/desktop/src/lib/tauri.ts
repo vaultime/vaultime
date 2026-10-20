@@ -5,9 +5,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ActiveSessions,
   ArtworkSource,
+  AutoMerge,
   BackupSnapshot,
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
+  CloudPc,
   CreateGameInput,
   CropRect,
   Device,
@@ -30,8 +32,8 @@ import type {
   PlayTotal,
   RecentPlay,
   Session,
-  SessionList,
   SessionEvent,
+  SessionList,
   SessionNote,
   Setting,
   SteamPlaytimePreview,
@@ -81,6 +83,50 @@ export async function previewMerge(path: string, trustNewKeys = false): Promise<
 
 export async function mergeBackup(path: string, choices: GameChoice[], trustNewKeys = false): Promise<MergeSummary> {
   return invoke<MergeSummary>("merge_backup", { path, choices, trustNewKeys });
+}
+
+/** The newest cloud backup of every other PC of the account. */
+export async function listCloudPcs(apiBaseUrl: string, accessToken: string, accountId: string): Promise<CloudPc[]> {
+  return invoke<CloudPc[]>("list_cloud_pcs", { apiBaseUrl, accessToken, accountId });
+}
+
+/** What merging another PC's cloud backup would bring in. The backup stays downloaded until merged or discarded. */
+export async function previewCloudMerge(
+  apiBaseUrl: string,
+  accessToken: string,
+  accountId: string,
+  backupId: string,
+  trustNewKeys: boolean,
+): Promise<MergePreview> {
+  return invoke<MergePreview>("preview_cloud_merge", { apiBaseUrl, accessToken, accountId, backupId, trustNewKeys });
+}
+
+export async function mergeCloudBackup(
+  apiBaseUrl: string,
+  accessToken: string,
+  accountId: string,
+  backupId: string,
+  choices: GameChoice[],
+  trustNewKeys: boolean,
+): Promise<MergeSummary> {
+  return invoke<MergeSummary>("merge_cloud_backup", {
+    apiBaseUrl,
+    accessToken,
+    accountId,
+    backupId,
+    choices,
+    trustNewKeys,
+  });
+}
+
+/** Lets go of a cloud backup downloaded for a merge that did not happen. */
+export async function discardCloudMerge(backupId: string): Promise<void> {
+  return invoke<void>("discard_cloud_merge", { backupId });
+}
+
+/** Merges the newer backups of the PCs merged here before, as far as they need no choice of the player. */
+export async function mergeDueCloudBackups(apiBaseUrl: string, accessToken: string, accountId: string): Promise<AutoMerge[]> {
+  return invoke<AutoMerge[]>("merge_due_cloud_backups", { apiBaseUrl, accessToken, accountId });
 }
 
 export async function getAppVersion(): Promise<string> {

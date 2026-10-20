@@ -72,7 +72,7 @@ export const SETTING_KEYS = {
 /** Automatic local backups kept. Same as AUTO_BACKUP_KEEP in constants.rs. */
 export const AUTO_BACKUP_KEEP = 7;
 
-/** Event the core sends when games or covers changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
+/** Event the core sends when games, covers or sessions changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
 export const LIBRARY_CHANGED_EVENT = "library-changed";
 
 /** Event the core sends when the look at start found new games. Same as FOUND_GAMES_EVENT in constants.rs. */

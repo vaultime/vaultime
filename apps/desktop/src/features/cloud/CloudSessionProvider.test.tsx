@@ -4,7 +4,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsContext } from "@/features/settings/settings-context";
-import { loadCloudSessionSecure } from "@/lib/tauri";
+import { loadCloudSessionSecure, mergeDueCloudBackups, uploadRemoteBackup } from "@/lib/tauri";
 import { CloudSessionProvider } from "./CloudSessionProvider";
 
 vi.mock("@tauri-apps/plugin-log", () => ({ info: vi.fn(async () => {}), warn: vi.fn(async () => {}) }));
@@ -12,6 +12,8 @@ vi.mock("@/lib/tauri", () => ({
   clearCloudBackupKeySecure: vi.fn(async () => true),
   clearCloudSessionSecure: vi.fn(async () => true),
   getAppVersion: vi.fn(async () => "0.5.0"),
+  getDeviceId: vi.fn(async () => "this-pc"),
+  mergeDueCloudBackups: vi.fn(async () => []),
   hasCloudBackupKeySecure: vi.fn(async () => true),
   loadCloudSessionSecure: vi.fn(),
   restoreRemoteBackup: vi.fn(),
@@ -41,6 +43,63 @@ function start(values: Record<string, string> = {}, read = true) {
   );
   return save;
 }
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** A complete backup of `pc`, uploaded `hoursAgo`. */
+function backupOf(pc: string, hoursAgo: number) {
+  return {
+    id: `${pc}-${hoursAgo}`,
+    label: null,
+    storage_key: "key",
+    checksum: "sum",
+    size_bytes: 1,
+    backup_created_at: new Date(Date.now() - hoursAgo * HOUR_MS).toISOString(),
+    uploaded_at: new Date(Date.now() - hoursAgo * HOUR_MS).toISOString(),
+    status: "complete",
+    client_device_id: null,
+    metadata_json: { source_device_id: pc },
+  };
+}
+
+/** A server that lists `backups`, renews the session and registers any PC. */
+function server(backups: unknown[]) {
+  return vi.fn(async (url: URL | string) => {
+    const path = new URL(url).pathname;
+    const body =
+      path === "/v1/backups"
+        ? backups
+        : path === "/v1/auth/refresh"
+          ? JSON.parse(SESSION)
+          : { id: "device", client_device_id: "client", device_name: "PC", platform: "windows", app_version: "0.5.0" };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  });
+}
+
+describe("the daily cloud backup", () => {
+  beforeEach(() => {
+    vi.mocked(loadCloudSessionSecure).mockResolvedValue(SESSION);
+    vi.mocked(uploadRemoteBackup).mockReset();
+    vi.mocked(mergeDueCloudBackups).mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uploads when this PC's newest backup is a day old, whatever another PC uploaded", async () => {
+    vi.stubGlobal("fetch", server([backupOf("laptop", 1), backupOf("this-pc", 30)]));
+    start({ cloud_backup: "true" });
+    await waitFor(() => expect(uploadRemoteBackup).toHaveBeenCalled());
+  });
+
+  it("waits while this PC uploaded within the day, and merges what is due", async () => {
+    vi.stubGlobal("fetch", server([backupOf("laptop", 30), backupOf("this-pc", 2)]));
+    start({ cloud_backup: "true" });
+    await waitFor(() => expect(mergeDueCloudBackups).toHaveBeenCalled());
+    expect(uploadRemoteBackup).not.toHaveBeenCalled();
+  });
+});
 
 describe("deciding cloud backup on a PC from before the switch", () => {
   beforeEach(() => {

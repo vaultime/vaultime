@@ -140,7 +140,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   trusted before, and the backup's keys for PCs never seen. Keys of a PC never seen are trusted on its first merge and
   recorded with `trusted` entries. Any other new key counts only when the
   player confirms it, which also vouches for its sessions that came in
-  unvouched. A backup must pass SQLite's integrity check and match the
+  unvouched. From the cloud, a first merge counts only the keys that PC
+  registered with the server, which keeps every key it was given, and the
+  newer backups of a PC merged before come in by themselves only when they
+  need no confirmation and no session fails its check. A backup must pass SQLite's integrity check and match the
   schema a fresh database gets, and a merge checks the rows and hashes it
   copied against the plan. A restore adopts only sessions that pass this
   way or that this PC's earlier pins confirm up to their newest timing

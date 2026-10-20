@@ -734,6 +734,30 @@ export interface CloudBackupRecord {
   metadata_json: CloudBackupPayloadSummary | null;
 }
 
+/** The newest cloud backup of another PC of the account. */
+export interface CloudPc {
+  device_id: string;
+  /** Its name, sealed with the backup key in the backup, or as this PC knows it. */
+  name: string | null;
+  backup_id: string;
+  backup_created_at: string;
+  sessions_count: number;
+  /** Whether this PC merged it before, so its newer backups come in by themselves. */
+  merged_before: boolean;
+  /** Whether the backup is newer than the last one merged here. */
+  newer: boolean;
+}
+
+/** What an automatic merge did with a PC: merged, or why it waits for the player. */
+export interface AutoMerge {
+  device_id: string;
+  name: string | null;
+  backup_id: string;
+  outcome: "merged" | "new_key" | "failing";
+  sessions_added: number;
+  sessions_grown: number;
+}
+
 export interface CloudCreateAdminInviteInput {
   prefix?: string | null;
   max_redemptions?: number | null;

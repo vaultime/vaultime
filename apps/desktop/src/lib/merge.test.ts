@@ -76,6 +76,20 @@ describe("merge text", () => {
     ]);
   });
 
+  it("says when a merge from the cloud counts only the keys a PC registered there", () => {
+    expect(mergeNotes({ ...preview, first_merge: true }, { fromCloud: true })).toEqual([
+      "Vaultime has not seen Laptop before, so it takes its ledger at its word for the keys Laptop registered with the cloud.",
+    ]);
+    expect(mergeNotes({ ...preview, first_merge: true, unknown_keys: true }, { fromCloud: true })).toEqual([
+      "Vaultime has not seen Laptop before, so it takes its ledger at its word for the keys Laptop registered with the cloud.",
+      "Laptop signs with a key it never registered with the cloud, so that key vouches for nothing here unless you say so below.",
+    ]);
+    // A PC merged before with a new key reads as from a folder.
+    expect(mergeNotes({ ...preview, unknown_keys: true }, { fromCloud: true })).toEqual([
+      "Laptop signs with a key this PC does not trust for it, so that key vouches for nothing here unless you say so below.",
+    ]);
+  });
+
   it("says what a merge did", () => {
     const summary = {
       device_id: "laptop-id",

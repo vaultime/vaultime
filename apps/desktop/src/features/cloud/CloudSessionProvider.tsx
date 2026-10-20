@@ -26,13 +26,20 @@ import {
 } from "@/lib/constants";
 import {
   clearCloudBackupKeySecure,
+  discardCloudMerge as discardCloudMergeCommand,
   getAppVersion,
+  getDeviceId,
   hasCloudBackupKeySecure,
+  listCloudPcs as listCloudPcsCommand,
+  mergeCloudBackup as mergeCloudBackupCommand,
+  mergeDueCloudBackups,
+  previewCloudMerge as previewCloudMergeCommand,
   setCloudSignedIn,
   restoreRemoteBackup as restoreRemoteBackupCommand,
   uploadRemoteBackup as uploadRemoteBackupCommand,
 } from "@/lib/tauri";
 import type {
+  AutoMerge,
   BetaApplication,
   CloudAdminInvite,
   CloudAuthSession,
@@ -40,6 +47,7 @@ import type {
   CloudCreateAdminInviteInput,
   CloudDevice,
   CloudStorage,
+  GameChoice,
 } from "@/lib/types";
 import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError, logFailure } from "@/lib/utils";
@@ -75,6 +83,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   // Turned off, there is no saved session to look for.
   const initializing = cloudSetting !== "false" && bootstrapping;
   const [autoBackup, setAutoBackupState] = useState(() => values[SETTING_KEYS.cloudAutoBackup] !== "false");
+  const [waitingMerges, setWaitingMerges] = useState<AutoMerge[]>([]);
   const [autoBackupError, setAutoBackupError] = useState<string | null>(null);
   const sessionRef = useRef<CloudAuthSession | null>(null);
   // Counts sign-outs, so a refresh that finishes after one cannot sign back in.
@@ -113,23 +122,36 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }, [connectionError, session]);
 
 
-  // Uploads a backup when the newest one on the server is a day old. Runs
-  // while this PC is signed in with its backups unlocked.
-  const backUpIfDue = useEffectEvent(async () => {
-    try {
-      const backups = await listBackups();
-      const newest = backups
-        .filter((backup) => backup.status === "complete")
-        .reduce((latest, backup) => Math.max(latest, Date.parse(backup.uploaded_at)), 0);
-      if (Date.now() - newest >= CLOUD_AUTO_BACKUP_INTERVAL_MS) {
-        await uploadRemoteBackup("Automatic");
-        void info("automatic cloud backup uploaded");
+  // Uploads a backup when this PC's newest one on the server is a day old,
+  // whatever the account's other PCs upload. Then the newer backups of PCs
+  // merged here before come in. Runs while this PC is signed in with its
+  // backups unlocked.
+  const checkCloud = useEffectEvent(async () => {
+    if (autoBackup) {
+      try {
+        const thisPc = await getDeviceId();
+        const backups = await listBackups();
+        const newest = backups
+          .filter((backup) => backup.status === "complete" && backup.metadata_json?.source_device_id === thisPc)
+          .reduce((latest, backup) => Math.max(latest, Date.parse(backup.uploaded_at)), 0);
+        if (Date.now() - newest >= CLOUD_AUTO_BACKUP_INTERVAL_MS) {
+          await uploadRemoteBackup("Automatic");
+          void info("automatic cloud backup uploaded");
+        }
+        setAutoBackupError(null);
+      } catch (error) {
+        // The next check tries again, the app works without the cloud.
+        setAutoBackupError(describeError(error));
+        void warn(`automatic cloud backup failed: ${describeError(error)}`);
       }
-      setAutoBackupError(null);
+    }
+    try {
+      const done = await withAuthenticatedSession((current) =>
+        mergeDueCloudBackups(CLOUD_API_BASE_URL, current.access_token, current.user.id),
+      );
+      setWaitingMerges(done.filter((merge) => merge.outcome !== "merged"));
     } catch (error) {
-      // The next check tries again, the app works without the cloud.
-      setAutoBackupError(describeError(error));
-      void warn(`automatic cloud backup failed: ${describeError(error)}`);
+      void warn(`automatic merge from the cloud failed: ${describeError(error)}`);
     }
   });
 
@@ -141,9 +163,9 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
   const accountId = session?.user.id ?? null;
   useEffect(() => {
-    if (initializing || !accountId || !backupKeyReady || !autoBackup) return;
-    const first = window.setTimeout(() => void backUpIfDue(), 0);
-    const timer = window.setInterval(() => void backUpIfDue(), CLOUD_AUTO_BACKUP_CHECK_MS);
+    if (initializing || !accountId || !backupKeyReady) return;
+    const first = window.setTimeout(() => void checkCloud(), 0);
+    const timer = window.setInterval(() => void checkCloud(), CLOUD_AUTO_BACKUP_CHECK_MS);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(timer);
@@ -434,6 +456,40 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  async function listCloudPcs() {
+    return withAuthenticatedSession(async (current) => {
+      await ensureBackupKeyForSession(current);
+      return listCloudPcsCommand(CLOUD_API_BASE_URL, current.access_token, current.user.id);
+    });
+  }
+
+  async function previewCloudMerge(backupId: string, trustNewKeys: boolean) {
+    return withAuthenticatedSession(async (current) => {
+      await ensureBackupKeyForSession(current);
+      return previewCloudMergeCommand(CLOUD_API_BASE_URL, current.access_token, current.user.id, backupId, trustNewKeys);
+    });
+  }
+
+  async function mergeCloudBackup(backupId: string, choices: GameChoice[], trustNewKeys: boolean) {
+    const summary = await withAuthenticatedSession(async (current) => {
+      await ensureBackupKeyForSession(current);
+      return mergeCloudBackupCommand(
+        CLOUD_API_BASE_URL,
+        current.access_token,
+        current.user.id,
+        backupId,
+        choices,
+        trustNewKeys,
+      );
+    });
+    setWaitingMerges((waiting) => waiting.filter((merge) => merge.device_id !== summary.device_id));
+    return summary;
+  }
+
+  async function discardCloudMerge(backupId: string) {
+    await discardCloudMergeCommand(backupId);
+  }
+
   async function deleteBackup(backupId: string) {
     return withAuthenticatedSession((current) =>
       cloudDelete(
@@ -628,6 +684,11 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     uploadRemoteBackup,
     restoreRemoteBackup,
     deleteBackup,
+    listCloudPcs,
+    previewCloudMerge,
+    mergeCloudBackup,
+    discardCloudMerge,
+    waitingMerges,
     createAdminInvite,
   };
 

@@ -3,6 +3,7 @@
 
 import { createContext, useContext } from "react";
 import type {
+  AutoMerge,
   BetaApplication,
   CloudAdminInvite,
   CloudAuthSession,
@@ -11,7 +12,11 @@ import type {
   CloudBackupUploadResult,
   CloudCreateAdminInviteInput,
   CloudDevice,
+  CloudPc,
   CloudStorage,
+  GameChoice,
+  MergePreview,
+  MergeSummary,
 } from "@/lib/types";
 
 export interface CloudSessionContextValue {
@@ -56,6 +61,13 @@ export interface CloudSessionContextValue {
   /** With `takeOver`, a fresh install continues as the PC that made the backup. */
   restoreRemoteBackup: (backupId: string, takeOver: boolean) => Promise<CloudBackupRestoreResult>;
   deleteBackup: (backupId: string) => Promise<void>;
+  /** The newest cloud backup of every other PC of the account. */
+  listCloudPcs: () => Promise<CloudPc[]>;
+  previewCloudMerge: (backupId: string, trustNewKeys: boolean) => Promise<MergePreview>;
+  mergeCloudBackup: (backupId: string, choices: GameChoice[], trustNewKeys: boolean) => Promise<MergeSummary>;
+  discardCloudMerge: (backupId: string) => Promise<void>;
+  /** Newer backups of PCs merged before that did not come in by themselves, as they need the player. */
+  waitingMerges: AutoMerge[];
   createAdminInvite: (
     input: CloudCreateAdminInviteInput,
   ) => Promise<CloudAdminInvite>;

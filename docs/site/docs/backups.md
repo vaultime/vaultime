@@ -59,16 +59,16 @@ On the Cloud page, **Create an account** asks for your email, a password, your i
 
 - Backups are encrypted on your PC with your passphrase before they are uploaded, so the server only stores data it cannot read.
 - Once unlocked, a key made from the passphrase stays in your system's keychain with your sign-in, so daily backups run without asking. The passphrase itself is not kept.
-- **Back up every day** uploads a backup once a day while you are signed in. **Back up now** uploads one right away.
+- **Back up every day** uploads a backup of this PC once a day while you are signed in, whatever your other PCs upload. **Back up now** uploads one right away.
 - Artwork is stored once per account, so unchanged covers are not uploaded again.
 - **Restore** on a backup works like a local restore, after you confirm.
 
 ### Space and rotation
 
-Every account gets the same space, 1 GiB for backups and artwork, and keeps up to 30 backups. **Space used** on the Cloud page shows how much is taken. When there are 30 backups or the space is full, a new backup replaces the oldest ones once it is safely stored. The server refuses a backup larger than 512 MiB or one that does not fit the space even alone. It also refuses a new backup less than 15 minutes after the last one.
+Every account gets the same space, 1 GiB for backups and artwork, and keeps up to 30 backups. **Space used** on the Cloud page shows how much is taken. When there are 30 backups or the space is full, a new backup replaces the oldest ones once it is safely stored. The newest backup of each PC always stays, so your other PCs can merge it. The server refuses a backup larger than 512 MiB or one that does not fit the space beside the newest backups of your other PCs. It also refuses a new backup of a PC less than 15 minutes after that PC's last one.
 
 There are no paid plans and no tiers. The limits are there to stop abuse.
 
 ### What the server sees
 
-Your email address, the name, platform and app version of each PC you back up from, and for each backup when it was made, how large it is and how many games, sessions and images it holds. It also sees the encrypted size of each image. It cannot read your games, sessions or artwork. The [privacy policy](../../legal/privacy-policy.md) has the details.
+Your email address, the name, platform and app version of each PC you back up from, and for each backup when it was made, how large it is and how many games, sessions and images it holds. It also sees the encrypted size of each image, and the public keys each PC signs its [ledger](ledger.md) with, so a merge from the cloud can check them. The name you gave a PC goes with its backups encrypted with your passphrase. The server cannot read your games, sessions, artwork or PC names. The [privacy policy](../../legal/privacy-policy.md) has the details.

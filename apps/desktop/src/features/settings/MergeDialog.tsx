@@ -16,19 +16,26 @@ import { GameLinkPicker } from "@/features/library/components/GameLinkPicker";
 import { useLibrary } from "@/features/library/library-context";
 import { launcherName, whereFrom } from "@/lib/links";
 import { mergeChangesSomething, mergeDone, mergeHeadline, mergeNotes, sourceName } from "@/lib/merge";
-import * as api from "@/lib/tauri";
 import { formatHoursMinutes } from "@/lib/time";
-import type { MergePreview } from "@/lib/types";
+import type { GameChoice, MergePreview, MergeSummary } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
 /** What a merge of another PC's backup brings, which game each of its games counts as, and the merge. */
 export function MergeDialog({
   preview,
+  readAgain,
+  mergeWith,
+  fromCloud = false,
   onClose,
   onMerged,
 }: {
   preview: MergePreview;
+  /** Reads the preview again, with or without the player vouching for new keys. */
+  readAgain: (trustNewKeys: boolean) => Promise<MergePreview>;
+  mergeWith: (choices: GameChoice[], trustNewKeys: boolean) => Promise<MergeSummary>;
+  /** Whether the backup comes from the cloud, where a first merge counts only the keys a PC registered. */
+  fromCloud?: boolean;
   onClose: () => void;
   onMerged: (message: string) => void;
 }) {
@@ -46,7 +53,7 @@ export function MergeDialog({
   const [shown, setShown] = useState(preview);
   const [reading, setReading] = useState(false);
   const reads = useRef(0);
-  const notes = mergeNotes(shown);
+  const notes = mergeNotes(shown, { fromCloud });
   const nothing = !mergeChangesSomething(shown);
 
   async function changeTrust(next: boolean) {
@@ -54,7 +61,7 @@ export function MergeDialog({
     setReading(true);
     setError(null);
     try {
-      const again = await api.previewMerge(preview.backup_path, next);
+      const again = await readAgain(next);
       if (read !== reads.current) return;
       setShown(again);
       setTrustNewKeys(next);
@@ -69,8 +76,7 @@ export function MergeDialog({
     setMerging(true);
     setError(null);
     try {
-      const summary = await api.mergeBackup(
-        preview.backup_path,
+      const summary = await mergeWith(
         Object.entries(choices).map(([game_id, linked_game_id]) => ({ game_id, linked_game_id })),
         trustNewKeys,
       );

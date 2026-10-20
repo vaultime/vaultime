@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::backups::record_snapshot;
 use crate::AppContext;
@@ -14,7 +14,7 @@ use crate::backup::cloud_merge::{AutoMerge, CloudPc};
 use crate::backup::merge::{GameChoice, MergePreview, MergeSummary};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::{self};
-use crate::constants::CLOUD_API_BASE_URL;
+use crate::constants::{CLOUD_API_BASE_URL, LIBRARY_CHANGED_EVENT};
 use crate::db::connection::Database;
 use crate::error::VaultimeError;
 use crate::secure_storage;
@@ -159,14 +159,21 @@ pub async fn merge_due_cloud_backups(
     account_id: String,
 ) -> Result<Vec<AutoMerge>, VaultimeError> {
     on_blocking_pool(move || {
-        backup::cloud_merge::merge_due_cloud_backups(
+        let done = backup::cloud_merge::merge_due_cloud_backups(
             &app.state::<Arc<Database>>(),
             &app.state::<AssetManager>(),
             &app.state::<AppContext>(),
             cloud_api_base_url(&api_base_url),
             &access_token,
             &account_id,
-        )
+        )?;
+        if done
+            .iter()
+            .any(|merge| merge.sessions_added + merge.sessions_grown > 0)
+        {
+            let _ = app.emit(LIBRARY_CHANGED_EVENT, ());
+        }
+        Ok(done)
     })
     .await
 }

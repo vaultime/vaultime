@@ -47,6 +47,7 @@ import type {
   ArtworkSource,
   CloudAuthSession,
   CloudBackupRecord,
+  CloudPc,
   CloudDevice,
   CropRect,
   Device,
@@ -272,6 +273,28 @@ const allGames = scenario === "empty" ? [] : games;
 
 // ?pcs=1 adds sessions merged from a laptop: some of a game linked to Hades II
 // here, one game that came along on its own, and one that failed its check.
+/** The newest cloud backups of the other PCs: the laptop merged before, the Steam Deck not yet. */
+let cloudPcs: CloudPc[] = [
+  {
+    device_id: "laptop",
+    name: "Laptop",
+    backup_id: "6f0d3c2a-1b4e-4d8a-9c55-0a1b2c3d4e5f",
+    backup_created_at: iso(now - 9 * 60 * 60 * 1000),
+    sessions_count: 214,
+    merged_before: true,
+    newer: params.has("waiting"),
+  },
+  {
+    device_id: "deck",
+    name: "Steam Deck",
+    backup_id: "7a1e4d3b-2c5f-4e9b-8d66-1b2c3d4e5f60",
+    backup_created_at: iso(now - 26 * 60 * 60 * 1000),
+    sessions_count: 37,
+    merged_before: false,
+    newer: true,
+  },
+];
+
 const devices: Device[] = [
   {
     id: "preview",
@@ -1492,6 +1515,30 @@ mockIPC((cmd, payload) => {
         games_linked: 1,
         safety_backup_path: "C:\\Users\\you\\AppData\\Roaming\\com.vaultime.app\\backups\\vaultime-auto-20261003T150000Z",
       };
+    case "list_cloud_pcs":
+      return cloudPcs;
+    case "preview_cloud_merge":
+      return { ...mergePreview, device_id: "deck", device_name: "Steam Deck", first_merge: true };
+    case "merge_cloud_backup":
+      cloudPcs = cloudPcs.map((pc) => (pc.backup_id === args.backupId ? { ...pc, merged_before: true, newer: false } : pc));
+      return {
+        device_id: "deck",
+        device_name: "Steam Deck",
+        sessions_added: 9,
+        sessions_grown: 0,
+        sessions_vouched: 0,
+        failing: 0,
+        games_added: 1,
+        games_linked: 1,
+        safety_backup_path: null,
+      };
+    case "discard_cloud_merge":
+      return null;
+    // ?waiting=1: the laptop's newer backup brings a new key and waits.
+    case "merge_due_cloud_backups":
+      return params.has("waiting")
+        ? [{ device_id: "laptop", name: "Laptop", backup_id: cloudPcs[0].backup_id, outcome: "new_key", sessions_added: 0, sessions_grown: 0 }]
+        : [];
     case "rename_this_pc":
       thisPc = { ...thisPc, name: String(args.name).trim().slice(0, DEVICE_NAME_MAX_CHARS) || thisPc.name };
       return thisPc;
