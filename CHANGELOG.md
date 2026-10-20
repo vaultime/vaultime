@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Interface
 
 - **Less motion when your system asks for it.** With animations turned off in Windows or reduced motion on your Linux desktop, dialogs, menus and scrolling no longer move.
+- **Straight to the day.** Go to a day in the journal and a click on a day in a calendar on the stats or game page now scroll to that day and mark its name for a moment, instead of opening the top of its week.
 
 ### Fixes
 

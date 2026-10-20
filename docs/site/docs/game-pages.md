@@ -6,7 +6,7 @@ Every game has a page in the colors of its cover, with its history, its totals a
 
 ## History
 
-**History** charts the game's active and idle time over the last **30 days**, **12 months** or all **Years**. **Every day** shows a calendar of the year for this game alone, and clicking a day opens its week in the journal.
+**History** charts the game's active and idle time over the last **30 days**, **12 months** or all **Years**. **Every day** shows a calendar of the year for this game alone, and clicking a day opens that day in the journal.
 
 ## Sessions and the event log
 

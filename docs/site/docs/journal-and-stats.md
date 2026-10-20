@@ -6,7 +6,7 @@ The journal tells your play week by week in plain sentences. The stats page look
 
 ## The journal
 
-The journal opens on this week. **Previous week** and **Next week** move through your history, and **Go to a day** jumps to any date. A sentence at the top sums up the week and names the game that took most of it, when one did.
+The journal opens on this week. **Previous week** and **Next week** move through your history, and **Go to a day** jumps to any date and scrolls to it. A sentence at the top sums up the week and names the game that took most of it, when one did.
 
 Each day shows its total and a strip of 24 hours in the colors of the games you played. Below it every session is a sentence, with its start and end time and how much of it was active and idle:
 
@@ -62,7 +62,7 @@ Played on a Steam Deck or a PC without Vaultime? On the game's page, **Add a ses
 The stats page shows one year at a time, with **Previous year** and **Next year** to move. At the top are the hours played, the days you played, your longest streak and your longest session.
 
 Every day
-: A calendar of the year with a square for each day, brighter the more you played. A day counts the time the journal shows for it, games side by side once. Point at a day to see what you played, and click it to read its week in the journal.
+: A calendar of the year with a square for each day, brighter the more you played. A day counts the time the journal shows for it, games side by side once. Point at a day to see what you played, and click it to read that day in the journal.
 
 When you play
 : Your week by hour, so you can see whether you are a weekday evening or a weekend afternoon player.

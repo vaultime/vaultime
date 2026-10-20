@@ -18,7 +18,7 @@ import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { scrollMotion } from "@/lib/anchors";
 import { describeError, logFailure } from "@/lib/utils";
 import { DaySection } from "./DaySection";
-import { entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
+import { dayId, entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
 
 /**
  * Chromium, which WebView2 runs on, opens a date picker for a date field.
@@ -44,10 +44,11 @@ export function JournalPage() {
     return stored.map((session) => running.get(session.id) ?? session);
   }, [stored, active]);
   const { accentHues, mode } = useAppearance();
-  // 0 is this week, -1 the week before and so on. `?week=2026-09-28` opens
-  // the week of that day, as the stats page asks for.
+  // 0 is this week, -1 the week before and so on. `?day=2026-09-28` opens
+  // the week of that day and goes to the day, as the stats page asks for.
   const [params] = useSearchParams();
-  const [offset, setOffset] = useState(() => weeksBack(params.get("week")));
+  const askedDay = params.get("day");
+  const [offset, setOffset] = useState(() => weeksBack(askedDay));
   // The week on the page as the core worked it out. It stays until the next
   // one comes, so moving between weeks does not flash an empty page.
   const [shown, setShown] = useState<{ offset: number; start: Date; play: JournalWeekPlay } | null>(null);
@@ -98,9 +99,17 @@ export function JournalPage() {
   // The session whose parts are marked on every day, while one of them is
   // pointed at or focused, or for a moment after a jump between them.
   const [linked, setLinked] = useState<string | null>(null);
-  // The line a jump goes to, scrolled to once its week is on the page.
-  const jumpTarget = useRef<string | null>(null);
+  // The line or day a jump goes to, scrolled to once its week is on the page.
+  const jumpTarget = useRef<string | null>(askedDay ? dayId(askedDay) : null);
   const flashTimer = useRef<number | undefined>(undefined);
+  // The day whose name is marked for a moment after a jump to it.
+  const [flashedDay, setFlashedDay] = useState<string | null>(askedDay);
+  const dayFlashTimer = useRef<number | undefined>(undefined);
+  const goToDay = useCallback((dayKey: string) => {
+    jumpTarget.current = dayId(dayKey);
+    setOffset(weeksBack(dayKey));
+    setFlashedDay(dayKey);
+  }, []);
   const jumpTo = useCallback((sessionId: string, day: Date) => {
     const dayKey = toDayKey(day);
     jumpTarget.current = entryId(sessionId, dayKey);
@@ -114,13 +123,25 @@ export function JournalPage() {
   }, []);
   useEffect(() => {
     if (!jumpTarget.current || shown?.offset !== offset) return;
+    const day = jumpTarget.current.startsWith(dayId(""));
     const target = document.getElementById(jumpTarget.current);
     jumpTarget.current = null;
+    if (day) {
+      window.clearTimeout(dayFlashTimer.current);
+      dayFlashTimer.current = window.setTimeout(() => setFlashedDay(null), JOURNAL_LINK_FLASH_MS);
+    }
+    // A day without play has no section, so the week stays at its top.
     if (!target) return;
     target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "center", behavior: scrollMotion() });
+    target.scrollIntoView({ block: day ? "start" : "center", behavior: scrollMotion() });
   });
-  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(flashTimer.current);
+      window.clearTimeout(dayFlashTimer.current);
+    },
+    [],
+  );
 
   // A game keeps one color through the week, the main color of its artwork,
   // nudged only when it would look like a game that showed up earlier. The
@@ -226,7 +247,7 @@ export function JournalPage() {
             <input
               ref={dateInput}
               type="date"
-              aria-label="Go to the week of a day"
+              aria-label="Go to a day"
               tabIndex={typingDay ? 0 : -1}
               className={
                 typingDay
@@ -237,7 +258,7 @@ export function JournalPage() {
               max={toDayKey(now)}
               onChange={(event) => {
                 if (!event.target.value) return;
-                setOffset(weeksBack(event.target.value));
+                goToDay(event.target.value);
                 setTypingDay(false);
               }}
               onBlur={() => setTypingDay(false)}
@@ -269,6 +290,7 @@ export function JournalPage() {
             notes={notes}
             onSaveNote={saveNote}
             onCorrected={onCorrected}
+            flashed={flashedDay === toDayKey(day.start)}
             linked={linked !== null && hasSession(day, linked) ? linked : null}
             onLink={setLinked}
             onJump={jumpTo}

@@ -278,7 +278,7 @@ export const JOURNAL_TICK_HOURS = 6;
 /** Narrowest span on the strip, in percent of the day, so short sessions still show. */
 export const JOURNAL_MIN_SPAN_PERCENT = 0.8;
 
-/** How long both parts of a session past midnight stay marked after a jump from one to the other. */
+/** How long both parts of a session past midnight stay marked after a jump from one to the other, and a day after a jump to it. */
 export const JOURNAL_LINK_FLASH_MS = 1800;
 
 // Time phrases

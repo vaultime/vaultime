@@ -110,7 +110,7 @@ export const YearHeatmap = memo(function YearHeatmap({
       <div ref={frame} className="relative">
         <div
           role="grid"
-          aria-label={`Time played on every day of ${year}. Arrow keys move between days, Enter opens the week in the journal.`}
+          aria-label={`Time played on every day of ${year}. Arrow keys move between days, Enter opens the day in the journal.`}
           aria-activedescendant={focused ? cellId(focused) : undefined}
           tabIndex={0}
           onKeyDown={onKeyDown}

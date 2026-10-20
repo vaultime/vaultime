@@ -11,7 +11,7 @@ import { GAME_HISTORY_DAYS, GAME_HISTORY_MONTHS, LIVE_TOTALS_REFRESH_MS } from "
 import { markColors, type GameTint } from "@/lib/game-tint";
 import { groupByBucket } from "@/lib/play-totals";
 import * as api from "@/lib/tauri";
-import { parseVaultimeDate, startOfDay, startOfWeek, toDayKey, UI_LOCALE } from "@/lib/time";
+import { parseVaultimeDate, startOfDay, toDayKey, UI_LOCALE } from "@/lib/time";
 import type { PlayBucket, PlayTotal, Session } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { cn, describeError } from "@/lib/utils";
@@ -168,7 +168,7 @@ export function GameHistory({
             days={groupByBucket(totals)}
             now={now}
             labelOf={() => ({ title, color })}
-            onOpenDay={(day) => navigate(`/journal?week=${toDayKey(startOfWeek(day))}`)}
+            onOpenDay={(day) => navigate(`/journal?day=${toDayKey(day)}`)}
           />
         ) : (
           <PlayBars

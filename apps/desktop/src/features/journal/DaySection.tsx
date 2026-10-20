@@ -23,7 +23,7 @@ import type { DayShare, PlayRun, Session, SessionEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PlayBlock } from "./PlayBlock";
 import { BLEED_PX, HIT_SLOP_PX, hatch, OUTLINE_GAP_PX, placeOnDay, TICKS, type Place } from "./strip";
-import { entryId, type JournalDay } from "./week";
+import { dayId, entryId, type JournalDay } from "./week";
 
 /** A session's part on a day's strip, with whether it runs in from or out to midnight. */
 interface StripPart {
@@ -148,6 +148,7 @@ export const DaySection = memo(function DaySection({
   notes,
   onSaveNote,
   onCorrected,
+  flashed,
   linked,
   onLink,
   onJump,
@@ -166,6 +167,8 @@ export const DaySection = memo(function DaySection({
   notes: Record<string, string>;
   onSaveNote: (sessionId: string, note: string) => Promise<void>;
   onCorrected: () => void;
+  /** Whether a jump just went to this day, which marks its name. */
+  flashed: boolean;
   /** The session marked on every day it ran. */
   linked: string | null;
   onLink: (sessionId: string | null) => void;
@@ -225,9 +228,15 @@ export const DaySection = memo(function DaySection({
   };
 
   return (
-    <section className="flex flex-col gap-5 border-b border-rule py-7 xl:flex-row xl:gap-10">
+    <section
+      id={dayId(dayKey)}
+      tabIndex={-1}
+      className="flex scroll-mt-6 flex-col gap-5 border-b border-rule py-7 outline-none xl:flex-row xl:gap-10"
+    >
       <div className="flex shrink-0 items-baseline gap-4 xl:block xl:w-[190px]">
-        <h2 className="font-display text-4xl leading-none">{formatDate(day.start, { weekday: "long" })}</h2>
+        <h2 className={cn("font-display text-4xl leading-none transition-colors", flashed && "text-violet")}>
+          {formatDate(day.start, { weekday: "long" })}
+        </h2>
         <div className="text-xs tracking-[0.12em] text-faint uppercase xl:mt-1.5">
           {formatDate(day.start, { day: "numeric", month: "long" })}
         </div>

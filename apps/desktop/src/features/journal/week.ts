@@ -25,6 +25,11 @@ export function entryId(sessionId: string, dayKey: string): string {
   return `journal-${sessionId}-${dayKey}`;
 }
 
+/** The element of a day, for jumps to it. */
+export function dayId(dayKey: string): string {
+  return `journal-day-${dayKey}`;
+}
+
 /** How many weeks back the week of `day` ("2026-09-28") lies, 0 for this week or no day. */
 export function weeksBack(day: string | null): number {
   const [year, month, date] = (day ?? "").split("-").map(Number);

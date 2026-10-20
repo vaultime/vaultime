@@ -37,7 +37,6 @@ import {
   formatHoursMinutes,
   formatHoursShort,
   parseVaultimeDate,
-  startOfWeek,
   toDayKey,
 } from "@/lib/time";
 import type { YearPlay } from "@/lib/types";
@@ -117,7 +116,7 @@ export function StatsPage() {
     const marks = new Map(games.map((game, index) => [game.gameId, yearMarks[index].color]));
     return (gameId: string) => ({ title: titleOf(gameId), color: marks.get(gameId) ?? "var(--soft)" });
   }, [shown, byGame, titleOf, accentHues, mode]);
-  const openDay = useCallback((day: Date) => navigate(`/journal?week=${toDayKey(startOfWeek(day))}`), [navigate]);
+  const openDay = useCallback((day: Date) => navigate(`/journal?day=${toDayKey(day)}`), [navigate]);
 
   const earliest = sessions.filter(countsAsPlay).reduce(
     (min, session) => Math.min(min, parseVaultimeDate(session.started_at_wall).getFullYear()),
