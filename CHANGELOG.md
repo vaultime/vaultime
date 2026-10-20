@@ -129,7 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Appearance
 
 - **Make it yours.** Settings has a new Appearance section. Pick dark, light or the system's mode, one of six ground tones, an accent color from six swatches or any color you like, and a background picture of your own or a game's art, with dim and blur so text stays readable. The look stays on this PC, and backups leave it out.
-- **The window wears your colors too.** The icon in the tray, the taskbar and the title bar takes your accent color, signed in to cloud backup or not. On Windows 11 the title bar takes the tone of the page and the window border your accent. On Linux the tray icon follows, and the window icon on X11.
+- **The window wears your colors too.** The icon in the tray and the title bar takes your accent color, signed in to cloud backup or not. On Windows 11 the title bar takes the tone of the page and the window border your accent. The taskbar keeps the icon of the Start menu shortcut. On Linux the tray icon follows, and the window icon on X11.
 
 ### Window
 
@@ -199,7 +199,7 @@ The first public release.
 - **Local backups** to any folder, with a checksum for every file and a preview before a restore replaces anything. A restore only takes the files a backup may hold and keeps this PC's backup folder setting. Damaged artwork is skipped instead of stopping the restore.
 - **Automatic backups** once a day and when Vaultime quits, the newest seven kept, in Vaultime's data folder or a folder you pick. Artwork that did not change is stored once for all of them. Signed in PCs also back up to the cloud once a day.
 - **Invite-only cloud backup** on our own server. Free, with the same limits for every account: 1 GiB for backups and artwork together and up to 30 backups. Backups are encrypted on your PC before upload, and artwork is uploaded once and shared by every backup. At 30 backups a new upload replaces the oldest. When the storage is full, an upload is refused until you delete older backups. A backup passphrase that does not open your earlier cloud backups is refused. The server slows down password guessing and ends a session whose sign-in was copied.
-- **Signed in at a glance.** The logo, the tray icon and the taskbar icon turn violet while the PC is signed in to cloud backup.
+- **Signed in at a glance.** The logo and the tray icon turn violet while the PC is signed in to cloud backup.
 - **Password change** on the Cloud page. Your other PCs are signed out, and the backup passphrase stays the same.
 - **Export.** Save every finished session as CSV for a spreadsheet or as JSON for other tools, with notes, trust labels and, in JSON, each game's status and earlier playtime.
 
