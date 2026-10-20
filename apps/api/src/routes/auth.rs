@@ -4,7 +4,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
@@ -229,9 +229,41 @@ pub async fn refresh(
     .ok_or_else(|| AppError::unauthorized("refresh token is invalid or expired"))?;
 
     // A token that a refresh replaced came back, so someone else holds a copy
-    // of this session. Ending the whole family locks both out. A token that
-    // signing out or a password change revoked is only refused.
-    if row.replaced_at.is_some() {
+    // of this session. Ending the whole family locks both out. Right after
+    // the refresh, while its replacement went unused, the app most likely
+    // never got the answer, so that replacement goes and this token renews
+    // once more. A token that signing out or a password change revoked is
+    // only refused.
+    let grace = Duration::seconds(state.config.refresh_reuse_grace_secs);
+    let retried = match row.replaced_at {
+        Some(replaced_at) if replaced_at + grace > Utc::now() => {
+            // The replacement still stands, unused, and nobody signed out.
+            sqlx::query_scalar::<_, bool>(
+                "SELECT NOT EXISTS (
+                     SELECT 1 FROM cloud_refresh_tokens
+                     WHERE family_id = $1 AND replaced_at > $2
+                 ) AND EXISTS (
+                     SELECT 1 FROM cloud_refresh_tokens
+                     WHERE family_id = $1 AND revoked_at IS NULL
+                 )",
+            )
+            .bind(row.family_id)
+            .bind(replaced_at)
+            .fetch_one(&mut *tx)
+            .await?
+        }
+        _ => false,
+    };
+    if retried {
+        sqlx::query(
+            "UPDATE cloud_refresh_tokens SET revoked_at = NOW()
+             WHERE family_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(row.family_id)
+        .execute(&mut *tx)
+        .await?;
+        tracing::info!(account_id = %row.account_id, "a refresh came again right after it renewed, its unused token was replaced");
+    } else if row.replaced_at.is_some() {
         sqlx::query(
             "UPDATE cloud_refresh_tokens SET revoked_at = COALESCE(revoked_at, NOW())
              WHERE family_id = $1",
@@ -246,7 +278,7 @@ pub async fn refresh(
         ));
     }
 
-    if row.revoked_at.is_some() {
+    if row.revoked_at.is_some() && !retried {
         return Err(AppError::unauthorized(
             "refresh token is invalid or expired",
         ));
@@ -255,9 +287,12 @@ pub async fn refresh(
         return Err(AppError::forbidden("account does not have cloud access"));
     }
 
+    // A retried token keeps when it was first replaced, so the grace never
+    // grows.
     sqlx::query(
         "UPDATE cloud_refresh_tokens
-         SET revoked_at = NOW(), replaced_at = NOW(), last_used_at = NOW()
+         SET revoked_at = COALESCE(revoked_at, NOW()), replaced_at = COALESCE(replaced_at, NOW()),
+             last_used_at = NOW()
          WHERE id = $1",
     )
     .bind(row.id)

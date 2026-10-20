@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use sqlx::{Postgres, Transaction};
+use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
@@ -29,6 +32,10 @@ pub async fn register(
         return Err(AppError::bad_request("device_public_key is too long"));
     }
 
+    // One registration at a time per account, so two at once cannot both
+    // take the last free place.
+    let mut tx = state.db.begin().await?;
+    lock_account(&mut tx, "devices", auth.account_id).await?;
     let (known, devices) = sqlx::query_as::<_, (bool, i64)>(
         "SELECT
              EXISTS(SELECT 1 FROM cloud_devices WHERE account_id = $1 AND client_device_id = $2),
@@ -36,7 +43,7 @@ pub async fn register(
     )
     .bind(auth.account_id)
     .bind(&client_device_id)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
     if !known && devices >= MAX_DEVICES_PER_ACCOUNT {
         return Err(AppError::conflict(format!(
@@ -78,10 +85,61 @@ pub async fn register(
     .bind(platform)
     .bind(app_version)
     .bind(payload.device_public_key)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     Ok(Json(row))
+}
+
+/// The devices of the account, the one seen last first.
+pub async fn list(
+    auth: AuthenticatedAccount,
+    State(state): State<AppState>,
+) -> AppResult<Json<Vec<DeviceResponse>>> {
+    let rows = sqlx::query_as::<_, DeviceResponse>(
+        "SELECT id, client_device_id, device_name, platform, app_version, registered_at, last_seen_at
+         FROM cloud_devices
+         WHERE account_id = $1
+         ORDER BY last_seen_at DESC, id",
+    )
+    .bind(auth.account_id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows))
+}
+
+/// Removes a device of the account. Its backups stay, without a device, and
+/// a device that is still used registers again when it next signs in.
+pub async fn remove(
+    auth: AuthenticatedAccount,
+    State(state): State<AppState>,
+    Path(device_id): Path<Uuid>,
+) -> AppResult<StatusCode> {
+    let removed = sqlx::query("DELETE FROM cloud_devices WHERE id = $1 AND account_id = $2")
+        .bind(device_id)
+        .bind(auth.account_id)
+        .execute(&state.db)
+        .await?
+        .rows_affected();
+    if removed == 0 {
+        return Err(AppError::not_found("device not found"));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Waits for and holds, until `tx` ends, the lock of `what` for the account,
+/// so counts read in `tx` stay true until it commits.
+pub(super) async fn lock_account(
+    tx: &mut Transaction<'_, Postgres>,
+    what: &str,
+    account_id: Uuid,
+) -> AppResult<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("{what}:{account_id}"))
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 fn trim_required(value: &str, field_name: &str) -> AppResult<String> {

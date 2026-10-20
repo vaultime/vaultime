@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::constants::{
     DEFAULT_MAX_ACCOUNT_BYTES, DEFAULT_MAX_BACKUP_BYTES, DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT,
     DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT, DEFAULT_MIN_BACKUP_INTERVAL_SECS,
-    DEFAULT_STALE_PENDING_BACKUP_SECS,
+    DEFAULT_REFRESH_REUSE_GRACE_SECS, DEFAULT_STALE_PENDING_BACKUP_SECS,
 };
 use crate::error::AppError;
 
@@ -29,6 +29,7 @@ pub struct Config {
     pub max_complete_backups_per_account: i64,
     pub min_backup_interval_secs: i64,
     pub stale_pending_backup_secs: i64,
+    pub refresh_reuse_grace_secs: i64,
 }
 
 impl Config {
@@ -62,6 +63,11 @@ impl Config {
             stale_pending_backup_secs: env_i64(
                 "VAULTIME_STALE_PENDING_BACKUP_SECONDS",
                 DEFAULT_STALE_PENDING_BACKUP_SECS,
+                0,
+            )?,
+            refresh_reuse_grace_secs: env_i64(
+                "VAULTIME_REFRESH_REUSE_GRACE_SECONDS",
+                DEFAULT_REFRESH_REUSE_GRACE_SECS,
                 0,
             )?,
         })

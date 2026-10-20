@@ -313,6 +313,7 @@ mod tests {
             max_complete_backups_per_account: 30,
             min_backup_interval_secs: 900,
             stale_pending_backup_secs: 3600,
+            refresh_reuse_grace_secs: 0,
         }
     }
 

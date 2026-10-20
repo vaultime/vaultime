@@ -92,9 +92,11 @@ pub async fn create_backup(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
+    // A device removed since, still running, keeps backing up without one
+    // until it registers again.
     let device_id = match client_device_id {
         None => None,
-        Some(client_device_id) => Some(
+        Some(client_device_id) => {
             sqlx::query_scalar::<_, Uuid>(
                 "SELECT id FROM cloud_devices WHERE account_id = $1 AND client_device_id = $2",
             )
@@ -102,10 +104,7 @@ pub async fn create_backup(
             .bind(client_device_id)
             .fetch_optional(&state.db)
             .await?
-            .ok_or_else(|| {
-                AppError::bad_request("client_device_id is not registered for this account")
-            })?,
-        ),
+        }
     };
 
     let backup_id = Uuid::new_v4();

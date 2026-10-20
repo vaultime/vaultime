@@ -63,6 +63,10 @@ pub const UPLOAD_IDLE_SECS: u64 = 120;
 pub const UPLOAD_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
 /// Bytes read from disk per chunk of a download.
 pub const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
+/// How long a refresh token that a refresh replaced still renews once, in
+/// seconds, for an app that never got the answer to that refresh. Within it
+/// the unused replacement is revoked instead of the whole session.
+pub const DEFAULT_REFRESH_REUSE_GRACE_SECS: i64 = 30;
 /// Devices one account may register.
 pub const MAX_DEVICES_PER_ACCOUNT: i64 = 50;
 /// Longest device id, name, platform or app version, in characters.
@@ -122,7 +126,7 @@ pub const DEFAULT_MAX_ACCOUNT_BYTES: i64 = BYTES_PER_GIB;
 pub const DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT: i64 = 1;
 /// Complete backups kept per account before the oldest are rotated out.
 pub const DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT: i64 = 30;
-/// Shortest time between two backups of an account, in seconds.
+/// Shortest time between two backups of a PC, in seconds.
 pub const DEFAULT_MIN_BACKUP_INTERVAL_SECS: i64 = 15 * SECS_PER_MINUTE;
 /// Age in seconds after which an unfinished upload is removed. Artwork that no
 /// backup refers to is kept this long too, so a backup being assembled keeps

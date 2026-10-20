@@ -108,8 +108,10 @@ print(created["code"])
 EOF
 }
 
-# The round trip needs two kept backups.
-start_api "$api" "$port" -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=2
+# The round trip needs two kept backups. A reused refresh token ends its
+# session at once here, the grace for a retry has its own check further down.
+start_api "$api" "$port" -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=2 \
+  -e VAULTIME_REFRESH_REUSE_GRACE_SECONDS=0
 
 echo "== creating a test account"
 code=$(make_invite)
@@ -268,6 +270,34 @@ assert status == 413, f"a backup larger than the storage was kept: {status}"
 assert stored() == kept, f"older backups went for a backup that did not fit: {stored()}"
 print("old backups made room")
 EOF
+
+echo "== a refresh retried right after it renewed"
+session=$(curl -fsS -X POST "$small_url/v1/auth/login" -H "content-type: application/json" \
+  -d '{"email":"rotation@example.com","password":"e2e-password-1234"}')
+renew() { curl -s -w '\n%{http_code}' -X POST "$small_url/v1/auth/refresh" \
+  -H "content-type: application/json" -d "{\"refresh_token\":\"$1\"}"; }
+first=$(field refresh_token <<<"$session")
+lost=$(renew "$first" | head -1 | field refresh_token)
+retry=$(renew "$first")
+[ "$(tail -1 <<<"$retry")" = 200 ] || { echo "a quick retry of a refresh was refused"; exit 1; }
+again=$(head -1 <<<"$retry" | field refresh_token)
+[ "$(renew "$lost" | tail -1)" = 401 ] || { echo "the unused token of the first refresh still renews"; exit 1; }
+[ "$(renew "$again" | tail -1)" = 200 ] || { echo "the retried session was ended"; exit 1; }
+
+echo "== listing and removing devices"
+device() { curl -fsS -X POST "$small_url/v1/devices/register" -H "authorization: Bearer $small_token" \
+  -H "content-type: application/json" \
+  -d "{\"client_device_id\":\"$1\",\"device_name\":\"PC\",\"platform\":\"windows\",\"app_version\":\"0.6.0\"}" | field id; }
+keep=$(device "kept-pc")
+gone=$(device "removed-pc")
+count() { curl -fsS -H "authorization: Bearer $small_token" "$small_url/v1/devices" \
+  | "$python" -c "import json, sys; print(len(json.load(sys.stdin)))"; }
+[ "$(count)" = 2 ] || { echo "expected two devices"; exit 1; }
+remove() { curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "authorization: Bearer $small_token" "$small_url/v1/devices/$1"; }
+[ "$(remove "$gone")" = 204 ] || { echo "a device was not removed"; exit 1; }
+[ "$(remove "$gone")" = 404 ] || { echo "a removed device was removed again"; exit 1; }
+[ "$(count)" = 1 ] || { echo "expected one device after the removal"; exit 1; }
+[ "$keep" != "$gone" ] || { echo "two devices got one id"; exit 1; }
 
 # Some failures, like a failed artwork cleanup, are only logged. The reused
 # refresh token above is expected to log a warning, not an error.

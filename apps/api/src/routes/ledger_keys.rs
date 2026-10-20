@@ -43,7 +43,8 @@ pub async fn register(
     let keys: Vec<String> = keys.into_iter().collect();
 
     // One registration at a time per account, so the limits below hold.
-    let _upload = state.limits.uploads.lock(auth.account_id).await?;
+    let mut tx = state.db.begin().await?;
+    super::devices::lock_account(&mut tx, "ledger-keys", auth.account_id).await?;
     let (known_pc, pcs, kept, already) = sqlx::query_as::<_, (bool, i64, i64, i64)>(
         "SELECT
              EXISTS(SELECT 1 FROM cloud_ledger_keys WHERE account_id = $1 AND ledger_device_id = $2),
@@ -55,7 +56,7 @@ pub async fn register(
     .bind(auth.account_id)
     .bind(pc)
     .bind(&keys)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
     if !known_pc && pcs >= MAX_DEVICES_PER_ACCOUNT {
         return Err(AppError::conflict(format!(
@@ -77,8 +78,9 @@ pub async fn register(
     .bind(auth.account_id)
     .bind(pc)
     .bind(&keys)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

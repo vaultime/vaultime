@@ -41,7 +41,9 @@ pub fn router(state: AppState) -> Router {
             "/v1/admin/beta-applications/{application_id}",
             delete(beta::delete_application),
         )
+        .route("/v1/devices", get(devices::list))
         .route("/v1/devices/register", post(devices::register))
+        .route("/v1/devices/{device_id}", delete(devices::remove))
         .route(
             "/v1/ledger-keys",
             get(ledger_keys::list).post(ledger_keys::register),
