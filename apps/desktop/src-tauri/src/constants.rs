@@ -500,3 +500,9 @@ pub const WINDOW_LOOK_SETTING: &str = "window_look";
 /// Size the icon of the tray, the taskbar and the title bar is drawn at, the
 /// size of `icons/signed-in.png`.
 pub const WINDOW_ICON_PX: u32 = 256;
+/// Sizes in the icon file of this program's shortcuts, as Explorer, the
+/// Start menu and the taskbar pick them at every display scale.
+pub const SHORTCUT_ICON_SIZES_PX: [u32; 6] = [16, 24, 32, 48, 64, 256];
+/// How deep shortcuts are looked for in the Start menu, whose programs may
+/// sit in a folder of their own.
+pub const SHORTCUT_SEARCH_DEPTH: usize = 2;

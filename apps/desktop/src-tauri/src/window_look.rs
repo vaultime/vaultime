@@ -3,7 +3,7 @@
 
 //! The window around the page in the look the player picked. The icon of the
 //! tray, the taskbar and the title bar takes the accent, signed in to cloud
-//! backup or not. On Windows the title bar follows dark or light mode, and on
+//! backup or not, and on Windows so do the shortcuts of this program. On Windows the title bar follows dark or light mode, and on
 //! Windows 11 it takes the ground of the page and the window border the accent.
 //! Linux leaves the title bar to the desktop.
 
@@ -82,6 +82,12 @@ struct Drawn {
     look: Option<WindowLook>,
     /// The accent of the icon, none for the bundled one, and the cloud state.
     icon: Option<(Option<String>, bool)>,
+    /// The accent the shortcuts of this program were last given.
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only Windows shortcuts take the accent")
+    )]
+    shortcut_accent: Option<String>,
 }
 
 /// The look and whether this PC is signed in, the two things the icon shows.
@@ -138,6 +144,19 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
         paint_title_bar(app, look);
         drawn.look = Some(look.clone());
     }
+    // Development builds leave the shortcuts alone, as they do login items.
+    #[cfg(windows)]
+    if !cfg!(debug_assertions)
+        && let Some(look) = &look
+        && drawn.shortcut_accent.as_ref() != Some(&look.icon_accent)
+        && let Some(context) = app.try_state::<crate::AppContext>()
+    {
+        crate::shortcut_icon::follow_accent(
+            context.app_dir.join(crate::constants::APPEARANCE_DIR),
+            look.icon_accent.clone(),
+        );
+        drawn.shortcut_accent = Some(look.icon_accent.clone());
+    }
     let icon = (look.map(|look| look.icon_accent), signed_in);
     if drawn.icon.as_ref() != Some(&icon) {
         crate::tray::show_icon(app, icon.0.as_deref(), signed_in);
@@ -157,6 +176,12 @@ fn rgb(color: &str) -> Option<[u8; 3]> {
 
 /// The logo in an accent, signed in to cloud backup or not.
 pub fn draw_icon(accent: &str, signed_in: bool) -> Option<Image<'static>> {
+    let rgba = draw_logo(accent, signed_in, WINDOW_ICON_PX)?;
+    Some(Image::new_owned(rgba, WINDOW_ICON_PX, WINDOW_ICON_PX))
+}
+
+/// The logo in an accent as RGBA, `size` pixels square.
+pub fn draw_logo(accent: &str, signed_in: bool, size: u32) -> Option<Vec<u8>> {
     // Only a plain color goes into the SVG.
     rgb(accent)?;
     let svg = if signed_in {
@@ -168,19 +193,15 @@ pub fn draw_icon(accent: &str, signed_in: bool) -> Option<Image<'static>> {
     let tree = usvg::Tree::from_str(&svg, &usvg::Options::default())
         .inspect_err(|error| warn!("failed to read the logo: {error}"))
         .ok()?;
-    let mut pixmap = tiny_skia::Pixmap::new(WINDOW_ICON_PX, WINDOW_ICON_PX)?;
-    let scale = f64::from(WINDOW_ICON_PX) / f64::from(tree.size().width());
+    let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
+    let scale = f64::from(size) / f64::from(tree.size().width());
     let scale = scale as f32;
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );
-    Some(Image::new_owned(
-        pixmap.take_demultiplied(),
-        WINDOW_ICON_PX,
-        WINDOW_ICON_PX,
-    ))
+    Some(pixmap.take_demultiplied())
 }
 
 /// Sets the big icon of a window, the one the taskbar shows. Tauri sets only

@@ -21,6 +21,8 @@ pub mod playtime;
 pub mod recovery;
 pub mod secure_storage;
 pub mod share;
+#[cfg(windows)]
+pub mod shortcut_icon;
 pub mod tracking;
 pub mod tray;
 pub mod window_look;

@@ -5781,6 +5781,7 @@ dependencies = [
  "tauri-plugin-updater",
  "uuid",
  "walkdir",
+ "windows",
  "windows-registry 0.100.0",
  "windows-sys 0.61.2",
  "x11rb",
