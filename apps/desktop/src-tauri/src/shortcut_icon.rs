@@ -26,7 +26,9 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{GUID, HSTRING, Interface, PCWSTR};
 
-use crate::constants::{SHORTCUT_ICON_DELAY, SHORTCUT_ICON_SIZES_PX, SHORTCUT_SEARCH_DEPTH};
+use crate::constants::{
+    SHORTCUT_ICON_DELAY, SHORTCUT_ICON_SIZES_PX, SHORTCUT_PATH_UNITS, SHORTCUT_SEARCH_DEPTH,
+};
 use crate::platform::process::path_key;
 use crate::window_look::draw_logo;
 
@@ -35,8 +37,6 @@ const SIGNED_IN_SUFFIX: &str = "-signed-in";
 const ICON_EXTENSION: &str = "ico";
 /// The pinned taskbar buttons, in the roaming app data folder.
 const TASKBAR_PINS: &str = r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar";
-/// Room for a path read from a shortcut, in UTF-16 units.
-const PATH_UNITS: usize = 1024;
 
 /// The logo the shortcuts should show next, with the appearance folder.
 static WANTED: Mutex<Option<(PathBuf, Logo)>> = Mutex::new(None);
@@ -104,7 +104,8 @@ fn known_folder(id: &GUID) -> Option<PathBuf> {
 }
 
 /// Points every shortcut in `folders` that starts `program` at the icon of
-/// `logo`, made once a shortcut needs it. Returns the shortcuts changed.
+/// `logo`, made once a shortcut needs it. The icons of earlier logos go
+/// once no shortcut is left pointing at one. Returns the shortcuts changed.
 fn point_shortcuts(
     folders: &[(PathBuf, usize)],
     program: &Path,
@@ -114,6 +115,7 @@ fn point_shortcuts(
     let program_key = path_key(&program.to_string_lossy());
     let mut icon: Option<PathBuf> = None;
     let mut changed = Vec::new();
+    let mut failed = false;
     let shortcuts = folders.iter().flat_map(|(folder, depth)| {
         walkdir::WalkDir::new(folder)
             .max_depth(*depth)
@@ -157,13 +159,16 @@ fn point_shortcuts(
                 info!("{} shows the logo of {logo:?} now", shortcut.display());
                 changed.push(shortcut);
             }
-            Err(error) => warn!(
-                "could not change the icon of {}: {error}",
-                shortcut.display()
-            ),
+            Err(error) => {
+                failed = true;
+                warn!(
+                    "could not change the icon of {}: {error}",
+                    shortcut.display()
+                );
+            }
         }
     }
-    if let Some(icon) = &icon {
+    if !failed && let Some(icon) = &icon {
         remove_other_icons(appearance_dir, icon);
     }
     changed
@@ -253,7 +258,7 @@ impl Shortcut {
 
     /// The program the shortcut starts.
     fn target(&self) -> Option<String> {
-        let mut buffer = [0_u16; PATH_UNITS];
+        let mut buffer = [0_u16; SHORTCUT_PATH_UNITS];
         // SAFETY: the buffer is passed with its length, and no find data is asked for.
         unsafe { self.link.GetPath(&mut buffer, std::ptr::null_mut(), 0) }.ok()?;
         text_of(&buffer)
@@ -261,7 +266,7 @@ impl Shortcut {
 
     /// The file its icon comes from.
     fn icon(&self) -> Option<String> {
-        let mut buffer = [0_u16; PATH_UNITS];
+        let mut buffer = [0_u16; SHORTCUT_PATH_UNITS];
         let mut index = 0;
         // SAFETY: the buffer is passed with its length, the index is a live i32.
         unsafe { self.link.GetIconLocation(&mut buffer, &raw mut index) }.ok()?;

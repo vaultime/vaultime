@@ -3,9 +3,10 @@
 
 //! The window around the page in the look the player picked. The icon of the
 //! tray, the taskbar and the title bar takes the accent, signed in to cloud
-//! backup or not, and on Windows the shortcuts of this program show the same. On Windows the title bar follows dark or light mode, and on
-//! Windows 11 it takes the ground of the page and the window border the accent.
-//! Linux leaves the title bar to the desktop.
+//! backup or not. On Windows the shortcuts of this program show the same,
+//! and the title bar follows dark or light mode. Windows 11 also gives it
+//! the ground of the page and the window border the accent. Linux leaves
+//! the title bar to the desktop.
 
 use std::sync::{Arc, Mutex, PoisonError};
 

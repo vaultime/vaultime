@@ -514,3 +514,5 @@ pub const SHORTCUT_ICON_DELAY: Duration = Duration::from_secs(10);
 /// How deep shortcuts are looked for in the Start menu, whose programs may
 /// sit in a folder of their own.
 pub const SHORTCUT_SEARCH_DEPTH: usize = 2;
+/// Room for a path read from a shortcut, in UTF-16 units.
+pub const SHORTCUT_PATH_UNITS: usize = 1024;
