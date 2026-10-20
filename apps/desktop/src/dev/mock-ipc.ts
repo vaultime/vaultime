@@ -1478,7 +1478,7 @@ mockIPC((cmd, payload) => {
   if (appearanceAnswer !== undefined) return appearanceAnswer;
   switch (cmd) {
     case "get_app_version":
-      return "0.5.0";
+      return "0.6.0";
     case "is_development_build":
       return false;
     case "get_device_id":
