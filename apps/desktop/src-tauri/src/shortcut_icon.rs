@@ -29,7 +29,7 @@ use windows::core::{GUID, HSTRING, Interface, PCWSTR};
 use crate::constants::{
     SHORTCUT_ICON_DELAY, SHORTCUT_ICON_SIZES_PX, SHORTCUT_PATH_UNITS, SHORTCUT_SEARCH_DEPTH,
 };
-use crate::platform::process::path_key;
+use crate::platform::process::{file_name, path_key, resolved_key};
 use crate::window_look::draw_logo;
 
 const ICON_PREFIX: &str = "shortcut-icon-";
@@ -112,7 +112,10 @@ fn point_shortcuts(
     appearance_dir: &Path,
     logo: &Logo,
 ) -> Vec<PathBuf> {
-    let program_key = path_key(&program.to_string_lossy());
+    // A shortcut gives its target as a long path, the program may run from
+    // a short one like `C:\PROGRA~1`.
+    let program_key = resolved_key(&program.to_string_lossy());
+    let program_name = file_name(&program_key).unwrap_or_default().to_owned();
     let mut icon: Option<PathBuf> = None;
     let mut changed = Vec::new();
     let mut failed = false;
@@ -137,7 +140,7 @@ fn point_shortcuts(
         };
         if link
             .target()
-            .is_none_or(|target| path_key(&target) != program_key)
+            .is_none_or(|target| !starts_program(&target, &program_name, &program_key))
         {
             continue;
         }
@@ -172,6 +175,12 @@ fn point_shortcuts(
         remove_other_icons(appearance_dir, icon);
     }
     changed
+}
+
+/// Whether a shortcut's `target` is the program. Only a target of the same
+/// file name is resolved, so other shortcuts cost no file system call.
+fn starts_program(target: &str, program_name: &str, program_key: &str) -> bool {
+    file_name(&path_key(target)) == Some(program_name) && resolved_key(target) == program_key
 }
 
 /// The icon file of `logo`, written when it is not there yet.
@@ -323,6 +332,8 @@ impl Drop for Com {
 
 #[cfg(test)]
 mod tests {
+    use windows::Win32::Storage::FileSystem::GetShortPathNameW;
+
     use super::*;
 
     fn teal(signed_in: bool) -> Logo {
@@ -377,6 +388,38 @@ mod tests {
         };
         assert!(write_icon(&appearance, &not_a_color).is_none());
         fs::remove_dir_all(appearance).unwrap();
+    }
+
+    /// The short form Windows gives `path`, when its volume keeps short names.
+    fn short_path(path: &Path) -> Option<PathBuf> {
+        let mut buffer = [0_u16; SHORTCUT_PATH_UNITS];
+        // SAFETY: the buffer outlives the call, which writes inside it only.
+        let length =
+            unsafe { GetShortPathNameW(&HSTRING::from(path.as_os_str()), Some(&mut buffer)) }
+                as usize;
+        (length > 0 && length < buffer.len())
+            .then(|| PathBuf::from(String::from_utf16_lossy(&buffer[..length])))
+    }
+
+    #[test]
+    fn a_program_started_through_a_short_path_finds_its_shortcuts() {
+        let _com = Com::start();
+        let root = folder();
+        let long = root.join("a long folder name");
+        fs::create_dir_all(&long).unwrap();
+        let ours = long.join("vaultime.exe");
+        fs::write(&ours, b"MZ").unwrap();
+        let programs = root.join("Programs");
+        fs::create_dir_all(&programs).unwrap();
+        make_shortcut(&programs.join("Vaultime.lnk"), &ours);
+
+        let short = short_path(&ours).unwrap();
+        if short != ours {
+            let folders = [(programs.clone(), SHORTCUT_SEARCH_DEPTH)];
+            let changed = point_shortcuts(&folders, &short, &root.join("appearance"), &teal(false));
+            assert_eq!(changed, [programs.join("Vaultime.lnk")]);
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

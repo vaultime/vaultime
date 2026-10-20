@@ -176,6 +176,16 @@ fn same_file(exe: &str, game_executable: &str) -> bool {
         .is_ok_and(|game| paths_equal(&exe.to_string_lossy(), &game.to_string_lossy()))
 }
 
+/// The comparison key of `path` with links and short names resolved, or of
+/// the path as given when it cannot be resolved.
+#[cfg(windows)]
+pub(crate) fn resolved_key(path: &str) -> String {
+    std::fs::canonicalize(path).map_or_else(
+        |_| path_key(path),
+        |resolved| path_key(strip_verbatim_prefix(&resolved.to_string_lossy())),
+    )
+}
+
 /// Last path segment, splitting on both separators so Windows paths parse on any OS.
 pub(crate) fn file_name(path: &str) -> Option<&str> {
     path.rsplit(['/', '\\']).find(|segment| !segment.is_empty())
