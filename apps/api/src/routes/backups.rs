@@ -32,6 +32,9 @@ use crate::constants::{
 use crate::error::{AppError, AppResult};
 use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
 
+/// The field of a backup's metadata that names the PC it is of.
+const SOURCE_PC_FIELD: &str = "source_device_id";
+
 /// Turns `b`, a CTE of `cloud_backups` rows, into `BackupRecordResponse` rows.
 const BACKUP_RECORD_SELECT: &str = "
     SELECT b.id, b.label, b.storage_key, b.checksum, b.size_bytes, b.backup_created_at,
@@ -73,9 +76,15 @@ pub async fn create_backup(
 
     let blob_ids = validate_blob_ids(&payload.blob_ids)?;
 
+    let metadata_json = payload.metadata_json.unwrap_or_default();
+    let source_pc = metadata_json
+        .get(SOURCE_PC_FIELD)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+
     let _upload = state.limits.uploads.lock(auth.account_id).await?;
     prune_stale_pending_backups(&state, auth.account_id).await?;
-    enforce_backup_limits(&state, auth.account_id).await?;
+    enforce_backup_limits(&state, auth.account_id, source_pc.as_deref()).await?;
 
     let client_device_id = payload
         .client_device_id
@@ -106,7 +115,6 @@ pub async fn create_backup(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let metadata_json = payload.metadata_json.unwrap_or_default();
 
     // The backup and its references to artwork appear together or not at all.
     let mut transaction = state.db.begin().await?;
@@ -222,9 +230,10 @@ pub async fn upload_backup_content(
         return Err(AppError::not_found("backup not found"));
     };
 
-    // A backup that does not fit even alone goes again before anything old
-    // is rotated out, so a failed upload never costs an old backup.
-    match fits_alone(&state, auth.account_id, backup_id).await {
+    // A backup that does not fit beside what rotation never removes goes
+    // again before anything old is rotated out, so a failed upload never
+    // costs an old backup.
+    match fits_beside_what_stays(&state, auth.account_id, backup_id).await {
         Ok(true) => {}
         Ok(false) => {
             remove_backup(&state, auth.account_id, backup_id, &backup.storage_key).await?;
@@ -378,17 +387,28 @@ pub(super) async fn receive_body(
     Ok(Some((size_bytes, hex::encode(hasher.finalize()))))
 }
 
-async fn enforce_backup_limits(state: &AppState, account_id: Uuid) -> AppResult<()> {
+/// One upload at a time per account, and a pause between the backups of a
+/// PC, `source_pc`, so PCs of one account each keep their own schedule. A
+/// backup that names no PC waits for any.
+async fn enforce_backup_limits(
+    state: &AppState,
+    account_id: Uuid,
+    source_pc: Option<&str>,
+) -> AppResult<()> {
     let (pending_backups, last_complete_at) = sqlx::query_as::<_, (i64, Option<DateTime<Utc>>)>(
         r#"
         SELECT
             COUNT(*) FILTER (WHERE status = 'pending'),
-            MAX(uploaded_at) FILTER (WHERE status = 'complete')
+            MAX(uploaded_at) FILTER (
+                WHERE status = 'complete'
+                  AND ($2::TEXT IS NULL OR metadata_json->>'source_device_id' = $2)
+            )
         FROM cloud_backups
         WHERE account_id = $1
         "#,
     )
     .bind(account_id)
+    .bind(source_pc)
     .fetch_one(&state.db)
     .await?;
 
@@ -440,75 +460,113 @@ pub(super) async fn prune_stale_pending_backups(
     Ok(())
 }
 
-/// Keeps the newest `max_complete_backups_per_account` complete backups, counting `keep_id`, and
-/// deletes the rest oldest first. Runs only after a new backup is stored and verified, so an
-/// account never loses an old backup for a failed upload.
+/// The complete backups of an account, the newest first, each with whether
+/// it is the newest of the PC that made it. Rotation keeps those, so every PC
+/// can merge the latest of every other one. A backup that names no PC is no
+/// PC's newest.
+async fn complete_backups(
+    state: &AppState,
+    account_id: Uuid,
+) -> AppResult<Vec<(Uuid, String, bool)>> {
+    Ok(sqlx::query_as::<_, (Uuid, String, bool)>(
+        r#"
+        SELECT id, storage_key,
+               metadata_json->>'source_device_id' IS NOT NULL
+               AND ROW_NUMBER() OVER (
+                   PARTITION BY metadata_json->>'source_device_id'
+                   ORDER BY uploaded_at DESC, id DESC
+               ) = 1
+        FROM cloud_backups
+        WHERE account_id = $1 AND status = 'complete'
+        ORDER BY uploaded_at DESC, id DESC
+        "#,
+    )
+    .bind(account_id)
+    .fetch_all(&state.db)
+    .await?)
+}
+
+/// Keeps `keep_id`, the newest backup of every PC and then the newest others
+/// up to `max_complete_backups_per_account`, and deletes the rest. Runs only
+/// after a new backup is stored and verified, so an account never loses an
+/// old backup for a failed upload.
 async fn rotate_complete_backups(
     state: &AppState,
     account_id: Uuid,
     keep_id: Uuid,
 ) -> AppResult<()> {
-    let expired = sqlx::query_as::<_, (Uuid, String)>(
-        r#"
-        SELECT id, storage_key
-        FROM cloud_backups
-        WHERE account_id = $1 AND status = 'complete' AND id <> $2
-        ORDER BY uploaded_at DESC, id DESC
-        OFFSET $3
-        "#,
-    )
-    .bind(account_id)
-    .bind(keep_id)
-    .bind(state.config.max_complete_backups_per_account - 1)
-    .fetch_all(&state.db)
-    .await?;
-
-    for (backup_id, storage_key) in expired {
-        remove_backup(state, account_id, backup_id, &storage_key).await?;
+    let backups = complete_backups(state, account_id).await?;
+    let max = usize::try_from(state.config.max_complete_backups_per_account).unwrap_or(usize::MAX);
+    let mut kept = backups
+        .iter()
+        .filter(|(id, _, newest)| *id == keep_id || *newest)
+        .count();
+    for (backup_id, storage_key, newest) in &backups {
+        if *backup_id == keep_id || *newest {
+            continue;
+        }
+        if kept < max {
+            kept += 1;
+            continue;
+        }
+        remove_backup(state, account_id, *backup_id, storage_key).await?;
         tracing::info!(%account_id, %backup_id, "rotated out old backup");
     }
-
     Ok(())
 }
 
-/// Whether the backup `backup_id` with its artwork fits the account's
-/// storage on its own.
-async fn fits_alone(state: &AppState, account_id: Uuid, backup_id: Uuid) -> AppResult<bool> {
-    let alone = sqlx::query_scalar::<_, i64>(
-        "SELECT
-             COALESCE((SELECT size_bytes FROM cloud_backups WHERE id = $2 AND account_id = $1), 0)::BIGINT
-           + COALESCE((SELECT SUM(b.size_bytes) FROM cloud_blobs b
-                       JOIN cloud_backup_blobs r ON r.account_id = b.account_id AND r.blob_id = b.id
-                       WHERE b.account_id = $1 AND r.backup_id = $2), 0)::BIGINT",
+/// Whether the backup `backup_id` fits the account's storage beside the
+/// newest backup of every other PC, which rotation never removes, with the
+/// artwork all of them refer to.
+async fn fits_beside_what_stays(
+    state: &AppState,
+    account_id: Uuid,
+    backup_id: Uuid,
+) -> AppResult<bool> {
+    let staying = sqlx::query_scalar::<_, i64>(
+        r#"
+        WITH kept AS (
+            SELECT id, size_bytes FROM cloud_backups WHERE account_id = $1 AND id = $2
+            UNION
+            SELECT id, size_bytes FROM (
+                SELECT DISTINCT ON (metadata_json->>'source_device_id') id, size_bytes
+                FROM cloud_backups
+                WHERE account_id = $1 AND status = 'complete'
+                  AND metadata_json->>'source_device_id' IS NOT NULL
+                ORDER BY metadata_json->>'source_device_id', uploaded_at DESC, id DESC
+            ) newest
+        )
+        SELECT
+            COALESCE((SELECT SUM(size_bytes) FROM kept), 0)::BIGINT
+          + COALESCE((SELECT SUM(b.size_bytes) FROM cloud_blobs b
+                      WHERE b.account_id = $1 AND EXISTS (
+                          SELECT 1 FROM cloud_backup_blobs r
+                          WHERE r.account_id = b.account_id AND r.blob_id = b.id
+                            AND r.backup_id IN (SELECT id FROM kept)
+                      )), 0)::BIGINT
+        "#,
     )
     .bind(account_id)
     .bind(backup_id)
     .fetch_one(&state.db)
     .await?;
-    Ok(alone <= state.config.max_account_bytes)
+    Ok(staying <= state.config.max_account_bytes)
 }
 
 /// Rotates out the oldest complete backups until what the account keeps fits
-/// its storage, keeping `keep_id`, the backup just stored.
+/// its storage, keeping `keep_id`, the backup just stored, and the newest
+/// backup of every PC.
 async fn make_room(state: &AppState, account_id: Uuid, keep_id: Uuid) -> AppResult<()> {
     let max_account_bytes = state.config.max_account_bytes;
     if kept_usage(state, account_id).await? <= max_account_bytes {
         return Ok(());
     }
-    let backups = sqlx::query_as::<_, (Uuid, String)>(
-        r#"
-        SELECT id, storage_key
-        FROM cloud_backups
-        WHERE account_id = $1 AND status = 'complete' AND id <> $2
-        ORDER BY uploaded_at ASC, id ASC
-        "#,
-    )
-    .bind(account_id)
-    .bind(keep_id)
-    .fetch_all(&state.db)
-    .await?;
-    for (backup_id, storage_key) in backups {
-        remove_backup(state, account_id, backup_id, &storage_key).await?;
+    let backups = complete_backups(state, account_id).await?;
+    for (backup_id, storage_key, newest) in backups.iter().rev() {
+        if *backup_id == keep_id || *newest {
+            continue;
+        }
+        remove_backup(state, account_id, *backup_id, storage_key).await?;
         tracing::info!(%account_id, %backup_id, "rotated out an old backup to make room");
         if kept_usage(state, account_id).await? <= max_account_bytes {
             break;

@@ -73,6 +73,19 @@ pub struct DeviceResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RegisterLedgerKeysRequest {
+    /// The id the PC's ledger names, the one its backups give as their source.
+    pub ledger_device_id: String,
+    pub public_keys: Vec<String>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct LedgerKeysResponse {
+    pub ledger_device_id: String,
+    pub public_keys: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateBackupRequest {
     pub label: Option<String>,
     pub checksum: String,

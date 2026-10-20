@@ -69,6 +69,11 @@ pub const MAX_DEVICES_PER_ACCOUNT: i64 = 50;
 pub const MAX_DEVICE_FIELD_CHARS: usize = 200;
 /// Longest device public key, in characters.
 pub const MAX_DEVICE_PUBLIC_KEY_CHARS: usize = 4096;
+/// An Ed25519 public key as hex, how ledgers name their keys.
+pub const LEDGER_KEY_HEX_CHARS: usize = 64;
+/// Ledger keys one PC may register. A PC gets a new key when it is set up
+/// again, so a handful is normal.
+pub const MAX_LEDGER_KEYS_PER_PC: i64 = 64;
 /// How often the server removes stale uploads, unused artwork, expired
 /// sessions and old beta applications, in seconds.
 pub const MAINTENANCE_INTERVAL_SECS: u64 = 60 * 60;

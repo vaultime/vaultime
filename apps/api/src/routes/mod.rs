@@ -7,6 +7,7 @@ mod backups;
 mod beta;
 mod blobs;
 mod devices;
+mod ledger_keys;
 mod maintenance;
 
 pub use maintenance::spawn_maintenance;
@@ -41,6 +42,10 @@ pub fn router(state: AppState) -> Router {
             delete(beta::delete_application),
         )
         .route("/v1/devices/register", post(devices::register))
+        .route(
+            "/v1/ledger-keys",
+            get(ledger_keys::list).post(ledger_keys::register),
+        )
         .route(
             "/v1/backups",
             get(backups::list_backups).post(backups::create_backup),
