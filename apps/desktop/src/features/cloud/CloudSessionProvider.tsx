@@ -417,6 +417,16 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  async function listDevices() {
+    return withAuthenticatedSession((current) => cloudGetJson<CloudDevice[]>("/v1/devices", current.access_token));
+  }
+
+  async function removeDevice(deviceId: string) {
+    await withAuthenticatedSession((current) =>
+      cloudDelete(`/v1/devices/${encodeURIComponent(deviceId)}`, current.access_token),
+    );
+  }
+
   async function listBetaApplications() {
     return withAuthenticatedSession((current) =>
       cloudGetJson<BetaApplication[]>("/v1/admin/beta-applications", current.access_token),
@@ -683,6 +693,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     logout,
     refreshSession,
     registerCurrentDevice,
+    listDevices,
+    removeDevice,
     listBackups,
     getStorage,
     listBetaApplications,

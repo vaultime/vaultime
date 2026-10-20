@@ -62,6 +62,7 @@ On the Cloud page, **Create an account** asks for your email, a password, your i
 - **Back up every day** uploads a backup of this PC once a day while you are signed in, whatever your other PCs upload. **Back up now** uploads one right away.
 - Artwork is stored once per account, so unchanged covers are not uploaded again.
 - **Restore** on a backup works like a local restore, after you confirm.
+- **Registered PCs** lists every PC that signed in with your account. **Remove** frees the place of a PC you no longer use, and its backups stay. A PC still in use registers again when it next signs in.
 
 ### Space and rotation
 

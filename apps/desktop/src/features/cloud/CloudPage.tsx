@@ -28,6 +28,7 @@ import {
   persistCachedBackups,
 } from "./backups";
 import { CreateInviteDialog } from "./CreateInviteDialog";
+import { RegisteredPcsSection } from "./RegisteredPcsSection";
 
 export function CloudPage() {
   const {
@@ -480,6 +481,8 @@ export function CloudPage() {
                 Register again
               </Button>
             </PageSection>
+
+            <RegisteredPcsSection onError={setErrorMessage} />
 
             <PageSection title="Account">
               <PageRow label="Email">{session.user.email}</PageRow>

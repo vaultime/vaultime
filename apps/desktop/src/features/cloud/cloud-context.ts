@@ -53,6 +53,9 @@ export interface CloudSessionContextValue {
   logout: () => Promise<void>;
   refreshSession: () => Promise<CloudAuthSession | null>;
   registerCurrentDevice: () => Promise<CloudDevice | null>;
+  /** Every PC that signed in with the account. */
+  listDevices: () => Promise<CloudDevice[]>;
+  removeDevice: (deviceId: string) => Promise<void>;
   listBackups: () => Promise<CloudBackupRecord[]>;
   getStorage: () => Promise<CloudStorage>;
   listBetaApplications: () => Promise<BetaApplication[]>;

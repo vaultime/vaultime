@@ -726,6 +726,14 @@ function cloudReply(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+/** The PCs of the mock account: this one, the laptop, and two left from earlier tests. */
+let mockDevices: CloudDevice[] = [
+  cloudDevice,
+  { ...cloudDevice, id: "device-laptop", client_device_id: "laptop", device_name: "Vaultime Windows Desktop", last_seen_at: iso(now - 9 * HOUR_MS) },
+  { ...cloudDevice, id: "device-test-1", client_device_id: "test-1", device_name: "Vaultime Windows Desktop", app_version: "0.5.0", last_seen_at: iso(now - 30 * HOUR_MS) },
+  { ...cloudDevice, id: "device-test-2", client_device_id: "test-2", device_name: "Vaultime Windows Desktop", app_version: "0.5.0", last_seen_at: iso(now - 29 * HOUR_MS) },
+];
+
 // Answers the cloud API in the browser, so the preview never reaches a server.
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -756,6 +764,8 @@ window.fetch = async (input, init) => {
       return cloudReply(200, cloudSession());
     case "/v1/devices/register":
       return cloudReply(200, cloudDevice);
+    case "/v1/devices":
+      return cloudReply(200, mockDevices);
     case "/v1/backups":
       return cloudReply(200, [cloudBackup("backup-2", "Before the reinstall", 2, 7, 38), cloudBackup("backup-1", "Backup", 16, 6, 24)]);
     case "/v1/admin/beta-applications":
@@ -766,6 +776,10 @@ window.fetch = async (input, init) => {
     case "/v1/storage":
       return cloudReply(200, { backup_bytes: 480_000, artwork_bytes: 8_700_000, limit_bytes: 2048 * 1024 * 1024 });
     default:
+      if (url.pathname.startsWith("/v1/devices/") && init?.method === "DELETE") {
+        mockDevices = mockDevices.filter((each) => each.id !== url.pathname.slice("/v1/devices/".length));
+        return new Response(null, { status: 204 });
+      }
       return cloudReply(404, { error: { code: "not_found", message: "not found" } });
   }
 };

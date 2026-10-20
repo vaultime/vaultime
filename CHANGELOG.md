@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A new PC looks like your old one.** Restoring a backup on a PC where the look was never changed brings the backup's mode, ground tone and accent along, with the dim and blur for a background picture. The picture itself stays out of backups, and a PC that has a look of its own keeps it.
 - **Your other PCs from the cloud.** Settings, Other PCs lists the newest cloud backup of each of your other PCs. Merge one once, and its newer backups come in by themselves within the hour. A backup with a new key or with sessions that fail their check waits for you, and a new game links to one of yours only with the same launcher id. A first merge from the cloud takes a PC's ledger at its word only for the keys that PC registered with the server, which keeps every key it was given. This needs the updated server.
 - **Each PC keeps its own cloud backup.** Every PC now uploads its own daily backup, also when another PC uploaded one that day, and the server keeps the newest backup of each PC when it makes room. PC names travel encrypted with your passphrase.
+- **Remove PCs from your account.** The Cloud page lists every PC registered with your account, and Remove frees the place of one you no longer use. Its backups stay. This needs the updated server.
 - **Cloud backup only when you want it.** Cloud backup has its own switch under Settings, Cloud backup. Turned off, the Cloud page leaves the menu and the command palette, and Vaultime neither signs in nor uploads backups, nor reads a saved sign-in from the keyring. New installs start with it off, as accounts are invite-only. A PC that is signed in keeps it on until you sign out, and the switch stays with each PC when you restore a backup.
 
 ### Interface
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- **Signed in through a dropped answer.** When the server renewed your sign-in but the answer never arrived, Vaultime asking again within 30 seconds now keeps you signed in, instead of the server taking it for a copied sign-in and signing you out. Two PCs registering at the same moment can no longer pass the limit of PCs per account. This needs the updated server.
 - **Each game once on the month bars.** Pointing at a month on the stats page listed a game once for every day you played it, so a busy month showed one game many times. It now shows each game once with its time for the month.
 - **A cloud restore asks before it takes over.** A fresh install that restores a cloud backup only continues as the backup's PC when the restore showed that choice. It used to take over even when the check behind the choice failed, or when the backup did not name its PC and the choice never showed. Restore waits until that check is done.
 - **A quick restart stays one session.** A game has to be missing at two checks in a row, about ten seconds, before its session ends. A game that restarted itself after an update, or a single check that missed it, used to split the session in two.

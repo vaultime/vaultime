@@ -68,6 +68,7 @@ No other third parties, such as analytics, advertising or cloud storage provider
 
 - Delete local data by removing Vaultime's data folder.
 - Delete individual cloud backups from the Cloud page in the app.
+- To remove a device from your cloud account, use **Registered PCs** on the Cloud page. Its backups stay.
 - To delete your cloud account with all its devices and backups, email [vaultime@outlook.de](mailto:vaultime@outlook.de).
 
 ## 7. Security

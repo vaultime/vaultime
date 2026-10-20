@@ -76,6 +76,8 @@ function renderPage(backup: CloudBackupRecord, result: CloudBackupRestoreResult)
     isAdmin: false,
     setAutoBackup: vi.fn(),
     listBackups: vi.fn(async () => [backup]),
+    listDevices: vi.fn(async () => []),
+    removeDevice: vi.fn(async () => {}),
     getStorage: vi.fn(async () => ({ backup_bytes: 0, artwork_bytes: 0, limit_bytes: 1 })),
     restoreRemoteBackup,
   } as unknown as CloudSessionContextValue;
