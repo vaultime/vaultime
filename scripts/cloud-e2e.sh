@@ -308,6 +308,81 @@ remove() { curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "authorization: B
 [ "$(count)" = 1 ] || { echo "expected one device after the removal"; exit 1; }
 [ "$keep" != "$gone" ] || { echo "two devices got one id"; exit 1; }
 
+echo "== each PC keeps its newest backup"
+code=$(make_invite)
+pcs_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \
+  -d "{\"email\":\"pcs@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
+  | field access_token)
+"$python" - "$small_url" "$pcs_token" <<'EOF'
+import hashlib
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+url, token = sys.argv[1], sys.argv[2]
+MIB = 1024 * 1024
+
+
+def call(method, path, body=None, content_type="application/json"):
+    request = urllib.request.Request(url + path, data=body, method=method)
+    request.add_header("authorization", f"Bearer {token}")
+    if body is not None:
+        request.add_header("content-type", content_type)
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.status, json.loads(response.read() or b"null")
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or b"null")
+
+
+def upload(size, pc):
+    content = os.urandom(size)
+    checksum = hashlib.sha256(content).hexdigest()
+    status, backup = call("POST", "/v1/backups", json.dumps({
+        "checksum": checksum,
+        "backup_created_at": "2026-10-20T12:00:00Z",
+        "metadata_json": {"source_device_id": pc},
+    }).encode())
+    assert status == 201, (status, backup)
+    status, _ = call("PUT", f"/v1/backups/{backup['id']}/content", content, "application/octet-stream")
+    return backup["id"], status
+
+
+def stored():
+    status, backups = call("GET", "/v1/backups")
+    assert status == 200, status
+    return [backup["id"] for backup in backups if backup["status"] == "complete"]
+
+
+for pc, key in [("desk", "a" * 64), ("lap", "b" * 64)]:
+    status, _ = call("POST", "/v1/ledger-keys", json.dumps({"ledger_device_id": pc, "public_keys": [key]}).encode())
+    assert status == 204, status
+
+lap, _ = upload(MIB + MIB // 4, "lap")
+desk_first, _ = upload(MIB + MIB // 4, "desk")
+# The desk's own older backup may go, only the laptop's newest has to stay.
+desk, status = upload(MIB + MIB // 4, "desk")
+assert status == 200, f"a backup that fits beside the other PC's newest was turned away: {status}"
+kept = stored()
+assert lap in kept and desk in kept and desk_first not in kept, kept
+
+# One that does not fit beside the laptop's newest goes, nothing else does.
+_, status = upload(2 * MIB, "desk")
+assert status == 413, f"a backup that crowds out another PC's newest was kept: {status}"
+assert stored() == kept, stored()
+
+# A name that never registered keys is no PC, so its backup gets no place of
+# its own and rotates out like any other.
+stray, _ = upload(MIB // 8, "made-up-1")
+_, status = upload(MIB // 8, "made-up-2")
+assert status == 200, status
+kept = stored()
+assert lap in kept and desk in kept and stray not in kept, kept
+print("each PC kept its newest backup")
+EOF
+
 # Some failures, like a failed artwork cleanup, are only logged. The reused
 # refresh token above is expected to log a warning, not an error.
 if docker logs "$api" 2>&1 | grep "ERROR" || docker logs "$small_api" 2>&1 | grep "ERROR"; then

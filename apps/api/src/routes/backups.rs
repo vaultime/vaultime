@@ -394,13 +394,19 @@ async fn enforce_backup_limits(
     account_id: Uuid,
     source_pc: Option<&str>,
 ) -> AppResult<()> {
+    // A PC counts on its own only once it registered its ledger keys, which
+    // an account can do for a limited number of PCs. Any other name a backup
+    // gives waits for the account's last backup.
     let (pending_backups, last_complete_at) = sqlx::query_as::<_, (i64, Option<DateTime<Utc>>)>(
         r#"
         SELECT
             COUNT(*) FILTER (WHERE status = 'pending'),
             MAX(uploaded_at) FILTER (
                 WHERE status = 'complete'
-                  AND ($2::TEXT IS NULL OR metadata_json->>'source_device_id' = $2)
+                  AND (metadata_json->>$3 = $2 OR NOT EXISTS (
+                      SELECT 1 FROM cloud_ledger_keys
+                      WHERE account_id = $1 AND ledger_device_id = $2
+                  ))
             )
         FROM cloud_backups
         WHERE account_id = $1
@@ -408,6 +414,7 @@ async fn enforce_backup_limits(
     )
     .bind(account_id)
     .bind(source_pc)
+    .bind(SOURCE_PC_FIELD)
     .fetch_one(&state.db)
     .await?;
 
@@ -461,8 +468,9 @@ pub(super) async fn prune_stale_pending_backups(
 
 /// The complete backups of an account, the newest first, each with whether
 /// it is the newest of the PC that made it. Rotation keeps those, so every PC
-/// can merge the latest of every other one. A backup that names no PC is no
-/// PC's newest.
+/// can merge the latest of every other one. Only a PC that registered its
+/// ledger keys has a newest backup, so the number kept this way stays as
+/// limited as those PCs.
 async fn complete_backups(
     state: &AppState,
     account_id: Uuid,
@@ -470,9 +478,11 @@ async fn complete_backups(
     Ok(sqlx::query_as::<_, (Uuid, String, bool)>(
         r#"
         SELECT id, storage_key,
-               metadata_json->>'source_device_id' IS NOT NULL
+               metadata_json->>$2 IN (
+                   SELECT ledger_device_id FROM cloud_ledger_keys WHERE account_id = $1
+               )
                AND ROW_NUMBER() OVER (
-                   PARTITION BY metadata_json->>'source_device_id'
+                   PARTITION BY metadata_json->>$2
                    ORDER BY uploaded_at DESC, id DESC
                ) = 1
         FROM cloud_backups
@@ -481,6 +491,7 @@ async fn complete_backups(
         "#,
     )
     .bind(account_id)
+    .bind(SOURCE_PC_FIELD)
     .fetch_all(&state.db)
     .await?)
 }
@@ -515,8 +526,8 @@ async fn rotate_complete_backups(
 }
 
 /// Whether the backup `backup_id` fits the account's storage beside the
-/// newest backup of every other PC, which rotation never removes, with the
-/// artwork all of them refer to.
+/// newest backup of every other PC that registered its keys, which rotation
+/// never removes, with the artwork all of them refer to.
 async fn fits_beside_what_stays(
     state: &AppState,
     account_id: Uuid,
@@ -528,11 +539,13 @@ async fn fits_beside_what_stays(
             SELECT id, size_bytes FROM cloud_backups WHERE account_id = $1 AND id = $2
             UNION
             SELECT id, size_bytes FROM (
-                SELECT DISTINCT ON (metadata_json->>'source_device_id') id, size_bytes
+                SELECT DISTINCT ON (metadata_json->>$3) id, size_bytes
                 FROM cloud_backups
                 WHERE account_id = $1 AND status = 'complete'
-                  AND metadata_json->>'source_device_id' IS NOT NULL
-                ORDER BY metadata_json->>'source_device_id', uploaded_at DESC, id DESC
+                  AND metadata_json->>$3 IN (
+                      SELECT ledger_device_id FROM cloud_ledger_keys WHERE account_id = $1
+                  )
+                ORDER BY metadata_json->>$3, uploaded_at DESC, id DESC
             ) newest
         )
         SELECT
@@ -547,6 +560,7 @@ async fn fits_beside_what_stays(
     )
     .bind(account_id)
     .bind(backup_id)
+    .bind(SOURCE_PC_FIELD)
     .fetch_one(&state.db)
     .await?;
     Ok(staying <= state.config.max_account_bytes)
