@@ -54,6 +54,9 @@ Frontend, from `apps/desktop`:
 - `npm run tauri dev` starts the app. Debug builds keep their cloud sign-in
   in their own keyring entries, so trying one never signs out an installed
   Vaultime.
+- `scripts/third-party-notices.mjs` writes `public/third-party-notices.txt`
+  (gitignored) from `cargo metadata` and `package-lock.json`. Tauri runs it
+  before every dev and build run, Settings, About shows it.
 - `npm run typecheck`, `npm run lint`, `npm test` and `npm run build`
 - Tests live next to the code as `*.test.ts` and run in six time zones (see
   `vitest.config.ts`) with a German locale, so code that mixes up local and

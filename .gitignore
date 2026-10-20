@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 target/
+# Written by scripts/third-party-notices.mjs before each Tauri build
+apps/desktop/public/third-party-notices.txt
 
 # IDE
 .idea/

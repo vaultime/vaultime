@@ -4,9 +4,9 @@
   "version": "0.5.0",
   "identifier": "com.vaultime.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node ../../scripts/third-party-notices.mjs && npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node ../../scripts/third-party-notices.mjs && npm run build",
     "frontendDist": "../dist"
   },
   "app": {

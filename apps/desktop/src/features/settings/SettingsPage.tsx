@@ -10,7 +10,7 @@ import {
 } from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Eye, RotateCcw } from "lucide-react";
+import { ExternalLink, Eye, RotateCcw, ScrollText } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -24,6 +24,7 @@ import { ExportSection } from "@/features/settings/ExportSection";
 import { IdleStepper } from "@/features/settings/IdleStepper";
 import { IgnoredSection } from "@/features/settings/IgnoredSection";
 import { LocalBackupsSection } from "@/features/settings/LocalBackupsSection";
+import { NoticesDialog } from "@/features/settings/NoticesDialog";
 import { UpdatesRow } from "@/features/settings/UpdatesRow";
 import { OtherPcsSection } from "@/features/settings/OtherPcsSection";
 import { ThisPcSection } from "@/features/settings/ThisPcSection";
@@ -82,6 +83,7 @@ export function SettingsPage() {
   });
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
+  const [showingNotices, setShowingNotices] = useState(false);
   const [trayAvailable, setTrayAvailable] = useState(false);
   const [closeToTray, setCloseToTray] = useState(initial.closeToTray);
   const [autostart, setAutostart] = useState(false);
@@ -357,7 +359,12 @@ export function SettingsPage() {
                 {link.label}
               </Button>
             ))}
+            <Button variant="outline" size="sm" onClick={() => setShowingNotices(true)}>
+              <ScrollText className="size-3.5" />
+              Third-party notices
+            </Button>
           </div>
+          {showingNotices && <NoticesDialog onClose={() => setShowingNotices(false)} />}
         </PageSection>
       </div>
     </div>
