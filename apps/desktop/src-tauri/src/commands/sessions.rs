@@ -37,11 +37,12 @@ pub fn list_sessions(
     recent_days: u32,
 ) -> Result<SessionList, VaultimeError> {
     let mut all = sessions::list_all_sessions(&db)?;
-    playtime::totals::as_shown(&db, &live, &mut all, chrono::Utc::now().timestamp_millis())?;
+    let now = chrono::Utc::now();
+    playtime::totals::as_shown(&db, &live, &mut all, now.timestamp_millis())?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
-    let recent_since = chrono::Utc::now() - chrono::TimeDelta::days(i64::from(recent_days));
+    let recent_since = now - chrono::TimeDelta::days(i64::from(recent_days));
     Ok(SessionList {
-        games: playtime::games::game_totals(&all, recent_since),
+        games: playtime::games::game_totals(&all, recent_since, now),
         sessions: all,
     })
 }

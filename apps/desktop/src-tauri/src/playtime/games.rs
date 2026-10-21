@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::db::models::Session;
-use crate::integrity::{STATUS_RECOVERED, STATUS_SUSPICIOUS};
+use crate::integrity::{STATUS_RECOVERED, STATUS_SUSPICIOUS, format_timestamp};
 
 /// One game's totals.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -26,6 +26,8 @@ pub struct GameTotals {
     /// The runtime of the longest session.
     pub longest_session_ms: i64,
     pub first_played_at: Option<String>,
+    /// When the newest play ended, now while the game runs here. Time set
+    /// aside for another game is no play.
     pub last_played_at: Option<String>,
     pub suspicious_count: i64,
     pub recovered_count: i64,
@@ -43,8 +45,15 @@ pub fn counts_as_play(session: &Session) -> bool {
 
 /// Each game's totals from `sessions` as the pages get them, each shown as
 /// the game it counts as. Trust labels of sessions that started at or after
-/// `recent_since` count as recent too.
-pub fn game_totals(sessions: &[Session], recent_since: DateTime<Utc>) -> Vec<GameTotals> {
+/// `recent_since` count as recent too. A session still running here was last
+/// played `now`, and one whose clock went back ended no earlier than it
+/// started.
+pub fn game_totals(
+    sessions: &[Session],
+    recent_since: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Vec<GameTotals> {
+    let now = format_timestamp(now);
     let mut by_game: BTreeMap<&str, GameTotals> = BTreeMap::new();
     for session in sessions.iter().filter(|session| counts_as_play(session)) {
         let totals = by_game
@@ -66,12 +75,14 @@ pub fn game_totals(sessions: &[Session], recent_since: DateTime<Utc>) -> Vec<Gam
         {
             totals.first_played_at = Some(start.clone());
         }
-        if totals
-            .last_played_at
+        let end = session
+            .counted_until
             .as_ref()
-            .is_none_or(|last| start > last)
-        {
-            totals.last_played_at = Some(start.clone());
+            .or(session.ended_at_wall.as_ref())
+            .unwrap_or(&now)
+            .max(start);
+        if totals.last_played_at.as_ref().is_none_or(|last| end > last) {
+            totals.last_played_at = Some(end.clone());
         }
         let recent = DateTime::parse_from_rfc3339(start)
             .is_ok_and(|started| started.with_timezone(&Utc) >= recent_since);
@@ -94,13 +105,20 @@ pub fn game_totals(sessions: &[Session], recent_since: DateTime<Utc>) -> Vec<Gam
 mod tests {
     use super::*;
 
+    fn at(time: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(time)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
     fn session(game: &str, start: &str, runtime_min: i64, status: &str) -> Session {
         let runtime_ms = runtime_min * 60_000;
+        let end = at(start) + chrono::TimeDelta::milliseconds(runtime_ms);
         Session {
             id: format!("{game}-{start}"),
             game_id: game.into(),
             started_at_wall: start.into(),
-            ended_at_wall: Some(start.into()),
+            ended_at_wall: Some(format_timestamp(end)),
             runtime_ms,
             counted_runtime_ms: runtime_ms,
             counted_active_ms: runtime_ms,
@@ -110,9 +128,11 @@ mod tests {
     }
 
     fn cutoff() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-10-01T00:00:00.000Z")
-            .unwrap()
-            .with_timezone(&Utc)
+        at("2026-10-01T00:00:00.000Z")
+    }
+
+    fn now() -> DateTime<Utc> {
+        at("2026-10-07T12:00:00.000Z")
     }
 
     #[test]
@@ -125,6 +145,7 @@ mod tests {
                 session("celeste", "2026-10-06T08:00:00.000Z", 60, "local"),
             ],
             cutoff(),
+            now(),
         );
         assert_eq!(totals.len(), 2);
         let hades = &totals[1];
@@ -138,7 +159,7 @@ mod tests {
         );
         assert_eq!(
             hades.last_played_at.as_deref(),
-            Some("2026-10-05T19:00:00.000Z")
+            Some("2026-10-05T19:30:00.000Z")
         );
         assert_eq!(
             (hades.suspicious_count, hades.recent_suspicious_count),
@@ -159,12 +180,48 @@ mod tests {
         gog.counted_runtime_ms = 60 * 60_000;
         let mut discarded = session("cyberpunk", "2026-10-03T18:00:00.000Z", 0, "edited");
         discarded.runtime_ms = 0;
-        let totals = game_totals(&[steam, gog, discarded], cutoff());
+        let totals = game_totals(&[steam, gog, discarded], cutoff(), now());
         assert_eq!(totals[0].runtime_ms, 90 * 60_000);
         assert_eq!(totals[0].sessions_count, 2);
         assert_eq!(
             totals[0].last_played_at.as_deref(),
-            Some("2026-10-02T18:30:00.000Z")
+            Some("2026-10-02T19:30:00.000Z")
+        );
+    }
+
+    #[test]
+    fn a_game_was_last_played_when_its_play_ended() {
+        let evening = session("hades", "2026-10-02T18:00:00.000Z", 180, "local");
+        let break_in_it = session("hades", "2026-10-02T19:00:00.000Z", 30, "local");
+        let totals = game_totals(&[evening.clone(), break_in_it], cutoff(), now());
+        assert_eq!(
+            totals[0].last_played_at.as_deref(),
+            Some("2026-10-02T21:00:00.000Z")
+        );
+
+        let mut running = session("hades", "2026-10-07T11:00:00.000Z", 0, "local");
+        running.ended_at_wall = None;
+        let totals = game_totals(&[evening, running], cutoff(), now());
+        assert_eq!(
+            totals[0].last_played_at.as_deref(),
+            Some("2026-10-07T12:00:00.000Z")
+        );
+    }
+
+    #[test]
+    fn last_played_leaves_out_time_set_aside_and_never_comes_before_the_start() {
+        let mut client = session("client", "2026-10-02T18:00:00.000Z", 180, "local");
+        client.counted_until = Some("2026-10-02T20:00:00.000Z".into());
+        let mut clock_back = session("hades", "2026-10-03T18:00:00.000Z", 60, "local");
+        clock_back.ended_at_wall = Some("2026-10-03T17:00:00.000Z".into());
+        let totals = game_totals(&[client, clock_back], cutoff(), now());
+        assert_eq!(
+            totals[0].last_played_at.as_deref(),
+            Some("2026-10-02T20:00:00.000Z")
+        );
+        assert_eq!(
+            totals[1].last_played_at.as_deref(),
+            Some("2026-10-03T18:00:00.000Z")
         );
     }
 }

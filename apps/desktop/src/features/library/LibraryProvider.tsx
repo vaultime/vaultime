@@ -107,25 +107,38 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!pageVisible) return;
     let cancelled = false;
+    // Polls by number, so a slow reload never brings back what an earlier poll saw.
+    let polls = 0;
+    let shown = 0;
 
     function poll() {
+      polls += 1;
+      const number = polls;
       api
         .getActiveSessions()
         .then(({ sessions: next, played_today_ms }) => {
           if (cancelled) return;
-          const json = JSON.stringify(next);
-          if (json !== activeJson.current) {
-            activeJson.current = json;
-            setActive(next);
-          }
-          setPlayedToday(played_today_ms);
-          setLastPoll(Date.now());
+          const polledAt = Date.now();
+          const show = () => {
+            if (cancelled || number < shown) return;
+            shown = number;
+            const json = JSON.stringify(next);
+            if (json !== activeJson.current) {
+              activeJson.current = json;
+              setActive(next);
+            }
+            setPlayedToday(played_today_ms);
+            setLastPoll(polledAt);
+          };
           setToday(toDayKey(new Date()));
           // The first poll, or a session started or ended: totals changed.
           const ids = next.map((s) => s.id).sort().join(",");
           if (ids !== activeIds.current) {
             activeIds.current = ids;
-            refresh().catch(() => {});
+            // Totals first, so a game that stops leaves the live views with its new last played.
+            refresh().then(show, () => {});
+          } else {
+            show();
           }
         })
         .catch(() => {

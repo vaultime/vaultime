@@ -383,6 +383,7 @@ function estimateSessionsBetween(
 /** What `list_sessions` answers for each game, trust labels of the last `recentDays` days counting as recent. */
 export function estimateGameTotals(sessions: Session[], recentDays: number, now = Date.now()): GameTotals[] {
   const recentSince = now - recentDays * DAY_MS;
+  const nowWall = new Date(now).toISOString();
   const byGame = new Map<string, GameTotals>();
   for (const session of sessions.filter(countsAsPlay)) {
     const total = byGame.get(session.game_id) ?? {
@@ -405,8 +406,9 @@ export function estimateGameTotals(sessions: Session[], recentDays: number, now 
     total.sessions_count += 1;
     total.longest_session_ms = Math.max(total.longest_session_ms, session.runtime_ms);
     const start = session.started_at_wall;
+    const end = session.ended_at_wall ?? nowWall;
     if (!total.first_played_at || start < total.first_played_at) total.first_played_at = start;
-    if (!total.last_played_at || start > total.last_played_at) total.last_played_at = start;
+    if (!total.last_played_at || end > total.last_played_at) total.last_played_at = end;
     const recent = parseVaultimeDate(start).getTime() >= recentSince;
     if (session.integrity_status === "suspicious") {
       total.suspicious_count += 1;

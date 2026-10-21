@@ -33,6 +33,7 @@ export interface GameSummary {
   recentSuspiciousCount: number;
   /** Recovered sessions of the last `TRUST_BADGE_RECENT_DAYS` days. */
   recentRecoveredCount: number;
+  /** When the newest play ended, now while the game runs here. */
   lastPlayedAt: string | null;
 }
 

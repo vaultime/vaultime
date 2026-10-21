@@ -240,6 +240,13 @@ export function formatNearDay(date: Date, day: Date): string {
     : formatDate(date, { day: "numeric", month: "short" });
 }
 
+/** "20:15" for a moment on the day of `day`, "Tue 23:40" for one on another day. */
+export function formatMomentOnDay(moment: Date, day = new Date()): string {
+  return calendarDaysAgo(moment, day) === 0
+    ? formatClockTime(moment)
+    : `${formatNearDay(moment, day)} ${formatClockTime(moment)}`;
+}
+
 /**
  * When a session ran, as read from the journal page of `day`: "22:40 to
  * 23:10", "22:40 to Sun 02:15" on the day it began, "Sat 22:40 to 02:15" on
@@ -247,12 +254,10 @@ export function formatNearDay(date: Date, day: Date): string {
  * session runs "to now".
  */
 export function formatSpanOnDay(start: Date, end: Date | null, day: Date): string {
-  const onDay = (moment: Date) => calendarDaysAgo(moment, day) === 0;
-  const at = (moment: Date) =>
-    onDay(moment) ? formatClockTime(moment) : `${formatNearDay(moment, day)} ${formatClockTime(moment)}`;
+  const at = (moment: Date) => formatMomentOnDay(moment, day);
   if (!end) return `${at(start)} to now`;
   const nextDay = startOfDay(day, 1);
-  if (!onDay(start) && end > nextDay) return `since ${at(start)}`;
+  if (calendarDaysAgo(start, day) !== 0 && end > nextDay) return `since ${at(start)}`;
   if (end.getTime() === nextDay.getTime()) return `${at(start)} to midnight`;
   return `${at(start)} to ${at(end)}`;
 }

@@ -17,12 +17,13 @@ import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCloudSession } from "@/features/cloud/cloud-context";
-import { useLibrary, usePlaying } from "@/features/library/library-context";
+import { useActiveSessions, useLibrary, usePlaying } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
-import { COPYRIGHT_NOTICE, SETTING_KEYS } from "@/lib/constants";
+import { COPYRIGHT_NOTICE, RELATIVE_TIME_REFRESH_MS, SETTING_KEYS } from "@/lib/constants";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
-import { formatHoursShort, formatRelativeDay } from "@/lib/time";
+import { formatHoursShort, formatMomentOnDay, formatRelativeDay, parseVaultimeDate } from "@/lib/time";
+import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { cn, logFailure } from "@/lib/utils";
 
 const PAGES = [
@@ -46,6 +47,8 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
     return isGameSort(saved) ? saved : "recent";
   });
   const games = sortGames(summaries, sort);
+  // Drawn again every minute, so "Just now" moves on.
+  useRefreshWhile(true, RELATIVE_TIME_REFRESH_MS);
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(logFailure("reading the version"));
@@ -141,11 +144,11 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
                     <span className="truncate text-sm text-soft">{game.title}</span>
                     <span className="flex items-center gap-1.5 text-xs text-faint">
                       {playing.has(game.id) && <span className="size-1.5 rounded-full bg-violet" />}
-                      {playing.has(game.id)
-                        ? "Playing now"
-                        : lastPlayedAt
-                          ? formatRelativeDay(lastPlayedAt)
-                          : "Not played yet"}
+                      {playing.has(game.id) ? (
+                        <PlayingSince gameId={game.id} />
+                      ) : lastPlayedAt
+                        ? formatRelativeDay(lastPlayedAt)
+                        : "Not played yet"}
                     </span>
                   </span>
                   {totalMs > 0 && (
@@ -165,5 +168,18 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
         <span>{COPYRIGHT_NOTICE}</span>
       </div>
     </nav>
+  );
+}
+
+/** "Since 20:15", beside the dot of a game that runs. On its own, so a poll renders only this line. */
+function PlayingSince({ gameId }: { gameId: string }) {
+  const starts = useActiveSessions()
+    .filter((session) => session.game_id === gameId)
+    .map((session) => parseVaultimeDate(session.started_at_wall).getTime());
+  if (starts.length === 0) return "Playing now";
+  return (
+    <span>
+      Since <span className="font-mono">{formatMomentOnDay(new Date(Math.min(...starts)))}</span>
+    </span>
   );
 }

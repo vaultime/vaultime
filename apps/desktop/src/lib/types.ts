@@ -342,6 +342,7 @@ export interface GameTotals {
   /** The runtime of the longest session. */
   longest_session_ms: number;
   first_played_at: string | null;
+  /** When the newest play ended, now while the game runs here. */
   last_played_at: string | null;
   suspicious_count: number;
   recovered_count: number;

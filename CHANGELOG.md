@@ -5,6 +5,12 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Recent order follows. Time a game set aside for another one leaves it out. While a game runs, the game list shows when you started it, "Since 20:15".
+
 ## [0.6.0] - 2026-10-20
 
 ### Backups

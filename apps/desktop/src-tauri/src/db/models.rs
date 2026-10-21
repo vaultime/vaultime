@@ -156,6 +156,11 @@ pub struct Session {
     pub counted_active_ms: i64,
     #[serde(default)]
     pub counted_idle_ms: i64,
+    /// When the time a closed session counts ended, for a game that steps
+    /// aside, and its start when none of it counts. Worked out from the play
+    /// spans, never stored.
+    #[serde(default, skip_serializing)]
+    pub counted_until: Option<String>,
     /// The game the session was recorded with, when it is shown as the game
     /// that one is linked to. Never stored, the session keeps its own game.
     #[serde(default, skip_serializing_if = "Option::is_none")]

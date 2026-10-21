@@ -17,6 +17,7 @@ use crate::db::repo::games;
 use crate::db::repo::map_db;
 use crate::db::repo::sessions::row_to_session;
 use crate::error::Result;
+use crate::integrity::format_timestamp;
 use crate::playtime::slices::{
     STEPS_ASIDE, Slice, Span, TimedEvent, apportion, aside_stretches, placing_events, slice_of,
     slices_from, spans_of, sum_of, wall_ms,
@@ -390,8 +391,9 @@ fn played_by_slice(
 }
 
 /// Fills in the time set aside of sessions whose game steps aside for
-/// others: what the session holds minus what its slices count. Running
-/// sessions, already brought up to the latest tick, are placed up to it.
+/// others: what the session holds minus what its slices count, and for a
+/// closed one when the time that counts ended. Running sessions, already
+/// brought up to the latest tick, are placed up to it.
 pub fn fill_set_aside(
     db: &Database,
     live: &LiveSessions,
@@ -435,11 +437,35 @@ pub fn fill_set_aside(
         } else {
             HashMap::new()
         };
+        let counted_until: HashMap<String, i64> = if any_closed {
+            let mut stmt = conn
+                .prepare_cached(&format!(
+                    "SELECT play_spans.session_id, MAX(play_spans.span_end)
+                     FROM play_spans
+                     JOIN sessions ON sessions.id = play_spans.session_id
+                     JOIN games ON games.id = sessions.game_id
+                     WHERE {STEPS_ASIDE} AND play_spans.runtime_ms > 0
+                     GROUP BY play_spans.session_id"
+                ))
+                .map_err(map_db)?;
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(map_db)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?
+        } else {
+            HashMap::new()
+        };
         for session in sessions
             .iter_mut()
             .filter(|session| stepping.contains(&session.game_id))
         {
             let kept = if session.ended_at_wall.is_some() {
+                session.counted_until = Some(
+                    counted_until
+                        .get(&session.id)
+                        .and_then(|end| DateTime::from_timestamp_millis(*end))
+                        .map_or_else(|| session.started_at_wall.clone(), format_timestamp),
+                );
                 counted.get(&session.id).copied().unwrap_or_default()
             } else {
                 sum_of(&open_session_slices(conn, live, session, now_ms)?)
@@ -1297,6 +1323,37 @@ mod tests {
         games::set_steps_aside(&db, &client, false).unwrap();
         crate::playtime::slices::rebuild_all(&db).unwrap();
         assert_eq!(day_minutes(&db, &client), 180);
+    }
+
+    #[test]
+    fn a_game_that_steps_aside_counts_until_another_game_takes_over() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        // The client from 18:00 to 21:00, a match from 20:00 that outlasts it.
+        let client_session = played_game(&db, &client, "2026-10-02T18:00:00Z", 180);
+        let match_session = played_game(&db, &match_game, "2026-10-02T20:00:00Z", 120);
+        // Opened again inside the match, the client counts nothing.
+        let covered = played_game(&db, &client, "2026-10-02T21:00:00Z", 30);
+
+        let mut listed = sessions::list_all_sessions(&db).unwrap();
+        fill_set_aside(&db, &LiveSessions::default(), &mut listed, 0).unwrap();
+        let until = |id: &str| {
+            listed
+                .iter()
+                .find(|session| session.id == id)
+                .unwrap()
+                .counted_until
+                .clone()
+        };
+        assert_eq!(
+            until(&client_session).as_deref(),
+            Some("2026-10-02T20:00:00.000Z")
+        );
+        assert_eq!(until(&covered).as_deref(), Some("2026-10-02T21:00:00.000Z"));
+        // Only games that step aside get it.
+        assert_eq!(until(&match_session), None);
     }
 
     #[test]

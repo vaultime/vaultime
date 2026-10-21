@@ -12,6 +12,7 @@ import {
   formatDayPart,
   formatHoursMinutes,
   formatHoursShort,
+  formatMomentOnDay,
   formatNearDay,
   formatRelativeDay,
   formatSessionStart,
@@ -149,6 +150,14 @@ describe("daylight saving", () => {
     expect(clockPercent(new Date(2026, 9, 25, 23, 0), day)).toBeCloseTo((23 / 24) * 100);
     expect(clockPercent(new Date(2026, 9, 24, 23, 0), day)).toBe(0);
     expect(clockPercent(new Date(2026, 9, 26, 0, 30), day)).toBe(100);
+  });
+});
+
+describe("formatMomentOnDay", () => {
+  it("names the day only for a moment on another day", () => {
+    const tuesday = new Date(2026, 9, 13, 23, 40);
+    expect(formatMomentOnDay(tuesday, new Date(2026, 9, 13, 9, 0))).toBe("23:40");
+    expect(formatMomentOnDay(tuesday, new Date(2026, 9, 14, 0, 30))).toBe("Tue 23:40");
   });
 });
 
