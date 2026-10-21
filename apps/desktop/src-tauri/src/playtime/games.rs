@@ -26,8 +26,7 @@ pub struct GameTotals {
     /// The runtime of the longest session.
     pub longest_session_ms: i64,
     pub first_played_at: Option<String>,
-    /// When the newest play ended, now while the game runs here. Time set
-    /// aside for another game is no play.
+    /// When the newest play ended, now while the game runs here.
     pub last_played_at: Option<String>,
     pub suspicious_count: i64,
     pub recovered_count: i64,
@@ -75,12 +74,7 @@ pub fn game_totals(
         {
             totals.first_played_at = Some(start.clone());
         }
-        let end = session
-            .counted_until
-            .as_ref()
-            .or(session.ended_at_wall.as_ref())
-            .unwrap_or(&now)
-            .max(start);
+        let end = session.ended_at_wall.as_ref().unwrap_or(&now).max(start);
         if totals.last_played_at.as_ref().is_none_or(|last| end > last) {
             totals.last_played_at = Some(end.clone());
         }
@@ -209,18 +203,12 @@ mod tests {
     }
 
     #[test]
-    fn last_played_leaves_out_time_set_aside_and_never_comes_before_the_start() {
-        let mut client = session("client", "2026-10-02T18:00:00.000Z", 180, "local");
-        client.counted_until = Some("2026-10-02T20:00:00.000Z".into());
+    fn last_played_never_comes_before_the_start() {
         let mut clock_back = session("hades", "2026-10-03T18:00:00.000Z", 60, "local");
         clock_back.ended_at_wall = Some("2026-10-03T17:00:00.000Z".into());
-        let totals = game_totals(&[client, clock_back], cutoff(), now());
+        let totals = game_totals(&[clock_back], cutoff(), now());
         assert_eq!(
             totals[0].last_played_at.as_deref(),
-            Some("2026-10-02T20:00:00.000Z")
-        );
-        assert_eq!(
-            totals[1].last_played_at.as_deref(),
             Some("2026-10-03T18:00:00.000Z")
         );
     }

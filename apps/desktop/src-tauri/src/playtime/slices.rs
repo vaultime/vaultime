@@ -1206,7 +1206,6 @@ mod tests {
             counted_idle_ms: 0,
             recorded_game_id: None,
             still_running_on: None,
-            counted_until: None,
         }
     }
 

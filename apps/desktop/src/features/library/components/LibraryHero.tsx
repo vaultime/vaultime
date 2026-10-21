@@ -11,9 +11,10 @@ import {
 } from "@/components/layout/Tinted";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
+import { LastPlayed } from "@/features/library/components/LastPlayed";
 import type { GameSummary } from "@/features/library/library-context";
 import { BRAND_TINT } from "@/lib/game-tint";
-import { lastPlayedLine, libraryPlaytime } from "@/lib/sentences";
+import { libraryPlaytime } from "@/lib/sentences";
 import { numberWords } from "@/lib/words";
 
 type HeroProps =
@@ -76,7 +77,7 @@ export function LibraryHero(props: HeroProps) {
         <div className="min-w-0 flex-1">
           <TintedOverline tint={tint}>
             {playing && <span className="size-2 rounded-full bg-violet ring-3 ring-violet/25" />}
-            {playing ? "Playing now" : lastPlayedLine(summary.lastPlayedAt)}
+            {playing ? "Playing now" : <LastPlayed at={summary.lastPlayedAt} sentence />}
           </TintedOverline>
           <TintedTitle tint={tint} text={game.title} />
           <TintedSentence tint={tint}>

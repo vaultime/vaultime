@@ -317,8 +317,6 @@ export const HABIT_MIN_SHARE = 0.5;
 
 /** Under this many minutes a time reads "Just now". */
 export const JUST_NOW_MINUTES = 2;
-/** How often lists read times like "5 min ago" again. */
-export const RELATIVE_TIME_REFRESH_MS = MINUTE_MS;
 
 /** Within this many days a date reads as a weekday, after that as a month. */
 export const WEEKDAY_NAME_DAYS = 7;

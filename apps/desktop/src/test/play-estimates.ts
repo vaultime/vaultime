@@ -406,7 +406,8 @@ export function estimateGameTotals(sessions: Session[], recentDays: number, now 
     total.sessions_count += 1;
     total.longest_session_ms = Math.max(total.longest_session_ms, session.runtime_ms);
     const start = session.started_at_wall;
-    const end = session.ended_at_wall ?? nowWall;
+    const ended = session.ended_at_wall ?? nowWall;
+    const end = ended > start ? ended : start;
     if (!total.first_played_at || start < total.first_played_at) total.first_played_at = start;
     if (!total.last_played_at || end > total.last_played_at) total.last_played_at = end;
     const recent = parseVaultimeDate(start).getTime() >= recentSince;

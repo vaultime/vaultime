@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LastPlayed } from "@/features/library/components/LastPlayed";
 import type { GameSummary } from "@/features/library/library-context";
 import { TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { onFind } from "@/lib/find";
@@ -21,7 +22,7 @@ import { GAME_SORTS, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import { matchesGame } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
-import { formatHoursShort, formatRelativeDay } from "@/lib/time";
+import { formatHoursShort } from "@/lib/time";
 import { scrollMotion } from "@/lib/anchors";
 import { cn } from "@/lib/utils";
 import { plural } from "@/lib/words";
@@ -246,7 +247,11 @@ function GameTile({
               <>
                 <span className="tabular-nums">{formatHoursShort(totalMs)}</span>
                 {lastPlayedAt && <span aria-hidden="true">·</span>}
-                {lastPlayedAt && <span className="truncate">{formatRelativeDay(lastPlayedAt)}</span>}
+                {lastPlayedAt && (
+                  <span className="truncate">
+                    <LastPlayed at={lastPlayedAt} />
+                  </span>
+                )}
               </>
             ) : (
               "Not played yet"

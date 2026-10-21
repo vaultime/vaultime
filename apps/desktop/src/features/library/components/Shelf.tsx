@@ -3,8 +3,9 @@
 
 import { Link } from "react-router";
 import { Cover } from "@/components/media/Cover";
+import { LastPlayed } from "@/features/library/components/LastPlayed";
 import type { GameSummary } from "@/features/library/library-context";
-import { formatHoursShort, formatRelativeDay } from "@/lib/time";
+import { formatHoursShort } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 // Only as many covers as fit in one row. The columns grow with the page.
@@ -53,9 +54,7 @@ export function Shelf({
                 <span className={cn("truncate", playing.has(summary.game.id) && "text-violet")}>
                   {playing.has(summary.game.id)
                     ? "Playing now"
-                    : summary.lastPlayedAt
-                      ? formatRelativeDay(summary.lastPlayedAt)
-                      : ""}
+                    : summary.lastPlayedAt && <LastPlayed at={summary.lastPlayedAt} />}
                 </span>
                 <span className="shrink-0 tabular-nums">{formatHoursShort(summary.totalMs)}</span>
               </span>

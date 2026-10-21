@@ -17,13 +17,13 @@ import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCloudSession } from "@/features/cloud/cloud-context";
+import { LastPlayed } from "@/features/library/components/LastPlayed";
 import { useActiveSessions, useLibrary, usePlaying } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
-import { COPYRIGHT_NOTICE, RELATIVE_TIME_REFRESH_MS, SETTING_KEYS } from "@/lib/constants";
+import { COPYRIGHT_NOTICE, SETTING_KEYS } from "@/lib/constants";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import * as api from "@/lib/tauri";
-import { formatHoursShort, formatMomentOnDay, formatRelativeDay, parseVaultimeDate } from "@/lib/time";
-import { useRefreshWhile } from "@/lib/use-refresh-while";
+import { formatHoursShort, formatMomentOnDay, parseVaultimeDate } from "@/lib/time";
 import { cn, logFailure } from "@/lib/utils";
 
 const PAGES = [
@@ -47,8 +47,6 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
     return isGameSort(saved) ? saved : "recent";
   });
   const games = sortGames(summaries, sort);
-  // Drawn again every minute, so "Just now" moves on.
-  useRefreshWhile(true, RELATIVE_TIME_REFRESH_MS);
 
   useEffect(() => {
     api.getAppVersion().then(setAppVersion).catch(logFailure("reading the version"));
@@ -144,11 +142,7 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
                     <span className="truncate text-sm text-soft">{game.title}</span>
                     <span className="flex items-center gap-1.5 text-xs text-faint">
                       {playing.has(game.id) && <span className="size-1.5 rounded-full bg-violet" />}
-                      {playing.has(game.id) ? (
-                        <PlayingSince gameId={game.id} />
-                      ) : lastPlayedAt
-                        ? formatRelativeDay(lastPlayedAt)
-                        : "Not played yet"}
+                      {playing.has(game.id) ? <PlayingSince gameId={game.id} /> : <LastPlayed at={lastPlayedAt} />}
                     </span>
                   </span>
                   {totalMs > 0 && (

@@ -80,6 +80,7 @@ export function useLibrary(): LibraryState {
 export const ActiveContext = createContext<Session[]>([]);
 export const PlayingContext = createContext<ReadonlySet<string>>(new Set());
 export const LastPollContext = createContext(0);
+export const MinuteContext = createContext(0);
 export const PlayedTodayContext = createContext(0);
 
 /** This PC's running sessions as of the last poll. The same list until they change. */
@@ -95,6 +96,11 @@ export function usePlaying(): ReadonlySet<string> {
 /** When the running sessions were last polled, for ticking the live timer between polls. */
 export function useLastPoll(): number {
   return useContext(LastPollContext);
+}
+
+/** The minute of the last poll, so words like "5 min ago" move on. */
+export function useMinute(): number {
+  return useContext(MinuteContext);
 }
 
 /** Clock time with a game running today, as the core counted it at the last poll. */

@@ -39,7 +39,6 @@ pub(crate) fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         counted_idle_ms: 0,
         recorded_game_id: None,
         still_running_on: None,
-        counted_until: None,
     })
 }
 

@@ -7,6 +7,7 @@ import {
   ACTIVE_POLL_MS,
   DEFAULT_IDLE_THRESHOLD_SECS,
   LIBRARY_CHANGED_EVENT,
+  MINUTE_MS,
   SETTING_KEYS,
   TRUST_BADGE_RECENT_DAYS,
 } from "@/lib/constants";
@@ -31,6 +32,7 @@ import {
   ActiveContext,
   LastPollContext,
   LibraryContext,
+  MinuteContext,
   PlayedTodayContext,
   PlayingContext,
   type GameSummary,
@@ -52,6 +54,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [lastPoll, setLastPoll] = useState(() => Date.now());
   const [playedToday, setPlayedToday] = useState(0);
   const [today, setToday] = useState(() => toDayKey(new Date()));
+  const [minute, setMinute] = useState(() => Math.floor(Date.now() / MINUTE_MS));
   const { values: settings } = useSettings();
   const savedThreshold = Number(settings[SETTING_KEYS.idleThreshold]);
   const idleThresholdSeconds =
@@ -107,38 +110,26 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!pageVisible) return;
     let cancelled = false;
-    // Polls by number, so a slow reload never brings back what an earlier poll saw.
-    let polls = 0;
-    let shown = 0;
 
     function poll() {
-      polls += 1;
-      const number = polls;
       api
         .getActiveSessions()
         .then(({ sessions: next, played_today_ms }) => {
           if (cancelled) return;
-          const polledAt = Date.now();
-          const show = () => {
-            if (cancelled || number < shown) return;
-            shown = number;
-            const json = JSON.stringify(next);
-            if (json !== activeJson.current) {
-              activeJson.current = json;
-              setActive(next);
-            }
-            setPlayedToday(played_today_ms);
-            setLastPoll(polledAt);
-          };
+          const json = JSON.stringify(next);
+          if (json !== activeJson.current) {
+            activeJson.current = json;
+            setActive(next);
+          }
+          setPlayedToday(played_today_ms);
+          setLastPoll(Date.now());
+          setMinute(Math.floor(Date.now() / MINUTE_MS));
           setToday(toDayKey(new Date()));
           // The first poll, or a session started or ended: totals changed.
           const ids = next.map((s) => s.id).sort().join(",");
           if (ids !== activeIds.current) {
             activeIds.current = ids;
-            // Totals first, so a game that stops leaves the live views with its new last played.
-            refresh().then(show, () => {});
-          } else {
-            show();
+            refresh().catch(() => {});
           }
         })
         .catch(() => {
@@ -312,7 +303,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       <ActiveContext.Provider value={active}>
         <PlayingContext.Provider value={playing}>
           <LastPollContext.Provider value={lastPoll}>
-            <PlayedTodayContext.Provider value={playedToday}>{children}</PlayedTodayContext.Provider>
+            <MinuteContext.Provider value={minute}>
+              <PlayedTodayContext.Provider value={playedToday}>{children}</PlayedTodayContext.Provider>
+            </MinuteContext.Provider>
           </LastPollContext.Provider>
         </PlayingContext.Provider>
       </ActiveContext.Provider>

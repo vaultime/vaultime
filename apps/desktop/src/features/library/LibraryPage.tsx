@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { scrollMotion } from "@/lib/anchors";
-import { LIVE_TOTALS_REFRESH_MS, RECENT_DAYS, RELATIVE_TIME_REFRESH_MS } from "@/lib/constants";
+import { LIVE_TOTALS_REFRESH_MS, RECENT_DAYS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import type { Game, RecentPlay } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
@@ -35,8 +35,6 @@ const NO_RECENT_PLAY: RecentPlay = {
 export function LibraryPage() {
   const { summaries, visible, sessions, today, loaded, error, refresh } = useLibrary();
   const playing = usePlaying();
-  // Drawn again every minute, so "Just now" moves on.
-  useRefreshWhile(true, RELATIVE_TIME_REFRESH_MS);
   const [searchParams, setSearchParams] = useSearchParams();
   const [editing, setEditing] = useState<Game | null>(null);
   const [deleting, setDeleting] = useState<Game | null>(null);
