@@ -86,6 +86,11 @@ From a Windows machine, with Docker:
 Run the checks for everything you touched before calling work done, on both
 Windows and Linux when platform code changed. CI treats warnings as errors.
 
+Keep the suites fast and the coverage high: small focused tests, shared
+setup, and timing or large-history tests behind `#[ignore]` as in `perf.rs`.
+Check the suite time after adding tests, and cover the edges of new logic,
+above all in tracking and integrity code.
+
 The Rust version is pinned in `rust-toolchain.toml`. Bump it on purpose and fix
 new clippy lints in the same change.
 
@@ -276,6 +281,12 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Author and committer are the local git identity. Merge pull requests by
   fast-forwarding `main` locally and pushing, because the GitHub merge buttons
   replace the committer.
+- In a release, the release commit with the version bump and the dated
+  `CHANGELOG.md` entry comes last. Re-create it when fixes come in. Push
+  `main` and wait for CI before the tag.
+- Ask the maintainer before every `v*` tag push. A tag publishes the update
+  to every installed app, and a ruleset keeps `v*` tags from being moved or
+  deleted.
 - Never commit generated files such as `__pycache__`, build output or `.env`.
 - Never commit anything private: passwords, keys, tokens, server IPs or
   personal data. Secrets go into GitHub Actions secrets or local files outside
