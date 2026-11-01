@@ -34,17 +34,17 @@ hostname = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "gif", "tiff", "tga", "qoi", "pnm"] }
 keyring = "4.2"
 log = "0.4"
-rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
-resvg = { version = "0.48", default-features = false }
+rfd = { version = "0.17", default-features = false, features = ["gtk3", "common-controls-v6"] }
+resvg = { version = "0.49", default-features = false }
 reqwest = { version = "0.13", features = ["blocking", "json"] }
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
-zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
