@@ -50,7 +50,6 @@ describe("themeTokens", () => {
       "--violet-hover": "#b39aff",
       "--violet-ink": "#140e22",
       "--hairline-strong": "#3b3842",
-      "--bar": "#111014",
       "--idle": "#484452",
       "--amber": "#f0b45a",
       "--sky": "#7fb0ff",
@@ -67,7 +66,7 @@ describe("themeTokens", () => {
   it.each(COMBINATIONS)("reads well in $mode mode on $ground with $accent", ({ mode, ground, accent }) => {
     const tokens = themeTokens(mode, ground, accent);
     const color = (token: string) => parse(tokens[token]);
-    for (const field of ["--ink", "--bar", "--surface"]) {
+    for (const field of ["--ink", "--surface"]) {
       expect(contrastRatio(color("--text"), color(field))).toBeGreaterThanOrEqual(7);
       expect(contrastRatio(color("--soft"), color(field))).toBeGreaterThanOrEqual(7);
       expect(contrastRatio(color("--faint"), color(field))).toBeGreaterThanOrEqual(4.5);

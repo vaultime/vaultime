@@ -11,10 +11,11 @@ import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
 import { stepsAside } from "@/lib/steps-aside";
 import { usePageVisible } from "@/lib/use-page-visible";
+import { cn } from "@/lib/utils";
 
-/** The bar at the bottom of every page: the running game, like a music player. */
+/** The panel at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
-  const { games, covers, idleThresholdSeconds } = useLibrary();
+  const { games, covers, summaries, idleThresholdSeconds } = useLibrary();
   const active = useActiveSessions();
   const activePolledAt = useLastPoll();
   const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
@@ -28,23 +29,20 @@ export function LiveBar() {
   if (!current) {
     const watched = games.filter((game) => game.executable_path).length;
     return (
-      <footer
-        aria-label="Live session"
-        className="col-span-2 grid h-[76px] grid-cols-3 items-center border-t border-rule bg-bar px-6"
-      >
-        <div className="flex items-center gap-3.5">
-          <span className="flex size-11 items-center justify-center rounded-md bg-raised text-faint">
-            <Gamepad2 className="size-5" strokeWidth={1.6} />
+      <footer aria-label="Live session" className={BAR}>
+        <div className={SIDE}>
+          <span className="flex h-12 w-[34px] shrink-0 items-center justify-center rounded-[5px] text-faint ring-1 ring-hairline ring-inset">
+            <Gamepad2 className="size-4" strokeWidth={1.6} />
           </span>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[15px] font-medium">Nothing running</span>
-            <span className="text-[13px] text-faint">Start a game and it shows up here</span>
+          <div className="flex min-w-0 flex-col leading-[1.35]">
+            <span className="truncate text-[13.5px] font-medium">Nothing running</span>
+            <span className="truncate text-xs text-faint">Start a game and it shows up here</span>
           </div>
         </div>
-        <span className="text-center font-mono text-[13px] text-faint">
-          Today {formatHoursMinutes(todayMs)}
+        <span className="flex-1 text-center text-[12.5px] text-faint">
+          Today <span className="font-medium text-text tabular-nums">{formatHoursMinutes(todayMs)}</span>
         </span>
-        <span className="text-right text-[13px] text-faint">
+        <span className={cn(SIDE, "justify-end text-xs text-faint")}>
           Watching {watched} game{watched === 1 ? "" : "s"}
         </span>
       </footer>
@@ -59,52 +57,55 @@ export function LiveBar() {
   const activeShare = counted > 0 ? current.active_ms / counted : 1;
   const trust = getIntegrityMeta(current.integrity_status).label;
   const startedAt = formatClockTime(parseVaultimeDate(current.started_at_wall));
+  const tint = summaries.find((summary) => summary.game.id === current.game_id)?.tint;
 
   return (
     <footer
       aria-label="Live session"
-      className="col-span-2 grid h-[76px] grid-cols-3 items-center border-t border-rule bg-bar px-6"
+      className={BAR}
+      // The colors of the game being played wash in from its cover.
+      style={tint ? { backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tint.fill} 70%, transparent), transparent 40%)` } : undefined}
     >
-      <div className="flex min-w-0 items-center gap-3.5">
-        <Cover title={title} src={covers[current.game_id]} variant="tile" className="size-11 text-xl" />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate text-[15px] font-medium">
+      <div className={SIDE}>
+        <Cover title={title} src={covers[current.game_id]} variant="tile" className="h-12 w-[34px] rounded-[5px] text-lg" />
+        <div className="flex min-w-0 flex-col leading-[1.35]">
+          <span className="truncate text-[13.5px] font-medium">
             {title}
-            {others > 0 && <span className="ml-2 text-[13px] text-faint">and {others} more</span>}
+            {others > 0 && <span className="ml-2 text-xs font-normal text-faint">and {others} more</span>}
           </span>
-          <span className="flex items-center gap-2 text-[13px] text-faint">
-            <span className="size-2 rounded-full bg-violet ring-3 ring-violet/25" />
-            Tracking since {startedAt}, {trust}
+          <span className="flex items-center gap-2 text-xs text-faint">
+            <span className="size-1.5 shrink-0 rounded-full bg-violet ring-3 ring-violet/25" />
+            <span className="truncate">
+              Since {startedAt}
+              <span aria-hidden="true" className="mx-1.5 opacity-60">
+                ·
+              </span>
+              {trust}
+            </span>
           </span>
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
         <RunningClock runtimeMs={current.runtime_ms} polledAt={activePolledAt} />
-        <div className="flex items-center gap-2.5 text-xs text-faint tabular-nums">
-          <span className="whitespace-nowrap">
-            <span className="label-caps mr-1.5">Active</span>
-            {formatHoursMinutes(current.active_ms)}
+        <div className="flex items-center gap-2.5 text-[11.5px] text-faint tabular-nums">
+          <span className="whitespace-nowrap">Active {formatHoursMinutes(current.active_ms)}</span>
+          <span aria-hidden="true" className="block h-1 w-20 overflow-hidden rounded-full bg-idle lg:w-40 xl:w-60">
+            <span className="block h-full rounded-full bg-violet" style={{ width: `${Math.round(activeShare * 100)}%` }} />
           </span>
-          <span aria-hidden="true" className="flex h-1.5 w-20 gap-0.5 lg:w-36 xl:w-56">
-            <span className="rounded-full bg-violet" style={{ width: `${Math.round(activeShare * 100)}%` }} />
-            <span className="flex-1 rounded-full bg-idle" />
-          </span>
-          <span className="whitespace-nowrap">
-            <span className="label-caps mr-1.5">Idle</span>
-            {formatHoursMinutes(current.idle_ms)}
-          </span>
+          <span className="whitespace-nowrap">Idle {formatHoursMinutes(current.idle_ms)}</span>
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-4">
-        <span className="hidden text-[13px] text-faint xl:inline">
-          Counts as idle after {Math.round(idleThresholdSeconds / SECONDS_PER_MINUTE)} min away
+      <div className={cn(SIDE, "justify-end gap-2.5 text-xs text-faint")}>
+        <span className="hidden truncate xl:inline">
+          Idle after {Math.round(idleThresholdSeconds / SECONDS_PER_MINUTE)} min away
         </span>
         <Link
           to={`/library/${current.game_id}`}
           aria-label={`Open ${title}`}
-          className="flex size-10 items-center justify-center rounded-full border border-hairline text-soft transition-colors hover:bg-raised hover:text-text"
+          title={`Open ${title}`}
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
         >
           <ArrowUpRight className="size-4" strokeWidth={1.8} />
         </Link>
@@ -112,6 +113,10 @@ export function LiveBar() {
     </footer>
   );
 }
+
+const BAR = "panel col-span-2 flex h-[72px] items-center gap-[18px] pr-3.5 pl-3";
+/** The two ends of the bar, of equal width so the clock sits in the middle. */
+const SIDE = "flex w-[230px] min-w-0 shrink-0 items-center gap-3 xl:w-[290px]";
 
 /**
  * The running time, ticking every second from the last poll while the window
@@ -127,7 +132,7 @@ function RunningClock({ runtimeMs, polledAt }: { runtimeMs: number; polledAt: nu
   }, [visible]);
   const shownMs = runtimeMs + Math.max(0, now - polledAt);
   return (
-    <span className="font-mono text-[22px] tracking-wide tabular-nums" role="timer" aria-label={`Running for ${formatHoursMinutes(shownMs)}`}>
+    <span className="font-mono text-[19px] leading-none font-medium tracking-wide tabular-nums" role="timer" aria-label={`Running for ${formatHoursMinutes(shownMs)}`}>
       {formatClock(shownMs)}
     </span>
   );

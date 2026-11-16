@@ -8,6 +8,7 @@ import {
   APPEARANCE_CACHE_KEY,
   APPEARANCE_SAVE_DELAY_MS,
   BACKGROUND_HEADER_OPACITY_PERCENT,
+  BACKGROUND_PANEL_OPACITY_PERCENT,
   WINDOW_LOOK_INTERVAL_MS,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
@@ -147,10 +148,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }, [mode, appearance.ground, appearance.accent, appearance.mode]);
 
   useLayoutEffect(() => {
-    document.documentElement.style.setProperty(
-      "--header-alpha",
-      background ? `${BACKGROUND_HEADER_OPACITY_PERCENT}%` : "100%",
-    );
+    const root = document.documentElement.style;
+    root.setProperty("--header-alpha", background ? `${BACKGROUND_HEADER_OPACITY_PERCENT}%` : "100%");
+    root.setProperty("--panel-alpha", background ? `${BACKGROUND_PANEL_OPACITY_PERCENT}%` : "100%");
   }, [background]);
 
   const change = useCallback(

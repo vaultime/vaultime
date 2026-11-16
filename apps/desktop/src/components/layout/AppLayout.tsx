@@ -12,10 +12,12 @@ import { otherDialogOpen } from "@/lib/found-games";
 import { CommandPalette } from "./CommandPalette";
 import { LiveBar } from "./LiveBar";
 import { Rail } from "./Rail";
+import { TopBar } from "./TopBar";
 import { UpdateBanner } from "./UpdateBanner";
 
 export function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [searchParams] = useSearchParams();
   const { refresh } = useLibrary();
   const { found, dismiss } = useFoundGames(otherDialogOpen(searchParams, paletteOpen));
@@ -38,16 +40,22 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="relative isolate grid h-screen grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[288px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-ink text-text">
+    <div className="relative isolate grid h-screen grid-cols-[248px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-2 overflow-hidden bg-window p-2 text-text 2xl:grid-cols-[272px_minmax(0,1fr)]">
       <Backdrop />
-      <Rail onSearch={() => setPaletteOpen(true)} />
-      {/* Relative, so hidden inputs and other positioned content stay inside the
-          scroller. Outside it they stretch the shell, and focusing one scrolls
-          the whole app up. */}
-      <main className="relative min-h-0 overflow-y-auto">
-        <UpdateBanner />
-        <Outlet />
-      </main>
+      <Rail />
+      <div className="panel flex min-h-0 flex-col">
+        {/* Relative, so hidden inputs and other positioned content stay inside the
+            scroller. Outside it they stretch the shell, and focusing one scrolls
+            the whole app up. */}
+        <main
+          className="relative min-h-0 flex-1 overflow-y-auto"
+          onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
+        >
+          <TopBar scrolled={scrolled} onSearch={() => setPaletteOpen(true)} />
+          <UpdateBanner />
+          <Outlet />
+        </main>
+      </div>
       <LiveBar />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <DiscoverGamesDialog

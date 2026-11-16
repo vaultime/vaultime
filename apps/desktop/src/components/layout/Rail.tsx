@@ -10,7 +10,6 @@ import {
   Check,
   Cloud,
   LibraryBig,
-  Search,
   SlidersHorizontal,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
@@ -34,7 +33,7 @@ const PAGES = [
   { to: "/settings", label: "Settings", icon: SlidersHorizontal },
 ] as const;
 
-export function Rail({ onSearch }: { onSearch: () => void }) {
+export function Rail() {
   const { visible: summaries, error: libraryError } = useLibrary();
   const playing = usePlaying();
   const { enabled: cloudEnabled, session } = useCloudSession();
@@ -58,18 +57,8 @@ export function Rail({ onSearch }: { onSearch: () => void }) {
   }
 
   return (
-    <nav aria-label="Main" className="flex min-h-0 flex-col gap-6 border-r border-rule px-4 pt-7 pb-4 short:gap-4 short:pt-5 xl:px-5">
+    <nav aria-label="Main" className="panel flex min-h-0 flex-col gap-6 px-3 pt-6 pb-3 short:gap-4 short:pt-4">
       <Logo className="justify-center" signedIn={session !== null} />
-
-      <button
-        type="button"
-        onClick={onSearch}
-        className="flex h-11 items-center gap-2.5 short:h-9 rounded-[10px] border border-hairline px-3 text-left text-sm text-faint transition-colors hover:border-hairline-strong hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
-      >
-        <Search className="size-4 shrink-0" strokeWidth={1.6} />
-        <span className="min-w-0 flex-1 truncate">Search</span>
-        <kbd className="shrink-0 rounded-[5px] border border-hairline px-1.5 py-0.5 font-mono text-[11px]">Ctrl K</kbd>
-      </button>
 
       <div className="flex flex-col gap-0.5">
         {pages.map(({ to, label, icon: Icon }) => (

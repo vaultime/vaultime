@@ -171,7 +171,7 @@ function GamePage({ gameId }: { gameId: string }) {
 
   return (
     <div className="pb-16">
-      <TintedHeader tint={tint} backdrop={cover} className="pt-9 pb-9">
+      <TintedHeader tint={tint} backdrop={cover} className="pt-[calc(var(--top-bar)+1.75rem)] pb-9">
         <div className="flex items-end gap-10">
           <div className="min-w-0 flex-1">
             <TintedOverline tint={tint}>

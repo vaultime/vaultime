@@ -479,7 +479,6 @@ export const GROUNDS = {
 export const GROUND_LEVELS = {
   window: { dark: { lightness: 0.135, chroma: 0.0105 }, light: { lightness: 0.925, chroma: 0.024 } },
   ink: { dark: { lightness: 0.176, chroma: 0.019 }, light: { lightness: 0.955, chroma: 0.02 } },
-  bar: { dark: { lightness: 0.176, chroma: 0.019 }, light: { lightness: 0.935, chroma: 0.026 } },
   surface: { dark: { lightness: 0.208, chroma: 0.022 }, light: { lightness: 0.985, chroma: 0.009 } },
   raised: { dark: { lightness: 0.234, chroma: 0.0255 }, light: { lightness: 0.915, chroma: 0.03 } },
   rule: { dark: { lightness: 0.25, chroma: 0.028 }, light: { lightness: 0.885, chroma: 0.032 } },
@@ -542,6 +541,8 @@ export const BACKGROUND_DIM_PERCENT = { min: 40, max: 95, default: 78 };
 export const BACKGROUND_BLUR_PX = { min: 0, max: 48, default: 16 };
 /** Opacity of tinted headers in front of a background picture, in percent. */
 export const BACKGROUND_HEADER_OPACITY_PERCENT = 86;
+/** Opacity of the panels in front of a background picture, in percent. */
+export const BACKGROUND_PANEL_OPACITY_PERCENT = 62;
 /** Wait after the last move of a slider or the color picker before the value is saved. */
 export const APPEARANCE_SAVE_DELAY_MS = 400;
 /** The background picture reaches this many blur radii past each edge, so the blur does not fade there. */

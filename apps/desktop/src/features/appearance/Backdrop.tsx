@@ -4,7 +4,7 @@
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { BACKGROUND_BLUR_BLEED } from "@/lib/constants";
 
-/** The background picture behind the whole app, blurred and dimmed by the ground. */
+/** The background picture behind the whole app, blurred and dimmed by the window tone. */
 export function Backdrop() {
   const { background, appearance } = useAppearance();
   if (!background) return null;
@@ -26,7 +26,7 @@ export function Backdrop() {
           willChange: "transform",
         }}
       />
-      <div className="absolute inset-0 bg-ink" style={{ opacity: appearance.dim / 100 }} />
+      <div className="absolute inset-0 bg-window" style={{ opacity: appearance.dim / 100 }} />
     </div>
   );
 }

@@ -74,6 +74,24 @@
   letter-spacing: -0.03em;
 }
 
+/* A rounded panel on the window. Its faint edge is drawn above what scrolls inside. */
+@utility panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 1.2);
+  background: color-mix(in oklab, var(--ink) var(--panel-alpha), transparent);
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--glint) 7%, transparent);
+    pointer-events: none;
+  }
+}
+
 /* Small uppercase labels above values and sections. */
 @utility label-caps {
   font-size: 0.6875rem;
@@ -146,7 +164,6 @@
   --color-violet-hover: var(--violet-hover);
   --color-violet-ink: var(--violet-ink);
   --color-hairline-strong: var(--hairline-strong);
-  --color-bar: var(--bar);
   --color-idle: var(--idle);
   --color-amber: var(--amber);
   --color-sky: var(--sky);
@@ -186,7 +203,6 @@
   --violet-hover: #b39aff;
   --violet-ink: #140e22;
   --hairline-strong: #3b3842;
-  --bar: #111014;
   --idle: #484452;
   --amber: #f0b45a;
   --sky: #7fb0ff;
@@ -203,6 +219,10 @@
   --radius: 0.625rem;
   /* Tinted headers let a background picture show through a little. */
   --header-alpha: 100%;
+  /* Panels let it show through a little more. */
+  --panel-alpha: 100%;
+  /* Height of the bar with the search over the top of the page. */
+  --top-bar: 52px;
 }
 
 *::-webkit-scrollbar {

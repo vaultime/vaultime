@@ -23,7 +23,7 @@ export function PageHeader({
 }) {
   return (
     // The controls go under the sentence when beside it they would leave it too narrow.
-    <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6 border-b border-rule px-8 pt-12 pb-8 xl:px-14">
+    <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6 border-b border-rule px-8 pt-6 pb-8 xl:px-14">
       <div className="min-w-0 flex-1 basis-[360px]">
         <div className="label-caps">{overline}</div>
         <h1 className="font-display mt-3 text-[clamp(56px,6vw,84px)] leading-[0.95]">
