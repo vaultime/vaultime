@@ -28,19 +28,31 @@ function LogoMark({
   );
 }
 
-/** Turns violet while signed in to cloud backup, with the pivot in ink. */
-export function Logo({ className, signedIn = false }: { className?: string; signedIn?: boolean }) {
+/** Turns violet while signed in to cloud backup, with the pivot in ink. Small keeps the proportions. */
+export function Logo({
+  className,
+  signedIn = false,
+  small = false,
+}: {
+  className?: string;
+  signedIn?: boolean;
+  small?: boolean;
+}) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2.5 transition-colors duration-500",
+        "inline-flex items-center transition-colors duration-500",
+        small ? "gap-2" : "gap-2.5",
         signedIn ? "text-violet" : "text-text",
         className,
       )}
       title={signedIn ? "Signed in to cloud backup" : undefined}
     >
-      <LogoMark className="size-[28px] shrink-0" pivotClassName={signedIn ? "fill-text" : "fill-violet"} />
-      <span className="font-wordmark text-[25px] leading-none">
+      <LogoMark
+        className={cn("shrink-0", small ? "size-[22px]" : "size-[28px]")}
+        pivotClassName={signedIn ? "fill-text" : "fill-violet"}
+      />
+      <span className={cn("font-wordmark leading-none", small ? "text-[19.5px]" : "text-[25px]")}>
         Vaultime
       </span>
     </span>

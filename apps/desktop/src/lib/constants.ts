@@ -164,6 +164,9 @@ export const LIVE_TOTALS_REFRESH_MS = MINUTE_MS;
 /** Games a chart's hover card names before it sums up the rest. */
 export const PLAY_CARD_GAMES = 5;
 
+/** Games the rail lists under Recently played. */
+export const RAIL_RECENT_GAMES = 5;
+
 /** Game results in the command palette before typing. */
 export const PALETTE_GAMES_IDLE = 5;
 /** Game results in the command palette while typing. */
