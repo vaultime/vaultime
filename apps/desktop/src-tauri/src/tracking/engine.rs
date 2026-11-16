@@ -31,7 +31,8 @@ use crate::integrity;
 use crate::platform;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
 use crate::platform::process::{
-    InstallFolder, RunningProcess, cpu_usage, matches_executable, refresh_running_processes,
+    InstallFolder, RunningProcess, cpu_usage, matches_executable, new_system,
+    refresh_running_processes,
 };
 use crate::tracking::live::{LiveCounters, LiveSessions};
 
@@ -286,7 +287,7 @@ fn poll_loop(
     tick_lock: &Mutex<()>,
 ) {
     let mut active: HashMap<String, ActiveSession> = HashMap::new();
-    let mut system = System::new();
+    let mut system = new_system();
     let mut folders = FolderCache::default();
 
     run_guarded("closing the sessions left open", || {
@@ -304,7 +305,7 @@ fn poll_loop(
                 }) == Guarded::Panicked
             {
                 // The process list may be half refreshed, so it starts over.
-                system = System::new();
+                system = new_system();
                 folders = FolderCache::default();
             }
         }
@@ -1017,7 +1018,7 @@ mod tests {
         // End every process of the game, it may have restarted itself through Steam.
         let _ = child.kill();
         let _ = child.wait();
-        let mut system = System::new();
+        let mut system = new_system();
         for process in refresh_running_processes(&mut system) {
             if crate::platform::process::runs_from_folder(&process, &folder)
                 && let Some(running) = system.process(sysinfo::Pid::from_u32(process.pid))
@@ -1068,7 +1069,7 @@ mod tests {
             )
             .unwrap();
         }
-        let mut system = System::new();
+        let mut system = new_system();
         let mut folders = FolderCache::default();
         let time = |label: &str, run: &mut dyn FnMut()| {
             run();

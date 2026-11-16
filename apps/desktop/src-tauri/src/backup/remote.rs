@@ -903,7 +903,7 @@ fn extract_archive(archive_path: &Path, destination_dir: &Path) -> Result<()> {
         let enclosed_name = entry.enclosed_name().ok_or_else(|| {
             VaultimeError::Backup(format!(
                 "backup archive entry contains an unsafe path: {}",
-                entry.name()
+                String::from_utf8_lossy(entry.name_raw())
             ))
         })?;
         let target_path = destination_dir.join(enclosed_name);

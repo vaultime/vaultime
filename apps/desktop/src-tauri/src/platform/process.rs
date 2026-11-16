@@ -37,6 +37,12 @@ impl RunningProcess {
     }
 }
 
+/// An empty process list to refresh. sysinfo fails only on systems it does
+/// not support, and Windows and Linux never do.
+pub fn new_system() -> System {
+    System::new().expect("sysinfo supports this system")
+}
+
 /// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
 pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
     // Paths and command lines do not change while a process runs, so they are
@@ -407,7 +413,7 @@ mod tests {
 
     #[test]
     fn list_processes_runs() {
-        let procs = refresh_running_processes(&mut System::new());
+        let procs = refresh_running_processes(&mut new_system());
         // Should at least find the current test process.
         assert!(!procs.is_empty());
     }
