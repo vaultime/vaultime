@@ -37,7 +37,7 @@ export function PlayCard({
       style={{ width: CARD_WIDTH_PX, ...style }}
       className="pointer-events-none absolute z-20 rounded-xl border border-hairline bg-surface px-4 py-3 shadow-lg shadow-scrim/40"
     >
-      <div className="text-[11px] tracking-[0.12em] text-faint uppercase">{label}</div>
+      <div className="text-xs font-medium text-faint">{label}</div>
       {!play || (playedMs ?? play.runtimeMs) <= 0 ? (
         <div className="mt-1.5 text-sm text-soft">Not played</div>
       ) : (

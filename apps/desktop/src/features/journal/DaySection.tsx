@@ -237,7 +237,7 @@ export const DaySection = memo(function DaySection({
         <h2 className={cn("font-display text-4xl leading-none transition-colors xl:text-[2rem] 2xl:text-4xl", flashed && "text-violet")}>
           {formatDate(day.start, { weekday: "long" })}
         </h2>
-        <div className="text-xs tracking-[0.12em] text-faint uppercase xl:mt-1.5">
+        <div className="text-xs text-faint xl:mt-1.5">
           {formatDate(day.start, { day: "numeric", month: "long" })}
         </div>
         <div className="ml-auto font-mono text-[22px] tabular-nums xl:mt-3.5 xl:ml-0">{formatHoursMinutes(day.playedMs)}</div>

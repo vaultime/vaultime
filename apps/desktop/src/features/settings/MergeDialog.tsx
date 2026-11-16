@@ -130,7 +130,7 @@ export function MergeDialog({
             {/* Room at the sides, so the scrolling list does not cut off the
                 pickers' focus ring. */}
             <div className="-mx-1 flex max-h-72 flex-col overflow-y-auto px-1">
-              <p className="label-caps pt-3 pb-1">Games that come along</p>
+              <p className="label-small pt-3 pb-1">Games that come along</p>
               {preview.games.map((game) => (
                 <div key={game.game_id} className="flex items-center justify-between gap-4 border-b border-rule py-2.5">
                   <div className="min-w-0">

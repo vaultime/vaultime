@@ -92,12 +92,10 @@
   }
 }
 
-/* Small uppercase labels above values and sections. */
-@utility label-caps {
-  font-size: 0.6875rem;
+/* Small labels in sentence case above values and sections. */
+@utility label-small {
+  font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--faint);
 }
 

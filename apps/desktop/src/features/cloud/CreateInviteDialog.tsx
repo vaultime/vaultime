@@ -132,7 +132,7 @@ export function CreateInviteDialog({
 
           {lastInvite && (
             <div className="border-l-2 border-violet py-1 pl-4">
-              <div className="label-caps">Share this code</div>
+              <div className="label-small">Share this code</div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                 <span className="font-mono text-base break-all">{lastInvite.code}</span>
                 <Button type="button" variant="outline" size="sm" onClick={copy}>

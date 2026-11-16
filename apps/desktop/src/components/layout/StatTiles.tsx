@@ -25,7 +25,7 @@ export function StatTiles({ label, tiles }: { label: string; tiles: StatTile[] }
     <section aria-label={label} className="grid grid-cols-2 border-b border-rule px-8 lg:grid-cols-4 xl:px-14">
       {tiles.map((tile, index) => (
         <div key={tile.label} className={cn("min-w-0 border-rule py-6 pr-6", CELL_BORDERS[index])}>
-          <div className="label-caps">{tile.label}</div>
+          <div className="label-small">{tile.label}</div>
           <div
             className={cn(
               "mt-2.5 font-mono text-[clamp(22px,2.3vw,32px)] tracking-[-0.02em] tabular-nums",

@@ -239,7 +239,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   <span className="truncate text-sm text-text">{command.label}</span>
                   <span className="truncate text-xs text-faint">{command.hint}</span>
                 </span>
-                <span className="font-mono text-[11px] tracking-wide text-faint uppercase">{command.kind}</span>
+                <span className="text-xs text-faint">{command.kind}</span>
               </li>
             ))}
           </ul>

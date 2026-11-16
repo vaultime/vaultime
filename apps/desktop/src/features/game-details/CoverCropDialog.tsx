@@ -225,7 +225,7 @@ function CropEditor({
 
         <div className="flex min-w-0 flex-col gap-6 [@media(max-height:680px)]:gap-4">
           <section>
-            <h3 className="label-caps">Image</h3>
+            <h3 className="label-small">Image</h3>
             <p className="mt-2 flex items-baseline gap-3 text-sm">
               <span className="min-w-0 truncate text-soft" title={target.label}>
                 {target.label}
@@ -240,7 +240,7 @@ function CropEditor({
           </section>
 
           <section>
-            <h3 className="label-caps">Zoom</h3>
+            <h3 className="label-small">Zoom</h3>
             <ZoomSlider view={view} size={size} onChange={setView} />
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
@@ -270,7 +270,7 @@ function CropEditor({
           </section>
 
           <section>
-            <h3 className="label-caps">In the library</h3>
+            <h3 className="label-small">In the library</h3>
             <div className="mt-3 flex items-end gap-5">
               <CoverComposition
                 source={source}

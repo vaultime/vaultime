@@ -352,7 +352,7 @@ function SidePanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">
         {/* Stays on top, so the options scroll under it, not under the close button. */}
         <div className="sticky top-0 z-10 -mx-6 bg-surface px-6 pt-7 pb-2 short:pt-5">
-          <div className="label-caps">Stats, {year}</div>
+          <div className="label-small">Stats, {year}</div>
         </div>
         <DialogTitle className="text-[28px]">Share your year</DialogTitle>
         <DialogDescription className="mt-2">
@@ -362,7 +362,7 @@ function SidePanel({
         {!empty && (
           <>
         <fieldset className="mt-6 min-w-0">
-          <legend className="label-caps">Format</legend>
+          <legend className="label-small">Format</legend>
           <div role="radiogroup" aria-label="Format" onKeyDown={onRadioKeys} className="mt-2.5">
             {SHARE_FORMAT_IDS.map((id, index) => {
               const checked = format === id;
@@ -400,7 +400,7 @@ function SidePanel({
         </fieldset>
 
         <fieldset className="mt-5 min-w-0">
-          <legend className="label-caps">On the card</legend>
+          <legend className="label-small">On the card</legend>
           <div className="mt-1.5">
             <Toggle id="share-games" label="Game titles and covers" checked={showGames} onChange={setShowGames} hint={showGames ? undefined : "Shows how many games and how the time split, no names."} />
             <Toggle id="share-calendar" label="Calendar of the year" checked={showCalendar} onChange={setShowCalendar} />
@@ -415,7 +415,7 @@ function SidePanel({
         </fieldset>
 
         <fieldset className="mt-5 min-w-0">
-          <legend className="label-caps">Look</legend>
+          <legend className="label-small">Look</legend>
           <div
             role="radiogroup"
             aria-label="Look of the card"

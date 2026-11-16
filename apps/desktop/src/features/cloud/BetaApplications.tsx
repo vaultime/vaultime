@@ -98,7 +98,7 @@ export function BetaApplications({ onError }: { onError: (message: string) => vo
     >
       {invited && (
         <div className="mb-4 border-l-2 border-violet py-1 pl-4">
-          <div className="label-caps">Invite for {invited.email}</div>
+          <div className="label-small">Invite for {invited.email}</div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <span className="font-mono text-base break-all">{invited.code}</span>
             <Button variant="outline" size="sm" onClick={() => void copyCode()}>

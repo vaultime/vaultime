@@ -49,7 +49,7 @@ export function TintedHeader({
 
 export function TintedOverline({ tint, children }: { tint: GameTint; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2.5 text-xs tracking-[0.16em] uppercase" style={{ color: tint.muted }}>
+    <div className="flex items-center gap-2 text-[13px] font-medium" style={{ color: tint.muted }}>
       {children}
     </div>
   );

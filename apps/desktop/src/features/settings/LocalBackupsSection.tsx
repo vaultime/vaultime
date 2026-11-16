@@ -206,7 +206,7 @@ export function LocalBackupsSection({
         </div>
       )}
 
-      <h3 className="label-caps mt-8 mb-1">History</h3>
+      <h3 className="label-small mt-8 mb-1">History</h3>
       {snapshots.length === 0 ? (
         <p className="py-3 text-sm text-faint">No backups saved or restored yet.</p>
       ) : (

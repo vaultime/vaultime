@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 export function AsideSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="label-caps mb-2.5">{title}</h2>
+      <h2 className="label-small mb-2.5">{title}</h2>
       {children}
     </section>
   );

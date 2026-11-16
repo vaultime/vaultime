@@ -319,7 +319,7 @@ function SliderRow({ label, value, hint, children }: { label: string; value: str
   return (
     <div>
       <div className="flex items-baseline justify-between gap-4">
-        <span className="label-caps">{label}</span>
+        <span className="label-small">{label}</span>
         <span className="font-mono text-[13px] text-soft tabular-nums">{value}</span>
       </div>
       <div className="mt-1.5">{children}</div>
