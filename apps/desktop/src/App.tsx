@@ -3,6 +3,7 @@
 
 import { Routes, Route, Navigate } from "react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { HomePage } from "@/features/library/HomePage";
 import { LibraryPage } from "@/features/library/LibraryPage";
 import { JournalPage } from "@/features/journal/JournalPage";
 import { StatsPage } from "@/features/stats/StatsPage";
@@ -16,7 +17,8 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<Navigate to="/library" replace />} />
+        <Route index element={<Navigate to="/home" replace />} />
+        <Route path="home" element={<HomePage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="library/:gameId" element={<GameDetailsPage />} />
         <Route path="journal" element={<JournalPage />} />

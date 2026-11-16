@@ -30,7 +30,8 @@ interface Command {
 }
 
 const FIXED: Command[] = [
-  { id: "page-library", label: "Library", hint: "All your games", kind: "Page", to: "/library" },
+  { id: "page-home", label: "Home", hint: "What you play now and the last days", kind: "Page", to: "/home" },
+  { id: "page-library", label: "All games", hint: "Every game in your library", kind: "Page", to: "/library" },
   { id: "page-journal", label: "Journal", hint: "Your play, week by week", kind: "Page", to: "/journal" },
   { id: "page-stats", label: "Stats", hint: "Your year in numbers", kind: "Page", to: "/stats" },
   { id: "page-cloud", label: "Cloud", hint: "Encrypted backups on the server", kind: "Page", to: "/cloud" },

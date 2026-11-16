@@ -75,13 +75,13 @@ export function GameGrid({
       ref={section}
       id="all-games"
       aria-labelledby="all-games-title"
-      className="scroll-mt-6 px-8 pt-12 xl:px-14"
+      className="scroll-mt-6 px-8 pt-6 xl:px-14"
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <h2 id="all-games-title" className="font-display text-[34px]">
+          <h1 id="all-games-title" className="font-display text-[34px]">
             All games
-          </h2>
+          </h1>
           <span className="font-mono text-sm text-faint">{sorted.length}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -168,6 +168,11 @@ export function GameGrid({
           </div>
         </div>
       </div>
+      {summaries.length === 0 && (
+        <p className="mt-6 max-w-[56ch] text-sm text-faint">
+          No games yet. Discover the games your launchers installed, or add any game by hand.
+        </p>
+      )}
       {sorted.length === 0 && query && (
         <p className="mt-6 text-sm text-faint">No game matches "{query.trim()}".</p>
       )}

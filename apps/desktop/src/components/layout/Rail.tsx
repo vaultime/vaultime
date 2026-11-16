@@ -9,6 +9,7 @@ import {
   ChartNoAxesColumn,
   Check,
   Cloud,
+  House,
   LibraryBig,
   SlidersHorizontal,
 } from "lucide-react";
@@ -26,7 +27,8 @@ import { formatHoursShort, formatMomentOnDay, parseVaultimeDate } from "@/lib/ti
 import { cn, logFailure } from "@/lib/utils";
 
 const PAGES = [
-  { to: "/library", label: "Library", icon: LibraryBig },
+  { to: "/home", label: "Home", icon: House },
+  { to: "/library", label: "All games", icon: LibraryBig },
   { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/stats", label: "Stats", icon: ChartNoAxesColumn },
   { to: "/cloud", label: "Cloud", icon: Cloud },
