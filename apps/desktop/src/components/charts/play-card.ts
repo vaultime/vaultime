@@ -25,7 +25,7 @@ export function gameTime(game: { activeMs: number; idleMs: number }): string {
 }
 
 /**
- * "3 h 12 active, Elden Ring 2 h 05, Hades II 58 min", for screen readers.
+ * "3h 12m active, Elden Ring 2h 05m, Hades II 58m", for screen readers.
  * With `playedMs` it leads with the time played instead.
  */
 export function describePlay(

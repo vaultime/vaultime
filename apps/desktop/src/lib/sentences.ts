@@ -67,9 +67,9 @@ function listOf(titles: string[]): string {
 }
 
 /**
- * "Elden Ring and Hades II ran side by side for 1 h 40." A game that ran
+ * "Elden Ring and Hades II ran side by side for 1h 40m." A game that ran
  * through all of it, like a launcher left open, is named first: "Stardew
- * Valley ran alongside Hades II and Balatro for 2 h 05."
+ * Valley ran alongside Hades II and Balatro for 2h 05m."
  */
 export function sideBySideSentence(group: SideBySideGroup, titleOf: (gameId: string) => string): string {
   const time = formatHoursMinutes(group.ms);

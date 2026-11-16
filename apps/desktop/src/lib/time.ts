@@ -131,10 +131,10 @@ export function formatRelativeDay(value: string, now = new Date()): string {
     : `In ${month} ${date.getFullYear()}`;
 }
 
-/** Whole hours for lists: "40 min", "3 h", "142 h". */
+/** Whole hours for lists: "40m", "3h", "142h". */
 export function formatHoursShort(ms: number): string {
-  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)} min`;
-  return `${Math.floor(ms / HOUR_MS)} h`;
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m`;
+  return `${Math.floor(ms / HOUR_MS)}h`;
 }
 
 /** Stopwatch style: "01:24:10". */
@@ -146,11 +146,11 @@ export function formatClock(ms: number): string {
   return `${pad(hours)}:${pad(minutes)}:${pad(total % SECONDS_PER_MINUTE)}`;
 }
 
-/** Hours and minutes with a space: "4 h 05", "38 min". */
+/** Hours and minutes with a space: "4h 05m", "38m". */
 export function formatHoursMinutes(ms: number): string {
-  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)} min`;
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m`;
   const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
-  return `${Math.floor(ms / HOUR_MS)} h ${String(minutes).padStart(2, "0")}`;
+  return `${Math.floor(ms / HOUR_MS)}h ${String(minutes).padStart(2, "0")}m`;
 }
 
 export type DayPart = "morning" | "afternoon" | "evening" | "night";

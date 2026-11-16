@@ -49,7 +49,7 @@ export function RecentStats({
     },
     {
       label: "Longest",
-      value: longest ? formatHoursMinutes(longest.runtime_ms) : "0 min",
+      value: formatHoursMinutes(longest?.runtime_ms ?? 0),
       note: longest
         ? [formatDayPart(longest.started_at_wall), longestTitle].filter(Boolean).join(", ")
         : "Nothing yet",

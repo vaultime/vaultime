@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Interface
+
+- **Shorter times.** Durations read 4h 05m and 142h everywhere, the tray included.
+
 ### Fixes
 
 - **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Recent order follows. While a game runs, the game list shows when you started it, "Since 20:15".

@@ -267,7 +267,7 @@ function monthStat(card: ShareCard, short: boolean): Stat {
   return { label: "Busiest month", value: name };
 }
 
-/** "212 h with a game running, 30 h idle. Longest session 6 h 12 in Elden Ring." */
+/** "212h with a game running, 30h idle. Longest session 6h 12m in Elden Ring." */
 function smallPrint(card: ShareCard, withSession: boolean): string {
   const running = `${formatHoursShort(card.playedMs)} with a game running, ${formatHoursShort(card.idleMs)} idle.`;
   const longest = card.longestSession;

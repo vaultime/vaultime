@@ -84,7 +84,7 @@ describe("session log", () => {
       runtime_ms: 45 * 60_000,
       reason: "  Fell asleep ",
     });
-    expect(getIntegrityEventDetail(corrected)).toBe("Changed from 2 h 08 to 45 min (“Fell asleep”)");
+    expect(getIntegrityEventDetail(corrected)).toBe("Changed from 2h 08m to 45m (“Fell asleep”)");
     expect(getIntegrityEventDetail(event("corrected", { reason: "" }))).toBe("Corrected");
     expect(getIntegrityEventDetail(event("added_manually", { reason: "On the laptop" }))).toBe(
       "Added by you (“On the laptop”)",
@@ -94,7 +94,7 @@ describe("session log", () => {
 
   it("tells how long a gap was and how far the clock was off", () => {
     expect(getIntegrityEventDetail(event("tracking_gap", { wall_gap_ms: 90 * 60_000 }))).toBe(
-      "1 h 30 not counted while the PC slept or tracking paused",
+      "1h 30m not counted while the PC slept or tracking paused",
     );
     expect(getIntegrityEventDetail(event("tracking_gap"))).toBe(
       "Time while the PC slept or tracking paused was not counted",

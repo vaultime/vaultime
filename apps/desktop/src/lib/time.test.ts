@@ -60,13 +60,13 @@ describe("parseVaultimeDate", () => {
 
 describe("durations", () => {
   it("formats hours and minutes", () => {
-    expect(formatHoursMinutes(38 * MINUTE_MS)).toBe("38 min");
-    expect(formatHoursMinutes(4 * HOUR_MS + 5 * MINUTE_MS)).toBe("4 h 05");
+    expect(formatHoursMinutes(38 * MINUTE_MS)).toBe("38m");
+    expect(formatHoursMinutes(4 * HOUR_MS + 5 * MINUTE_MS)).toBe("4h 05m");
   });
 
   it("rounds down to whole hours for lists", () => {
-    expect(formatHoursShort(40 * MINUTE_MS)).toBe("40 min");
-    expect(formatHoursShort(142 * HOUR_MS + 59 * MINUTE_MS)).toBe("142 h");
+    expect(formatHoursShort(40 * MINUTE_MS)).toBe("40m");
+    expect(formatHoursShort(142 * HOUR_MS + 59 * MINUTE_MS)).toBe("142h");
   });
 
   it("formats a stopwatch", () => {

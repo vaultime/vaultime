@@ -315,23 +315,23 @@ export function continuedPhrase(
   return { before, em: title, middle, link, after };
 }
 
-/** "2 h 15" kept on one line, or "Under a minute" at the start of a sentence. */
+/** "2h 15m" kept on one line, or "Under a minute" at the start of a sentence. */
 function partAmount(ms: number, start: boolean): string {
   if (ms >= MINUTE_MS) return formatHoursMinutes(ms).replaceAll(" ", NO_BREAK_SPACE);
   return start ? "Under a minute" : "under a minute";
 }
 
-/** "2 h 15 of it after midnight, counted on ", followed by the days. */
+/** "2h 15m of it after midnight, counted on ", followed by the days. */
 export function afterMidnightLead(laterMs: number): string {
   return `${partAmount(laterMs, true)} of it after midnight, counted on `;
 }
 
-/** "2 h 15 of its 3 h 35 count on this day." for a day a session went on to. */
+/** "2h 15m of its 3h 35m count on this day." for a day a session went on to. */
 export function continuedAmounts(partMs: number, wholeMs: number, live: boolean): string {
   return `${partAmount(partMs, true)} of its ${partAmount(wholeMs, false)}${live ? " so far" : ""} count on this day.`;
 }
 
-/** "1 h 12 in all, 1 h 05 active, 7 min idle", or "1 h 12, all of it active". */
+/** "1h 12m in all, 1h 05m active, 7m idle", or "1h 12m, all of it active". */
 export function sessionAmounts(session: Session): string {
   const all = formatHoursMinutes(session.runtime_ms);
   if (session.runtime_ms >= MINUTE_MS) {

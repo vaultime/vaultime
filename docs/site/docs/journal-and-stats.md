@@ -12,7 +12,7 @@ Each day shows its total and a strip of 24 hours in the colors of the games you 
 
 > A long evening in Elden Ring
 >
-> 3 h 12 in all, 2 h 58 active, 14 min idle.
+> 3h 12m in all, 2h 58m active, 14m idle.
 
 The wording changes from session to session but always stays the same for the same session. Sessions note first looks, returns after a long break, records and games left running. Status changes you set, like finishing a game, show up between the sessions and say how long you had played the game by then: its time up to that moment, counted as the stats count it, with any playtime from before Vaultime.
 
@@ -26,7 +26,7 @@ When two games ran at the same time, the strip shows the shared stretch hatched 
 
 ### Past midnight
 
-Time counts on the day it happened, so a session from 22:40 to 02:15 adds 1 h 20 to the first day and 2 h 15 to the second. Time the PC slept counts nowhere, so each day gets the time that really fell on it. It is still one session, and the journal shows it as one:
+Time counts on the day it happened, so a session from 22:40 to 02:15 adds 1h 20m to the first day and 2h 15m to the second. Time the PC slept counts nowhere, so each day gets the time that really fell on it. It is still one session, and the journal shows it as one:
 
 - The entry stays under the day it started, with the whole session's time, and its time reads *22:40 to Sun 02:15*. It adds how much counted after midnight and on which day.
 - The bar runs out over the right edge of the first day's strip and back in at the left edge of the next.

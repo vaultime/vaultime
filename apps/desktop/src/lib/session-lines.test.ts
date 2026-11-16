@@ -147,15 +147,15 @@ describe("describeSession", () => {
 describe("sessionAmounts", () => {
   it("lists runtime, active and idle time", () => {
     const played = session(at(2026, 9, 29, 22, 10), 72, { active_ms: 65 * MINUTE_MS, idle_ms: 7 * MINUTE_MS });
-    expect(sessionAmounts(played)).toBe("1 h 12 in all, 1 h 05 active, 7 min idle");
+    expect(sessionAmounts(played)).toBe("1h 12m in all, 1h 05m active, 7m idle");
   });
 
   it("shortens a session that was all active or all idle", () => {
-    expect(sessionAmounts(session(at(2026, 9, 29, 22, 10), 72))).toBe("1 h 12, all of it active");
+    expect(sessionAmounts(session(at(2026, 9, 29, 22, 10), 72))).toBe("1h 12m, all of it active");
     const idle = session(at(2026, 9, 29, 22, 10), 72, { active_ms: 0, idle_ms: 72 * MINUTE_MS });
-    expect(sessionAmounts(idle)).toBe("1 h 12, all of it idle");
+    expect(sessionAmounts(idle)).toBe("1h 12m, all of it idle");
     const discarded = session(at(2026, 9, 29, 22, 10), 72, { runtime_ms: 0, active_ms: 0, idle_ms: 0 });
-    expect(sessionAmounts(discarded)).toBe("0 min in all, 0 min active, 0 min idle");
+    expect(sessionAmounts(discarded)).toBe("0m in all, 0m active, 0m idle");
   });
 });
 
@@ -200,13 +200,13 @@ describe("play past midnight", () => {
   it("gives the part after midnight and the part on a later day with the whole", () => {
     // Amounts never break across lines.
     const plain = (text: string) => text.replaceAll(" ", " ");
-    expect(afterMidnightLead(135 * MINUTE_MS)).toBe("2 h 15 of it after midnight, counted on ");
+    expect(afterMidnightLead(135 * MINUTE_MS)).toBe("2h 15m of it after midnight, counted on ");
     expect(afterMidnightLead(20 * 1000)).toBe("Under a minute of it after midnight, counted on ");
     expect(plain(continuedAmounts(135 * MINUTE_MS, 215 * MINUTE_MS, false))).toBe(
-      "2 h 15 of its 3 h 35 count on this day.",
+      "2h 15m of its 3h 35m count on this day.",
     );
     expect(plain(continuedAmounts(20 * MINUTE_MS, 70 * MINUTE_MS, true))).toBe(
-      "20 min of its 1 h 10 so far count on this day.",
+      "20m of its 1h 10m so far count on this day.",
     );
   });
 });
@@ -231,7 +231,7 @@ describe("sessionTrustNote", () => {
       event(played.id, "tracking_gap", { wall_gap_ms: 2 * HOUR_MS + 14 * MINUTE_MS }),
       event("someone-else", "integrity_flagged", { reason: "wall_clock_moved_backwards" }),
     ];
-    expect(sessionTrustNote(played, events)).toBe("2 h 14 of sleep or pause left out.");
+    expect(sessionTrustNote(played, events)).toBe("2h 14m of sleep or pause left out.");
     expect(sessionTrustNote(played, [])).toBeNull();
   });
 
@@ -240,11 +240,11 @@ describe("sessionTrustNote", () => {
     const corrected = [
       event(edited.id, "corrected", { reason: "left it running", runtime_ms: 30 * MINUTE_MS, previous: { runtime_ms: 5 * HOUR_MS } }),
     ];
-    expect(sessionTrustNote(edited, corrected)).toBe("Cut short by you from 5 h 00 (“left it running”).");
+    expect(sessionTrustNote(edited, corrected)).toBe("Cut short by you from 5h 00m (“left it running”).");
     const discarded = [
       event(edited.id, "corrected", { reason: "Only the launcher!", runtime_ms: 0, previous: { runtime_ms: HOUR_MS } }),
     ];
-    expect(sessionTrustNote(edited, discarded)).toBe("All 1 h 00 taken out by you (“Only the launcher!”).");
+    expect(sessionTrustNote(edited, discarded)).toBe("All 1h 00m taken out by you (“Only the launcher!”).");
     const manual = session(at(2026, 9, 29, 21, 0), 30, { integrity_status: "manual" });
     expect(sessionTrustNote(manual, [event(manual.id, "added_manually", { reason: "On the Steam Deck" })])).toBe(
       "Added by you (“On the Steam Deck”).",
@@ -252,6 +252,6 @@ describe("sessionTrustNote", () => {
     expect(sessionTrustNote(manual, [event(manual.id, "added_manually", { reason: "" })])).toBe("Added by you.");
     // A short reason never reads like part of a time.
     const short = [event(edited.id, "corrected", { reason: "123", runtime_ms: HOUR_MS, previous: { runtime_ms: 2 * HOUR_MS } })];
-    expect(sessionTrustNote(edited, short)).toBe("Cut short by you from 2 h 00 (“123”).");
+    expect(sessionTrustNote(edited, short)).toBe("Cut short by you from 2h 00m (“123”).");
   });
 });

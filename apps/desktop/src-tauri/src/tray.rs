@@ -204,7 +204,7 @@ fn local_day_start(now: DateTime<Utc>) -> DateTime<Utc> {
         .map_or(now, |start| start.with_timezone(&Utc))
 }
 
-/// "Playing Elden Ring, 1 h 24" and "2 h 40 played today", from the
+/// "Playing Elden Ring, 1h 24m" and "2h 40m played today", from the
 /// running sessions and today's play as the journal counts it.
 fn describe_status(running: &[SessionSpan], played_today_ms: i64) -> (String, String) {
     // Two linked installs of one game running at once show as one game.
@@ -237,14 +237,14 @@ fn describe_status(running: &[SessionSpan], played_today_ms: i64) -> (String, St
     (playing, today)
 }
 
-/// "1 h 24" or "40 min". Same as `formatHoursMinutes` in `lib/time.ts`.
+/// "1h 24m" or "40m". Same as `formatHoursMinutes` in `lib/time.ts`.
 fn format_hours_minutes(ms: i64) -> String {
     let time = TimeDelta::milliseconds(ms.max(0));
     if time < TimeDelta::hours(1) {
-        return format!("{} min", time.num_minutes());
+        return format!("{}m", time.num_minutes());
     }
     let minutes = (time - TimeDelta::hours(time.num_hours())).num_minutes();
-    format!("{} h {minutes:02}", time.num_hours())
+    format!("{}h {minutes:02}m", time.num_hours())
 }
 
 /// Brings the main window back from the tray or the taskbar.
@@ -425,8 +425,8 @@ mod tests {
     #[test]
     fn names_the_running_game_and_the_day() {
         let (playing, today) = describe_status(&[running("Elden Ring", 84)], 144 * MINUTE_MS);
-        assert_eq!(playing, "Playing Elden Ring, 1 h 24");
-        assert_eq!(today, "2 h 24 played today");
+        assert_eq!(playing, "Playing Elden Ring, 1h 24m");
+        assert_eq!(today, "2h 24m played today");
         assert_eq!(
             describe_status(&[], 0),
             (NOTHING_RUNNING.into(), NOTHING_TODAY.into())
@@ -448,7 +448,7 @@ mod tests {
     fn two_installs_of_one_game_show_once() {
         let spans = [running("Cyberpunk 2077", 60), running("Cyberpunk 2077", 30)];
         let (playing, _) = describe_status(&spans, 60 * MINUTE_MS);
-        assert_eq!(playing, "Playing Cyberpunk 2077, 1 h 00");
+        assert_eq!(playing, "Playing Cyberpunk 2077, 1h 00m");
     }
 
     #[test]
@@ -484,7 +484,7 @@ mod tests {
         );
         let (playing, _) =
             status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
-        assert_eq!(playing, "Playing Client, 2 h 00");
+        assert_eq!(playing, "Playing Client, 2h 00m");
     }
 
     #[test]
@@ -506,10 +506,10 @@ mod tests {
 
     #[test]
     fn formats_like_the_app() {
-        assert_eq!(format_hours_minutes(0), "0 min");
-        assert_eq!(format_hours_minutes(40 * MINUTE_MS + 59_999), "40 min");
-        assert_eq!(format_hours_minutes(60 * MINUTE_MS), "1 h 00");
-        assert_eq!(format_hours_minutes(84 * MINUTE_MS), "1 h 24");
-        assert_eq!(format_hours_minutes(-5), "0 min");
+        assert_eq!(format_hours_minutes(0), "0m");
+        assert_eq!(format_hours_minutes(40 * MINUTE_MS + 59_999), "40m");
+        assert_eq!(format_hours_minutes(60 * MINUTE_MS), "1h 00m");
+        assert_eq!(format_hours_minutes(84 * MINUTE_MS), "1h 24m");
+        assert_eq!(format_hours_minutes(-5), "0m");
     }
 }

@@ -165,22 +165,22 @@ describe("sideBySideSentence", () => {
 
   it("puts two games side by side", () => {
     expect(sideBySideSentence({ ...group, game_ids: ["a", "b"] }, titleOf)).toBe(
-      "League of Legends and Teamfight Tactics ran side by side for 1 h 55.",
+      "League of Legends and Teamfight Tactics ran side by side for 1h 55m.",
     );
   });
 
   it("names a game that ran through all of it first", () => {
     expect(sideBySideSentence({ ...group, game_ids: ["a", "b", "c"], alongside: "a", most_at_once: 3 }, titleOf)).toBe(
-      "League of Legends ran alongside Teamfight Tactics and Balatro for 1 h 55.",
+      "League of Legends ran alongside Teamfight Tactics and Balatro for 1h 55m.",
     );
   });
 
   it("says how many ran at once when no game ran through all of it", () => {
     expect(sideBySideSentence({ ...group, game_ids: ["a", "b", "c"] }, titleOf)).toBe(
-      "League of Legends, Teamfight Tactics and Balatro ran side by side, two at a time, for 1 h 55.",
+      "League of Legends, Teamfight Tactics and Balatro ran side by side, two at a time, for 1h 55m.",
     );
     expect(sideBySideSentence({ ...group, game_ids: ["a", "b", "c", "d"], most_at_once: 3 }, titleOf)).toBe(
-      "League of Legends, Teamfight Tactics, Balatro and Celeste ran side by side, up to three at a time, for 1 h 55.",
+      "League of Legends, Teamfight Tactics, Balatro and Celeste ran side by side, up to three at a time, for 1h 55m.",
     );
   });
 });
