@@ -136,7 +136,7 @@ export function CorrectSessionDialog({
               <span className="font-mono tabular-nums">{formatClockTime(end)}</span>
             </dd>
             <dt className="text-faint">Counted</dt>
-            <dd className="font-mono tabular-nums">
+            <dd className="tabular-nums">
               {formatHoursMinutes(session.runtime_ms)}, {formatHoursMinutes(session.active_ms)} active
               {aside >= MINUTE_MS && `, ${formatHoursMinutes(aside)} set aside`}
             </dd>

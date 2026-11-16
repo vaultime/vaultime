@@ -112,7 +112,7 @@ export function RestoreBackupDialog({
             <p className="text-[15px]">
               {target.label ?? "Backup"}, uploaded {formatTimestamp(target.uploaded_at)}
             </p>
-            <p className="font-mono text-sm text-soft">
+            <p className="text-sm text-soft tabular-nums">
               {target.metadata_json
                 ? `${plural(target.metadata_json.games_count, "game")}, ${plural(target.metadata_json.sessions_count, "session")}`
                 : "Contents unknown"}

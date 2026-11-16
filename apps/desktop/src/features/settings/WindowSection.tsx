@@ -112,7 +112,7 @@ export function WindowSection() {
                   {hint && <span className="mt-0.5 block text-[13px] leading-relaxed text-faint">{hint}</span>}
                 </span>
                 <span
-                  className={cn("shrink-0 font-mono text-sm", fits && choice !== "free" ? "text-soft" : "text-faint")}
+                  className={cn("shrink-0 text-sm tabular-nums", fits && choice !== "free" ? "text-soft" : "text-faint")}
                 >
                   {size}
                 </span>

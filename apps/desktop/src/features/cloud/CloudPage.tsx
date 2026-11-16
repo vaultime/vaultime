@@ -387,7 +387,7 @@ export function CloudPage() {
                   label="Space used"
                   hint="Artwork is stored once for all backups, so a new backup adds little more than your history."
                 >
-                  <span className="font-mono text-sm">
+                  <span className="text-sm tabular-nums">
                     {formatByteSize(storage.backup_bytes + storage.artwork_bytes)} of{" "}
                     {formatByteSize(storage.limit_bytes)}
                   </span>

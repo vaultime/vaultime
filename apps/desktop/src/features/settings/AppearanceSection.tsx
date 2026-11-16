@@ -320,7 +320,7 @@ function SliderRow({ label, value, hint, children }: { label: string; value: str
     <div>
       <div className="flex items-baseline justify-between gap-4">
         <span className="label-small">{label}</span>
-        <span className="font-mono text-[13px] text-soft tabular-nums">{value}</span>
+        <span className="text-[13px] text-soft tabular-nums">{value}</span>
       </div>
       <div className="mt-1.5">{children}</div>
       <p className="mt-1 text-[12px] text-faint">{hint}</p>

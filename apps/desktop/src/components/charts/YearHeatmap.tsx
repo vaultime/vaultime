@@ -191,7 +191,7 @@ const HeatmapRows = memo(function HeatmapRows({
             <span
               key={week[0].getTime()}
               role="columnheader"
-              className="h-4 font-mono text-[10px] whitespace-nowrap text-faint"
+              className="h-4 text-[10px] whitespace-nowrap text-faint tabular-nums"
             >
               {/* Single letters where the weeks are too narrow for names. */}
               <span className="@max-[420px]:hidden">

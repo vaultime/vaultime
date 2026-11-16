@@ -94,7 +94,7 @@ export function GameGrid({
           <h1 id="all-games-title" className="font-display text-[28px] leading-[1.1]">
             All games
           </h1>
-          <span className="font-mono text-sm text-faint">{sorted.length}</span>
+          <span className="text-sm text-faint tabular-nums">{sorted.length}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={onDiscover}>

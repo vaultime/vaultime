@@ -425,7 +425,7 @@ function GameRow({
         </div>
       </div>
       <div className="text-right">
-        <div className="font-mono text-sm tabular-nums">{formatHoursMinutes(game.runtimeMs)}</div>
+        <div className="text-sm tabular-nums">{formatHoursMinutes(game.runtimeMs)}</div>
         <div className="mt-0.5 text-xs text-faint tabular-nums">{share} %</div>
       </div>
     </li>

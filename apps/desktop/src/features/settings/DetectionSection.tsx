@@ -72,7 +72,7 @@ export function DetectionSection({
       </PageRow>
       {pollSeconds && (
         <PageRow label="Checks every">
-          <span className="font-mono">{pollSeconds} s</span>
+          <span className="tabular-nums">{pollSeconds} s</span>
         </PageRow>
       )}
     </PageSection>

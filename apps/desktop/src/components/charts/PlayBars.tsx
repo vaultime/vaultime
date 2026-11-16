@@ -104,7 +104,7 @@ export function PlayBars({
       </div>
       <figcaption
         aria-hidden="true"
-        className={cn("flex gap-2.5 font-mono text-[11px] text-faint", axis === "all" && "justify-center")}
+        className={cn("flex gap-2.5 text-[11px] text-faint tabular-nums", axis === "all" && "justify-center")}
       >
         {axis === "all" ? (
           points.map((point, index) => (

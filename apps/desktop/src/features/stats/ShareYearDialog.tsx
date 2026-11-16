@@ -390,7 +390,7 @@ function SidePanel({
                     <span className="block text-[15px] text-text">{FORMAT_NAMES[id].label}</span>
                     <span className="block text-[12px] text-faint">{FORMAT_NAMES[id].hint}</span>
                   </span>
-                  <span className="shrink-0 font-mono text-[12px] text-faint">
+                  <span className="shrink-0 text-[12px] text-faint tabular-nums">
                     {width} × {height}
                   </span>
                 </button>

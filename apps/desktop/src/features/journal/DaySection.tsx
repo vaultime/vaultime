@@ -82,14 +82,14 @@ function SessionCard({
               return (
                 <li key={share.day} className={cn("flex items-baseline gap-2.5 text-[13px]", !here && "text-faint")}>
                   <span className="min-w-0 flex-1 truncate">{dayName(share)}</span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums">{formatHoursMinutes(share.runtime_ms)}</span>
+                  <span className="shrink-0 text-xs tabular-nums">{formatHoursMinutes(share.runtime_ms)}</span>
                 </li>
               );
             })}
           </ul>
           <div className="mt-2 flex items-baseline gap-2.5 border-t border-rule pt-2 text-[13px] text-soft">
             <span className="min-w-0 flex-1">{ended ? "In all" : "So far"}</span>
-            <span className="shrink-0 font-mono text-xs tabular-nums">{formatHoursMinutes(session.runtime_ms)}</span>
+            <span className="shrink-0 text-xs tabular-nums">{formatHoursMinutes(session.runtime_ms)}</span>
           </div>
         </>
       ) : (
@@ -240,7 +240,7 @@ export const DaySection = memo(function DaySection({
         <div className="text-xs text-faint xl:mt-1.5">
           {formatDate(day.start, { day: "numeric", month: "long" })}
         </div>
-        <div className="ml-auto font-mono text-[22px] tabular-nums xl:mt-3.5 xl:ml-0">{formatHoursMinutes(day.playedMs)}</div>
+        <div className="ml-auto text-[15px] font-medium text-soft tabular-nums xl:mt-3 xl:ml-0">{formatHoursMinutes(day.playedMs)}</div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-3.5">

@@ -138,7 +138,7 @@ export function EarlierPlaytimeSection({ onError }: { onError: (message: string)
                         {game.tracked_before_ms > 0 && `, ${formatHoursMinutes(game.tracked_before_ms)} of it tracked here`}
                       </div>
                     </div>
-                    <span className="shrink-0 font-mono text-sm tabular-nums">
+                    <span className="shrink-0 text-sm tabular-nums">
                       {game.earlier_ms > 0 ? `+${formatHoursMinutes(game.earlier_ms)}` : "nothing new"}
                     </span>
                   </li>

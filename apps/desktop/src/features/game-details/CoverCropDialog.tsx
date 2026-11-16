@@ -230,7 +230,7 @@ function CropEditor({
               <span className="min-w-0 truncate text-soft" title={target.label}>
                 {target.label}
               </span>
-              <span className="shrink-0 font-mono text-xs text-faint">
+              <span className="shrink-0 text-xs text-faint tabular-nums">
                 {source.width} × {source.height}
               </span>
             </p>

@@ -87,7 +87,7 @@ export function IdleStepper({
             }
           }}
           style={{ width: `${Math.max(text.length, 2)}ch` }}
-          className="border-b border-hairline bg-transparent text-center font-mono text-[17px] text-text tabular-nums transition-colors outline-none hover:border-hairline-strong focus:border-violet"
+          className="border-b border-hairline bg-transparent text-center text-[17px] text-text tabular-nums transition-colors outline-none hover:border-hairline-strong focus:border-violet"
         />
         <span aria-hidden="true" className="text-sm text-faint">
           min

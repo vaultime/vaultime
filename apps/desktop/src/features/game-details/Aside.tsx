@@ -43,7 +43,7 @@ export function TotalRow({ label, value, accent = false }: { label: string; valu
   return (
     <div className="flex items-baseline justify-between border-b border-rule py-2.5">
       <span className="text-sm text-soft">{label}</span>
-      <span className={cn("font-mono text-[15px] tabular-nums", accent && "text-violet")}>{value}</span>
+      <span className={cn("text-[15px] tabular-nums", accent && "text-violet")}>{value}</span>
     </div>
   );
 }

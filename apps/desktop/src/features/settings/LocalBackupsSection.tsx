@@ -166,7 +166,7 @@ export function LocalBackupsSection({
               `, made on ${whichPc(restorePreview.source_device_id, thisDeviceId)}`}
             .
           </p>
-          <p className="mt-2 font-mono text-sm text-soft">
+          <p className="mt-2 text-sm text-soft tabular-nums">
             {plural(restorePreview.games_count, "game")}, {plural(restorePreview.sessions_count, "session")},{" "}
             {plural(restorePreview.asset_file_count, "image")}
           </p>

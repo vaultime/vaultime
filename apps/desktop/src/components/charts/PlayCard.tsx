@@ -42,7 +42,7 @@ export function PlayCard({
         <div className="mt-1.5 text-sm text-soft">Not played</div>
       ) : (
         <>
-          <div className="mt-1 font-mono text-[15px] tabular-nums">
+          <div className="mt-1 text-[15px] tabular-nums">
             {playedMs === undefined
               ? `${formatHoursMinutes(play.activeMs)} active`
               : `${formatHoursMinutes(playedMs)} played`}
@@ -54,7 +54,7 @@ export function PlayCard({
                 <li key={game.gameId} className="flex items-center gap-2.5 text-[13px]">
                   <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
                   <span className="min-w-0 flex-1 truncate">{title}</span>
-                  <span className="shrink-0 font-mono text-xs text-soft tabular-nums">
+                  <span className="shrink-0 text-xs text-soft tabular-nums">
                     {gameTime(game)}
                   </span>
                 </li>

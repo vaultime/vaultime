@@ -19,6 +19,23 @@ const CELL_BORDERS = [
   "pl-6",
 ];
 
+/** "17h 06m" with the units smaller than the figures, so the number reads first. */
+function Figures({ text }: { text: string }) {
+  return text.split(/(\d[\d.,]*)/).map((part, index) => {
+    const unit = part.trim();
+    if (/^\d/.test(part) || !unit) return part.trim() ? <span key={index}>{part}</span> : null;
+    return (
+      <span
+        key={index}
+        // A word like days stands apart, a letter like h sits close.
+        className={cn("mr-[0.22em] text-[0.62em] font-medium tracking-normal opacity-75", unit.length > 1 ? "ml-[0.2em]" : "ml-[0.06em]")}
+      >
+        {unit}
+      </span>
+    );
+  });
+}
+
 /** Four numbers in a row, separated by hairlines. */
 export function StatTiles({ label, tiles }: { label: string; tiles: StatTile[] }) {
   return (
@@ -28,11 +45,11 @@ export function StatTiles({ label, tiles }: { label: string; tiles: StatTile[] }
           <div className="label-small">{tile.label}</div>
           <div
             className={cn(
-              "mt-2.5 font-mono text-[clamp(22px,2.3vw,32px)] tracking-[-0.02em] tabular-nums",
+              "mt-2 text-[clamp(22px,2.2vw,28px)] font-semibold tracking-[-0.01em] tabular-nums",
               tile.accent && "text-violet",
             )}
           >
-            {tile.value}
+            <Figures text={tile.value} />
           </div>
           <div className="mt-1.5 line-clamp-2 text-[13px] text-pretty text-faint">{tile.note}</div>
         </div>

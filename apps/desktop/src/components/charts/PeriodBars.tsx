@@ -75,7 +75,7 @@ export function PeriodBars({
           />
         )}
       </div>
-      <figcaption aria-hidden="true" className="flex gap-2.5 font-mono text-[11px] text-faint">
+      <figcaption aria-hidden="true" className="flex gap-2.5 text-[11px] text-faint tabular-nums">
         {columns.map(({ short, long }, index) => (
           <span
             key={long}
