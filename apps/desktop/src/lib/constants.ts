@@ -53,8 +53,11 @@ export const SETTING_KEYS = {
   cloudAutoBackup: "cloud_auto_backup_enabled",
   /** Shows the Cloud page and lets this PC sign in with `true`. Same as CLOUD_BACKUP_SETTING in constants.rs. */
   cloudBackup: "cloud_backup",
-  /** How the rail sorts the games. Same as RAIL_SORT_SETTING in constants.rs. */
-  railSort: "rail_sort",
+  /**
+   * How All games sorts the games, under its name from when the rail listed
+   * them. Same as LIBRARY_SORT_SETTING in constants.rs.
+   */
+  librarySort: "rail_sort",
   /** Looking for new games at start, on unless `false`. Same as AUTO_DISCOVER_SETTING in constants.rs. */
   autoDiscover: "auto_discover_on_start",
   /** Dark, light or the system's mode. Same as APPEARANCE_MODE_SETTING in constants.rs. */

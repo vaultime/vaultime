@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowDownUp, Check, ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { Badge } from "@/components/ui/badge";
@@ -16,15 +16,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LastPlayed } from "@/features/library/components/LastPlayed";
 import type { GameSummary } from "@/features/library/library-context";
-import { TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
+import { useSettings } from "@/features/settings/settings-context";
+import { SETTING_KEYS, TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { onFind } from "@/lib/find";
-import { GAME_SORTS, sortGames, type GameSort } from "@/lib/game-sort";
+import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import { matchesGame } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort } from "@/lib/time";
 import { scrollMotion } from "@/lib/anchors";
-import { cn } from "@/lib/utils";
+import { cn, logFailure } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
 /** Every game as a cover, with sorting and the ways to add more. */
@@ -43,7 +44,11 @@ export function GameGrid({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const [sort, setSort] = useState<GameSort>("recent");
+  const { values, save } = useSettings();
+  const [sort, setSort] = useState<GameSort>(() => {
+    const saved = values[SETTING_KEYS.librarySort];
+    return isGameSort(saved) ? saved : "recent";
+  });
   const [filter, setFilter] = useState<GameStatus | "all">("all");
   const [query, setQuery] = useState("");
   const section = useRef<HTMLElement>(null);
@@ -59,6 +64,11 @@ export function GameGrid({
     );
     return sortGames(filtered, sort);
   }, [summaries, sort, shownFilter, query]);
+
+  function changeSort(next: GameSort) {
+    setSort(next);
+    save(SETTING_KEYS.librarySort, next).catch(logFailure("saving the sort of All games"));
+  }
 
   useEffect(
     () =>
@@ -150,22 +160,24 @@ export function GameGrid({
               ))}
             </div>
           )}
-          <div role="group" aria-label="Sort games" className="flex rounded-full border border-hairline p-0.5">
-            {(Object.keys(GAME_SORTS) as GameSort[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={sort === key}
-                onClick={() => setSort(key)}
-                className={cn(
-                  "h-8 rounded-full px-3.5 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                  sort === key ? "bg-raised text-text" : "text-faint hover:text-soft",
-                )}
-              >
-                {GAME_SORTS[key]}
-              </button>
-            ))}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={`Sort games, now ${GAME_SORTS[sort]}`}
+              className="flex h-[30px] items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] text-soft ring-1 ring-hairline transition-colors ring-inset hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none data-popup-open:bg-glint/5"
+            >
+              <ArrowDownUp className="size-3.5 text-faint" strokeWidth={1.8} />
+              <span className="font-medium text-text">{GAME_SORTS[sort]}</span>
+              <ChevronDown className="size-3.5 text-faint" strokeWidth={1.8} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-auto min-w-40">
+              {(Object.keys(GAME_SORTS) as GameSort[]).map((option) => (
+                <DropdownMenuItem key={option} onClick={() => changeSort(option)}>
+                  {GAME_SORTS[option]}
+                  {option === sort && <Check className="ml-auto size-4 text-violet" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       {summaries.length === 0 && (
