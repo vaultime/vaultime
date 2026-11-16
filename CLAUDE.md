@@ -244,6 +244,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - In comments, docs, UI copy and commit messages: no em or en dashes, no
   semicolons in sentences, no decorative banner comments and no filler words
   like "robust", "seamless", "leverage" or "comprehensive".
+- Never name other playtime trackers or competing apps in code, comments,
+  docs, UI copy, the website or commit messages. Launchers and tools Vaultime
+  reads data from may be named.
 - No magic numbers. Every value that tunes behavior (durations, limits,
   thresholds, sizes, defaults) is a named constant in one file per codebase:
   `apps/desktop/src/lib/constants.ts`, `apps/desktop/src-tauri/src/constants.rs`
