@@ -23,14 +23,12 @@ export function PageHeader({
 }) {
   return (
     // The controls go under the sentence when beside it they would leave it too narrow.
-    <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6 border-b border-rule px-8 pt-6 pb-8 xl:px-14">
+    <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-5 border-b border-rule px-8 pt-4 pb-7 xl:px-14">
       <div className="min-w-0 flex-1 basis-[360px]">
         <div className="label-small">{overline}</div>
-        <h1 className="font-display mt-3 text-[clamp(56px,6vw,84px)] leading-[0.95]">
-          {title}
-        </h1>
+        <h1 className="font-display mt-1.5 text-[28px] leading-[1.1]">{title}</h1>
         {children && (
-          <p className="font-prose mt-4 max-w-[640px] text-[23px] leading-[1.3] text-pretty text-soft">
+          <p className="font-prose mt-2.5 max-w-[640px] text-[17px] leading-[1.45] text-pretty text-soft">
             {children}
           </p>
         )}
@@ -61,7 +59,7 @@ export function PageSection({
         )}
       >
         <div>
-          <h2 className="font-display text-[28px] leading-tight">{title}</h2>
+          <h2 className="font-display text-lg leading-tight">{title}</h2>
           {description && (
             <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-pretty text-faint">{description}</p>
           )}

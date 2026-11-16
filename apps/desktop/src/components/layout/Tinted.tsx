@@ -26,7 +26,7 @@ export function TintedHeader({
     // It reaches up under the top bar, which floats over its colors.
     <section
       className={cn(
-        "relative isolate -mt-(--top-bar) overflow-hidden border-b px-8 pt-[calc(var(--top-bar)+2.5rem)] pb-10 xl:px-14",
+        "relative isolate -mt-(--top-bar) overflow-hidden border-b px-8 pt-[calc(var(--top-bar)+2.5rem)] pb-9 xl:px-14",
         className,
       )}
       style={{
@@ -98,7 +98,7 @@ export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
   return (
     <h1
       ref={lineRef}
-      className="font-display mt-3.5 text-[clamp(48px,5.4vw,80px)] leading-[0.95] whitespace-nowrap"
+      className="font-display mt-2.5 text-[46px] leading-none tracking-[-0.03em] whitespace-nowrap"
       style={{ color: tint.ink }}
     >
       {/* The line keeps the full size height, the shrunk title sits on its baseline. */}
@@ -120,7 +120,7 @@ export function TintedSentence({
 }) {
   return (
     <p
-      className={cn("font-prose mt-5 max-w-[620px] text-2xl leading-[1.3] text-pretty", className)}
+      className={cn("font-prose mt-3.5 max-w-[560px] text-[17px] leading-[1.45] text-pretty", className)}
       style={{ color: tint.soft }}
     >
       {children}
@@ -129,7 +129,7 @@ export function TintedSentence({
 }
 
 const BUTTON =
-  "inline-flex h-11 items-center gap-2 rounded-full px-5 text-sm transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none";
+  "inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none";
 
 /** A pill in the header's colors. Solid for the main action, outlined otherwise. */
 export function TintedButton({

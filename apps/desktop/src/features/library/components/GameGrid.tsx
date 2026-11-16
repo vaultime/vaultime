@@ -91,7 +91,7 @@ export function GameGrid({
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <h1 id="all-games-title" className="font-display text-[34px]">
+          <h1 id="all-games-title" className="font-display text-[28px] leading-[1.1]">
             All games
           </h1>
           <span className="font-mono text-sm text-faint">{sorted.length}</span>

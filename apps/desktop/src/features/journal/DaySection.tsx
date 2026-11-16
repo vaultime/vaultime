@@ -234,7 +234,7 @@ export const DaySection = memo(function DaySection({
       className="flex scroll-mt-6 flex-col gap-5 border-b border-rule py-7 outline-none xl:flex-row xl:gap-10"
     >
       <div className="flex shrink-0 items-baseline gap-4 xl:block xl:w-[210px] 2xl:w-[240px]">
-        <h2 className={cn("font-display text-4xl leading-none transition-colors xl:text-[2rem] 2xl:text-4xl", flashed && "text-violet")}>
+        <h2 className={cn("font-display text-[22px] leading-none transition-colors", flashed && "text-violet")}>
           {formatDate(day.start, { weekday: "long" })}
         </h2>
         <div className="text-xs text-faint xl:mt-1.5">

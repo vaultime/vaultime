@@ -62,7 +62,7 @@ export function HomePage() {
   if (error && summaries.length === 0) {
     return (
       <div className="px-8 pt-12 xl:px-14">
-        <h1 className="font-display text-4xl">Your library did not load</h1>
+        <h1 className="font-display text-[28px]">Your library did not load</h1>
         <p role="alert" className="mt-3 max-w-[560px] text-amber">
           {error}
         </p>

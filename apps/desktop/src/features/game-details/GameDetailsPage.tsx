@@ -122,7 +122,7 @@ function GamePage({ gameId }: { gameId: string }) {
   if (!summary) {
     return (
       <div className="px-8 pt-12 xl:px-14">
-        <h1 className="font-display text-4xl">This game is not in your library</h1>
+        <h1 className="font-display text-[28px]">This game is not in your library</h1>
         <p className="mt-3 text-faint">It may have been deleted.</p>
         <Button variant="outline" className="mt-6" nativeButton={false} render={<Link to="/library" />}>
           Back to the library
@@ -206,7 +206,7 @@ function GamePage({ gameId }: { gameId: string }) {
             title={game.title}
             src={cover}
             variant="card"
-            className="hidden h-[240px] w-[180px] p-4 text-[30px] shadow-2xl shadow-scrim/40 lg:flex"
+            className="hidden h-[200px] w-[150px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex"
           />
         </div>
       </TintedHeader>
@@ -233,7 +233,7 @@ function GamePage({ gameId }: { gameId: string }) {
 
           <section aria-labelledby="sessions-title">
             <div className="mb-1.5 flex items-baseline justify-between gap-4">
-              <h2 id="sessions-title" className="font-display text-[30px]">
+              <h2 id="sessions-title" className="font-display text-lg">
                 {showAll ? "Every session" : "Recent sessions"}
               </h2>
               {/* A game of another PC gets its sessions with each merge. */}

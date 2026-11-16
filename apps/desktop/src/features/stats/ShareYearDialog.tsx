@@ -299,7 +299,7 @@ function CardPreview({
             />
           ) : (
             <div className="max-w-[420px] text-center">
-              <p className="font-display text-[34px] leading-tight">Nothing to share for {year} yet</p>
+              <p className="font-display text-2xl leading-tight">Nothing to share for {year} yet</p>
               <p className="font-prose mt-3 text-[19px] leading-snug text-soft">
                 Once you play, your year fills in here, day by day.
               </p>

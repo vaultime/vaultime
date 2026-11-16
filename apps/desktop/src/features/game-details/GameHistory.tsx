@@ -137,7 +137,7 @@ export function GameHistory({
   return (
     <section aria-labelledby="history-title" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="history-title" className="font-display text-[30px]">
+        <h2 id="history-title" className="font-display text-lg">
           History
         </h2>
         <div className="flex items-center gap-4">
