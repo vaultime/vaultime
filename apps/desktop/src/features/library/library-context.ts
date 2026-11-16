@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { GameTint } from "@/lib/game-tint";
+import { stepsAside } from "@/lib/steps-aside";
 import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 
 export interface GameSummary {
@@ -101,6 +102,17 @@ export function useLastPoll(): number {
 /** The minute of the last poll, so words like "5 min ago" move on. */
 export function useMinute(): number {
   return useContext(MinuteContext);
+}
+
+/**
+ * The session of the game being played rather than a launcher that steps
+ * aside for it, whose clock stands still while the game runs.
+ */
+export function useCurrentSession(): Session | null {
+  const active = useActiveSessions();
+  const { games } = useLibrary();
+  const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
+  return active.find((session) => !stepping.has(session.game_id)) ?? active[0] ?? null;
 }
 
 /** Clock time with a game running today, as the core counted it at the last poll. */

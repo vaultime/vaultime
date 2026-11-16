@@ -1,15 +1,20 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { ArrowUpRight, Gamepad2 } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
-import { useActiveSessions, useLastPoll, useLibrary, usePlayedToday } from "@/features/library/library-context";
+import {
+  useActiveSessions,
+  useCurrentSession,
+  useLastPoll,
+  useLibrary,
+  usePlayedToday,
+} from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
-import { stepsAside } from "@/lib/steps-aside";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { cn } from "@/lib/utils";
 
@@ -18,10 +23,7 @@ export function LiveBar() {
   const { games, covers, summaries, idleThresholdSeconds } = useLibrary();
   const active = useActiveSessions();
   const activePolledAt = useLastPoll();
-  const stepping = useMemo(() => new Set(games.filter(stepsAside).map((game) => game.id)), [games]);
-  // The game being played rather than a launcher that steps aside for it,
-  // whose clock stands still while the game runs.
-  const current = active.find((session) => !stepping.has(session.game_id)) ?? active[0];
+  const current = useCurrentSession();
 
   // Counted by the core at each poll, as the journal counts the day.
   const todayMs = usePlayedToday();
