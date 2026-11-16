@@ -37,10 +37,17 @@ import {
   VAULTIME_URL,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
-import type { BackupSnapshot, TrackingDiagnostics } from "@/lib/types";
+import type { BackupSnapshot, TrackingDiagnostics, TrayStatus } from "@/lib/types";
 import { describeError, logFailure } from "@/lib/utils";
 import { useScrollToAnchor } from "@/lib/anchors";
 import { numberWords } from "@/lib/words";
+
+const TRAY_HINTS: Record<TrayStatus, string> = {
+  shown: "Vaultime stays in the tray. Quit it from the tray menu.",
+  hidden:
+    "This desktop shows no tray icons, so closing the window minimizes Vaultime and it keeps counting. On GNOME, an AppIndicator extension adds the icon.",
+  none: "This system has no tray, so closing the window quits Vaultime. On Linux, installing libayatana-appindicator3 adds one.",
+};
 
 const LINKS = [
   { label: "Website", url: VAULTIME_URL },
@@ -84,7 +91,7 @@ export function SettingsPage() {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
   const [showingNotices, setShowingNotices] = useState(false);
-  const [trayAvailable, setTrayAvailable] = useState(false);
+  const [tray, setTray] = useState<TrayStatus>("none");
   const [closeToTray, setCloseToTray] = useState(initial.closeToTray);
   const [autostart, setAutostart] = useState(false);
   const [autoDiscover, setAutoDiscover] = useState(initial.autoDiscover);
@@ -96,13 +103,13 @@ export function SettingsPage() {
       api.listBackupSnapshots(),
       api.getAppVersion(),
       // Optional extras. Failing here must not hide the tracking rules.
-      api.trayAvailable().catch(() => false),
+      api.trayStatus().catch((): TrayStatus => "none"),
       autostartEnabled().catch(() => false),
       api.getAutoBackupFolder().catch(() => ""),
     ])
       .then(([nextDiagnostics, nextSnapshots, version, tray, startsAtLogin, backupFolder]) => {
         if (cancelled) return;
-        setTrayAvailable(Boolean(tray));
+        setTray(tray);
         setBackups({ autoBackup: initial.autoBackup, folder: backupFolder, snapshots: nextSnapshots });
         setAutostart(Boolean(startsAtLogin));
         setDiagnostics(nextDiagnostics);
@@ -250,16 +257,12 @@ export function SettingsPage() {
           <PageRow
             label="Keep tracking when the window is closed"
             htmlFor="close-to-tray"
-            hint={
-              trayAvailable
-                ? "Vaultime stays in the tray. Quit it from the tray menu."
-                : "This system has no tray, so closing the window quits Vaultime. On Linux, installing libayatana-appindicator3 adds one."
-            }
+            hint={TRAY_HINTS[tray]}
           >
             <Switch
               id="close-to-tray"
-              checked={trayAvailable && closeToTray}
-              disabled={!trayAvailable}
+              checked={tray !== "none" && closeToTray}
+              disabled={tray === "none"}
               onCheckedChange={(checked) =>
                 void toggle(setCloseToTray, checked, saveSetting(SETTING_KEYS.closeToTray, checked))
               }
@@ -269,9 +272,9 @@ export function SettingsPage() {
             label={diagnostics?.platform === "windows" ? "Start with Windows" : "Start when you log in"}
             htmlFor="autostart"
             hint={
-              trayAvailable
+              tray === "shown"
                 ? "Starts quietly in the tray, so the first game of the day counts too."
-                : "Opens Vaultime when you log in."
+                : "Starts quietly without a window, so the first game of the day counts too. Start Vaultime again to open it."
             }
           >
             <Switch

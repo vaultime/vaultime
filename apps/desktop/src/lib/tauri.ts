@@ -40,6 +40,7 @@ import type {
   StepsAsideHint,
   ThisPc,
   TrackingDiagnostics,
+  TrayStatus,
   TrimPreview,
   UpdateGameInput,
   WindowLook,
@@ -489,8 +490,8 @@ export async function setWindowSize(choice: WindowSizeChoice): Promise<WindowSiz
 }
 
 /** Whether this system shows a tray icon, so closing the window can keep tracking. */
-export async function trayAvailable(): Promise<boolean> {
-  return invoke<boolean>("tray_available");
+export async function trayStatus(): Promise<TrayStatus> {
+  return invoke<TrayStatus>("tray_status");
 }
 
 export async function discoverGames(

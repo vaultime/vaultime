@@ -1682,8 +1682,8 @@ mockIPC((cmd, payload) => {
       return signedIn ? JSON.stringify(cloudSession()) : null;
     case "has_cloud_backup_key_secure":
       return signedIn;
-    case "tray_available":
-      return true;
+    case "tray_status":
+      return "shown";
     case "get_window_size":
       return mockWindowSize();
     case "set_window_size":

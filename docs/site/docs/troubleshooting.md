@@ -96,7 +96,7 @@ Settings, Window picks a fixed size from Compact at 1024 by 640 to Extra large a
 
 ### No tray icon on Linux
 
-Install `libayatana-appindicator3`. Without it there is no tray, and closing the window quits Vaultime, so tracking stops until you start it again. On GNOME you also need an AppIndicator extension. Without one, Vaultime keeps running after you close the window, only its icon does not show. Start Vaultime again to bring the window back.
+Install `libayatana-appindicator3`. Without it there is no tray, and closing the window quits Vaultime, so tracking stops until you start it again. On GNOME you also need an AppIndicator extension for the icon. Without one, closing the window minimizes Vaultime instead, so it keeps counting and stays in the dash. Settings, In the background says which of the two your desktop does.
 
 ## Still stuck?
 

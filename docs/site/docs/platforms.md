@@ -40,7 +40,7 @@ Steam, Heroic, Lutris and itch.io installed through Flatpak are found by discove
 
 ## Tray and keyring
 
-- The tray icon needs `libayatana-appindicator3`. GNOME shows tray icons only with an AppIndicator extension, which Ubuntu ships.
+- The tray icon needs `libayatana-appindicator3`. GNOME shows tray icons only with an AppIndicator extension, which Ubuntu ships. Without one, closing the window minimizes Vaultime instead of hiding it.
 - Signing in to cloud backup keeps your sign-in and the backup key in the system keyring, so it needs a keyring service such as GNOME Keyring or KWallet. Most desktops ship one.
 
 ## macOS

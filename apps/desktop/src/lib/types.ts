@@ -467,6 +467,9 @@ export interface Setting {
 /** A window size preset or `free`, see `WINDOW_PRESETS` in constants.rs. */
 export type WindowSizeChoice = "compact" | "standard" | "large" | "extra_large" | "free";
 
+/** Where closing the window leaves Vaultime: in the tray, minimized on a desktop without tray icons, or quit. */
+export type TrayStatus = "shown" | "hidden" | "none";
+
 /** Mirrors the Rust `WindowPresetView` struct. */
 export interface WindowPresetView {
   name: Exclude<WindowSizeChoice, "free">;

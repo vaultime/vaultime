@@ -77,10 +77,11 @@ pub struct TrackingDiagnostics {
     pub poll_interval_seconds: u64,
 }
 
-/// Whether this system shows a tray icon, so closing the window can keep tracking.
+/// Where closing the window leaves Vaultime: in the tray, minimized on a
+/// desktop that shows no tray icons, or quit without a tray.
 #[tauri::command]
-pub fn tray_available(tray: State<'_, crate::tray::TrayState>) -> bool {
-    tray.available
+pub fn tray_status(tray: State<'_, crate::tray::TrayState>) -> crate::tray::TrayStatus {
+    tray.status()
 }
 
 fn main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, VaultimeError> {

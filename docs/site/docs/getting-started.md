@@ -99,7 +99,7 @@ Hiding is for privacy, not for programs that are no games. A hidden game is left
 
 Closing the window keeps Vaultime running in the tray, and it starts when you log in. Both are switches under Settings, In the background: **Keep tracking when the window is closed** and **Start with Windows**, called **Start when you log in** on Linux. The tray menu shows the game that runs and how long you played today.
 
-On Linux the tray needs `libayatana-appindicator3`, and GNOME shows tray icons only with an AppIndicator extension. Ubuntu ships one. Without the library there is no tray, and closing the window quits Vaultime.
+On Linux the tray needs `libayatana-appindicator3`, and GNOME shows tray icons only with an AppIndicator extension. Ubuntu ships one. Without the library there is no tray, and closing the window quits Vaultime. On a desktop that shows no tray icons, closing the window minimizes Vaultime instead, so it keeps counting.
 
 ## Make it yours
 

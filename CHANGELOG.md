@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Recent order follows. While a game runs, the game list shows when you started it, "Since 20:15".
+- **No lost window on GNOME.** On a desktop that shows no tray icons, like GNOME without an AppIndicator extension, closing the window now minimizes Vaultime instead of hiding it where no icon could bring it back. It keeps counting either way, and Settings says which your desktop does.
 - **Wednesday fits in the journal.** In a window of 1280 pixels and wider, the journal's day names no longer run into the strip of play beside them.
 
 ## [0.6.0] - 2026-10-20

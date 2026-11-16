@@ -84,7 +84,7 @@ pub fn run() {
                     if tray::close_to_tray(window.app_handle()) =>
                 {
                     api.prevent_close();
-                    tray::hide_main_window(window.app_handle());
+                    tray::put_main_window_away(window.app_handle());
                 }
                 WindowEvent::Resized(_) => window_size::on_main_resized(window.app_handle()),
                 _ => {}
@@ -177,7 +177,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::app::list_settings,
         commands::app::set_setting,
         commands::app::get_tracking_diagnostics,
-        commands::app::tray_available,
+        commands::app::tray_status,
         commands::app::get_window_size,
         commands::app::set_window_size,
         commands::cloud::set_cloud_signed_in,

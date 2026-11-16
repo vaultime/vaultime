@@ -36,23 +36,60 @@ const SIGNED_IN_TOOLTIP: &str = "Vaultime, signed in to cloud backup";
 /// Whether this system can show a tray icon at all.
 pub struct TrayState {
     pub available: bool,
+    /// Whether the desktop shows the icon. GNOME without an `AppIndicator`
+    /// extension runs it unseen.
+    pub shown: bool,
+}
+
+/// Where closing the window leaves Vaultime, for the settings page.
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrayStatus {
+    /// In the tray.
+    Shown,
+    /// Minimized, as the desktop shows no tray icons.
+    Hidden,
+    /// Nowhere, closing the window quits.
+    None,
+}
+
+impl TrayState {
+    pub fn status(&self) -> TrayStatus {
+        match (self.available, self.shown) {
+            (false, _) => TrayStatus::None,
+            (true, false) => TrayStatus::Hidden,
+            (true, true) => TrayStatus::Shown,
+        }
+    }
 }
 
 /// Creates the tray icon when the system supports one.
 pub fn create<R: Runtime>(app: &AppHandle<R>) -> TrayState {
+    let missing = TrayState {
+        available: false,
+        shown: false,
+    };
     if !system_supports_tray() {
         warn!("no tray on this system, install libayatana-appindicator3 for one");
-        return TrayState { available: false };
+        return missing;
     }
     match build(app) {
         Ok((playing, today)) => {
-            info!("tray icon created");
+            let shown = desktop_shows_tray();
+            if shown {
+                info!("tray icon created");
+            } else {
+                warn!("tray icon created, but this desktop shows none, so closing minimizes");
+            }
             start_status_updates(app.clone(), playing, today);
-            TrayState { available: true }
+            TrayState {
+                available: true,
+                shown,
+            }
         }
         Err(error) => {
             warn!("failed to create the tray icon: {error}");
-            TrayState { available: false }
+            missing
         }
     }
 }
@@ -275,7 +312,17 @@ pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Whether closing the window should hide it instead of quitting.
+/// Puts the window away on close: into the tray, or down to the taskbar or
+/// dock when the desktop shows no tray icons, so Vaultime stays in sight.
+pub fn put_main_window_away<R: Runtime>(app: &AppHandle<R>) {
+    if app.state::<TrayState>().shown {
+        hide_main_window(app);
+    } else if let Some(window) = app.get_webview_window("main") {
+        let _ = window.minimize();
+    }
+}
+
+/// Whether closing the window should keep Vaultime running instead of quitting.
 pub fn close_to_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
     if !app.state::<TrayState>().available {
         return false;
@@ -305,6 +352,58 @@ fn system_supports_tray() -> bool {
 #[cfg(not(target_os = "linux"))]
 fn system_supports_tray() -> bool {
     true
+}
+
+/// The service a Linux desktop runs to show `AppIndicator` icons.
+#[cfg(target_os = "linux")]
+const NOTIFIER_WATCHER: &str = "org.kde.StatusNotifierWatcher";
+
+/// Whether the desktop shows tray icons: through a status notifier watcher,
+/// or an X tray that `AppIndicator` falls back to without one. GNOME has
+/// neither unless an `AppIndicator` extension runs.
+#[cfg(target_os = "linux")]
+fn desktop_shows_tray() -> bool {
+    notifier_watcher_running() || x_tray_running()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn desktop_shows_tray() -> bool {
+    true
+}
+
+#[cfg(target_os = "linux")]
+fn notifier_watcher_running() -> bool {
+    let Ok(bus) = zbus::blocking::Connection::session() else {
+        return false;
+    };
+    bus.call_method(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus"),
+        "NameHasOwner",
+        &NOTIFIER_WATCHER,
+    )
+    .ok()
+    .and_then(|reply| reply.body().deserialize::<bool>().ok())
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn x_tray_running() -> bool {
+    use x11rb::protocol::xproto::ConnectionExt as _;
+
+    let Ok((connection, screen)) = x11rb::connect(None) else {
+        return false;
+    };
+    let selection = format!("_NET_SYSTEM_TRAY_S{screen}");
+    connection
+        .intern_atom(true, selection.as_bytes())
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .filter(|reply| reply.atom != x11rb::NONE)
+        .and_then(|reply| connection.get_selection_owner(reply.atom).ok())
+        .and_then(|cookie| cookie.reply().ok())
+        .is_some_and(|reply| reply.owner != x11rb::NONE)
 }
 
 #[cfg(test)]
@@ -386,6 +485,15 @@ mod tests {
         let (playing, _) =
             status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
         assert_eq!(playing, "Playing Client, 2 h 00");
+    }
+
+    #[test]
+    fn closing_goes_where_the_icon_shows() {
+        let state = |available, shown| TrayState { available, shown };
+        assert_eq!(state(true, true).status(), TrayStatus::Shown);
+        assert_eq!(state(true, false).status(), TrayStatus::Hidden);
+        assert_eq!(state(false, false).status(), TrayStatus::None);
+        assert_eq!(state(false, true).status(), TrayStatus::None);
     }
 
     #[test]
