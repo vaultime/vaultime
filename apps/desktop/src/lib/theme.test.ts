@@ -34,23 +34,24 @@ function parse(color: string, tokens: Record<string, string> = {}): Oklch {
 }
 
 describe("themeTokens", () => {
-  it("keeps the dark violet look of Vaultime 0.2 as the default", () => {
+  it("keeps the violet grey look of index.css as the default", () => {
     const tokens = themeTokens("dark", "vault", "violet");
     const before: Record<string, string> = {
-      "--ink": "#0e0b14",
-      "--surface": "#16121e",
-      "--raised": "#1a1524",
-      "--hairline": "#2a2238",
-      "--rule": "#231c31",
-      "--text": "#eee8f6",
-      "--soft": "#d9d1e6",
-      "--faint": "#a99fbc",
+      "--window": "#08080a",
+      "--ink": "#111014",
+      "--surface": "#18171c",
+      "--raised": "#1f1d23",
+      "--hairline": "#2c2931",
+      "--rule": "#222027",
+      "--text": "#f2f1f4",
+      "--soft": "#b9b5c0",
+      "--faint": "#8e8a96",
       "--violet": "#9d7cff",
       "--violet-hover": "#b39aff",
       "--violet-ink": "#140e22",
-      "--hairline-strong": "#3a3050",
-      "--bar": "#120e19",
-      "--idle": "#4a4060",
+      "--hairline-strong": "#3b3842",
+      "--bar": "#111014",
+      "--idle": "#484452",
       "--amber": "#f0b45a",
       "--sky": "#7fb0ff",
       "--destructive": "#ff7a85",
@@ -80,6 +81,8 @@ describe("themeTokens", () => {
     // Rules and idle time stay visible against the ground.
     expect(contrastRatio(color("--hairline"), color("--ink"))).toBeGreaterThan(1.2);
     expect(contrastRatio(color("--idle"), color("--ink"))).toBeGreaterThanOrEqual(1.5);
+    // The panels stand apart from the window around them.
+    expect(color("--ink").lightness - color("--window").lightness).toBeGreaterThan(0.025);
     expect(contrastRatio(color("--violet"), color("--idle"))).toBeGreaterThanOrEqual(1.5);
   });
 
@@ -199,10 +202,10 @@ describe("windowLook", () => {
     expect(windowLook("dark", "vault", "violet", "dark").iconAccent).not.toBe(windowLook("dark", "vault", "orange", "dark").iconAccent);
   });
 
-  it("matches the title bar to the page", () => {
+  it("matches the title bar to the window around the panels", () => {
     const dark = windowLook("dark", "umber", "orange", "dark");
     const light = windowLook("light", "umber", "orange", "light");
-    expect(dark.titleBar).toBe(oklchToHex(parse(themeTokens("dark", "umber", "orange")["--ink"])));
+    expect(dark.titleBar).toBe(oklchToHex(parse(themeTokens("dark", "umber", "orange")["--window"])));
     expect(contrastRatio(hexToOklch(dark.titleText)!, hexToOklch(dark.titleBar)!)).toBeGreaterThan(7);
     expect(contrastRatio(hexToOklch(light.titleText)!, hexToOklch(light.titleBar)!)).toBeGreaterThan(7);
     expect(light.border).toBe(oklchToHex(accentColor("orange", "light")));

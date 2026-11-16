@@ -180,7 +180,7 @@ export function themeTokens(mode: ThemeMode, groundId: GroundId, accent: string)
 }
 
 /**
- * Colors for the window around the page and the mode the player chose, for
+ * Colors for the window around the panels and the mode the player chose, for
  * the title bar. The logo keeps its own dark tile, so it takes the accent of
  * dark mode in either mode.
  */
@@ -188,7 +188,7 @@ export function windowLook(mode: ThemeMode, groundId: GroundId, accent: string, 
   return {
     theme: choice,
     iconAccent: oklchToHex(accentColor(accent, "dark")),
-    titleBar: oklchToHex(groundColor(mode, groundId, "ink")),
+    titleBar: oklchToHex(groundColor(mode, groundId, "window")),
     titleText: oklchToHex(groundColor(mode, groundId, "text")),
     border: oklchToHex(accentColor(accent, mode)),
   };

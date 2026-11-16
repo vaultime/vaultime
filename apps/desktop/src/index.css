@@ -133,6 +133,7 @@
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
   /* Named palette. */
+  --color-window: var(--window);
   --color-ink: var(--ink);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
@@ -166,26 +167,27 @@
 }
 
 /*
- * The default look, violet on dark violet ink. lib/theme.ts derives every
+ * The default look, violet on a violet grey a step above black. lib/theme.ts derives every
  * token below for the mode, ground and accent the player picks and sets them
  * on the root element, so these only hold until the page starts. The
  * --violet tokens are the accent, violet unless the player picks another.
  */
 :root {
-  --ink: #0e0b14;
-  --surface: #16121e;
-  --raised: #1a1524;
-  --hairline: #2a2238;
-  --rule: #231c31;
-  --text: #eee8f6;
-  --soft: #d9d1e6;
-  --faint: #a99fbc;
+  --window: #08080a;
+  --ink: #111014;
+  --surface: #18171c;
+  --raised: #1f1d23;
+  --hairline: #2c2931;
+  --rule: #222027;
+  --text: #f2f1f4;
+  --soft: #b9b5c0;
+  --faint: #8e8a96;
   --violet: #9d7cff;
   --violet-hover: #b39aff;
   --violet-ink: #140e22;
-  --hairline-strong: #3a3050;
-  --bar: #120e19;
-  --idle: #4a4060;
+  --hairline-strong: #3b3842;
+  --bar: #111014;
+  --idle: #484452;
   --amber: #f0b45a;
   --sky: #7fb0ff;
   /* Shadows under covers and floating panels. */

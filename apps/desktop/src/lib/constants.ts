@@ -457,10 +457,11 @@ export const TINT_MAX_STRENGTH = 1.2;
 
 /**
  * Ground tones: the hue of the ground and how colorful it is, where 1 is the
- * violet ink Vaultime started with.
+ * violet ink Vaultime started with. The default vault ground keeps less than
+ * half of it, so cover art carries the color.
  */
 export const GROUNDS = {
-  vault: { hue: 300, chroma: 1 },
+  vault: { hue: 300, chroma: 0.45 },
   graphite: { hue: 260, chroma: 0.15 },
   midnight: { hue: 252, chroma: 1.25 },
   moss: { hue: 160, chroma: 0.85 },
@@ -470,22 +471,24 @@ export const GROUNDS = {
 
 /**
  * Lightness and chroma of each ground token in dark and light mode, at a
- * ground chroma of 1. Dark mode with the vault ground is the palette of
- * Vaultime 0.2. Light grounds are tinted paper, colorful enough that each
- * ground tone shows, with surfaces a little lighter than the page.
+ * ground chroma of 1. The window shows between the panels, a step darker
+ * than the page on them. Text comes in three clear steps. Light grounds are
+ * tinted paper, colorful enough that each ground tone shows, with surfaces a
+ * little lighter than the page.
  */
 export const GROUND_LEVELS = {
-  ink: { dark: { lightness: 0.158, chroma: 0.019 }, light: { lightness: 0.955, chroma: 0.02 } },
-  bar: { dark: { lightness: 0.175, chroma: 0.023 }, light: { lightness: 0.935, chroma: 0.026 } },
-  surface: { dark: { lightness: 0.193, chroma: 0.025 }, light: { lightness: 0.985, chroma: 0.009 } },
-  raised: { dark: { lightness: 0.209, chroma: 0.03 }, light: { lightness: 0.915, chroma: 0.03 } },
-  rule: { dark: { lightness: 0.245, chroma: 0.04 }, light: { lightness: 0.885, chroma: 0.032 } },
-  hairline: { dark: { lightness: 0.272, chroma: 0.041 }, light: { lightness: 0.855, chroma: 0.036 } },
-  "hairline-strong": { dark: { lightness: 0.335, chroma: 0.056 }, light: { lightness: 0.78, chroma: 0.045 } },
+  window: { dark: { lightness: 0.135, chroma: 0.0105 }, light: { lightness: 0.925, chroma: 0.024 } },
+  ink: { dark: { lightness: 0.176, chroma: 0.019 }, light: { lightness: 0.955, chroma: 0.02 } },
+  bar: { dark: { lightness: 0.176, chroma: 0.019 }, light: { lightness: 0.935, chroma: 0.026 } },
+  surface: { dark: { lightness: 0.208, chroma: 0.022 }, light: { lightness: 0.985, chroma: 0.009 } },
+  raised: { dark: { lightness: 0.234, chroma: 0.0255 }, light: { lightness: 0.915, chroma: 0.03 } },
+  rule: { dark: { lightness: 0.25, chroma: 0.028 }, light: { lightness: 0.885, chroma: 0.032 } },
+  hairline: { dark: { lightness: 0.288, chroma: 0.03 }, light: { lightness: 0.855, chroma: 0.036 } },
+  "hairline-strong": { dark: { lightness: 0.347, chroma: 0.039 }, light: { lightness: 0.78, chroma: 0.045 } },
   idle: { dark: { lightness: 0.395, chroma: 0.054 }, light: { lightness: 0.75, chroma: 0.05 } },
-  faint: { dark: { lightness: 0.72, chroma: 0.043 }, light: { lightness: 0.48, chroma: 0.042 } },
-  soft: { dark: { lightness: 0.873, chroma: 0.03 }, light: { lightness: 0.33, chroma: 0.035 } },
-  text: { dark: { lightness: 0.94, chroma: 0.02 }, light: { lightness: 0.2, chroma: 0.03 } },
+  faint: { dark: { lightness: 0.64, chroma: 0.04 }, light: { lightness: 0.48, chroma: 0.042 } },
+  soft: { dark: { lightness: 0.78, chroma: 0.035 }, light: { lightness: 0.33, chroma: 0.035 } },
+  text: { dark: { lightness: 0.96, chroma: 0.009 }, light: { lightness: 0.2, chroma: 0.03 } },
 };
 
 /**
