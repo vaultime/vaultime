@@ -54,6 +54,8 @@ export function GameGrid({
   const section = useRef<HTMLElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const statuses = GAME_STATUSES.filter((status) => summaries.some((summary) => summary.status === status));
+  const countOf = (key: GameStatus | "all") =>
+    key === "all" ? summaries.length : summaries.filter((summary) => summary.status === key).length;
   const shownFilter = filter !== "all" && statuses.includes(filter) ? filter : "all";
 
   const sorted = useMemo(() => {
@@ -143,7 +145,11 @@ export function GameGrid({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {statuses.length > 0 && (
-            <div role="group" aria-label="Show games by status" className="flex rounded-full border border-hairline p-0.5">
+            <div
+              role="group"
+              aria-label="Show games by status"
+              className="flex gap-0.5 rounded-[9px] bg-glint/4 p-[3px] ring-1 ring-rule ring-inset"
+            >
               {(["all", ...statuses] as const).map((key) => (
                 <button
                   key={key}
@@ -151,11 +157,20 @@ export function GameGrid({
                   aria-pressed={shownFilter === key}
                   onClick={() => setFilter(key)}
                   className={cn(
-                    "h-8 rounded-full px-3.5 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                    shownFilter === key ? "bg-raised text-text" : "text-faint hover:text-soft",
+                    "flex h-[26px] items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
+                    shownFilter === key ? "bg-glint/10 text-text shadow-sm shadow-scrim/40" : "text-soft hover:text-text",
                   )}
                 >
+                  {key !== "all" && <GameStatusIcon status={key} className="size-3" />}
                   {key === "all" ? "All" : GAME_STATUS_LABELS[key]}
+                  <span
+                    className={cn(
+                      "text-[11.5px] font-normal tabular-nums",
+                      shownFilter === key ? "text-soft" : "text-faint",
+                    )}
+                  >
+                    {countOf(key)}
+                  </span>
                 </button>
               ))}
             </div>
