@@ -438,6 +438,7 @@ pub const PAGE_SETTINGS: &[&str] = &[
     APPEARANCE_ACCENT_SETTING,
     BACKGROUND_DIM_SETTING,
     BACKGROUND_BLUR_SETTING,
+    WHATS_NEW_SEEN_SETTING,
 ];
 /// Folder name prefix of automatic backups, so pruning never touches others.
 pub const AUTO_BACKUP_PREFIX: &str = "vaultime-auto";
@@ -538,6 +539,9 @@ pub const BACKGROUND_DIM_SETTING: &str = "background_dim";
 /// Setting with how far the background picture is blurred. Same as
 /// `SETTING_KEYS.backgroundBlur` in `lib/constants.ts`.
 pub const BACKGROUND_BLUR_SETTING: &str = "background_blur";
+/// Setting with the version whose changes the player saw or set aside. Same
+/// as `SETTING_KEYS.whatsNewSeen` in `lib/constants.ts`.
+pub const WHATS_NEW_SEEN_SETTING: &str = "whats_new_seen";
 /// Folder in Vaultime's data folder for the background picture. Backups
 /// leave it out.
 pub const APPEARANCE_DIR: &str = "appearance";

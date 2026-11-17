@@ -48,6 +48,7 @@ const FIXED: Command[] = [
   { id: "action-share-year", label: "Share your year", hint: "A picture of your year in play to post", kind: "Action", to: "/stats?share=1" },
   { id: "action-backup", label: "Save a backup", hint: "Pick a folder and save everything now", kind: "Action", to: "/settings?do=backup#local-backups" },
   { id: "action-export-csv", label: "Export as CSV", hint: "Every session for a spreadsheet", kind: "Action", to: "/settings?do=export-csv#export" },
+  { id: "action-whats-new", label: "What's new", hint: "The changes in this version of Vaultime", kind: "Action", to: "/settings?do=whats-new#about" },
   { id: "action-export-json", label: "Export as JSON", hint: "Sessions, games, statuses and earlier playtime", kind: "Action", to: "/settings?do=export-json#export" },
   { id: "setting-idle", label: "Idle time", hint: "When time stops counting as active", kind: "Setting", to: "/settings#tracking" },
   { id: "setting-this-pc", label: "This PC", hint: "Its name and the ledger of its sessions", kind: "Setting", to: "/settings#this-pc" },

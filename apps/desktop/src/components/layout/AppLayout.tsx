@@ -7,6 +7,7 @@ import { Backdrop } from "@/features/appearance/Backdrop";
 import { DiscoverGamesDialog } from "@/features/library/components/DiscoverGamesDialog";
 import { useLibrary } from "@/features/library/library-context";
 import { useFoundGames } from "@/features/library/use-found-games";
+import { WhatsNewBanner } from "@/features/updates/WhatsNewBanner";
 import { requestFind } from "@/lib/find";
 import { otherDialogOpen } from "@/lib/found-games";
 import { CommandPalette } from "./CommandPalette";
@@ -67,6 +68,7 @@ export function AppLayout() {
       <div className="panel flex min-h-0 flex-col">
         {/* Above the scroller, where a tinted header reaching up under the top bar cannot cover it. */}
         <UpdateBanner />
+        <WhatsNewBanner />
         {/* Relative, so hidden inputs and other positioned content stay inside the
             scroller. Outside it they stretch the shell, and focusing one scrolls
             the whole app up. */}

@@ -10,7 +10,7 @@ import {
 } from "@tauri-apps/plugin-autostart";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Eye, RotateCcw, ScrollText } from "lucide-react";
+import { ExternalLink, Eye, RotateCcw, ScrollText, Sparkles } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +30,7 @@ import { OtherPcsSection } from "@/features/settings/OtherPcsSection";
 import { SyncFolderSection } from "@/features/settings/SyncFolderSection";
 import { ThisPcSection } from "@/features/settings/ThisPcSection";
 import { WindowSection } from "@/features/settings/WindowSection";
+import { WhatsNewDialog } from "@/features/updates/WhatsNewDialog";
 import {
   COPYRIGHT_NOTICE,
   DEFAULT_IDLE_THRESHOLD_SECS,
@@ -41,6 +42,7 @@ import * as api from "@/lib/tauri";
 import type { BackupSnapshot, TrackingDiagnostics, TrayStatus } from "@/lib/types";
 import { describeError, logFailure } from "@/lib/utils";
 import { useScrollToAnchor } from "@/lib/anchors";
+import { loadReleaseNotes, type Release } from "@/lib/whats-new";
 import { numberWords } from "@/lib/words";
 
 const TRAY_HINTS: Record<TrayStatus, string> = {
@@ -93,6 +95,8 @@ export function SettingsPage() {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
   const [showingNotices, setShowingNotices] = useState(false);
+  const [release, setRelease] = useState<Release | null>(null);
+  const [showingWhatsNew, setShowingWhatsNew] = useState(false);
   const [tray, setTray] = useState<TrayStatus>("none");
   const [closeToTray, setCloseToTray] = useState(initial.closeToTray);
   const [autostart, setAutostart] = useState(false);
@@ -180,6 +184,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (!intent) return;
     const timer = setTimeout(() => {
+      if (intent === "whats-new") setShowingWhatsNew(true);
       setParams(
         (next) => {
           next.delete("do");
@@ -192,6 +197,20 @@ export function SettingsPage() {
     // Once per request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent]);
+
+  // The changes of this version, for What's new under About.
+  useEffect(() => {
+    if (!appVersion) return;
+    let cancelled = false;
+    loadReleaseNotes(appVersion)
+      .then((notes) => {
+        if (!cancelled) setRelease(notes);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [appVersion]);
 
   if (!loaded) return null;
 
@@ -383,12 +402,28 @@ export function SettingsPage() {
                 {link.label}
               </Button>
             ))}
+            {release && (
+              <Button variant="outline" size="sm" onClick={() => setShowingWhatsNew(true)}>
+                <Sparkles className="size-3.5" />
+                What's new
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowingNotices(true)}>
               <ScrollText className="size-3.5" />
               Third-party notices
             </Button>
           </div>
           {showingNotices && <NoticesDialog onClose={() => setShowingNotices(false)} />}
+          {release && showingWhatsNew && (
+            <WhatsNewDialog
+              release={release}
+              onClose={() => {
+                setShowingWhatsNew(false);
+                // Seen here, the line over the page goes too.
+                save(SETTING_KEYS.whatsNewSeen, release.version).catch(() => {});
+              }}
+            />
+          )}
         </PageSection>
       </div>
     </div>

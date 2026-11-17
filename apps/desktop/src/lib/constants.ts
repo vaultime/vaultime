@@ -74,6 +74,8 @@ export const SETTING_KEYS = {
   backgroundDim: "background_dim",
   /** How far the background picture is blurred. Same as BACKGROUND_BLUR_SETTING in constants.rs. */
   backgroundBlur: "background_blur",
+  /** The version whose changes the player saw or set aside. Same as WHATS_NEW_SEEN_SETTING in constants.rs. */
+  whatsNewSeen: "whats_new_seen",
 } as const;
 
 /** Automatic local backups kept. Same as AUTO_BACKUP_KEEP in constants.rs. */
@@ -82,6 +84,8 @@ export const AUTO_BACKUP_KEEP = 7;
 export const SYNC_BACKUP_KEEP = 3;
 /** Time a program from a game folder runs in front before Discover offers it. Same as `SEEN_RUNNING_MIN` in constants.rs. */
 export const SEEN_RUNNING_MIN_MS = 10 * MINUTE_MS;
+/** Covers of the games played last over the changes of a release, few enough to leave the corners free. */
+export const WHATS_NEW_COVERS = 5;
 /** How often the rail looks for programs seen running that wait in Discover. */
 export const SEEN_GAMES_CHECK_MS = 10 * MINUTE_MS;
 /** How often the running app brings in newer backups from the sync folder. */
