@@ -449,7 +449,8 @@ function useCountUp(value: number, animate: boolean): number {
     let frame = 0;
     const start = performance.now();
     const step = (time: number) => {
-      const next = Math.min(1, (time - start) / YEAR_STORY_COUNT_UP_MS);
+      // A frame may carry a time from just before the start.
+      const next = Math.min(1, Math.max(0, (time - start) / YEAR_STORY_COUNT_UP_MS));
       setProgress(next);
       if (next < 1) frame = requestAnimationFrame(step);
     };
