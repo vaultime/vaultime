@@ -103,19 +103,18 @@ pub(crate) fn open_session_spans(
     now_ms: i64,
 ) -> Result<Vec<Span>> {
     let events = placing_events(conn, &session.id)?;
-    let latest = live
-        .get(&session.id)
-        .map(|counters| (now_ms, counters))
-        .or_else(|| {
-            Some((
-                wall_ms(events.last()?.event_time_wall())?,
-                LiveCounters {
-                    runtime_ms: session.runtime_ms,
-                    active_ms: session.active_ms,
-                    idle_ms: session.idle_ms,
-                },
-            ))
-        });
+    // The counters belong where their tick counted them, which lies behind
+    // now when the tracker has not ticked since the PC woke.
+    let latest = live.counted(&session.id).or_else(|| {
+        Some((
+            wall_ms(events.last()?.event_time_wall())?,
+            LiveCounters {
+                runtime_ms: session.runtime_ms,
+                active_ms: session.active_ms,
+                idle_ms: session.idle_ms,
+            },
+        ))
+    });
     let aside = aside_stretches(conn, session, now_ms)?;
     Ok(spans_of(session, &events, latest, &aside))
 }
@@ -128,10 +127,9 @@ pub(crate) fn placed_until(
     conn: &rusqlite::Connection,
     live: &LiveSessions,
     session: &Session,
-    now_ms: i64,
 ) -> Result<Option<i64>> {
-    if live.get(&session.id).is_some() {
-        return Ok(Some(now_ms));
+    if let Some((counted_at_ms, _)) = live.counted(&session.id) {
+        return Ok(Some(counted_at_ms));
     }
     let last: Option<String> = conn
         .prepare_cached(
@@ -268,7 +266,7 @@ fn range_play(
             spans.extend(rows.into_iter().map(|(game, span)| (shown(game), span)));
         }
         for session in open_sessions(conn, game_id)? {
-            if placed_until(conn, live, &session, now_ms)?.is_none_or(|until| until < from_ms) {
+            if placed_until(conn, live, &session)?.is_none_or(|until| until < from_ms) {
                 continue;
             }
             let placed = open_session_spans(conn, live, &session, now_ms)?;
@@ -792,7 +790,7 @@ pub fn fill_copy_overlap(
             }
             let own = match placed.remove(&running.id) {
                 Some(own) => own,
-                None if placed_until(conn, live, &running, now_ms)?
+                None if placed_until(conn, live, &running)?
                     .is_some_and(|until| until >= from_ms) =>
                 {
                     open_session_slices(conn, live, &running, now_ms)?
@@ -1314,7 +1312,7 @@ mod tests {
                 active_ms: 40 * MINUTE,
                 idle_ms: 0,
             },
-            chrono::Utc::now(),
+            utc(start) + TimeDelta::minutes(40),
         );
         let now = (utc(start) + TimeDelta::minutes(40)).timestamp_millis();
 
@@ -1330,6 +1328,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(by_bucket(&days), vec![("2026-10-02".into(), 40)]);
+
+        // Asked after the PC slept into the next day, before the tracker's
+        // first tick, the time stays where its tick counted it.
+        let woke = (utc(start) + TimeDelta::hours(14)).timestamp_millis();
+        let hours = play_totals(
+            &library.db,
+            &live,
+            &FixedOffset::east_opt(0).unwrap(),
+            date("2026-10-02"),
+            date("2026-10-04"),
+            Bucket::HourOfWeek,
+            Some(&library.game_id),
+            woke,
+        )
+        .unwrap();
+        assert_eq!(by_bucket(&hours), vec![("4-20".into(), 40)]);
     }
 
     fn game(db: &Database, title: &str) -> String {
@@ -1532,7 +1546,7 @@ mod tests {
                 active_ms: 60 * MINUTE,
                 idle_ms: 0,
             },
-            chrono::Utc::now(),
+            utc(start) + TimeDelta::minutes(60),
         );
         let now = (utc(start) + TimeDelta::minutes(60)).timestamp_millis();
 

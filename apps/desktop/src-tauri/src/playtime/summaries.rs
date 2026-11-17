@@ -129,7 +129,7 @@ fn open_days_with_play<Tz: TimeZone>(
     db.with_transaction(|conn| {
         let mut days = BTreeSet::new();
         for session in open_sessions(conn, None)? {
-            if placed_until(conn, live, &session, now_ms)?.is_none_or(|until| until < from_ms) {
+            if placed_until(conn, live, &session)?.is_none_or(|until| until < from_ms) {
                 continue;
             }
             let spans = open_session_spans(conn, live, &session, now_ms)?;

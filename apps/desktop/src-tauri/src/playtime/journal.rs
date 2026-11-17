@@ -887,7 +887,7 @@ mod tests {
                 active_ms: 90 * MINUTE,
                 idle_ms: 0,
             },
-            chrono::Utc::now(),
+            start + TimeDelta::minutes(90),
         );
         let now = (start + TimeDelta::minutes(90)).timestamp_millis();
         let week = journal_week(&db, &live, &Berlin, date("2026-10-12"), "device", now).unwrap();
@@ -1038,7 +1038,7 @@ mod tests {
                 active_ms: 90 * MINUTE,
                 idle_ms: 0,
             },
-            chrono::Utc::now(),
+            start + TimeDelta::minutes(90),
         );
         status_at(&db, &one, "playing", "2026-10-17T19:00:00Z");
         let now = (start + TimeDelta::minutes(90)).timestamp_millis();

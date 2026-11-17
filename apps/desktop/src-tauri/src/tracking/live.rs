@@ -50,6 +50,14 @@ impl LiveSessions {
         self.lock().get(session_id).map(|counted| counted.at_ms)
     }
 
+    /// A session's counters with when its latest tick counted them, in Unix
+    /// milliseconds, both of the same tick.
+    pub fn counted(&self, session_id: &str) -> Option<(i64, LiveCounters)> {
+        self.lock()
+            .get(session_id)
+            .map(|counted| (counted.at_ms, counted.counters))
+    }
+
     /// A copy as of now, for reads that have to agree with each other while
     /// the tracker counts on.
     #[must_use]
