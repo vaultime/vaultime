@@ -281,7 +281,7 @@ def markdown(text, anchors=False, rendered=None):
                 markdown("\n".join(quoted[1:]), anchors, inner)
                 name = kind.group(1).lower()
                 out.blocks.append(
-                    f'<aside class="callout {name}"><div class="caps">{CALLOUTS[kind.group(1)]}</div>{"".join(inner.blocks)}</aside>'
+                    f'<aside class="callout {name}"><div class="label-small">{CALLOUTS[kind.group(1)]}</div>{"".join(inner.blocks)}</aside>'
                 )
             else:
                 markdown("\n".join(quoted), anchors, inner)
@@ -403,7 +403,7 @@ def docs_nav(current):
             f'<li><a href="{doc_url(source)}"' + (' aria-current="page"' if source == current else "") + f">{html.escape(label)}</a></li>"
             for source, label in entries
         )
-        groups.append(f'<div class="docs-nav-group"><div class="caps">{html.escape(group)}</div><ul>{links}</ul></div>')
+        groups.append(f'<div class="docs-nav-group"><div class="label-small">{html.escape(group)}</div><ul>{links}</ul></div>')
     return "".join(groups)
 
 
@@ -425,7 +425,7 @@ def docs_contents(pages):
             if source != "index.md"
         )
         if rows:
-            groups.append(f'<section class="docs-group"><h2 class="caps">{html.escape(group)}</h2><div class="docs-cards">{rows}</div></section>')
+            groups.append(f'<section class="docs-group"><h2 class="label-small">{html.escape(group)}</h2><div class="docs-cards">{rows}</div></section>')
     return "".join(groups)
 
 
@@ -439,16 +439,16 @@ def build_docs(template):
         pager = []
         if position > 0:
             _, previous, previous_label = order[position - 1]
-            pager.append(f'<a class="prev" href="{doc_url(previous)}"><span class="caps">Previous</span><span class="pager-title">{html.escape(previous_label)}</span></a>')
+            pager.append(f'<a class="prev" href="{doc_url(previous)}"><span class="label-small">Previous</span><span class="pager-title">{html.escape(previous_label)}</span></a>')
         if position + 1 < len(order):
             _, following, following_label = order[position + 1]
-            pager.append(f'<a class="next" href="{doc_url(following)}"><span class="caps">Next</span><span class="pager-title">{html.escape(following_label)}</span></a>')
-        crumb = '<div class="caps crumb"><a href="/docs/">Docs</a>' + (f" <span>/</span> {html.escape(group)}" if source != "index.md" else "") + "</div>"
+            pager.append(f'<a class="next" href="{doc_url(following)}"><span class="label-small">Next</span><span class="pager-title">{html.escape(following_label)}</span></a>')
+        crumb = '<div class="label-small crumb"><a href="/docs/">Docs</a>' + (f" <span>/</span> {html.escape(group)}" if source != "index.md" else "") + "</div>"
         toc_side = ""
         if sections:
-            toc_side = f'<aside class="docs-toc" aria-label="On this page"><div class="caps">On this page</div>{docs_toc(sections)}</aside>'
+            toc_side = f'<aside class="docs-toc" aria-label="On this page"><div class="label-small">On this page</div>{docs_toc(sections)}</aside>'
             # Narrow windows get the section list right after the lead sentence.
-            toc_inline = f'<details class="toc-inline"><summary class="caps">On this page</summary>{docs_toc(sections)}</details>'
+            toc_inline = f'<details class="toc-inline"><summary class="label-small">On this page</summary>{docs_toc(sections)}</details>'
             at = body.find('<p class="lead">')
             end = body.find("</p>", at) + len("</p>") if at >= 0 else body.find("</h1>") + len("</h1>")
             body = body[:end] + toc_inline + body[end:]
@@ -457,7 +457,7 @@ def build_docs(template):
         main = (
             '  <div class="docs' + (" has-toc" if sections else "") + '">\n'
             '    <aside class="docs-side" aria-label="Documentation">\n'
-            f'      <details class="docs-menu"><summary><span class="caps">Docs</span>'
+            f'      <details class="docs-menu"><summary><span class="label-small">Docs</span>'
             f'<span class="docs-menu-current">{html.escape(label)}</span></summary><nav>{nav}</nav></details>\n'
             f'      <nav class="docs-nav">{nav}</nav>\n'
             "    </aside>\n"
