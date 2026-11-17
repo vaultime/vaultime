@@ -216,7 +216,7 @@ pub fn steam_screenshot(app_id: String, file: String) -> Result<String, Vaultime
     screenshots::picture(&app_id, &file)
 }
 
-/// Sets the note of a session, an empty note removes it.
+/// Sets the note of a session, an empty note clears it.
 #[tauri::command]
 pub fn set_session_note(
     db: State<'_, Arc<Database>>,

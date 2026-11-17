@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wednesday fits in the journal.** In a window of 1280 pixels and wider, the journal's day names no longer run into the strip of play beside them.
 - **A game quit right before sleep.** When the PC went to sleep within seconds of quitting a game, its session ended only when the PC woke, so the journal showed it running through the night. It now ends where Vaultime last saw the game.
 - **A whole drive is no game folder.** A game whose install folder was set to a whole drive counted every program started from that drive as the game. The root of a drive or share, also of a drive Linux mounts at a folder, now counts nothing, and the game is still found by its program.
+- **Notes and statuses from your other PCs.** A note added to a session or a status given to a game on another PC came over only with that PC's first merge or with new play of that game. Every merge now brings them and the newest change wins. A note cleared on one PC is now cleared on the others too, while one cleared before this version can come back once from a PC that still has it.
 
 ## [0.6.0] - 2026-10-20
 

@@ -109,14 +109,16 @@ pub fn set_game_status(
 pub fn list_session_notes(db: &Database) -> Result<Vec<SessionNote>> {
     db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare("SELECT * FROM session_notes ORDER BY session_id")
+            .prepare("SELECT * FROM session_notes WHERE note != '' ORDER BY session_id")
             .map_err(map_db)?;
         let rows = stmt.query_map([], row_to_note).map_err(map_db)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })
 }
 
-/// Sets the note of a session. An empty note removes it.
+/// Sets the note of a session. An empty note clears it, kept as an empty
+/// note with its time, so a merge brings the clearing along instead of the
+/// note it cleared.
 pub fn set_session_note(
     db: &Database,
     session_id: &str,
@@ -131,8 +133,9 @@ pub fn set_session_note(
     db.with_conn(|conn| {
         if note.is_empty() {
             conn.execute(
-                "DELETE FROM session_notes WHERE session_id = ?1",
-                [session_id],
+                "UPDATE session_notes SET note = '', updated_at = ?2
+                 WHERE session_id = ?1 AND note != ''",
+                params![session_id, integrity::now_timestamp()],
             )
             .map_err(map_db)?;
             return Ok(None);

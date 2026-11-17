@@ -336,38 +336,26 @@ fn apply_checked(
         games_linked: links.len(),
         safety_backup_path: None,
     };
+    // The staged copy is attached for copying, so its own connection closes.
     if plan.sessions.is_empty() {
+        staged.close();
+        copy_from(db, &staged.db_path, copy_annotations)?;
         remember_merged(db, &source, &staged.manifest.created_at);
         return Ok(summary);
     }
     summary.safety_backup_path =
         Some(auto::back_up_before_merge(db, asset_manager, app_context)?.backup_path);
 
-    // The staged copy is attached for copying, so its own connection closes.
     staged.close();
-    let copied_assets = db.with_conn(|conn| {
-        attach(conn, &staged.db_path)?;
-        // Rolled back when dropped unless committed, also when the commit fails.
-        let written = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
-            .map_err(map_db)
-            .and_then(|transaction| {
-                let copied = copy_in(
-                    &transaction,
-                    &plan,
-                    &links,
-                    &source,
-                    &staged.manifest.backup_id,
-                    asset_manager,
-                )?;
-                transaction.commit().map_err(map_db)?;
-                Ok(copied)
-            });
-        let detached = conn
-            .execute_batch(&format!("DETACH DATABASE {SOURCE}"))
-            .map_err(map_db);
-        let copied = written?;
-        detached?;
-        Ok(copied)
+    let copied_assets = copy_from(db, &staged.db_path, |conn| {
+        copy_in(
+            conn,
+            &plan,
+            &links,
+            &source,
+            &staged.manifest.backup_id,
+            asset_manager,
+        )
     })?;
     integrity::forget_checks();
     remember_merged(db, &source, &staged.manifest.created_at);
@@ -895,6 +883,32 @@ fn chosen_links(
     Ok(links)
 }
 
+/// Runs `copy` in one transaction with the staged backup at `path`
+/// attached.
+fn copy_from<T>(
+    db: &Database,
+    path: &Path,
+    copy: impl FnOnce(&Connection) -> Result<T>,
+) -> Result<T> {
+    db.with_conn(|conn| {
+        attach(conn, path)?;
+        // Rolled back when dropped unless committed, also when the commit fails.
+        let written = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
+            .map_err(map_db)
+            .and_then(|transaction| {
+                let copied = copy(&transaction)?;
+                transaction.commit().map_err(map_db)?;
+                Ok(copied)
+            });
+        let detached = conn
+            .execute_batch(&format!("DETACH DATABASE {SOURCE}"))
+            .map_err(map_db);
+        let copied = written?;
+        detached?;
+        Ok(copied)
+    })
+}
+
 fn attach(conn: &Connection, path: &Path) -> Result<()> {
     conn.execute(
         &format!("ATTACH DATABASE ?1 AS {SOURCE}"),
@@ -978,6 +992,7 @@ fn copy_in(
     plan.trust.record(conn, false)?;
     copy_games(conn, plan, links, source)?;
     copy_sessions(conn, plan)?;
+    copy_annotations(conn)?;
     // What came in has to be what was checked, event by event.
     for planned in &plan.sessions {
         if event_hashes(conn, &planned.session.id)? != planned.hashes {
@@ -1085,21 +1100,40 @@ fn copy_games(
         )
         .map_err(map_db)?;
     }
+    Ok(())
+}
+
+/// Status changes and notes of every game and session here, also those that
+/// came in before, so the newest on any PC wins. Status changes add up to a
+/// history, of notes the one written last stays.
+fn copy_annotations(conn: &Connection) -> Result<()> {
     conn.execute(
         &copy_statement(
             conn,
             "game_status_changes",
             "OR IGNORE",
-            &format!("game_id {IN_LIST}"),
+            "game_id IN (SELECT id FROM main.games)",
         )?,
-        [&games],
+        [],
+    )
+    .map_err(map_db)?;
+    conn.execute(
+        &format!(
+            "INSERT INTO main.session_notes (session_id, note, updated_at)
+             SELECT session_id, note, updated_at FROM {SOURCE}.session_notes
+             WHERE session_id IN (SELECT id FROM main.sessions)
+             ON CONFLICT(session_id) DO UPDATE SET note = excluded.note,
+                 updated_at = excluded.updated_at
+             WHERE excluded.updated_at > main.session_notes.updated_at"
+        ),
+        [],
     )
     .map_err(map_db)?;
     Ok(())
 }
 
-/// Sessions and their events as they are, the missing events of sessions
-/// that grew, and notes, of which the one written last stays.
+/// Sessions and their events as they are, and the missing events of
+/// sessions that grew.
 fn copy_sessions(conn: &Connection, plan: &Plan) -> Result<()> {
     let new: Vec<&Planned> = plan
         .sessions
@@ -1153,22 +1187,6 @@ fn copy_sessions(conn: &Connection, plan: &Plan) -> Result<()> {
             .map_err(map_db)?;
         expect_rows(written, 1)?;
     }
-    conn.execute(
-        &format!(
-            "INSERT INTO main.session_notes (session_id, note, updated_at)
-             SELECT session_id, note, updated_at FROM {SOURCE}.session_notes
-             WHERE session_id {IN_LIST}
-             ON CONFLICT(session_id) DO UPDATE SET note = excluded.note,
-                 updated_at = excluded.updated_at
-             WHERE excluded.updated_at > main.session_notes.updated_at"
-        ),
-        [json_list(
-            plan.sessions
-                .iter()
-                .map(|planned| planned.session.id.as_str()),
-        )],
-    )
-    .map_err(map_db)?;
     Ok(())
 }
 
@@ -1264,7 +1282,7 @@ mod tests {
     };
     use crate::db::models::CreateGame;
     use crate::db::repo::sessions::Checkpoint;
-    use crate::db::repo::{corrections, devices, sessions};
+    use crate::db::repo::{annotations, corrections, devices, sessions};
     use crate::integrity::STATUS_LOCAL;
     use crate::playtime::totals;
     use crate::tracking::live::LiveSessions;
@@ -2040,6 +2058,59 @@ mod tests {
         assert_eq!(
             last_merged(&desktop.db).get(&manifest.source_device_id),
             Some(&manifest.created_at)
+        );
+    }
+
+    #[test]
+    fn notes_and_statuses_made_after_a_merge_come_with_the_next_one() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        let session = laptop.play(&game, 20);
+        desktop.merge(&laptop.back_up(), &[]);
+        laptop.act();
+        annotations::set_session_note(&laptop.db, &session, "Beat the first boss").unwrap();
+        annotations::set_game_status(&laptop.db, &game, "finished").unwrap();
+
+        let summary = desktop.merge(&laptop.back_up(), &[]);
+        assert_eq!(summary.sessions_added, 0);
+        let notes = annotations::list_session_notes(&desktop.db).unwrap();
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.session_id == session && note.note == "Beat the first boss")
+        );
+        let changes = annotations::list_status_changes(&desktop.db).unwrap();
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.game_id == game && change.status == "finished")
+        );
+    }
+
+    #[test]
+    fn a_cleared_note_stays_cleared_and_clears_the_other_pcs_copy() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        let session = laptop.play(&game, 20);
+        laptop.act();
+        annotations::set_session_note(&laptop.db, &session, "Beat the first boss").unwrap();
+        desktop.merge(&laptop.back_up(), &[]);
+        desktop.act();
+        annotations::set_session_note(&desktop.db, &session, "").unwrap();
+
+        desktop.merge(&laptop.back_up(), &[]);
+        assert!(
+            annotations::list_session_notes(&desktop.db)
+                .unwrap()
+                .is_empty()
+        );
+        laptop.merge(&desktop.back_up(), &[]);
+        assert!(
+            annotations::list_session_notes(&laptop.db)
+                .unwrap()
+                .is_empty()
         );
     }
 
