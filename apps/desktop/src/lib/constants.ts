@@ -380,6 +380,20 @@ export const SHARE_FORMATS = {
 export const SHARE_TOP_GAMES = { wide: 3, square: 4, story: 5 } as const;
 /** A year with fewer days played reads as a quiet one on the card. */
 export const SHARE_QUIET_MAX_DAYS = 10;
+/** Games in the top chapter of Year in games. */
+export const YEAR_STORY_TOP_GAMES = 5;
+/** Games named for the week with the most play in Year in games. */
+export const YEAR_STORY_WEEK_GAMES = 3;
+/** Launchers in the chapter on where the hours came from. */
+export const YEAR_STORY_LAUNCHERS = 5;
+/** From this share on, prose calls a part of the hours nearly all of them. */
+export const SHARE_WORDS_NEARLY_ALL = 0.9;
+/** From this share on, prose calls a part of the hours most of them. */
+export const SHARE_WORDS_MOST = 0.6;
+/** Below this share, prose calls a part of the hours a small one. */
+export const SHARE_WORDS_SMALL = 0.07;
+/** How far a share may be from a half, a third or a quarter and still read as about that much. */
+export const SHARE_WORDS_ABOUT = 0.06;
 /** Largest card the core saves, in bytes. Same as SHARE_IMAGE_MAX_BYTES in constants.rs. */
 export const SHARE_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
 /** Share of a day's pitch in the calendar of the year card that its square covers, the rest is the gap. */

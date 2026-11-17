@@ -3,7 +3,26 @@
 
 import { describe, expect, it } from "vitest";
 import { normalizeIntegrityStatus } from "./integrity";
-import { capitalize, numberWords, sentence, whichPc } from "./words";
+import { capitalize, numberWords, sentence, shareWords, whichPc } from "./words";
+
+describe("shareWords", () => {
+  it("names a share by the fraction it is nearest to", () => {
+    expect(shareWords(0.5)).toBe("about half");
+    expect(shareWords(0.29)).toBe("almost a third");
+    expect(shareWords(0.4)).toBe("more than a third");
+    expect(shareWords(0.55)).toBe("more than half");
+    expect(shareWords(0.23)).toBe("almost a quarter");
+    expect(shareWords(0.22)).toBe("more than a fifth");
+    expect(shareWords(0.1)).toBe("about a tenth");
+  });
+
+  it("says most, nearly all or a small part at the ends", () => {
+    expect(shareWords(0.6)).toBe("most");
+    expect(shareWords(0.95)).toBe("nearly all");
+    expect(shareWords(1)).toBe("nearly all");
+    expect(shareWords(0.03)).toBe("a small part");
+  });
+});
 
 describe("whichPc", () => {
   it("names this PC and waits for its id", () => {

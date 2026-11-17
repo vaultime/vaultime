@@ -1,7 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { HOUR_MS, MINUTE_MS, NUMBER_WORDS_MAX } from "@/lib/constants";
+import {
+  HOUR_MS,
+  MINUTE_MS,
+  NUMBER_WORDS_MAX,
+  SHARE_WORDS_ABOUT,
+  SHARE_WORDS_MOST,
+  SHARE_WORDS_NEARLY_ALL,
+  SHARE_WORDS_SMALL,
+} from "@/lib/constants";
 import { UI_LOCALE, type DayPart } from "@/lib/time";
 
 const ONES = [
@@ -37,6 +45,28 @@ export function durationWords(ms: number): string {
   const minutes = Math.floor((ms % HOUR_MS) / MINUTE_MS);
   if (hours === 0) return countWords(minutes, "minute");
   return minutes > 0 ? `${countWords(hours, "hour")} and ${countWords(minutes, "minute")}` : countWords(hours, "hour");
+}
+
+const FRACTIONS: [share: number, words: string][] = [
+  [1 / 2, "half"],
+  [1 / 3, "a third"],
+  [1 / 4, "a quarter"],
+  [1 / 5, "a fifth"],
+  [1 / 10, "a tenth"],
+];
+
+/** A share from 0 to 1 in words for "… of your hours": "almost a third", "about half", "most". */
+export function shareWords(share: number): string {
+  if (share >= SHARE_WORDS_NEARLY_ALL) return "nearly all";
+  if (share >= SHARE_WORDS_MOST) return "most";
+  if (share < SHARE_WORDS_SMALL) return "a small part";
+  // The nearest fraction by ratio, so a fifth and a quarter split fairly.
+  const [fraction, words] = FRACTIONS.reduce((best, entry) =>
+    Math.abs(Math.log(share / entry[0])) < Math.abs(Math.log(share / best[0])) ? entry : best,
+  );
+  if (share < fraction * (1 - SHARE_WORDS_ABOUT)) return `almost ${words}`;
+  if (share > fraction * (1 + SHARE_WORDS_ABOUT)) return `more than ${words}`;
+  return `about ${words}`;
 }
 
 /** How prose names each part of the day. */
