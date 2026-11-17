@@ -8,6 +8,7 @@ import { phraseString } from "@/test/phrases";
 import {
   gamePlaytime,
   lastPlayedLine,
+  launcherPlaytime,
   ledgerSentence,
   libraryPlaytime,
   sideBySideSentence,
@@ -29,6 +30,36 @@ describe("libraryPlaytime", () => {
     expect(libraryPlaytime(3 * HOUR_MS, 0).before).toBe("Three hours so far.");
     expect(libraryPlaytime(30 * MINUTE_MS, 0).before).toBe("Thirty minutes so far.");
     expect(libraryPlaytime(10_000, 0).before).toBe("The clock has just started.");
+  });
+});
+
+describe("launcherPlaytime", () => {
+  it("names the game with most of the time and keeps the launcher's earlier count apart", () => {
+    expect(
+      launcherPlaytime("through Steam", 212 * HOUR_MS, { title: "Elden Ring", ms: 150 * HOUR_MS }, { launcher: "Steam", ms: 90 * HOUR_MS }),
+    ).toEqual({
+      before: "Two hundred twelve hours through Steam, most of it in ",
+      em: "Elden Ring",
+      after: ". Steam counted ninety hours before Vaultime.",
+    });
+    expect(launcherPlaytime("through GOG", 3 * HOUR_MS, { title: "Celeste", ms: 3 * HOUR_MS }, null)).toEqual({
+      before: "Three hours through GOG, all of it in ",
+      em: "Celeste",
+      after: ".",
+    });
+  });
+
+  it("leaves out a game with half the time or less", () => {
+    expect(launcherPlaytime("in games found in folders", 10 * HOUR_MS, { title: "Celeste", ms: 5 * HOUR_MS }, null)).toEqual({
+      before: "Ten hours in games found in folders.",
+    });
+  });
+
+  it("says when nothing was played there yet", () => {
+    expect(launcherPlaytime("through Epic Games", 0, null, null).before).toBe("Nothing played through Epic Games yet.");
+    expect(launcherPlaytime("through Steam", 0, null, { launcher: "Steam", ms: 2 * HOUR_MS }).before).toBe(
+      "Nothing played through Steam yet. Steam counted two hours before Vaultime.",
+    );
   });
 });
 

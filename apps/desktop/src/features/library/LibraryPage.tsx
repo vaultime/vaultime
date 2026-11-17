@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
+import { timeOnLauncher } from "@/lib/launchers";
 import type { Game } from "@/lib/types";
 import { AddGameDialog } from "./components/AddGameDialog";
 import { DeleteGameDialog } from "./components/DeleteGameDialog";
@@ -36,7 +37,12 @@ export function LibraryPage() {
       { replace: true },
     );
   const launcher = searchParams.get("launcher");
-  const shown = launcher ? visible.filter((summary) => summary.launchers.includes(launcher)) : visible;
+  // On a launcher's view a game shows and sorts by its time there.
+  const shown = launcher
+    ? visible
+        .filter((summary) => summary.launchers.includes(launcher))
+        .map((summary) => ({ ...summary, totalMs: timeOnLauncher(summary, launcher) }))
+    : visible;
   const openAdd = () => setDialog("add");
   const openDiscover = () => setDialog("discover");
 

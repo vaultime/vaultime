@@ -316,6 +316,9 @@ export const SESSION_WORDS_MINUTE_STEP_MS = 5 * MINUTE_MS;
 /** Share of a week's playtime one game needs to be named in the week sentence. */
 export const WEEK_TOP_GAME_MIN_SHARE = 0.6;
 
+/** Share of a launcher's tracked time one game needs to be named in its sentence, "most of it in Elden Ring". */
+export const LAUNCHER_TOP_GAME_MIN_SHARE = 0.5;
+
 /** Sessions in a part of the day before it can count as a habit. */
 export const HABIT_MIN_SESSIONS = 3;
 /** Share of runtime a part of the day needs to count as a habit. */

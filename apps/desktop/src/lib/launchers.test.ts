@@ -2,8 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { BY_HAND, launcherCounts, launchersOfGame, launcherTitle } from "@/lib/launchers";
-import type { Game, GameLink } from "@/lib/types";
+import { HOUR_MS } from "@/lib/constants";
+import {
+  BY_HAND,
+  launcherCounts,
+  launchersOfGame,
+  launcherTitle,
+  launcherWhere,
+  timeOnLauncher,
+} from "@/lib/launchers";
+import type { EarlierPlaytime, Game, GameLink } from "@/lib/types";
 
 const game = (id: string, launcher_source: string | null) => ({ id, launcher_source }) as Game;
 const link = (game_id: string, linked_game_id: string, launcher_source: string | null, origin_device_id: string | null = null) =>
@@ -15,6 +23,19 @@ describe("launchers", () => {
     expect(launcherTitle("folder_scan")).toBe("Found in folders");
     expect(launcherTitle(BY_HAND)).toBe("Added by hand");
     expect(launcherTitle("someday")).toBe("someday");
+    expect(launcherWhere("gog")).toBe("through GOG");
+    expect(launcherWhere("folder_scan")).toBe("in games found in folders");
+    expect(launcherWhere(BY_HAND)).toBe("in games added by hand");
+  });
+
+  it("counts the time a launcher counted before Vaultime on that launcher only", () => {
+    const played = {
+      launcherMs: { steam: 10 * HOUR_MS, gog: 4 * HOUR_MS },
+      earlier: { source: "steam", earlier_ms: 30 * HOUR_MS } as EarlierPlaytime,
+    };
+    expect(timeOnLauncher(played, "steam")).toBe(40 * HOUR_MS);
+    expect(timeOnLauncher(played, "gog")).toBe(4 * HOUR_MS);
+    expect(timeOnLauncher(played, "epic")).toBe(0);
   });
 
   it("counts a game for the launcher of every copy, here or on another PC", () => {

@@ -6,7 +6,7 @@
 
 import { compareTitles } from "@/lib/game-sort";
 import { FOLDER_SCAN, launcherName } from "@/lib/links";
-import type { Game, GameLink } from "@/lib/types";
+import type { EarlierPlaytime, Game, GameLink } from "@/lib/types";
 
 /** The launcher of games added by hand, which name none. */
 export const BY_HAND = "manual";
@@ -21,6 +21,21 @@ export function launcherTitle(launcher: string): string {
   if (launcher === FOLDER_SCAN) return "Found in folders";
   if (launcher === BY_HAND) return "Added by hand";
   return launcherName(launcher) ?? launcher;
+}
+
+/** "through Steam", "in games found in folders" or "in games added by hand", for prose. */
+export function launcherWhere(launcher: string): string {
+  if (launcher === FOLDER_SCAN) return "in games found in folders";
+  if (launcher === BY_HAND) return "in games added by hand";
+  return `through ${launcherTitle(launcher)}`;
+}
+
+/** The time a game counts on a launcher: what its copies from there recorded and what the launcher counted before Vaultime. */
+export function timeOnLauncher(
+  game: { launcherMs: Record<string, number>; earlier: EarlierPlaytime | null },
+  launcher: string,
+): number {
+  return (game.launcherMs[launcher] ?? 0) + (game.earlier?.source === launcher ? game.earlier.earlier_ms : 0);
 }
 
 /** The launchers of a game and of the games that count as it, here or on another PC, each once. */

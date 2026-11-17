@@ -12,6 +12,8 @@ export interface GameSummary {
   otherTitles: string[];
   /** Where the game and the games that count as it came from (`lib/launchers.ts`). */
   launchers: string[];
+  /** Tracked runtime by the launcher of the copy that recorded it. */
+  launcherMs: Record<string, number>;
   cover: string | null;
   /** From the cover art when there is some, otherwise from the title. */
   tint: GameTint;

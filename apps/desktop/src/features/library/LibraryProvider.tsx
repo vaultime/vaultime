@@ -14,7 +14,7 @@ import {
 import { useSettings } from "@/features/settings/settings-context";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { compareTitles } from "@/lib/game-sort";
-import { launchersOfGame } from "@/lib/launchers";
+import { launcherKey, launchersOfGame } from "@/lib/launchers";
 import { compareTimes, toDayKey } from "@/lib/time";
 import type {
   Device,
@@ -24,6 +24,7 @@ import type {
   GameStatus,
   GameStatusChange,
   GameTotals,
+  LauncherTime,
   Session,
 } from "@/lib/types";
 import * as api from "@/lib/tauri";
@@ -44,6 +45,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [totals, setTotals] = useState<GameTotals[]>([]);
+  const [launcherTimes, setLauncherTimes] = useState<LauncherTime[]>([]);
   const [earlier, setEarlier] = useState<EarlierPlaytime[]>([]);
   const [statusChanges, setStatusChanges] = useState<GameStatusChange[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -89,6 +91,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setGames(nextGames);
       setSessions(history.sessions);
       setTotals(history.games);
+      setLauncherTimes(history.launchers);
       setEarlier(nextEarlier);
       setStatusChanges(nextChanges);
       setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
@@ -189,6 +192,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         game,
         otherTitles: [],
         launchers: launchersOfGame(game, links),
+        launcherMs: {},
         cover: covers[game.id] ?? null,
         tint: artTints[game.id] ?? tintForTitle(game.title),
         runtimeMs: total?.runtime_ms ?? 0,
@@ -214,6 +218,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         summary.otherTitles.push(link.title);
       }
     }
+    for (const time of launcherTimes) {
+      const summary = byGame.get(time.game_id);
+      if (summary) summary.launcherMs[launcherKey(time.launcher)] = time.runtime_ms;
+    }
     for (const entry of earlier) {
       const summary = byGame.get(entry.game_id);
       if (summary) summary.earlier = entry;
@@ -234,7 +242,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (b.lastPlayedAt) return 1;
       return compareTitles(a.game.title, b.game.title);
     });
-  }, [games, totals, covers, artTints, earlier, statusChanges, links]);
+  }, [games, totals, launcherTimes, covers, artTints, earlier, statusChanges, links]);
 
   const setStatus = useCallback(
     async (gameId: string, status: GameStatus | "none") => {

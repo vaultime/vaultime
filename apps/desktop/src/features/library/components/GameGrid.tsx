@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { ArrowDownUp, Check, ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { LauncherMark } from "@/components/brand/LauncherMark";
 import { Cover } from "@/components/media/Cover";
+import { PhraseText } from "@/components/media/PhraseText";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,8 @@ import { SETTING_KEYS, TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { onFind } from "@/lib/find";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
-import { launcherTitle } from "@/lib/launchers";
+import { launcherTitle, launcherWhere } from "@/lib/launchers";
+import { launcherPlaytime } from "@/lib/sentences";
 import { matchesGame } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort } from "@/lib/time";
@@ -113,6 +115,11 @@ export function GameGrid({
           </Button>
         </div>
       </div>
+      {launcher && (
+        <p className="mt-2 max-w-[600px] font-prose text-[17px] leading-[1.45] text-soft">
+          <PhraseText phrase={launcherSentence(summaries, launcher)} />
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="relative">
           <Search
@@ -215,6 +222,20 @@ export function GameGrid({
       </ul>
     </section>
   );
+}
+
+/** The hours a launcher's copies recorded and the game with most of them, with the time it counted before Vaultime apart. */
+function launcherSentence(summaries: GameSummary[], launcher: string) {
+  let trackedMs = 0;
+  let earlierMs = 0;
+  let top: { title: string; ms: number } | null = null;
+  for (const summary of summaries) {
+    const ms = summary.launcherMs[launcher] ?? 0;
+    trackedMs += ms;
+    if (summary.earlier?.source === launcher) earlierMs += summary.earlier.earlier_ms;
+    if (ms > 0 && (!top || ms > top.ms)) top = { title: summary.game.title, ms };
+  }
+  return launcherPlaytime(launcherWhere(launcher), trackedMs, top, { launcher: launcherTitle(launcher), ms: earlierMs });
 }
 
 function GameTile({

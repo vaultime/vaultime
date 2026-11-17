@@ -4,7 +4,14 @@
 // Play history written as plain sentences. Lines about one session live in
 // session-lines.ts, the sentences of the stats page in year-sentences.ts.
 
-import { HABIT_MIN_SESSIONS, HABIT_MIN_SHARE, HOUR_MS, MINUTE_MS, WEEK_TOP_GAME_MIN_SHARE } from "@/lib/constants";
+import {
+  HABIT_MIN_SESSIONS,
+  HABIT_MIN_SHARE,
+  HOUR_MS,
+  LAUNCHER_TOP_GAME_MIN_SHARE,
+  MINUTE_MS,
+  WEEK_TOP_GAME_MIN_SHARE,
+} from "@/lib/constants";
 import { dayPartOfHour, formatHoursMinutes, formatRelativeDay, type DayPart } from "@/lib/time";
 import type { GameStatus, LedgerReport, SideBySideGroup } from "@/lib/types";
 import { amountWords, capitalize, countWords, DAY_PART_WORDS, durationWords, numberWords } from "@/lib/words";
@@ -159,6 +166,26 @@ export function weekSentence({
     return { before: `${lead} Most of it went to `, em: topTitle, after: "." };
   }
   return { before: `${lead} `, em: longestDay, after: " was the longest day." };
+}
+
+/**
+ * A launcher's view: "Two hundred twelve hours through Steam, most of it in
+ * *Elden Ring*. Steam counted ninety hours before Vaultime." `where` comes
+ * from `launcherWhere`, `top` is the game with the most time there and
+ * `earlier` what the launcher counted before Vaultime.
+ */
+export function launcherPlaytime(
+  where: string,
+  trackedMs: number,
+  top: { title: string; ms: number } | null,
+  earlier: { launcher: string; ms: number } | null,
+): Phrase {
+  const counted =
+    earlier && earlier.ms >= MINUTE_MS ? ` ${earlier.launcher} counted ${amountWords(earlier.ms)} before Vaultime.` : "";
+  if (trackedMs < MINUTE_MS) return { before: `Nothing played ${where} yet.${counted}` };
+  const lead = `${capitalize(amountWords(trackedMs))} ${where}`;
+  if (!top || top.ms / trackedMs <= LAUNCHER_TOP_GAME_MIN_SHARE) return { before: `${lead}.${counted}` };
+  return { before: `${lead}, ${top.ms >= trackedMs ? "all" : "most"} of it in `, em: top.title, after: `.${counted}` };
 }
 
 /**
