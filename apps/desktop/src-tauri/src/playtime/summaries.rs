@@ -302,10 +302,7 @@ fn play_between<Tz: TimeZone>(
         .into_iter()
         .filter_map(date_of)
         .collect();
-    let mut started = started_sessions(db, live, tz, first, Some(next), now_ms)?;
-    // A finished session whose time was all set aside counts nowhere, as on
-    // the library and the game pages.
-    started.retain(|session| session.ended_at_wall.is_none() || shown_runtime(session) > 0);
+    let started = started_sessions(db, live, tz, first, Some(next), now_ms)?;
     let links = games::links(db)?;
     let mut sessions_by_game: BTreeMap<String, usize> = BTreeMap::new();
     let mut session_lengths = [0; 5];
@@ -365,6 +362,9 @@ fn started_sessions<Tz: TimeZone>(
         live.apply(session);
     }
     fill_set_aside(db, live, &mut started, now_ms)?;
+    // A finished session whose time was all set aside counts nowhere, as on
+    // the library and the game pages.
+    started.retain(|session| session.ended_at_wall.is_none() || shown_runtime(session) > 0);
     Ok(started)
 }
 
@@ -680,6 +680,16 @@ mod tests {
         .unwrap();
         assert_eq!(year.sessions_count, 1);
         assert_eq!(year.sessions_by_game, BTreeMap::from([(match_game, 1)]));
+        let recent = recent_play(
+            &db,
+            &LiveSessions::default(),
+            &Berlin,
+            7,
+            date("2026-03-03"),
+            utc("2026-03-03T12:00:00Z").timestamp_millis(),
+        )
+        .unwrap();
+        assert_eq!(recent.sessions_count, 1);
     }
 
     #[test]

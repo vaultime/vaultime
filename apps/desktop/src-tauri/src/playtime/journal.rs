@@ -168,6 +168,26 @@ fn format_ms(ms: i64) -> String {
     DateTime::from_timestamp_millis(ms).map_or_else(String::new, integrity::format_timestamp)
 }
 
+/// Whether a session counts: a running one, or a finished one with time
+/// left. For a game that steps aside, that is the time its slices kept, as
+/// on every other page.
+fn session_counts(conn: &Connection, session: &Session, steps_aside: bool) -> Result<bool> {
+    if session.ended_at_wall.is_none() {
+        return Ok(true);
+    }
+    if session.runtime_ms <= 0 || !steps_aside {
+        return Ok(session.runtime_ms > 0);
+    }
+    let kept: i64 = conn
+        .prepare_cached(
+            "SELECT COALESCE(SUM(runtime_ms), 0) FROM play_slices WHERE session_id = ?1",
+        )
+        .map_err(map_db)?
+        .query_row([&session.id], |row| row.get(0))
+        .map_err(map_db)?;
+    Ok(kept > 0)
+}
+
 /// Sessions with time on the clock between `from_ms` and `to_ms`, placed up
 /// to `now_ms`, with their parts and stretches.
 fn placed_between(
@@ -230,7 +250,7 @@ fn placed_between(
         if !touches(start_ms, end_ms, from_ms, to_ms) {
             continue;
         }
-        let counts = session.ended_at_wall.is_none() || session.runtime_ms > 0;
+        let counts = session_counts(conn, &session, stepping.contains(&session.game_id))?;
         let (parts, spans) = if counts {
             let aside = if stepping.contains(&session.game_id) {
                 aside_stretches(conn, &session, now_ms)?
@@ -755,6 +775,23 @@ mod tests {
         assert_eq!(minutes(&week.shares[&launcher]), [120]);
         assert_eq!(week.days[0].played_ms, 180 * MINUTE);
         assert!(week.days[0].side_by_side.is_empty());
+    }
+
+    #[test]
+    fn a_launcher_session_set_aside_whole_is_no_session_of_the_week() {
+        let db = database();
+        let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
+        games::set_steps_aside(&db, &client, true).unwrap();
+        played(&db, &match_game, "2026-10-05T17:30:00Z", 120);
+        let inside = played(&db, &client, "2026-10-05T18:00:00Z", 60);
+        let week = week_of(
+            &db,
+            &FixedOffset::east_opt(0).unwrap(),
+            "2026-10-05",
+            "2026-10-07T10:00:00Z",
+        );
+        assert_eq!(week.sessions_count, 1);
+        assert!(!week.shares.contains_key(&inside));
     }
 
     #[test]

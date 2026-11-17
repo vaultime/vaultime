@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notes and statuses from your other PCs.** A note added to a session or a status given to a game on another PC came over only with that PC's first merge or with new play of that game. Every merge now brings them and the newest change wins. A note cleared on one PC is now cleared on the others too, while one cleared before this version can come back once from a PC that still has it.
 - **A first merge that brings nothing.** Merging a PC whose backup held no finished session yet let its later backups come in by themselves, with keys you never looked at. Its next backup now waits for you, as a first merge does.
 - **Adding play beside a session left running elsewhere.** A session another PC left running in a backup blocked adding play by hand for its game from its start until now. It now blocks only up to its last moment, where every page shows it ending.
+- **One number of sessions everywhere.** Home and the journal counted a session whose time a launcher set aside for another game, while Stats and the library left it out. All of them leave it out now.
 
 ## [0.6.0] - 2026-10-20
 
