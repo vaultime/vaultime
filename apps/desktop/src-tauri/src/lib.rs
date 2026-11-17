@@ -146,6 +146,8 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::cloud::store_cloud_backup_key_secure,
         commands::cloud::clear_cloud_backup_key_secure,
         commands::cloud::check_cloud_server,
+        commands::cloud::seal_pc_name,
+        commands::cloud::open_pc_names,
         commands::cloud::cloud_request,
         commands::games::list_games,
         commands::games::create_game,

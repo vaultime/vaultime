@@ -64,11 +64,18 @@ pub fn store_cloud_backup_key(
 }
 
 pub fn load_cloud_backup_key(account_id: &str) -> Result<[u8; BACKUP_KEY_BYTES]> {
-    let encoded = load_cloud_backup_key_encoded(account_id)?.ok_or_else(|| {
+    find_cloud_backup_key(account_id)?.ok_or_else(|| {
         VaultimeError::Cloud(
             "No backup passphrase is configured for this account on this device.".into(),
         )
-    })?;
+    })
+}
+
+/// The account's backup key, None while no passphrase is set on this PC.
+pub fn find_cloud_backup_key(account_id: &str) -> Result<Option<[u8; BACKUP_KEY_BYTES]>> {
+    let Some(encoded) = load_cloud_backup_key_encoded(account_id)? else {
+        return Ok(None);
+    };
     let decoded = STANDARD
         .decode(encoded)
         .map_err(|error| VaultimeError::Cloud(format!("invalid stored backup key: {error}")))?;
@@ -77,7 +84,7 @@ pub fn load_cloud_backup_key(account_id: &str) -> Result<[u8; BACKUP_KEY_BYTES]>
         .try_into()
         .map_err(|_| VaultimeError::Cloud("stored backup key has an unexpected length".into()))?;
 
-    Ok(bytes)
+    Ok(Some(bytes))
 }
 
 pub fn clear_cloud_backup_key(account_id: &str) -> Result<()> {

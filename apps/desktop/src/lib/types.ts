@@ -697,9 +697,12 @@ export type CloudReply =
 export interface CloudDevice {
   id: string;
   client_device_id: string;
+  /** The name the PC gave itself, its own sealed one once opened, else a label of its platform. */
   device_name: string;
   platform: string;
   app_version: string;
+  /** The PC's name sealed with the backup key. Servers and apps before 0.7 keep none. */
+  sealed_name?: string | null;
   registered_at: string;
   last_seen_at: string;
 }

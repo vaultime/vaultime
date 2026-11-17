@@ -830,12 +830,16 @@ function cloudBackup(id: string, label: string, daysAgo: number, games: number, 
   };
 }
 
+/** How the preview seals a PC name, which only its own mock opens. */
+const MOCK_SEALED = "sealed:";
+
 const cloudDevice: CloudDevice = {
   id: "device-1",
   client_device_id: "preview",
   device_name: "Vaultime Windows Desktop",
   platform: "windows",
   app_version: "0.1.0",
+  sealed_name: `${MOCK_SEALED}Desktop`,
   registered_at: iso(now - 40 * DAY_MS),
   last_seen_at: iso(now),
 };
@@ -844,12 +848,12 @@ function cloudReply(status: number, body: unknown) {
   return { status, body };
 }
 
-/** The PCs of the mock account: this one, the laptop, and two left from earlier tests. */
+/** The PCs of the mock account: this one, the laptop, and two from earlier tests whose app sealed no name. */
 let mockDevices: CloudDevice[] = [
   cloudDevice,
-  { ...cloudDevice, id: "device-laptop", client_device_id: "laptop", device_name: "Vaultime Windows Desktop", last_seen_at: iso(now - 9 * HOUR_MS) },
-  { ...cloudDevice, id: "device-test-1", client_device_id: "test-1", device_name: "Vaultime Windows Desktop", app_version: "0.5.0", last_seen_at: iso(now - 30 * HOUR_MS) },
-  { ...cloudDevice, id: "device-test-2", client_device_id: "test-2", device_name: "Vaultime Windows Desktop", app_version: "0.5.0", last_seen_at: iso(now - 29 * HOUR_MS) },
+  { ...cloudDevice, id: "device-laptop", client_device_id: "laptop", sealed_name: `${MOCK_SEALED}Laptop`, last_seen_at: iso(now - 9 * HOUR_MS) },
+  { ...cloudDevice, id: "device-test-1", client_device_id: "test-1", sealed_name: null, app_version: "0.5.0", last_seen_at: iso(now - 30 * HOUR_MS) },
+  { ...cloudDevice, id: "device-test-2", client_device_id: "test-2", sealed_name: null, app_version: "0.5.0", last_seen_at: iso(now - 29 * HOUR_MS) },
 ];
 
 /** Answers the cloud API as a server would, so the preview never reaches one. */
@@ -1848,6 +1852,12 @@ mockIPC((cmd, payload) => {
       return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", controller_detection: "xinput", controllers_connected: 1, poll_interval_seconds: 5 };
     case "load_cloud_session_secure":
       return signedIn ? JSON.stringify(cloudSession()) : null;
+    case "seal_pc_name":
+      return `${MOCK_SEALED}${thisPc.name}`;
+    case "open_pc_names":
+      return (args.sealed as (string | null)[]).map((sealed) =>
+        sealed?.startsWith(MOCK_SEALED) ? sealed.slice(MOCK_SEALED.length) : null,
+      );
     case "check_cloud_server": {
       if (params.get("server") === "missing") throw { kind: "cloud", message: "no Vaultime server answers at that address." };
       const typed = String(args.address).trim().replace(/\/+$/, "");

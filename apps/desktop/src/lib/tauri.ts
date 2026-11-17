@@ -108,6 +108,16 @@ export async function checkCloudServer(address: string): Promise<CloudServerInfo
   return invoke<CloudServerInfo>("check_cloud_server", { address });
 }
 
+/** This PC's name sealed with the account's backup key, null without a key. */
+export async function sealPcName(accountId: string): Promise<string | null> {
+  return invoke<string | null>("seal_pc_name", { accountId });
+}
+
+/** The PC names `sealPcName` sealed, null where this PC's backup key does not open one. */
+export async function openPcNames(accountId: string, sealed: (string | null)[]): Promise<(string | null)[]> {
+  return invoke<(string | null)[]>("open_pc_names", { accountId, sealed });
+}
+
 /** Sends one JSON request to the player's cloud server through the core. */
 export async function cloudRequest(
   server: string,

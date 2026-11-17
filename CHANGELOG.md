@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Cloud backup on a server of your own.** Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home, with Docker Compose as the docs describe. The Cloud page connects to it by its address and says whether it takes new accounts. The privacy policy now covers only the website and the software.
 - **Goodbye to the beta server.** The cloud backup server Vaultime ran during the beta is shut down. The app forgets a sign-in to it and its backup key, and your library and history on this PC stay as they were. Cloud backup now goes to a server of your own, as above.
+- **Your PCs by name on the server.** Registered PCs on the Cloud page show the names you gave them, not Vaultime Windows Desktop for each. A PC sends its name sealed with your backup passphrase, so the server keeps it without being able to read it.
 - **Sync folder.** Keep backups in a folder that Dropbox, Google Drive, OneDrive, Syncthing or a NAS keeps the same on every PC. Each PC copies its automatic backups there with every image stored once, and the PCs that share the folder find each other: merge another PC once and its newer sessions come in by themselves within the hour. A new PC can restore from the folder.
 
 ### Library

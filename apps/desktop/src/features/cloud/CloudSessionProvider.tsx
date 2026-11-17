@@ -34,8 +34,10 @@ import {
   listCloudPcs as listCloudPcsCommand,
   mergeCloudBackup as mergeCloudBackupCommand,
   mergeDueCloudBackups,
+  openPcNames,
   previewCloudMerge as previewCloudMergeCommand,
   restoreRemoteBackup as restoreRemoteBackupCommand,
+  sealPcName,
   uploadRemoteBackup as uploadRemoteBackupCommand,
 } from "@/lib/tauri";
 import type {
@@ -71,6 +73,15 @@ import {
 async function sessionFrom(server: string, path: string, body: unknown, accessToken?: string): Promise<CloudAuthSession> {
   const answer = await cloudPostJson<Omit<CloudAuthSession, "server">>(server, path, body, accessToken);
   return { ...answer, server };
+}
+
+/** Devices by the names their PCs sealed, where the backup key on this PC opens them. */
+async function withOpenedNames(session: CloudAuthSession, devices: CloudDevice[]): Promise<CloudDevice[]> {
+  const names = await openPcNames(
+    session.user.id,
+    devices.map((each) => each.sealed_name ?? null),
+  ).catch((): (string | null)[] => []);
+  return devices.map((each, index) => ({ ...each, device_name: names[index] ?? each.device_name }));
 }
 
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
@@ -352,6 +363,9 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       throw new Error("You signed out of cloud backup.");
     }
     setBackupKeyReady(true);
+    // With the key this PC can seal its name for the server.
+    const active = sessionRef.current;
+    if (active) void tryRegisterDeviceForSession(active);
   }
 
   /** Removes the backup key from this PC, so a different passphrase can be set. */
@@ -442,7 +456,9 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function listDevices() {
-    return withAuthenticatedSession((current) => cloudGetJson<CloudDevice[]>(current.server, "/v1/devices", current.access_token));
+    return withAuthenticatedSession(async (current) =>
+      withOpenedNames(current, await cloudGetJson<CloudDevice[]>(current.server, "/v1/devices", current.access_token)),
+    );
   }
 
   async function removeDevice(deviceId: string) {
@@ -601,6 +617,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         device_name: getDeviceName(),
         platform: detectPlatform(),
         app_version: appVersion,
+        // The name the player gave this PC, which only their own PCs can open.
+        sealed_name: await sealPcName(activeSession.user.id).catch(() => null),
       };
 
       const registered = await cloudPostJson<CloudDevice>(
@@ -610,9 +628,10 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
         activeSession.access_token,
       );
 
-      setDevice(registered);
+      const [named] = await withOpenedNames(activeSession, [registered]);
+      setDevice(named);
       setDeviceError(null);
-      return registered;
+      return named;
     } catch (error) {
       const message = describeError(error);
       setDeviceError(message);

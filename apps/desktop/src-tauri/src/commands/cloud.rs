@@ -15,8 +15,9 @@ use crate::backup::merge::{GameChoice, MergePreview, MergeSummary};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
 use crate::backup::server::{Reply, ServerInfo};
 use crate::backup::{self};
-use crate::constants::LIBRARY_CHANGED_EVENT;
+use crate::constants::{BACKUP_KEY_BYTES, LIBRARY_CHANGED_EVENT};
 use crate::db::connection::Database;
+use crate::db::repo::devices;
 use crate::error::VaultimeError;
 use crate::secure_storage;
 use crate::tracking::engine::TrackingEngine;
@@ -65,6 +66,55 @@ pub async fn store_cloud_backup_key_secure(
 pub async fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, VaultimeError> {
     on_blocking_pool(move || secure_storage::clear_cloud_backup_key(&account_id)).await?;
     Ok(true)
+}
+
+/// This PC's name sealed with the account's backup key, for its registration
+/// with the server, which cannot read it. None without a key or a name.
+#[tauri::command]
+pub async fn seal_pc_name(
+    app: AppHandle,
+    account_id: String,
+) -> Result<Option<String>, VaultimeError> {
+    on_blocking_pool(move || {
+        let Some(key) = secure_storage::find_cloud_backup_key(&account_id)? else {
+            return Ok(None);
+        };
+        // The PC the ledger names, as for backups, which a takeover changes
+        // before the app restarts.
+        let this_pc = crate::integrity::ledger::this_device()
+            .unwrap_or_else(|_| app.state::<AppContext>().device_id.clone());
+        let name = devices::get_device(&app.state::<Arc<Database>>(), &this_pc)?.name;
+        name.map(|name| backup::crypto::seal_text(&name, &key))
+            .transpose()
+    })
+    .await
+}
+
+/// The PC names `seal_pc_name` sealed, cleaned like a rename. Each is None
+/// where none came or the account's backup key on this PC does not open it.
+#[tauri::command]
+pub async fn open_pc_names(
+    account_id: String,
+    sealed: Vec<Option<String>>,
+) -> Result<Vec<Option<String>>, VaultimeError> {
+    on_blocking_pool(move || {
+        let key = secure_storage::find_cloud_backup_key(&account_id)?;
+        Ok(open_names(sealed, key.as_ref()))
+    })
+    .await
+}
+
+fn open_names(
+    sealed: Vec<Option<String>>,
+    key: Option<&[u8; BACKUP_KEY_BYTES]>,
+) -> Vec<Option<String>> {
+    sealed
+        .into_iter()
+        .map(|text| {
+            let name = backup::crypto::open_text(&text?, key?)?;
+            Some(devices::clean_name(&name)).filter(|name| !name.is_empty())
+        })
+        .collect()
 }
 
 /// Checks that a Vaultime server answers at the address the player typed.
@@ -288,4 +338,35 @@ pub async fn restore_remote_backup(
         Ok(result)
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backup::crypto::seal_text;
+
+    #[test]
+    fn sealed_pc_names_open_with_the_backup_key_only_and_come_cleaned() {
+        let key = [7_u8; BACKUP_KEY_BYTES];
+        let sealed = vec![
+            Some(seal_text("Laptop", &key).unwrap()),
+            Some(seal_text(" Deck\u{7}", &key).unwrap()),
+            Some(seal_text("\u{1b}", &key).unwrap()),
+            Some(seal_text("Laptop", &[8_u8; BACKUP_KEY_BYTES]).unwrap()),
+            Some("not sealed".into()),
+            None,
+        ];
+        assert_eq!(
+            open_names(sealed.clone(), Some(&key)),
+            [
+                Some("Laptop".into()),
+                Some("Deck".into()),
+                None,
+                None,
+                None,
+                None
+            ]
+        );
+        assert_eq!(open_names(sealed, None), vec![None; 6]);
+    }
 }

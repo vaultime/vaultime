@@ -4,17 +4,19 @@
 import { useEffect, useState } from "react";
 import { PageRow, PageSection } from "@/components/layout/Page";
 import { Input } from "@/components/ui/input";
+import { useCloudSession } from "@/features/cloud/cloud-context";
 import { DEVICE_NAME_MAX_CHARS } from "@/lib/constants";
 import { ledgerSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
 import { formatCalendarDay } from "@/lib/time";
 import type { ThisPc } from "@/lib/types";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 
 /** The name of this PC and what its ledger vouches for. */
 export function ThisPcSection({ onError }: { onError: (message: string | null) => void }) {
   const [pc, setPc] = useState<ThisPc | null>(null);
   const [name, setName] = useState("");
+  const { session, registerCurrentDevice } = useCloudSession();
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +43,8 @@ export function ThisPcSection({ onError }: { onError: (message: string | null) =
       const next = await api.renameThisPc(name);
       setPc(next);
       setName(next.name);
+      // The cloud server keeps the name sealed, so it gets the new one.
+      if (session) registerCurrentDevice().catch(logFailure("sending this PC's new name to the cloud server"));
     } catch (error) {
       onError(describeError(error));
     }
