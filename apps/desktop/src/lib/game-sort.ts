@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { UI_LOCALE } from "@/lib/time";
+import { compareTimes, UI_LOCALE } from "@/lib/time";
 
 export const GAME_SORTS = {
-  recent: "Recent",
+  recent: "Last played",
+  added: "Recently added",
   title: "A to Z",
   played: "Most played",
 } as const;
@@ -24,7 +25,7 @@ export function compareTitles(a: string, b: string): number {
 }
 
 interface Sortable {
-  game: { title: string };
+  game: { title: string; created_at: string };
   totalMs: number;
 }
 
@@ -32,6 +33,7 @@ interface Sortable {
 export function sortGames<T extends Sortable>(games: T[], sort: GameSort): T[] {
   if (sort === "recent") return games;
   const copy = [...games];
+  if (sort === "added") copy.sort((a, b) => compareTimes(b.game.created_at, a.game.created_at));
   if (sort === "title") copy.sort((a, b) => compareTitles(a.game.title, b.game.title));
   if (sort === "played") copy.sort((a, b) => b.totalMs - a.totalMs);
   return copy;

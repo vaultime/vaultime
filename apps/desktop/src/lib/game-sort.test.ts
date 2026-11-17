@@ -4,7 +4,10 @@
 import { describe, expect, it } from "vitest";
 import { isGameSort, sortGames } from "./game-sort";
 
-const game = (title: string, totalMs: number) => ({ game: { title }, totalMs });
+const game = (title: string, totalMs: number, created_at = "2026-01-01T00:00:00.000Z") => ({
+  game: { title, created_at },
+  totalMs,
+});
 const titles = (games: { game: { title: string } }[]) => games.map((entry) => entry.game.title);
 
 describe("sortGames", () => {
@@ -30,6 +33,15 @@ describe("sortGames", () => {
       "hades II",
       "Ōkami",
     ]);
+  });
+
+  it("puts the games added last first", () => {
+    const added = [
+      game("Celeste", 0, "2026-03-02T10:00:00.000Z"),
+      game("Hades", 0, "2026-11-01T10:00:00.000Z"),
+      game("Balatro", 0, "2026-06-15T10:00:00.000Z"),
+    ];
+    expect(titles(sortGames(added, "added"))).toEqual(["Hades", "Balatro", "Celeste"]);
   });
 
   it("puts the most played first without touching the input", () => {
