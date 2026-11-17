@@ -2,7 +2,7 @@
 
 The journal tells your play week by week in plain sentences. The stats page looks at a whole year at once.
 
-![The journal with a week of sessions written as sentences](../../../assets/screenshots/journal.png "The journal: a 24 hour strip for every day and every session as a sentence.")
+![The journal with a week of sessions written as sentences](../../../assets/screenshots/journal.png "The journal: the week's games, a 24 hour strip for every day and every session as a sentence beside its cover.")
 
 ## The journal
 
