@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Library
 
+- **A timer for play away from the PC.** Start a timer on a game's page before you play on a console or a handheld. The live bar shows its clock, and stopping it saves the play as a Manual session, with the length still yours to correct.
 - **Seen running.** A program from your game folders that runs in front for ten minutes without being in your library shows in Discover, ready to add or to set aside as not a game, and a dot on the + next to Library says so. Vaultime notes no program outside those folders.
 
 ### Interface

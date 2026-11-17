@@ -59,6 +59,8 @@ Give a reason under **Why**. The session is then labeled Edited, unless it was S
 
 Played on a Steam Deck or a PC without Vaultime? On the game's page, **Add a session** asks for the start, the length, where you played and, for Steam games, whether you played through Steam. A session added by hand is labeled Manual, counts as active time and can be up to 24 hours long.
 
+About to play away from the PC? **Start a timer** on the game's page. The live bar shows the timed game and its clock, also after Vaultime or the PC restarts, and **Stop the timer** there or on the game's page opens the same dialog with the start and the length filled in. Shorten the length if the timer ran on after you stopped, then **Save session**, or pick **Keep timing** or **Discard**. One timer runs at a time, and a game another PC recorded is timed on that PC.
+
 ## Stats
 
 ![The stats page with the year calendar and the hours you play](../../../assets/screenshots/stats.png "Stats for a year: a calendar of every day and the hours you play.")

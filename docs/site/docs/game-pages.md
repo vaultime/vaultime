@@ -10,7 +10,7 @@ Every game has a page in the colors of its cover, with its history, its totals a
 
 ## Sessions and the event log
 
-**Recent sessions** lists the game's latest sessions with their labels. Point at one to add a note or correct it, and use **Add a session** for play Vaultime did not see.
+**Recent sessions** lists the game's latest sessions with their labels. Point at one to add a note or correct it, use **Add a session** for play Vaultime did not see, and **Start a timer** to time play away from the PC as it happens.
 
 The **Event log** below lists the events in the records of the game's sessions that say something: when tracking started, sleep left out, flags with their reason, the end, corrections and sessions added by hand. The times saved along the way stay out, and only the newest 12 entries show. It is the place to look when a number seems off.
 
