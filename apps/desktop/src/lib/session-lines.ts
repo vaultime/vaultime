@@ -42,6 +42,7 @@ import {
   weekdayOf,
 } from "@/lib/time";
 import type { Session, SessionEvent } from "@/lib/types";
+import { markWords, marksPassedBy } from "@/lib/milestones";
 import { stableHash } from "@/lib/utils";
 import { capitalize, DAY_PART_WORDS, numberWords } from "@/lib/words";
 
@@ -64,7 +65,7 @@ export interface SessionContext {
   gameTitle?: string;
   /**
    * Sessions of the same game in any order, this one may be among them. They
-   * tell a first session, a return or a record from a plain one.
+   * tell a first session, an hour mark, a return or a record from a plain one.
    */
   gameSessions?: Session[];
   /** Playtime from before Vaultime, so the first tracked session is no first look. */
@@ -190,6 +191,15 @@ function standoutWordings(session: Session, context: SessionContext, words: Line
       : [[[`A first ${words.noun} in `, ""], `The first ${words.noun}`]];
   }
 
+  const mark = marksPassedBy(session, context.gameSessions, context.earlierMs).at(-1);
+  if (mark !== undefined) {
+    const hours = markWords(mark);
+    return [
+      [["", ` passed ${hours}`], `Past ${hours}`],
+      [[`Past ${hours} in `, ""], `${capitalize(hours)} reached`],
+    ];
+  }
+
   const previousEnd = previous?.ended_at_wall ? parseVaultimeDate(previous.ended_at_wall) : null;
   if (previousEnd && started.getTime() - previousEnd.getTime() >= SESSION_RETURN_MIN_MS) {
     const away = awayWords(previousEnd, started);
@@ -246,8 +256,8 @@ function standoutWordings(session: Session, context: SessionContext, words: Line
 /**
  * "A long evening", "Forty minutes in the morning", "Playing now". With a
  * title, the title is the italic part: "A long evening in *Elden Ring*". With
- * the other sessions of the game it also notes a first session, a return, a
- * record or a late night. The wording varies between sessions and stays the
+ * the other sessions of the game it also notes a first session, an hour mark,
+ * a return, a record or a late night. The wording varies between sessions and stays the
  * same for each one.
  */
 export function describeSession(session: Session, context: SessionContext = {}): Phrase {

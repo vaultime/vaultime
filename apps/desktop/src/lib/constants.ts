@@ -380,6 +380,10 @@ export const SHARE_FORMATS = {
 export const SHARE_TOP_GAMES = { wide: 3, square: 4, story: 5 } as const;
 /** A year with fewer days played reads as a quiet one on the card. */
 export const SHARE_QUIET_MAX_DAYS = 10;
+/** Hours of play in a game worth marking, the first ones. */
+export const MILESTONE_HOURS = [10, 25, 50, 100, 250, 500, 1000];
+/** Past the last of MILESTONE_HOURS, a mark every this many hours. */
+export const MILESTONE_STEP_HOURS = 1000;
 /** Games in the top chapter of Year in games. */
 export const YEAR_STORY_TOP_GAMES = 5;
 /** Games named for the week with the most play in Year in games. */

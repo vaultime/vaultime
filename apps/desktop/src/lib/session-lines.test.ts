@@ -92,6 +92,20 @@ describe("describeSession", () => {
       );
     });
 
+    it("notes the hour mark a session passed, with play from before Vaultime", () => {
+      const before = session(at(2026, 9, 25, 20, 0), 9 * 60);
+      const past = session(at(2026, 9, 29, 20, 0), 90);
+      expect(wordings(past, { gameTitle, gameSessions: [before, past] })).toEqual(
+        new Set(["Hades II passed ten hours", "Past ten hours in Hades II"]),
+      );
+      expect(wordings(past, { gameSessions: [before, past], earlierMs: 90 * HOUR_MS })).toEqual(
+        new Set(["Past a hundred hours", "A hundred hours reached"]),
+      );
+      // Time a copy shared with another one counts once, as in the totals.
+      const shared = { ...past, counted_runtime_ms: 30 * MINUTE_MS };
+      expect(wordings(shared, { gameTitle, gameSessions: [before, shared] })).not.toContain("Hades II passed ten hours");
+    });
+
     it("notes a return after a break", () => {
       const back = session(at(2026, 9, 29, 20, 0), 60);
       const away = (start: string) => wordings(back, { gameTitle, gameSessions: [session(start, 60), back] });
