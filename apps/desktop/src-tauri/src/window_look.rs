@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The window around the page in the look the player picked. The logo on the
-//! tray, the taskbar and the title bar takes the accent in its frame and
-//! hands, as the logo in the app does. The shortcuts of this program on
-//! Windows and its launcher on Linux show the same, and on Windows the title
-//! bar follows dark or light mode. Windows 11 also gives it
-//! the ground of the page and the window border the accent. Linux leaves
-//! the title bar to the desktop.
+//! tray, the taskbar and the title bar takes the accent of the page in its
+//! frame and hands, as the logo in the app does. The shortcuts of this program
+//! on Windows and its launcher on Linux show the look of Home, which a start
+//! opens with, so browsing never rewrites them. On Windows the title bar
+//! follows dark or light mode, and Windows 11 gives it the window tone and
+//! the window border the accent. Linux leaves the title bar to the desktop.
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -46,7 +46,7 @@ pub struct WindowLook {
     /// Accent of the logo. The logo has its own dark tile, so this is the
     /// accent of dark mode in either mode.
     pub icon_accent: String,
-    /// The title bar, in the ground of the page.
+    /// The title bar, in the window tone around the page.
     pub title_bar: String,
     /// The title, in the text color of the page.
     pub title_text: String,
@@ -70,10 +70,24 @@ impl WindowLook {
     }
 }
 
-/// What the window should show.
+/// What the window should show: the look of the page, and the look of Home
+/// for the shortcuts and the next start.
 #[derive(Default)]
 struct Wanted {
     look: Option<WindowLook>,
+    home: Option<WindowLook>,
+}
+
+impl Wanted {
+    /// Takes both looks, true when either changed.
+    fn take(&mut self, look: WindowLook, home: WindowLook) -> bool {
+        if self.look.as_ref() == Some(&look) && self.home.as_ref() == Some(&home) {
+            return false;
+        }
+        self.look = Some(look);
+        self.home = Some(home);
+        true
+    }
 }
 
 /// What the window shows. Held while it is redrawn, so redraws never overlap.
@@ -104,7 +118,10 @@ impl WindowLookState {
             .and_then(|stored| serde_json::from_str::<WindowLook>(&stored).ok())
             .filter(|look| look.colors().into_iter().all(|color| rgb(color).is_some()));
         Self {
-            wanted: Mutex::new(Wanted { look }),
+            wanted: Mutex::new(Wanted {
+                home: look.clone(),
+                look,
+            }),
             drawn: Mutex::new(Drawn::default()),
         }
     }
@@ -131,27 +148,29 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
         paint_title_bar(app, look);
         drawn.look = Some(look.clone());
     }
-    // The shortcuts, and the launcher on Linux, show what the tray shows.
-    // Development builds leave them alone, as they do login items.
+    // The shortcuts, and the launcher on Linux, show Home. Development
+    // builds leave them alone, as they do login items.
+    #[cfg(any(windows, target_os = "linux"))]
+    let home = state.wanted().home.clone();
     #[cfg(windows)]
     if !cfg!(debug_assertions)
-        && let Some(look) = &look
-        && drawn.shortcut_accent.as_ref() != Some(&look.icon_accent)
+        && let Some(home) = &home
+        && drawn.shortcut_accent.as_ref() != Some(&home.icon_accent)
         && let Some(context) = app.try_state::<crate::AppContext>()
     {
         crate::shortcut_icon::follow(
             context.app_dir.join(crate::constants::APPEARANCE_DIR),
-            look.icon_accent.clone(),
+            home.icon_accent.clone(),
         );
-        drawn.shortcut_accent = Some(look.icon_accent.clone());
+        drawn.shortcut_accent = Some(home.icon_accent.clone());
     }
     #[cfg(target_os = "linux")]
     if !cfg!(debug_assertions)
-        && let Some(look) = &look
-        && drawn.shortcut_accent.as_ref() != Some(&look.icon_accent)
+        && let Some(home) = &home
+        && drawn.shortcut_accent.as_ref() != Some(&home.icon_accent)
     {
-        crate::launcher_icon::follow(look.icon_accent.clone());
-        drawn.shortcut_accent = Some(look.icon_accent.clone());
+        crate::launcher_icon::follow(home.icon_accent.clone());
+        drawn.shortcut_accent = Some(home.icon_accent.clone());
     }
     // The bundled logo shows until the page has told the accent, at start.
     let accent = look.map(|look| look.icon_accent);
@@ -309,29 +328,31 @@ pub fn show_stored<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Takes the colors and mode of the page for the icons and the title bar,
-/// and keeps them for the next start. Runs off the main thread, so drawing
-/// the icons never holds up the window.
+/// and those of Home for the shortcuts and the next start, which opens Home.
+/// Runs off the main thread, so drawing the icons never holds up the window.
 #[tauri::command(async)]
 pub fn set_window_look(
     app: AppHandle,
     db: State<'_, Arc<Database>>,
     state: State<'_, WindowLookState>,
     look: WindowLook,
+    home: WindowLook,
 ) -> Result<bool, VaultimeError> {
-    if look.colors().into_iter().any(|color| rgb(color).is_none()) {
+    if look
+        .colors()
+        .into_iter()
+        .chain(home.colors())
+        .any(|color| rgb(color).is_none())
+    {
         return Err(VaultimeError::Invalid(
             "window colors must be given as #rrggbb".into(),
         ));
     }
-    {
-        let mut wanted = state.wanted();
-        if wanted.look.as_ref() == Some(&look) {
-            return Ok(false);
-        }
-        wanted.look = Some(look.clone());
+    if !state.wanted().take(look, home.clone()) {
+        return Ok(false);
     }
     redraw(&app);
-    let stored = serde_json::to_string(&look).map_err(|error| {
+    let stored = serde_json::to_string(&home).map_err(|error| {
         VaultimeError::Invalid(format!("failed to store the window colors: {error}"))
     })?;
     settings::set_setting(&db, WINDOW_LOOK_SETTING, &stored)?;
@@ -412,9 +433,38 @@ mod tests {
         .unwrap();
         let state = WindowLookState::load(&db);
         assert_eq!(state.wanted().look.as_ref(), Some(&look));
+        assert_eq!(state.wanted().home.as_ref(), Some(&look));
 
         settings::set_setting(&db, WINDOW_LOOK_SETTING, r#"{"iconAccent":"red"}"#).unwrap();
         assert!(WindowLookState::load(&db).wanted().look.is_none());
+    }
+
+    #[test]
+    fn takes_the_page_and_home_apart() {
+        let page = WindowLook {
+            icon_accent: "#f08a2c".into(),
+            title_bar: "#140f0b".into(),
+            title_text: "#f3ece6".into(),
+            border: "#f08a2c".into(),
+            theme: WindowTheme::Dark,
+        };
+        let home = WindowLook {
+            icon_accent: "#4c99f8".into(),
+            border: "#4c99f8".into(),
+            ..page.clone()
+        };
+        let mut wanted = Wanted::default();
+        assert!(wanted.take(page.clone(), home.clone()));
+        assert!(!wanted.take(page.clone(), home.clone()));
+        // Browsing to another game changes the page, Home and its shortcuts stay.
+        let other = WindowLook {
+            icon_accent: "#2fbf71".into(),
+            border: "#2fbf71".into(),
+            ..page.clone()
+        };
+        assert!(wanted.take(other.clone(), home.clone()));
+        assert_eq!(wanted.look.as_ref(), Some(&other));
+        assert_eq!(wanted.home.as_ref(), Some(&home));
     }
 
     #[test]

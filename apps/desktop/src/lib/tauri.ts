@@ -652,7 +652,10 @@ export async function clearBackgroundImage(): Promise<boolean> {
   return invoke<boolean>("clear_background_image");
 }
 
-/** Colors the icons and the title bar like the page. False when nothing changed. */
-export async function setWindowLook(look: WindowLook): Promise<boolean> {
-  return invoke<boolean>("set_window_look", { look });
+/**
+ * Colors the icons and the title bar like the page, and the shortcuts and the
+ * next start like Home. False when nothing changed.
+ */
+export async function setWindowLook(look: WindowLook, home: WindowLook): Promise<boolean> {
+  return invoke<boolean>("set_window_look", { look, home });
 }

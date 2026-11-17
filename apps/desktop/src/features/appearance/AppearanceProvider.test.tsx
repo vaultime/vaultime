@@ -221,9 +221,9 @@ function setPageVisible(visible: boolean) {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
-/** The hue of the accent the window look last sent. */
-function sentHue() {
-  return hexToOklch(vi.mocked(api.setWindowLook).mock.lastCall![0].iconAccent)!.hue;
+/** The hue of the accent the window look last sent, of the page or of Home. */
+function sentHue(look: 0 | 1 = 0) {
+  return hexToOklch(vi.mocked(api.setWindowLook).mock.lastCall![look].iconAccent)!.hue;
 }
 
 describe("the window look", () => {
@@ -246,6 +246,8 @@ describe("the window look", () => {
       rerender(tree({ page: TEAL, home: ORANGE }));
       await waitFor(() => expect(api.setWindowLook).toHaveBeenCalledOnce());
       expect(Math.abs(sentHue() - TEAL.colors[0].hue)).toBeLessThan(5);
+      // The shortcuts and the next start take Home, so browsing never rewrites them.
+      expect(Math.abs(sentHue(1) - ORANGE.colors[0].hue)).toBeLessThan(5);
 
       act(() => setPageVisible(false));
       await vi.advanceTimersByTimeAsync(WINDOW_LOOK_INTERVAL_MS);

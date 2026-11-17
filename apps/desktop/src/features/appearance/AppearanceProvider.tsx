@@ -201,7 +201,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     const send = () => {
       windowLookSentAt.current = performance.now();
       api
-        .setWindowLook(windowLook(mode, appearance.ground, windowAccent, appearance.mode))
+        .setWindowLook(
+          windowLook(mode, appearance.ground, windowAccent, appearance.mode),
+          windowLook(mode, appearance.ground, homeAccent, appearance.mode),
+        )
         .catch(logFailure("coloring the window and its icons"));
     };
     const wait = windowLookSentAt.current + WINDOW_LOOK_INTERVAL_MS - performance.now();
@@ -211,7 +214,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     }
     const timer = window.setTimeout(send, wait);
     return () => window.clearTimeout(timer);
-  }, [mode, appearance.ground, windowAccent, appearance.mode, waitForGames]);
+  }, [mode, appearance.ground, windowAccent, homeAccent, appearance.mode, waitForGames]);
 
   const backdrop =
     appearance.source === "game" ? (games.page?.cover ?? null) : appearance.source === "picture" ? background : null;

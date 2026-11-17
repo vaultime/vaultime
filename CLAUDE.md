@@ -279,8 +279,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   (`font-wordmark`), and `scripts/build-brand.py` outlines it for the logo
   files. The lockups keep the proportions of the
   logo in the app, the mark a little taller than the letters. The app draws
-  the tray, taskbar, title bar and shortcut icons from those files in the
-  accent of the window, or the one picked.
+  the tray, taskbar and title bar icons from those files in the accent of
+  the window and the shortcut icons in that of Home, which a start opens
+  with, or the one picked.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope
