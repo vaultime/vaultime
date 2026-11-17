@@ -13,10 +13,8 @@ pub use maintenance::spawn_maintenance;
 use std::net::SocketAddr;
 
 use axum::extract::connect_info::IntoMakeServiceWithConnectInfo;
-use axum::http::{Method, header};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router, extract::State};
-use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use crate::AppState;
@@ -28,12 +26,9 @@ pub fn service(state: AppState) -> IntoMakeServiceWithConnectInfo<Router, Socket
     router(state).into_make_service_with_connect_info::<SocketAddr>()
 }
 
+// No CORS headers: only the app calls the server, from its core, so no web
+// page can make the browsers of its visitors sign in or sign up.
 fn router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
-
     Router::new()
         .route("/healthz", get(health))
         .route("/v1/auth/signup", post(auth::sign_up))
@@ -70,7 +65,6 @@ fn router(state: AppState) -> Router {
             get(blobs::download_blob).put(blobs::upload_blob),
         )
         .route("/v1/storage", get(blobs::storage))
-        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
