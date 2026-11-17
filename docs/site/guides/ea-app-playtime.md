@@ -16,7 +16,7 @@ The EA app also has playtime controls in its settings, where you can look at you
 
 ## What Vaultime adds
 
-[Vaultime](/) is a free app for Windows and Linux that finds your EA games and counts every session on your PC, with active time and idle time apart.
+[Vaultime](/) is a free app for Windows and Linux that counts every session on your PC, with active time and idle time apart. On Windows it finds your EA games, on Linux the ones you installed through Lutris.
 
 - Each session stays in the record, so a total never drops back on its own.
 - A journal of your days, with when you played and for how long.

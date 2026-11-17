@@ -20,7 +20,7 @@ Epic is rebuilding its launcher, and its preview may not show playtime yet.
 [Vaultime](/) is a free app for Windows and Linux that finds your Epic games and counts every session, also of Epic games you start through another launcher, like [Heroic](linux-playtime.md) on Linux.
 
 - Active time and idle time apart, so you can tell play from a game left open in the background.
-- A journal of your days, and a view of your Epic games with the time you played each through Epic.
+- A journal of your days, and a view of your Epic games with the time you played each through Epic. On Linux they show under Heroic.
 - Your Epic games in one library with the games of every other launcher.
 
 See also [How to see all your playtime in one place](all-your-playtime.md).

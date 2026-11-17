@@ -14,7 +14,7 @@ Ubisoft Connect shows your time played in a game's statistics, for games that se
 
 ## What Vaultime adds
 
-[Vaultime](/) is a free app for Windows and Linux that finds your Ubisoft games and counts every session as you play, with active time and idle time apart.
+[Vaultime](/) is a free app for Windows and Linux that counts every session as you play, with active time and idle time apart. On Windows it finds your Ubisoft games, on Linux the ones you installed through Lutris.
 
 - A total for every game, also the ones without statistics.
 - A journal of your days, with when you played and for how long.

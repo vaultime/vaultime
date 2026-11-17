@@ -15,7 +15,7 @@ Every launcher counts only its own games, and not every launcher shows a number 
 Vaultime is a free app for Windows and Linux that watches which game runs and counts it, wherever it came from.
 
 1. [Download Vaultime](/#download) and install it. You need no account.
-2. Pick **Discover games**. Vaultime reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot and other launchers installed and looks through the usual game folders. You check the games you want, and you can add any game by hand.
+2. Pick **Discover games**. Vaultime reads what Steam, the Xbox app, Epic, GOG, EA, Ubisoft Connect, Battle.net, Riot and other launchers installed on Windows, and Steam, Heroic, Lutris and itch.io on Linux, and looks through the usual game folders. You check the games you want, and you can add any game by hand.
 3. Play the way you always do. You start games from their launchers, and Vaultime notices them on its own.
 4. For the hours from before, pick Settings, Earlier playtime, **Import from Steam**. Vaultime reads how long Steam says you played each Steam game and counts nothing twice.
 

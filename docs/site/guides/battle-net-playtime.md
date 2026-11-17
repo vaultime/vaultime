@@ -12,7 +12,7 @@ The game time on your Blizzard account pages is the subscription time of World o
 
 ## What Vaultime adds
 
-[Vaultime](/) is a free app for Windows and Linux that finds the games Battle.net installed and counts every session, with active time and idle time apart.
+[Vaultime](/) is a free app for Windows and Linux that counts every session, with active time and idle time apart. On Windows it finds the games Battle.net installed, on Linux the ones you installed through Lutris.
 
 - A total for every Blizzard game, in hours and minutes, across all your characters.
 - A journal of your days, with when you played and for how long.

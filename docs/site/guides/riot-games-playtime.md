@@ -14,7 +14,7 @@ Neither shows how long you played. Your personal data from Riot, which you can r
 
 ## What Vaultime adds
 
-[Vaultime](/) is a free app for Windows and Linux that finds your Riot games and counts every session, with active time and idle time apart.
+[Vaultime](/) is a free app for Windows and Linux that counts every session on your PC, with active time and idle time apart. On Windows it finds your Riot games, on Linux the ones you installed through Lutris.
 
 - One total for each game that never resets with a season.
 - A journal of your days, with when you played and for how long.
