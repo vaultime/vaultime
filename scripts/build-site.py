@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the website into dist-site: the landing page, its styles and art,
 the fonts the app ships, the documentation, the screenshots and HTML versions
-of the legal pages and the changelog.
+of the privacy policy and the changelog.
 
     python scripts/build-site.py
 
@@ -437,9 +437,8 @@ def sitemap():
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n'
 
 
-# The API and the installers are no pages to show.
+# The installers are no pages to show.
 ROBOTS = f"""User-agent: *
-Disallow: /v1/
 Disallow: /downloads/
 
 Sitemap: {SITE_URL}/sitemap.xml

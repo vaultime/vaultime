@@ -42,7 +42,7 @@ apps/desktop/     Tauri app, React in src/, Rust in src-tauri/
 apps/api/         Cloud backup server that players run, with its Dockerfile
 deploy/server/    Docker Compose setup of that server, for players
 deploy/vps/       Install script of the website and downloads on our VPS
-docs/             Legal pages, landing page and documentation (docs/site)
+docs/             Privacy policy, landing page and documentation (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
 packaging/aur/    PKGBUILD of the vaultime-bin AUR package, made from the deb
 packaging/winget/ winget manifests of the latest release
