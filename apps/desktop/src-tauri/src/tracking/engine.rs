@@ -35,6 +35,7 @@ use crate::platform::process::{
     refresh_running_processes,
 };
 use crate::tracking::live::{LiveCounters, LiveSessions};
+use crate::tracking::seen::SeenPrograms;
 
 /// Tracks a currently running game session.
 struct ActiveSession {
@@ -289,6 +290,7 @@ fn poll_loop(
     let mut active: HashMap<String, ActiveSession> = HashMap::new();
     let mut system = new_system();
     let mut folders = FolderCache::default();
+    let mut seen = SeenPrograms::default();
 
     run_guarded("closing the sessions left open", || {
         close_orphaned_sessions(db, device_id);
@@ -301,7 +303,15 @@ fn poll_loop(
             // Checked again because `pause` may have won the race for the lock.
             if !paused.load(Ordering::SeqCst)
                 && run_guarded("tracking poll", || {
-                    poll_tick(db, device_id, live, &mut system, &mut folders, &mut active)
+                    poll_tick(
+                        db,
+                        device_id,
+                        live,
+                        &mut system,
+                        &mut folders,
+                        &mut seen,
+                        &mut active,
+                    )
                 }) == Guarded::Panicked
             {
                 // The process list may be half refreshed, so it starts over.
@@ -355,6 +365,7 @@ fn poll_tick(
     live: &LiveSessions,
     system: &mut System,
     folders: &mut FolderCache,
+    seen: &mut SeenPrograms,
     active: &mut HashMap<String, ActiveSession>,
 ) -> crate::error::Result<()> {
     let tracking_settings = TrackingSettings::load(db);
@@ -383,6 +394,17 @@ fn poll_tick(
         &activity_snapshot,
         system,
         folders,
+    );
+
+    let game_in_front = observed_games
+        .values()
+        .any(|observation| observation.has_foreground_window);
+    seen.note(
+        db,
+        &processes,
+        &activity_snapshot,
+        game_in_front,
+        &tracked_games,
     );
 
     for (game_id, observation) in &observed_games {
@@ -1104,7 +1126,16 @@ mod tests {
         let live = LiveSessions::default();
         let mut active = HashMap::new();
         time("whole tick", &mut || {
-            poll_tick(&db, "device", &live, &mut system, &mut folders, &mut active).unwrap();
+            poll_tick(
+                &db,
+                "device",
+                &live,
+                &mut system,
+                &mut folders,
+                &mut SeenPrograms::default(),
+                &mut active,
+            )
+            .unwrap();
         });
     }
 

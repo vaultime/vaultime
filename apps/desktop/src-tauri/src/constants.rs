@@ -448,6 +448,13 @@ pub const AUTO_BACKUP_KEEP: usize = 7;
 pub const AUTO_BACKUP_INTERVAL: Duration = Duration::from_hours(24);
 /// Quitting makes a backup only when the last one is at least this old.
 pub const AUTO_BACKUP_ON_QUIT_MIN_AGE: Duration = Duration::from_hours(1);
+/// Time a program from a game folder runs in front before Discover offers
+/// it. Same as `SEEN_RUNNING_MIN_MS` in `lib/constants.ts`.
+pub const SEEN_RUNNING_MIN: Duration = Duration::from_mins(10);
+/// Time in front the tracker gathers for such a program before it writes it.
+pub const SEEN_RUNNING_FLUSH: Duration = Duration::from_mins(1);
+/// How often the tracker reads the game folders again.
+pub const SEEN_ROOTS_REFRESH: Duration = Duration::from_hours(1);
 /// How often the running app checks whether the daily backup is due.
 pub const AUTO_BACKUP_CHECK_INTERVAL: Duration = Duration::from_hours(1);
 /// Setting with the folder the player picked to keep backups in sync between
