@@ -16,10 +16,9 @@ use crate::constants::{
     TRAY_STATUS_INTERVAL,
 };
 use crate::db::connection::Database;
-use crate::db::repo::sessions::{self, SessionSpan};
+use crate::db::repo::sessions::{self, RunningSession};
 use crate::db::repo::{map_db, settings};
 use crate::error::Result;
-use crate::integrity;
 use crate::playtime::{summaries, totals};
 use crate::tracking::live::LiveSessions;
 use crate::window_look::draw_icon;
@@ -203,52 +202,43 @@ pub(crate) fn status_lines(
     device_id: &str,
     now: DateTime<Utc>,
 ) -> Result<(StatusLines, Vec<String>)> {
-    let since = integrity::format_timestamp(local_day_start(now));
-    let mut spans = sessions::spans_since(db, &since, device_id)?;
-    spans.retain(|span| span.ended_at_wall.is_none());
-    let mut running_ids: Vec<String> = spans.iter().map(|span| span.session_id.clone()).collect();
+    let mut running = sessions::running_on(db, device_id)?;
+    let mut running_ids: Vec<String> = running
+        .iter()
+        .map(|session| session.session_id.clone())
+        .collect();
     running_ids.sort();
     let now_ms = now.timestamp_millis();
     // The time the live bar shows, without what a launcher set aside.
-    let mut running = db.with_conn(|conn| {
-        spans
+    let mut stored = db.with_conn(|conn| {
+        running
             .iter()
-            .map(|span| sessions::stored_session(conn, &span.session_id).map_err(map_db))
+            .map(|session| sessions::stored_session(conn, &session.session_id).map_err(map_db))
             .collect::<Result<Vec<_>>>()
     })?;
-    for session in &mut running {
+    for session in &mut stored {
         live.apply(session);
     }
-    totals::show_counted(db, live, &mut running, now_ms)?;
-    for (span, session) in spans.iter_mut().zip(&running) {
-        span.runtime_ms = session.runtime_ms;
+    totals::show_counted(db, live, &mut stored, now_ms)?;
+    for (shown, session) in running.iter_mut().zip(&stored) {
+        shown.runtime_ms = session.runtime_ms;
     }
     let today = summaries::today_of(&Local, now_ms);
     let played = summaries::played_on(db, live, &Local, today, now_ms)?;
     let recent = summaries::played_in_last(db, live, &Local, TRAY_RECENT_DAYS, today, now_ms)?;
-    Ok((describe_status(&spans, played, recent), running_ids))
-}
-
-/// The first moment of the local day `now` falls in. Where the clocks jump
-/// forward at midnight, the day starts at the first hour that exists.
-fn local_day_start(now: DateTime<Utc>) -> DateTime<Utc> {
-    let day = now.with_timezone(&Local).date_naive();
-    (0..2)
-        .filter_map(|hour| day.and_hms_opt(hour, 0, 0))
-        .find_map(|start| start.and_local_timezone(Local).earliest())
-        .map_or(now, |start| start.with_timezone(&Utc))
+    Ok((describe_status(&running, played, recent), running_ids))
 }
 
 /// "Playing Elden Ring, 1h 24m", "2h 40m played today" and "17h 06m in the
 /// past 7 days", from the running sessions and the play of today and the
 /// recent days as the journal and Home count it.
 fn describe_status(
-    running: &[SessionSpan],
+    running: &[RunningSession],
     played_today_ms: i64,
     played_recent_ms: i64,
 ) -> StatusLines {
     // Two linked installs of one game running at once show as one game.
-    let mut shown: Vec<&SessionSpan> = Vec::new();
+    let mut shown: Vec<&RunningSession> = Vec::new();
     for span in running {
         if !shown
             .iter()
@@ -458,12 +448,10 @@ mod tests {
 
     const MINUTE_MS: i64 = 60_000;
 
-    fn running(title: &str, minutes: i64) -> SessionSpan {
-        SessionSpan {
+    fn running(title: &str, minutes: i64) -> RunningSession {
+        RunningSession {
             session_id: format!("{title}-{minutes}"),
             game_title: title.into(),
-            started_at_wall: "2026-09-30T18:00:00.000Z".into(),
-            ended_at_wall: None,
             runtime_ms: minutes * MINUTE_MS,
         }
     }
@@ -512,7 +500,7 @@ mod tests {
         use crate::tracking::live::LiveCounters;
 
         // The PC the tests act as.
-        let here = integrity::ledger::this_device().unwrap();
+        let here = crate::integrity::ledger::this_device().unwrap();
         let db = database();
         crate::db::repo::devices::ensure_device(&db, &here, "test", "0.1.0").unwrap();
         let (client, match_game) = (game(&db, "Client"), game(&db, "Match"));
@@ -551,14 +539,6 @@ mod tests {
         assert_eq!(state(true, false).status(), TrayStatus::Hidden);
         assert_eq!(state(false, false).status(), TrayStatus::None);
         assert_eq!(state(false, true).status(), TrayStatus::None);
-    }
-
-    #[test]
-    fn the_day_starts_before_now() {
-        let now = Utc::now();
-        let start = local_day_start(now);
-        assert!(start <= now);
-        assert!(now - start < TimeDelta::days(1));
     }
 
     #[test]

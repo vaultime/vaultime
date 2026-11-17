@@ -496,47 +496,36 @@ pub fn show_running_elsewhere(
     })
 }
 
-/// When a session ran and for how long, with its game's title.
+/// A session running on this PC, with the title of the game it is shown as.
 #[derive(Debug, Clone)]
-pub struct SessionSpan {
+pub struct RunningSession {
     pub session_id: String,
     pub game_title: String,
-    pub started_at_wall: String,
-    pub ended_at_wall: Option<String>,
     pub runtime_ms: i64,
 }
 
-/// Sessions that ran at `since` or later, running ones included, oldest
-/// first, each with the title of the game it is shown as. An open session of
-/// another PC than `this_device` ends at its last event, as nothing runs it
-/// here. It skips the integrity check, so it stays cheap to call often.
-pub fn spans_since(db: &Database, since: &str, this_device: &str) -> Result<Vec<SessionSpan>> {
+/// The sessions running on `device_id`, oldest first. It skips the
+/// integrity check, so it stays cheap to call often.
+pub fn running_on(db: &Database, device_id: &str) -> Result<Vec<RunningSession>> {
     db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare(
-                "SELECT id, title, started_at_wall, ended_at_wall, runtime_ms FROM (
-                     SELECT sessions.id, games.title, sessions.started_at_wall,
-                            COALESCE(sessions.ended_at_wall, CASE WHEN sessions.device_id != ?2
-                                THEN (SELECT event_time_wall FROM session_events
-                                      WHERE session_id = sessions.id
-                                      ORDER BY sequence DESC LIMIT 1) END) AS ended_at_wall,
-                            sessions.runtime_ms
-                     FROM sessions JOIN games ON games.id = COALESCE(
-                         (SELECT linked_game_id FROM game_links
-                          WHERE game_links.game_id = sessions.game_id),
-                         sessions.game_id))
-                 WHERE ended_at_wall IS NULL OR ended_at_wall > ?1
-                 ORDER BY started_at_wall",
+            .prepare_cached(
+                "SELECT sessions.id, games.title, sessions.runtime_ms
+                 FROM sessions INDEXED BY idx_sessions_running
+                 JOIN games ON games.id = COALESCE(
+                     (SELECT linked_game_id FROM game_links
+                      WHERE game_links.game_id = sessions.game_id),
+                     sessions.game_id)
+                 WHERE sessions.ended_at_wall IS NULL AND sessions.device_id = ?1
+                 ORDER BY sessions.started_at_wall",
             )
             .map_err(map_db)?;
         let rows = stmt
-            .query_map([since, this_device], |row| {
-                Ok(SessionSpan {
+            .query_map([device_id], |row| {
+                Ok(RunningSession {
                     session_id: row.get(0)?,
                     game_title: row.get(1)?,
-                    started_at_wall: row.get(2)?,
-                    ended_at_wall: row.get(3)?,
-                    runtime_ms: row.get(4)?,
+                    runtime_ms: row.get(2)?,
                 })
             })
             .map_err(map_db)?;
@@ -693,6 +682,44 @@ mod tests {
         )
         .unwrap();
         game.id
+    }
+
+    #[test]
+    fn lists_the_sessions_running_here_as_the_game_they_count_as() {
+        let db = test_db();
+        devices::ensure_device(&db, "other", "linux", "0.1.0").unwrap();
+        let game_id = seed_game(&db);
+        let copy = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Second Install".into(),
+                executable_path: Some("/opt/test-game".into()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap()
+        .id;
+        games::link_game(&db, &copy, Some(&game_id)).unwrap();
+        let start = chrono::Utc::now() - chrono::TimeDelta::minutes(5);
+        let first = create_session_at(&db, &copy, DEV_ID, start).unwrap();
+        let second = create_session(&db, &game_id, DEV_ID).unwrap();
+        let ended = create_session(&db, &game_id, DEV_ID).unwrap();
+        end_session(&db, &ended.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL).unwrap();
+        create_session(&db, &game_id, "other").unwrap();
+
+        let running = running_on(&db, DEV_ID).unwrap();
+        let listed: Vec<(&str, &str)> = running
+            .iter()
+            .map(|session| (session.session_id.as_str(), session.game_title.as_str()))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                (first.id.as_str(), "Test Game"),
+                (second.id.as_str(), "Test Game")
+            ]
+        );
     }
 
     #[test]
