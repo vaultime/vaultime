@@ -485,6 +485,9 @@ pub(crate) fn installed_programs() -> Vec<InstalledProgram> {
     .flat_map(|list| {
         subkeys(&list)
             .into_iter()
+            // Steam lists its games with their publishers, which the readers of
+            // other launchers would take for theirs. Steam discovery finds them.
+            .filter(|name| !name.starts_with("Steam App "))
             .filter_map(|name| {
                 let entry = list.open(&name).ok()?;
                 Some(InstalledProgram {

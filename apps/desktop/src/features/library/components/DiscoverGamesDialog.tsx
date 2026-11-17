@@ -150,7 +150,9 @@ export function DiscoverGamesDialog({
         const insideLauncherFolder =
           game.source === "folder_scan" &&
           launcherFolders.some((folder) => pathKey(game.executable_path).startsWith(`${folder}/`));
-        if (!insideLauncherFolder && !byPath.has(game.executable_path)) byPath.set(game.executable_path, game);
+        // Keyed as paths compare, since Steam may write its folder in other letters.
+        const key = pathKey(game.executable_path);
+        if (!insideLauncherFolder && !byPath.has(key)) byPath.set(key, game);
       }
       // A launcher's row of a program seen running wins, as it knows the launcher. A folder
       // find of one gives way to its row above.

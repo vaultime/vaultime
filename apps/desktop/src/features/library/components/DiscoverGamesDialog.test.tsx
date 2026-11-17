@@ -73,6 +73,18 @@ describe("programs seen running in Discover", () => {
     expect(screen.getByText("Epic Games")).toBeTruthy();
   });
 
+  it("lists a game once when two readers write its path differently", async () => {
+    const steam = { ...seen("Apex"), executable_path: "c:/program files (x86)/steam/steamapps/common/apex/r5apex.exe", source: "steam" };
+    const ea = { ...seen("Apex"), executable_path: "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Apex\\r5apex.exe", source: "ea" };
+    vi.mocked(api.discoverSteamGames).mockResolvedValue([steam]);
+    vi.mocked(api.discoverLauncherGames).mockResolvedValue([ea]);
+    vi.mocked(api.listSeenGames).mockResolvedValue([]);
+    render(<DiscoverGamesDialog open onOpenChange={() => {}} onImported={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start the scan" }));
+    expect(await screen.findByText("1 game found")).toBeTruthy();
+    expect(screen.getByText("Steam")).toBeTruthy();
+  });
+
   it("shows nothing of it while none ran", async () => {
     vi.mocked(api.listSeenGames).mockResolvedValue([]);
     render(<DiscoverGamesDialog open onOpenChange={() => {}} onImported={() => {}} />);
