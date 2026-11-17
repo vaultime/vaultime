@@ -38,9 +38,15 @@ export function LocalBackupsSection({
   onRestartRequired: () => void;
 }) {
   const { thisDeviceId } = useLibrary();
-  const { save } = useSettings();
+  const { values, save, reloads } = useSettings();
   const finishRestore = useFinishRestore();
   const [autoBackup, setAutoBackup] = useState(initial.autoBackup);
+  // A restore replaces the setting, and the switch takes the restored one.
+  const [seenReloads, setSeenReloads] = useState(reloads);
+  if (reloads !== seenReloads) {
+    setSeenReloads(reloads);
+    setAutoBackup(values[SETTING_KEYS.autoBackup] !== "false");
+  }
   const [folder, setFolder] = useState(initial.folder);
   const [snapshots, setSnapshots] = useState(initial.snapshots);
   const [busy, setBusy] = useState(false);

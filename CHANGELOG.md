@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Games named Steam something.** Discover took every Steam game whose name starts with Steam, like Steam Marines, for a tool of Steam and left it out. Only Steam's own tools stay out now.
 - **A login item you turned off stays off on Linux.** On XFCE, Cinnamon and MATE, turning off Vaultime in the desktop's startup settings came undone at the next start, which wrote the login item anew. Vaultime now leaves an item the desktop switched off alone.
 - **A steady live clock.** The running time in the live bar went back a few seconds now and then. It now counts on from the moment Vaultime last counted the session.
+- **Settings after a restore.** Switches like closing to the tray, the idle time and automatic backups showed the values from before a restore until you opened Settings again. They show the restored ones right away.
 
 ## [0.6.0] - 2026-10-20
 

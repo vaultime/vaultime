@@ -81,13 +81,19 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [backupKeyReady, setBackupKeyReady] = useState(false);
-  const { values, read: settingsRead, save } = useSettings();
+  const { values, read: settingsRead, save, reloads } = useSettings();
   // Unset on PCs from before the switch, until the first start decides.
   const cloudSetting = values[SETTING_KEYS.cloudBackup];
   const enabled = cloudSetting === "true";
   // Turned off, there is no saved session to look for.
   const initializing = cloudSetting !== "false" && bootstrapping;
   const [autoBackup, setAutoBackupState] = useState(() => values[SETTING_KEYS.cloudAutoBackup] !== "false");
+  // A restore replaces the setting, and the switch takes the restored one.
+  const [seenReloads, setSeenReloads] = useState(reloads);
+  if (reloads !== seenReloads) {
+    setSeenReloads(reloads);
+    setAutoBackupState(values[SETTING_KEYS.cloudAutoBackup] !== "false");
+  }
   const [waitingMerges, setWaitingMerges] = useState<AutoMerge[]>([]);
   const [autoBackupError, setAutoBackupError] = useState<string | null>(null);
   const sessionRef = useRef<CloudAuthSession | null>(null);

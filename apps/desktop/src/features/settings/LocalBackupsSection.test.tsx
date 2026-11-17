@@ -43,8 +43,8 @@ function renderSection() {
   const refresh = vi.fn(async () => {});
   const reload = vi.fn(async () => {});
   const library = { refresh, thisDeviceId: "this-pc" } as unknown as NonNullable<ContextType<typeof LibraryContext>>;
-  render(
-    <SettingsContext.Provider value={{ values: {}, read: true, save: vi.fn(async () => {}), reload, reloads: 0 }}>
+  const section = (values: Record<string, string>, reloads: number) => (
+    <SettingsContext.Provider value={{ values, read: true, save: vi.fn(async () => {}), reload, reloads }}>
       <LibraryContext.Provider value={library}>
         <LocalBackupsSection
           initial={{ autoBackup: true, folder: "C:\\Backups", snapshots: [] }}
@@ -53,9 +53,10 @@ function renderSection() {
           onRestartRequired={vi.fn()}
         />
       </LibraryContext.Provider>
-    </SettingsContext.Provider>,
+    </SettingsContext.Provider>
   );
-  return { refresh, reload };
+  const { rerender } = render(section({}, 0));
+  return { refresh, reload, settingsRead: (values: Record<string, string>) => rerender(section(values, 1)) };
 }
 
 async function restore() {
@@ -91,5 +92,18 @@ describe("restoring a local backup", () => {
     await screen.findByText("Backup restored.");
     expect(api.importLocalBackup).toHaveBeenCalledWith(BACKUP_PATH, false);
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("shows the restored automatic backup setting and keeps saying what happened", async () => {
+    vi.mocked(api.inspectLocalBackup).mockResolvedValue(backup(null));
+    vi.mocked(api.importLocalBackup).mockResolvedValue(backup(null, true));
+    const { settingsRead } = renderSection();
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("true");
+
+    await restore();
+    await screen.findByText("Backup restored.");
+    settingsRead({ auto_backup_enabled: "false" });
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("Backup restored.")).toBeTruthy();
   });
 });

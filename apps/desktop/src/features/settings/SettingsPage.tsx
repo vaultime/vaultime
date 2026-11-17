@@ -59,21 +59,24 @@ const LINKS = [
 
 const PLATFORM_NAMES: Record<string, string> = { windows: "Windows", linux: "Linux", macos: "macOS" };
 
+/** What the switches of the page show for the saved settings. */
+function switchesFrom(values: Record<string, string>) {
+  const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
+  return {
+    idleSeconds: Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS,
+    closeToTray: values[SETTING_KEYS.closeToTray] !== "false",
+    autoDiscover: values[SETTING_KEYS.autoDiscover] !== "false",
+    journalScreenshots: values[SETTING_KEYS.journalScreenshots] !== "false",
+    autoBackup: values[SETTING_KEYS.autoBackup] !== "false",
+    backgroundActive: values[SETTING_KEYS.backgroundActive] === "true",
+  };
+}
+
 export function SettingsPage() {
   const { refresh, summaries } = useLibrary();
-  const { values, save } = useSettings();
+  const { values, save, reloads } = useSettings();
   // Read once when the page opens, as the switches keep their own state.
-  const [initial] = useState(() => {
-    const seconds = Number(values[SETTING_KEYS.idleThreshold] ?? DEFAULT_IDLE_THRESHOLD_SECS);
-    return {
-      idleSeconds: Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS,
-      closeToTray: values[SETTING_KEYS.closeToTray] !== "false",
-      autoDiscover: values[SETTING_KEYS.autoDiscover] !== "false",
-      journalScreenshots: values[SETTING_KEYS.journalScreenshots] !== "false",
-      autoBackup: values[SETTING_KEYS.autoBackup] !== "false",
-      backgroundActive: values[SETTING_KEYS.backgroundActive] === "true",
-    };
-  });
+  const [initial] = useState(() => switchesFrom(values));
   const [loaded, setLoaded] = useState(false);
   // What the command palette asked for, like ?do=backup, once the page is there.
   const [params, setParams] = useSearchParams();
@@ -83,6 +86,10 @@ export function SettingsPage() {
   // The idle time saved last, and a change still waiting to be saved.
   const savedIdle = useRef(initial.idleSeconds);
   const pendingIdle = useRef<{ seconds: number; timer: number } | null>(null);
+  // A restore saves another idle time, which a failed change falls back to.
+  useEffect(() => {
+    savedIdle.current = switchesFrom(values).idleSeconds;
+  }, [values]);
   const [backgroundActive, setBackgroundActive] = useState(initial.backgroundActive);
   const [diagnostics, setDiagnostics] = useState<TrackingDiagnostics | null>(null);
   const [backups, setBackups] = useState<{ autoBackup: boolean; folder: string; snapshots: BackupSnapshot[] }>({
@@ -100,6 +107,18 @@ export function SettingsPage() {
   const [autostart, setAutostart] = useState(false);
   const [autoDiscover, setAutoDiscover] = useState(initial.autoDiscover);
   const [journalScreenshots, setJournalScreenshots] = useState(initial.journalScreenshots);
+  // A restore replaces these settings, and the switches take the restored ones.
+  const [seenReloads, setSeenReloads] = useState(reloads);
+  if (reloads !== seenReloads) {
+    const restored = switchesFrom(values);
+    setSeenReloads(reloads);
+    setIdleSeconds(restored.idleSeconds);
+    setBackgroundActive(restored.backgroundActive);
+    setCloseToTray(restored.closeToTray);
+    setAutoDiscover(restored.autoDiscover);
+    setJournalScreenshots(restored.journalScreenshots);
+    setBackups((shown) => ({ ...shown, autoBackup: restored.autoBackup }));
+  }
 
   useEffect(() => {
     let cancelled = false;
