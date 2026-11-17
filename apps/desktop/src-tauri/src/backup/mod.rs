@@ -92,14 +92,12 @@ pub struct LocalBackupSummary {
     pub created_at: String,
     pub app_version: String,
     pub source_device_id: String,
-    pub schema_migrations: Vec<String>,
     pub overall_checksum: String,
     pub games_count: i64,
     pub sessions_count: i64,
     pub assets_count: i64,
     pub asset_file_count: usize,
     pub backup_path: String,
-    pub manifest_path: String,
     pub restart_required: bool,
     /// The PC this one continues as, after restoring this backup or when it
     /// would restore it, see `ledger::Takeover`.
@@ -1289,17 +1287,12 @@ fn summary_from_manifest(
         created_at: manifest.created_at.clone(),
         app_version: manifest.app_version.clone(),
         source_device_id: manifest.source_device_id.clone(),
-        schema_migrations: manifest.schema_migrations.clone(),
         overall_checksum: manifest.overall_checksum.clone(),
         games_count: manifest.games_count,
         sessions_count: manifest.sessions_count,
         assets_count: manifest.assets_count,
         asset_file_count,
         backup_path: backup_dir.to_string_lossy().to_string(),
-        manifest_path: backup_dir
-            .join(BACKUP_MANIFEST_FILE)
-            .to_string_lossy()
-            .to_string(),
         restart_required,
         continues_as: None,
     }

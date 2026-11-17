@@ -576,14 +576,12 @@ export interface LocalBackupSummary {
   created_at: string;
   app_version: string;
   source_device_id: string;
-  schema_migrations: string[];
   overall_checksum: string;
   games_count: number;
   sessions_count: number;
   assets_count: number;
   asset_file_count: number;
   backup_path: string;
-  manifest_path: string;
   restart_required: boolean;
   /** The PC this one continues as once it restores the backup, or did restore it. */
   continues_as?: PcTakeover | null;
