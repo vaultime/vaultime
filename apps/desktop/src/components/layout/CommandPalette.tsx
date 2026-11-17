@@ -5,28 +5,33 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { matchPath, useLocation, useNavigate } from "react-router";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Search } from "lucide-react";
+import { LauncherMark } from "@/components/brand/LauncherMark";
 import { Cover } from "@/components/media/Cover";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
 import { useUpdates } from "@/features/updates/update-context";
 import { PALETTE_GAMES_IDLE, PALETTE_GAMES_SEARCHING } from "@/lib/constants";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
+import { launcherCounts, launcherTitle } from "@/lib/launchers";
 import { matchesGame, matchesSearch } from "@/lib/search";
 import { stepsAside } from "@/lib/steps-aside";
 import * as api from "@/lib/tauri";
 import { formatHoursShort } from "@/lib/time";
 import { cn, describeError, logFailure } from "@/lib/utils";
+import { plural } from "@/lib/words";
 
 interface Command {
   id: string;
   label: string;
   hint: string;
-  kind: "Game" | "Page" | "Action" | "Setting";
+  kind: "Game" | "Launcher" | "Page" | "Action" | "Setting";
   /** Where the command goes. */
   to?: string;
   /** What the command does, in place of going somewhere. */
   run?: () => Promise<unknown>;
   cover?: { title: string; src: string | null };
+  /** The launcher whose mark stands in for a cover. */
+  launcher?: string;
 }
 
 const FIXED: Command[] = [
@@ -82,6 +87,19 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         to: `/library/${game.id}`,
         cover: { title: game.title, src: cover },
       }));
+    // The rail lists them already, so they come up only for a search.
+    const launchers: Command[] = query.trim()
+      ? launcherCounts(summaries)
+          .map(({ launcher, count }) => ({
+            id: `launcher-${launcher}`,
+            label: launcherTitle(launcher),
+            hint: plural(count, "game"),
+            kind: "Launcher" as const,
+            to: `/library?launcher=${encodeURIComponent(launcher)}`,
+            launcher,
+          }))
+          .filter((command) => matches(command.label))
+      : [];
     const fixed: Command[] = [
       ...FIXED.filter((command) => cloudEnabled || command.id !== "page-cloud"),
       {
@@ -133,6 +151,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     return [
       ...forGame.filter((command) => matches(command.label)),
       ...games,
+      ...launchers,
       ...fixed.filter((command) => matches(command.label) || matches(command.hint)),
     ];
   }, [query, summaries, pageGame, setStatus, refresh, updates.check, cloudEnabled]);
@@ -234,6 +253,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               >
                 {command.cover && (
                   <Cover title={command.cover.title} src={command.cover.src} variant="tile" className="size-8 text-base" />
+                )}
+                {command.launcher && (
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-glint/6 text-soft">
+                    <LauncherMark launcher={command.launcher} className="size-4" />
+                  </span>
                 )}
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate text-sm text-text">{command.label}</span>
