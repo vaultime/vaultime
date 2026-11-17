@@ -41,7 +41,11 @@ function YearStory() {
     if (!valid) return;
     let cancelled = false;
     api.getYearPlay(year).then(
-      (next) => !cancelled && setPlay({ year, play: next }),
+      (next) => {
+        if (cancelled) return;
+        setPlay({ year, play: next });
+        setError(null);
+      },
       (failure) => !cancelled && setError(describeError(failure)),
     );
     return () => {
@@ -101,9 +105,11 @@ function YearStory() {
   const intro =
     story?.firstDay && story.lastDay
       ? `${capitalize(amountWords(story.playedMs))} on ${countWords(story.daysPlayed, "day")}, from ${formatDayAndMonth(story.firstDay)} to ${formatDayAndMonth(story.lastDay)}. Made on this PC, nothing is uploaded.`
-      : current
-        ? "Nothing played this year yet. Once you play, your year fills in here."
-        : `Nothing played in ${year}.`;
+      : error
+        ? "Your year did not load."
+        : current
+          ? "Nothing played this year yet. Once you play, your year fills in here."
+          : `Nothing played in ${year}.`;
   const cover = (gameId: string) => covers[gameId] ?? byGame.get(gameId)?.cover ?? null;
 
   return (
