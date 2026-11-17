@@ -22,8 +22,8 @@ use crate::db::connection::Database;
 use crate::db::repo::settings;
 use crate::error::VaultimeError;
 
-/// The logo as `scripts/build-brand.py` writes it for the icons, with a
-/// violet frame and hands and a light pivot.
+/// The logo as `scripts/build-brand.py` writes it for the icons, on a
+/// graphite tile with a violet frame and hands and a light pivot.
 const ICON_SVG: &str = include_str!("../../../../assets/vaultime-icon-accent.svg");
 /// The violet of the logo file, which the accent replaces.
 const LOGO_VIOLET: &str = "#9D7CFF";
@@ -375,7 +375,7 @@ mod tests {
             (icon.width(), icon.height()),
             (WINDOW_ICON_PX, WINDOW_ICON_PX)
         );
-        assert_eq!(pivot(&icon), [0xf1, 0xeb, 0xfa, 0xff]);
+        assert_eq!(pivot(&icon), [0xf1, 0xf2, 0xf2, 0xff]);
         let rgba = icon.rgba();
         let accent_pixels = rgba
             .as_chunks::<4>()

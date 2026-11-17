@@ -40,6 +40,10 @@ ASSETS = ROOT / "assets"
 
 TILE = "#1A1230"
 LIGHT = "#F1EBFA"
+# The tile and pivot of the icon the app draws in its accent, neutral like the
+# graphite ground, so no accent sits on violet.
+GRAPHITE = "#17181A"
+NEUTRAL_LIGHT = "#F1F2F2"
 VIOLET = "#9D7CFF"
 VIOLET_ON_LIGHT = "#7A55F0"
 
@@ -80,14 +84,14 @@ def framed(size, margin, frame_width=FRAME_WIDTH):
     return scale, offset
 
 
-def tile_svg(size, margin=0.06, rounded=True, ink=LIGHT, pivot=VIOLET):
+def tile_svg(size, margin=0.06, rounded=True, ink=LIGHT, pivot=VIOLET, tile=TILE):
     """The mark on a square tile. Rounded tile corners follow the curve of the
     frame, so the margin stays even all the way around."""
     scale, offset = framed(size, margin)
     radius = (FRAME[4] + FRAME_WIDTH / 2) * scale + size * margin if rounded else 0
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-        f'<rect width="{size}" height="{size}" rx="{radius:.1f}" fill="{TILE}"/>'
+        f'<rect width="{size}" height="{size}" rx="{radius:.1f}" fill="{tile}"/>'
         f'<g transform="translate({offset:.1f} {offset:.1f}) scale({scale:.4f})">{mark(ink, pivot)}</g>'
         "</svg>\n"
     )
@@ -150,7 +154,9 @@ def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
     (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
-    (ASSETS / "vaultime-icon-accent.svg").write_text(tile_svg(1024, ink=VIOLET, pivot=LIGHT), encoding="utf8")
+    (ASSETS / "vaultime-icon-accent.svg").write_text(
+        tile_svg(1024, ink=VIOLET, pivot=NEUTRAL_LIGHT, tile=GRAPHITE), encoding="utf8"
+    )
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))

@@ -270,7 +270,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
   frame. The logo files and the website keep violet `#9D7CFF` for the
   pivot. The app shows the frame, the hands and the wordmark in the accent
-  and the pivot light, in the rail and on its icons. The wordmark is Mona
+  and the pivot light, in the rail and on its icons, which sit on a graphite
+  tile. The wordmark is Mona
   Sans 700 at full width (`font-wordmark`), and `scripts/build-brand.py`
   outlines it for the logo files. The lockups keep the proportions of the
   logo in the app, the mark a little taller than the letters. The app draws
