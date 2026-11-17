@@ -129,7 +129,7 @@ export function TintedSentence({
 }
 
 const BUTTON =
-  "inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none";
+  "inline-flex h-[34px] items-center gap-2 rounded-lg px-3.5 text-[13px] transition focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none";
 
 /** A pill in the header's colors. Solid for the main action, outlined otherwise. */
 export function TintedButton({

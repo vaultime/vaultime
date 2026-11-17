@@ -29,7 +29,7 @@ export function GameLinkPicker({
     : sorted;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex h-9 max-w-64 min-w-0 items-center gap-2 rounded-md border border-rule px-3 text-[13px] text-text transition-colors hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none">
+      <DropdownMenuTrigger className="inline-flex h-[34px] max-w-64 min-w-0 items-center gap-2 rounded-lg border border-rule px-3 text-[13px] text-text transition-colors hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none">
         <span className="truncate">{chosen ? `Same as ${chosen.title}` : "Its own game"}</span>
         <ChevronDown className="size-3.5 shrink-0 opacity-70" />
       </DropdownMenuTrigger>
