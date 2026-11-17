@@ -375,10 +375,12 @@ function GameTile({
                 <span className="size-1.5 rounded-full bg-violet" />
                 <span className="text-violet">Playing now</span>
               </>
-            ) : totalMs > 0 ? (
+            ) : totalMs > 0 || lastPlayedAt ? (
+              // On a launcher's view the hours are only that launcher's, so a game played
+              // through another copy still says when.
               <>
-                <span className="tabular-nums">{formatHoursShort(totalMs)}</span>
-                {lastPlayedAt && <span aria-hidden="true">·</span>}
+                {totalMs > 0 && <span className="tabular-nums">{formatHoursShort(totalMs)}</span>}
+                {totalMs > 0 && lastPlayedAt && <span aria-hidden="true">·</span>}
                 {lastPlayedAt && (
                   <span className="truncate">
                     <LastPlayed at={lastPlayedAt} />
