@@ -25,7 +25,7 @@ chmod +x Vaultime.AppImage
 ./Vaultime.AppImage
 ```
 
-A package your distribution builds updates through its package manager, and Vaultime then leaves updates to it. Every release is installed and started on Debian, Ubuntu, Fedora, Arch and openSUSE before it is published. What works where on Linux, X11 and Wayland is on [Platforms and Linux](platforms.md).
+When a package manager installed Vaultime and its package says so, Vaultime leaves updates to that package manager. Every release is installed and started on Debian, Ubuntu, Fedora, Arch and openSUSE before it is published. What works where on Linux, X11 and Wayland is on [Platforms and Linux](platforms.md).
 
 ### Updates
 

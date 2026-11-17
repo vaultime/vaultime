@@ -40,7 +40,7 @@ Times are in your time zone and durations in seconds.
 ## What goes online
 
 Updates
-: Vaultime asks the Vaultime server whether a new version is out when it starts and every few hours. Updates are signed, and Vaultime only installs ones that carry the right signature.
+: Vaultime asks the Vaultime server whether a new version is out when it starts and every few hours, unless a package manager brings its updates. Updates are signed, and Vaultime only installs ones that carry the right signature.
 
 Cloud backup
 : Only when you turn it on and sign in. Backups are encrypted on your PC before they are uploaded, see [Backups](backups.md#cloud-backup).
