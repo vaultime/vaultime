@@ -14,6 +14,7 @@ import {
 import { useSettings } from "@/features/settings/settings-context";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { compareTitles } from "@/lib/game-sort";
+import { isFavorite } from "@/lib/game-metadata";
 import { launcherKey, launchersOfGame } from "@/lib/launchers";
 import { compareTimes, toDayKey } from "@/lib/time";
 import type {
@@ -191,6 +192,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       byGame.set(game.id, {
         game,
         otherTitles: [],
+        favorite: isFavorite(game),
         launchers: launchersOfGame(game, links),
         launcherMs: {},
         cover: covers[game.id] ?? null,
@@ -252,6 +254,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const setFavorite = useCallback(async (gameId: string, favorite: boolean) => {
+    const changed = await api.setGameFavorite(gameId, favorite);
+    setGames((current) => current.map((game) => (game.id === changed.id ? changed : game)));
+  }, []);
+
   const saveNote = useCallback(async (sessionId: string, note: string) => {
     const saved = await api.setSessionNote(sessionId, note);
     setNotes((current) => {
@@ -285,6 +292,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       setStatus,
+      setFavorite,
       saveNote,
     }),
     [
@@ -304,6 +312,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       error,
       refresh,
       setStatus,
+      setFavorite,
       saveNote,
     ],
   );

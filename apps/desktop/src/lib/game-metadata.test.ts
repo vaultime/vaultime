@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Game } from "@/lib/types";
-import { stepsAside } from "./steps-aside";
+import { isFavorite, stepsAside } from "./game-metadata";
 
 function game(metadata: string): Game {
   return {
@@ -25,5 +25,11 @@ describe("stepsAside", () => {
     expect(stepsAside(game('{"steps_aside":true}'))).toBe(true);
     expect(stepsAside(game("{}"))).toBe(false);
     expect(stepsAside(game("not json"))).toBe(false);
+  });
+
+  it("reads a favorite from the game's metadata", () => {
+    expect(isFavorite(game('{"favorite":true,"steps_aside":true}'))).toBe(true);
+    expect(isFavorite(game('{"favorite":"yes"}'))).toBe(false);
+    expect(isFavorite(game('{"steps_aside":true}'))).toBe(false);
   });
 });

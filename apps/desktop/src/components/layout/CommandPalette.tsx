@@ -14,7 +14,7 @@ import { PALETTE_GAMES_IDLE, PALETTE_GAMES_SEARCHING } from "@/lib/constants";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import { launcherCounts, launcherTitle } from "@/lib/launchers";
 import { matchesGame, matchesSearch } from "@/lib/search";
-import { stepsAside } from "@/lib/steps-aside";
+import { stepsAside } from "@/lib/game-metadata";
 import * as api from "@/lib/tauri";
 import { formatHoursShort } from "@/lib/time";
 import { cn, describeError, logFailure } from "@/lib/utils";
@@ -62,7 +62,7 @@ const FIXED: Command[] = [
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { visible: summaries, summaries: everyGame, setStatus, refresh } = useLibrary();
+  const { visible: summaries, summaries: everyGame, setStatus, setFavorite, refresh } = useLibrary();
   const updates = useUpdates();
   const { enabled: cloudEnabled } = useCloudSession();
   // On a game's page, things to do with that game come first.
@@ -113,7 +113,14 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     ];
     const forGame: Command[] = [];
     if (pageGame) {
-      const { game, status } = pageGame;
+      const { game, status, favorite } = pageGame;
+      forGame.push({
+        id: "favorite",
+        label: favorite ? `Remove ${game.title} from favorites` : `Add ${game.title} to favorites`,
+        hint: "Favorites have their own row in the library",
+        kind: "Action",
+        run: () => setFavorite(game.id, !favorite),
+      });
       for (const next of GAME_STATUSES.filter((entry) => entry !== status)) {
         forGame.push({
           id: `status-${next}`,
@@ -154,7 +161,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       ...launchers,
       ...fixed.filter((command) => matches(command.label) || matches(command.hint)),
     ];
-  }, [query, summaries, pageGame, setStatus, refresh, updates.check, cloudEnabled]);
+  }, [query, summaries, pageGame, setStatus, setFavorite, refresh, updates.check, cloudEnabled]);
 
   const active = Math.min(selected, Math.max(results.length - 1, 0));
 

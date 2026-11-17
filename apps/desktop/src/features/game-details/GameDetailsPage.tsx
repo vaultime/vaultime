@@ -19,13 +19,13 @@ import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary, usePlaying } from "@/features/library/library-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { GameHistory } from "@/features/game-details/GameHistory";
-import { StatusPicker } from "@/features/game-details/StatusPicker";
+import { FavoriteButton, StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, STEAM_LAUNCHER } from "@/lib/constants";
 import { launchersOf, linkedTo, whereFrom } from "@/lib/links";
 import { runtimeByHour } from "@/lib/play-totals";
 import { gamePlaytime } from "@/lib/sentences";
-import { stepsAside } from "@/lib/steps-aside";
+import { stepsAside } from "@/lib/game-metadata";
 import * as api from "@/lib/tauri";
 import { compareTimes, formatCalendarDay, formatHoursMinutes, parseVaultimeDate, startOfDay, toDayKey } from "@/lib/time";
 import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
@@ -44,7 +44,7 @@ export function GameDetailsPage() {
 
 function GamePage({ gameId }: { gameId: string }) {
   const navigate = useNavigate();
-  const { summaries, sessions: allSessions, loaded, refresh, notes, saveNote, setStatus, links, thisDeviceId } =
+  const { summaries, sessions: allSessions, loaded, refresh, notes, saveNote, setStatus, setFavorite, links, thisDeviceId } =
     useLibrary();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
@@ -160,6 +160,15 @@ function GamePage({ gameId }: { gameId: string }) {
     }
   }
 
+  async function changeFavorite(favorite: boolean) {
+    try {
+      setActionError(null);
+      await setFavorite(game.id, favorite);
+    } catch (error) {
+      setActionError(describeError(error));
+    }
+  }
+
   async function changeStatus(status: Parameters<typeof setStatus>[1]) {
     try {
       setActionError(null);
@@ -193,12 +202,17 @@ function GamePage({ gameId }: { gameId: string }) {
             <TintedSentence tint={tint} className="min-h-[2.6em]">
               {hours && <PhraseText phrase={gamePlaytime(summary, hours)} />}
             </TintedSentence>
-            <div className="mt-6">
+            <div className="mt-6 flex items-center gap-2">
               <StatusPicker
                 tint={tint}
                 status={summary.status}
                 since={summary.statusSince}
                 onChange={(status) => void changeStatus(status)}
+              />
+              <FavoriteButton
+                tint={tint}
+                favorite={summary.favorite}
+                onChange={(favorite) => void changeFavorite(favorite)}
               />
             </div>
           </div>

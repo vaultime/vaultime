@@ -3,13 +3,15 @@
 
 import { createContext, useContext, useMemo } from "react";
 import type { GameTint } from "@/lib/game-tint";
-import { stepsAside } from "@/lib/steps-aside";
+import { stepsAside } from "@/lib/game-metadata";
 import type { Device, EarlierPlaytime, Game, GameLink, GameStatus, GameStatusChange, Session } from "@/lib/types";
 
 export interface GameSummary {
   game: Game;
   /** Other titles of the game, those of installs and games of other PCs that count as it, for search. */
   otherTitles: string[];
+  /** One of the player's favorites. */
+  favorite: boolean;
   /** Where the game and the games that count as it came from (`lib/launchers.ts`). */
   launchers: string[];
   /** Tracked runtime by the launcher of the copy that recorded it. */
@@ -69,6 +71,7 @@ interface LibraryState {
   error: string | null;
   refresh: () => Promise<void>;
   setStatus: (gameId: string, status: GameStatus | "none") => Promise<void>;
+  setFavorite: (gameId: string, favorite: boolean) => Promise<void>;
   /** An empty note removes it. */
   saveNote: (sessionId: string, note: string) => Promise<void>;
 }

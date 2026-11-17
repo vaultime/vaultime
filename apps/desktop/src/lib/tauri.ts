@@ -342,6 +342,11 @@ export async function setGameStepsAside(gameId: string, stepsAside: boolean): Pr
   return invoke<Game>("set_game_steps_aside", { gameId, stepsAside });
 }
 
+/** Makes a game one of the player's favorites, or no longer. */
+export async function setGameFavorite(gameId: string, favorite: boolean): Promise<Game> {
+  return invoke<Game>("set_game_favorite", { gameId, favorite });
+}
+
 /** What a closed session would keep when it counted only up to `endedAt`. */
 export async function previewTrim(sessionId: string, endedAt: string): Promise<TrimPreview> {
   return invoke<TrimPreview>("preview_trim", { sessionId, endedAt });

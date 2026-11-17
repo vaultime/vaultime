@@ -1767,6 +1767,13 @@ mockIPC((cmd, payload) => {
       game.metadata_json = JSON.stringify({ ...metadata, steps_aside: Boolean(args.stepsAside) || undefined });
       return game;
     }
+    case "set_game_favorite": {
+      const game = games.find((entry) => entry.id === args.gameId);
+      if (!game) return null;
+      const metadata = JSON.parse(game.metadata_json || "{}");
+      game.metadata_json = JSON.stringify({ ...metadata, favorite: Boolean(args.favorite) || undefined });
+      return { ...game };
+    }
     case "get_play_totals":
       return estimatePlayTotals(
         shownSessions(),

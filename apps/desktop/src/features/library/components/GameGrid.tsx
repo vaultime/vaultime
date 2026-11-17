@@ -3,7 +3,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ArrowDownUp, Check, ChevronDown, MoreHorizontal, Pencil, Plus, Rows3, Search, Trash2, X } from "lucide-react";
+import {
+  ArrowDownUp,
+  Check,
+  ChevronDown,
+  Heart,
+  HeartOff,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Rows3,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { LauncherMark } from "@/components/brand/LauncherMark";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
@@ -303,7 +316,8 @@ function GameTile({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const { game, cover, totalMs, lastPlayedAt, recentSuspiciousCount, recentRecoveredCount, status } = summary;
+  const { game, cover, totalMs, lastPlayedAt, recentSuspiciousCount, recentRecoveredCount, status, favorite } = summary;
+  const { setFavorite } = useLibrary();
 
   return (
     <li className="group relative">
@@ -338,6 +352,12 @@ function GameTile({
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm text-text">{game.title}</span>
           <span className="flex items-center gap-1.5 truncate text-xs text-faint">
+            {favorite && (
+              <span title="Favorite" className="flex shrink-0 items-center text-soft">
+                <Heart className="size-3" fill="currentColor" strokeWidth={0} />
+                <span className="sr-only">Favorite</span>
+              </span>
+            )}
             {status && (
               <span title={GAME_STATUS_LABELS[status]} className="flex shrink-0 items-center">
                 <GameStatusIcon status={status} className="size-3" />
@@ -374,6 +394,12 @@ function GameTile({
           <MoreHorizontal className="size-4" strokeWidth={1.8} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => setFavorite(game.id, !favorite).catch(logFailure("changing a favorite from the library"))}
+          >
+            {favorite ? <HeartOff className="size-4" /> : <Heart className="size-4" />}
+            {favorite ? "Remove from favorites" : "Add to favorites"}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onEdit(game)}>
             <Pencil className="size-4" />
             Edit
