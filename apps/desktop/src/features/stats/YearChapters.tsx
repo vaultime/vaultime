@@ -11,7 +11,15 @@ import type { GameSummary } from "@/features/library/library-context";
 import { DAYS_PER_WEEK, YEAR_STORY_COUNT_UP_MS, YEAR_STORY_FINISHED_COVERS } from "@/lib/constants";
 import { launcherTitle, launcherWhere } from "@/lib/launchers";
 import type { YearStats } from "@/lib/stats";
-import { formatClockTime, formatDate, formatDayAndMonth, formatHoursMinutes, formatHoursShort } from "@/lib/time";
+import {
+  formatClockTime,
+  formatDate,
+  formatDayAndMonth,
+  formatDayRange,
+  formatHoursMinutes,
+  formatHoursShort,
+  startOfDay,
+} from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { rhythmSentence } from "@/lib/year-sentences";
 import { chapterTitle, type YearChapter, type YearStory } from "@/lib/year-story";
@@ -262,13 +270,22 @@ function LongestChapter({ story, game, animate }: ChapterProps) {
   );
 }
 
+/** The week by its Monday, or by the days of the year it counts where it crosses into another. */
+function weekTitle(start: Date, year: number): string {
+  const end = startOfDay(start, DAYS_PER_WEEK - 1);
+  if (start.getFullYear() === year && end.getFullYear() === year) return `Week of ${formatDayAndMonth(start)}`;
+  const first = start.getFullYear() < year ? new Date(year, 0, 1) : start;
+  const last = end.getFullYear() > year ? new Date(year, 11, 31) : end;
+  return first.getTime() === last.getTime() ? formatDayAndMonth(first) : formatDayRange(first, last);
+}
+
 function WeekChapter({ story, game, cover, animate }: ChapterProps) {
   const week = story.week;
   if (!week) return null;
   return (
     <>
       <Eyebrow>The week you could not stop</Eyebrow>
-      <Title>Week of {formatDayAndMonth(week.start)}</Title>
+      <Title>{weekTitle(week.start, story.year)}</Title>
       <Big value={week.playedMs} animate={animate} />
       <p className="font-prose mt-1 text-[16px] text-soft">
         {week.daysPlayed >= DAYS_PER_WEEK ? "on every day of it" : `on ${countWords(week.daysPlayed, "day")}`}
