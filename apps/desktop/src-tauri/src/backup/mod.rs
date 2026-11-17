@@ -1098,8 +1098,9 @@ fn collect_backup_files(backup_dir: &Path) -> Result<Vec<BackupFileEntry>> {
     Ok(files)
 }
 
-/// Copies a directory tree. A file that `link_from` holds at the same place
-/// with the same content is hard linked from there instead. Where links do not
+/// Copies the artwork cache, without the files made from its images, which
+/// the app makes again. A file that `link_from` holds at the same place with
+/// the same content is hard linked from there instead. Where links do not
 /// work, for example across drives or on FAT, the file is copied.
 fn copy_directory_contents(
     source_dir: &Path,
@@ -1140,6 +1141,9 @@ fn copy_directory_contents(
                     target_path.display()
                 ))
             })?;
+            continue;
+        }
+        if crate::assets::art::is_derived(entry.path()) {
             continue;
         }
 
@@ -1762,6 +1766,24 @@ mod tests {
         assert_eq!(setting(BACKGROUND_DIM_SETTING).as_deref(), Some("0.4"));
         assert_eq!(setting(WINDOW_SIZE_SETTING).as_deref(), Some("compact"));
         fixture.finish();
+    }
+
+    #[test]
+    fn a_backup_takes_the_images_and_not_what_is_made_from_them() {
+        let root = std::env::temp_dir().join(format!("vaultime-artwork-{}", uuid::Uuid::new_v4()));
+        let game = root.join("cache").join("game");
+        fs::create_dir_all(&game).unwrap();
+        let image = "0f8fad5b-d9cb-469f-a165-70867728950e";
+        for file in ["jpg", "thumb.jpg", "tint.json", "thumb.5e1f.tmp"] {
+            fs::write(game.join(format!("{image}.{file}")), file).unwrap();
+        }
+        copy_directory_contents(&root.join("cache"), &root.join("copy"), None).unwrap();
+        let copied: Vec<String> = fs::read_dir(root.join("copy").join("game"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(copied, [format!("{image}.jpg")]);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

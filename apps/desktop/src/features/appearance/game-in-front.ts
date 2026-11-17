@@ -38,7 +38,7 @@ export function gameInFront(
 export function gameArt(summary: GameSummary | null): GameInFront | null {
   if (!summary) return null;
   const { lightness, colors } = summary.tint;
-  return { cover: summary.cover, colors: lightness === undefined ? [] : colors, lightness: lightness ?? null };
+  return { cover: summary.art, colors: lightness === undefined ? [] : colors, lightness: lightness ?? null };
 }
 
 /** Tells games and their art apart without spelling out the cover, a long data URL. */

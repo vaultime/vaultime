@@ -1537,9 +1537,9 @@ if (deleteStep || params.get("focus") === "delete") {
   }
 }
 
-/** A sample image as the core sends it. */
+/** A sample image as the core sends it, the thumbnail the image itself. */
 function shownAt(src: string) {
-  return { image_url: src };
+  return { image_url: src, thumb_url: src };
 }
 
 function preferredAssets(): GameAssetView[] {

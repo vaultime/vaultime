@@ -16,7 +16,10 @@ export interface GameSummary {
   launchers: string[];
   /** Tracked runtime by the launcher of the copy that recorded it. */
   launcherMs: Record<string, number>;
+  /** The thumbnail of its cover, for tiles and lists. */
   cover: string | null;
+  /** Its cover at full size, for the game page and the art behind the window. */
+  art: string | null;
   /** From the cover art when there is some, otherwise from the title. */
   tint: GameTint;
   /** Tracked by Vaultime. */
@@ -49,6 +52,7 @@ interface LibraryState {
   sessions: Session[];
   /** Sessions whose chain is not checked yet, as after a start. Their trust label waits for it. */
   unchecked: ReadonlySet<string>;
+  /** Cover thumbnails by game. */
   covers: Record<string, string>;
   idleThresholdSeconds: number;
   /** Every game with its totals, most recently played first. */

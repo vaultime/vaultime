@@ -7,7 +7,7 @@ import { tintForTitle } from "@/lib/game-tint";
 import { gameArt, gameInFront } from "./game-in-front";
 
 function summary(id: string, lastPlayedAt: string | null): GameSummary {
-  return { game: { id, title: id }, lastPlayedAt, cover: `/covers/${id}.jpg` } as unknown as GameSummary;
+  return { game: { id, title: id }, lastPlayedAt, cover: `/thumbs/${id}.jpg`, art: `/covers/${id}.jpg` } as unknown as GameSummary;
 }
 
 const recent = summary("recent", "2026-11-16T20:00:00Z");
@@ -24,7 +24,7 @@ describe("gameInFront", () => {
   it("lights the look only with art read from a cover", () => {
     const withArt = { ...recent, tint: { ...tintForTitle("recent"), lightness: 0.4 } };
     expect(gameArt(withArt)).toEqual({ cover: "/covers/recent.jpg", colors: withArt.tint.colors, lightness: 0.4 });
-    const titleOnly = { ...older, cover: null, tint: tintForTitle("older") };
+    const titleOnly = { ...older, cover: null, art: null, tint: tintForTitle("older") };
     expect(gameArt(titleOnly)).toEqual({ cover: null, colors: [], lightness: null });
     expect(gameArt(null)).toBeNull();
   });

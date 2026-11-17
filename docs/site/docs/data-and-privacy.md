@@ -15,7 +15,7 @@ Inside the data folder:
 : The database with your games, sessions, their logs, the ledger and your settings.
 
 `asset-cache`
-: Copies of your cover art and other images.
+: Copies of your cover art and other images, with a small copy of each cover for the library and its colors. Backups take the images, the small copies and colors are made again.
 
 `backups`
 : Automatic backups, unless you picked another folder.

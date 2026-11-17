@@ -124,7 +124,8 @@ function YearStory() {
         : current
           ? "Nothing played this year yet. Once you play, your year fills in here."
           : `Nothing played in ${year}.`;
-  const cover = (gameId: string) => covers[gameId] ?? byGame.get(gameId)?.cover ?? null;
+  // The cards show covers large.
+  const cover = (gameId: string) => byGame.get(gameId)?.art ?? covers[gameId] ?? null;
 
   return (
     <div className="flex min-h-full flex-col px-8 pt-4 pb-8 xl:px-14">

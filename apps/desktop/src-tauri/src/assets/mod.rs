@@ -66,6 +66,8 @@ pub struct GameAssetView {
     pub created_at: String,
     /// The cached image as the window loads it, None without one.
     pub image_url: Option<String>,
+    /// Its thumbnail for tiles and lists, or the image where it is small.
+    pub thumb_url: Option<String>,
     /// The colors of the image, worked out for the covers of the library.
     pub tint: Option<ArtTint>,
     pub is_preferred: bool,
@@ -86,7 +88,7 @@ pub fn list_game_assets(
     ))
 }
 
-/// One cover per game with its colors. When the preferred
+/// One cover per game with its thumbnail and colors. When the preferred
 /// cover cannot be read, the next readable asset stands in.
 pub fn list_preferred_game_assets(
     db: &Database,
@@ -736,7 +738,9 @@ fn build_asset_views(
 }
 
 fn asset_view(asset: &GameAsset, art: Option<art::Art>, is_preferred: bool) -> GameAssetView {
-    let (image_url, tint) = art.map_or((None, None), |art| (Some(art.image_url), art.tint));
+    let (image_url, thumb_url, tint) = art.map_or((None, None, None), |art| {
+        (Some(art.image_url), Some(art.thumb_url), art.tint)
+    });
     GameAssetView {
         id: asset.id.clone(),
         game_id: asset.game_id.clone(),
@@ -747,6 +751,7 @@ fn asset_view(asset: &GameAsset, art: Option<art::Art>, is_preferred: bool) -> G
         hash: asset.hash.clone(),
         created_at: asset.created_at.clone(),
         image_url,
+        thumb_url,
         tint,
         is_preferred,
     }
@@ -1366,7 +1371,7 @@ mod tests {
         fs::write(
             &kept,
             serde_json::to_vec(&serde_json::json!({
-                "rules": crate::constants::ART_TINT_RULES_VERSION,
+                "rules": crate::constants::ART_RULES_VERSION,
                 "tint": changed,
             }))
             .unwrap(),

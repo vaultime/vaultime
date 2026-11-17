@@ -668,6 +668,8 @@ export interface GameAssetView {
   created_at: string;
   /** The cached image from the app's art scheme, null without one. */
   image_url: string | null;
+  /** Its thumbnail for tiles and lists, or the image where it is small. */
+  thumb_url: string | null;
   /** The colors of the image, worked out for the covers of the library. */
   tint: ArtTint | null;
   is_preferred: boolean;

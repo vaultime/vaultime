@@ -170,7 +170,7 @@ function GamePage({ gameId }: { gameId: string }) {
     );
   }
 
-  const { game, cover, tint } = summary;
+  const { game, art, tint } = summary;
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
 
   function onAssetsChanged(next: GameAssetView[]) {
@@ -219,7 +219,7 @@ function GamePage({ gameId }: { gameId: string }) {
 
   return (
     <div className="pb-16">
-      <TintedHeader tint={tint} backdrop={cover} className="pt-[calc(var(--top-bar)+1.75rem)] pb-9">
+      <TintedHeader tint={tint} backdrop={art} className="pt-[calc(var(--top-bar)+1.75rem)] pb-9">
         <div className="flex items-end gap-10">
           <div className="min-w-0 flex-1">
             <TintedOverline tint={tint}>
@@ -257,7 +257,7 @@ function GamePage({ gameId }: { gameId: string }) {
           </div>
           <Cover
             title={game.title}
-            src={cover}
+            src={art}
             variant="card"
             className="hidden h-[200px] w-[150px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex xl:h-[288px] xl:w-[216px]"
           />

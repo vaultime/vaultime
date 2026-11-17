@@ -70,7 +70,7 @@ export function LibraryHero(props: HeroProps) {
   }
 
   const { summary, playing, weekRuntimeMs } = props;
-  const { game, cover, tint } = summary;
+  const { game, cover, art, tint } = summary;
 
   return (
     <TintedHeader tint={tint} backdrop={cover}>
@@ -96,7 +96,7 @@ export function LibraryHero(props: HeroProps) {
         </div>
         <Cover
           title={game.title}
-          src={cover}
+          src={art ?? cover}
           variant="card"
           className="hidden h-[220px] w-[165px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex xl:h-[288px] xl:w-[216px]"
         />

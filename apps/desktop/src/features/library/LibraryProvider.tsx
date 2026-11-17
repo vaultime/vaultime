@@ -44,6 +44,16 @@ import {
 } from "./library-context";
 
 /** Games, sessions, covers and the live session, shared by the shell and pages. */
+/** Where the window loads each game's cover from, at one of its sizes. */
+function urlsByGame(assets: GameAssetView[], size: "thumb_url" | "image_url"): Record<string, string> {
+  return Object.fromEntries(
+    assets.flatMap((asset) => {
+      const url = asset[size];
+      return url ? [[asset.game_id, url]] : [];
+    }),
+  );
+}
+
 /** A cover's tint with the colors it came from. */
 interface ArtTintOf {
   key: string;
@@ -83,6 +93,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [thisDeviceId, setThisDeviceId] = useState<string | null>(null);
   const [links, setLinks] = useState<GameLink[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
+  const [arts, setArts] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
   const [countedAt, setCountedAt] = useState<Record<string, number>>({});
   const [playedToday, setPlayedToday] = useState(0);
@@ -134,13 +145,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setEarlier(nextEarlier);
       setStatusChanges(nextChanges);
       setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
-      setCovers(
-        Object.fromEntries(
-          assets
-            .filter((asset) => asset.image_url)
-            .map((asset) => [asset.game_id, asset.image_url as string]),
-        ),
-      );
+      setCovers(urlsByGame(assets, "thumb_url"));
+      setArts(urlsByGame(assets, "image_url"));
       setArtTints((current) => tintsOfCovers(assets, current));
       setError(null);
     } catch (loadError) {
@@ -231,6 +237,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         launchers: launchersOfGame(game, links),
         launcherMs: {},
         cover: covers[game.id] ?? null,
+        art: arts[game.id] ?? null,
         tint: artTints[game.id]?.tint ?? tintForTitle(game.title),
         runtimeMs: total?.runtime_ms ?? 0,
         activeMs: total?.active_ms ?? 0,
@@ -279,7 +286,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (b.lastPlayedAt) return 1;
       return compareTitles(a.game.title, b.game.title);
     });
-  }, [games, totals, launcherTimes, covers, artTints, earlier, statusChanges, links]);
+  }, [games, totals, launcherTimes, covers, arts, artTints, earlier, statusChanges, links]);
 
   const setStatus = useCallback(
     async (gameId: string, status: GameStatus | "none") => {
