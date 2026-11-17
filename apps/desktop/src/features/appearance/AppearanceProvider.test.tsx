@@ -92,7 +92,8 @@ describe("the backdrop", () => {
         </AppearanceProvider>
       </SettingsProvider>,
     );
-    expect((await screen.findByLabelText("Dim")).textContent).toBe("75");
+    const dim = await screen.findByLabelText("Dim");
+    await waitFor(() => expect(dim.textContent).toBe("75"));
   });
 });
 
