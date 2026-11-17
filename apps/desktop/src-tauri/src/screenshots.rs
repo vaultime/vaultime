@@ -13,7 +13,7 @@ use base64::Engine;
 use serde::Serialize;
 
 use crate::constants::{
-    JOURNAL_SCREENSHOTS_SETTING, SCREENSHOTS_PER_SESSION, STEAM_SCREENSHOT_MAX_BYTES,
+    JOURNAL_SCREENSHOTS_SETTING, SCREENSHOTS_PER_SESSION, STEAM_SCREENSHOT_MAX_BYTES, STEAM_SOURCE,
     STEAM_THUMBNAIL_MAX_BYTES,
 };
 use crate::db::connection::Database;
@@ -75,15 +75,24 @@ pub fn for_sessions(
         if app_of.contains_key(&range.game_id) {
             continue;
         }
-        let app_id = games::get_game(db, &range.game_id)?
-            .install_folder
-            .and_then(|folder| steam::app_id_for_install_folder(Path::new(&folder)));
+        let game = games::get_game(db, &range.game_id)?;
+        // A Steam game keeps its app id, other installs are looked up by folder.
+        let app_id = games::launcher_id(&game)
+            .filter(|_| game.launcher_source.as_deref() == Some(STEAM_SOURCE))
+            .or_else(|| {
+                game.install_folder
+                    .as_deref()
+                    .and_then(|folder| steam::app_id_for_install_folder(Path::new(folder)))
+            });
         app_of.insert(range.game_id.clone(), app_id);
     }
     let app_of: HashMap<String, String> = app_of
         .into_iter()
         .filter_map(|(game_id, app_id)| Some((game_id, app_id?)))
         .collect();
+    if app_of.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut found = Vec::new();
     for (session_id, shots) in taken_during(&ranges, &app_of, steam_screenshots::list(&root)) {
         // Steam keeps listing a screenshot deleted outside it.
