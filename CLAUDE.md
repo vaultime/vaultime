@@ -41,6 +41,7 @@ apps/api/         Self-hosted cloud backup API
 deploy/vps/       Server install script, systemd unit and admin tools
 docs/             Legal pages, landing page and documentation (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
+packaging/aur/    PKGBUILD of the vaultime-bin AUR package, made from the deb
 scripts/          Dev helpers: Linux checks, packaging, cloud round trip, API and
                   site deploy, release upload, logo, UI screenshots, social
                   preview
@@ -82,6 +83,10 @@ From a Windows machine, with Docker:
 - `bash scripts/cloud-e2e.sh` runs the API with PostgreSQL in Docker and a
   cloud backup round trip of the desktop core against it. Run it after
   changes to the backup format or the backup API.
+- `bash scripts/aur-check.sh` builds the AUR package in Arch Linux, writes
+  its `.SRCINFO`, installs it and checks its libraries. The package names
+  the AUR in `/usr/lib/vaultime/package-manager`, so the app leaves updates
+  to it.
 
 Run the checks for everything you touched before calling work done, on both
 Windows and Linux when platform code changed. CI treats warnings as errors.

@@ -4,6 +4,8 @@ Dockerfile text eol=lf
 *.py text eol=lf
 *.service text eol=lf
 *.timer text eol=lf
+PKGBUILD text eol=lf
+.SRCINFO text eol=lf
 
 # sqlx checksums include line endings. The live database recorded 0001 and
 # 0002 with CRLF and every later migration with LF, so each checkout keeps

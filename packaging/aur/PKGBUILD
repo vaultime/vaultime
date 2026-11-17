@@ -1,0 +1,27 @@
+# Maintainer: Dominik Schwimmbeck
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+pkgname=vaultime-bin
+pkgver=0.6.0
+pkgrel=1
+pkgdesc="Game library and playtime tracker that keeps active and idle time apart"
+arch=('x86_64')
+url="https://vaultime.codfishcloud.de"
+license=('GPL-3.0-or-later')
+depends=('cairo' 'dbus' 'gdk-pixbuf2' 'glib2' 'glibc' 'gtk3' 'hicolor-icon-theme' 'libgcc'
+         'libsoup3' 'webkit2gtk-4.1')
+# The tray icon loads it at run time, where namcap cannot see it.
+depends+=('libayatana-appindicator')
+options=('!strip' '!debug')
+provides=('vaultime')
+conflicts=('vaultime')
+source=("https://github.com/vaultime/vaultime/releases/download/v${pkgver}/Vaultime_${pkgver}_amd64.deb")
+sha256sums=('02fb25d3475b186c3d50ebaa3037cf7f853e795d3cf5764004a698c4c6b3f595')
+
+package() {
+  bsdtar -xf data.tar.gz -C "$pkgdir"
+  # Vaultime leaves its updates to the AUR instead of installing a deb itself.
+  install -d "$pkgdir/usr/lib/vaultime"
+  echo "the AUR" > "$pkgdir/usr/lib/vaultime/package-manager"
+}
