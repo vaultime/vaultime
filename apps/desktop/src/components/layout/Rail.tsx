@@ -179,33 +179,29 @@ function RailLink({
   /** Drawn in the current color, which follows the row. */
   icon: ReactNode;
   count?: number;
-  /** For rows whose page also has a query, which NavLink alone would not tell apart. */
-  active?: boolean;
+  /** Whether the row's page is open. NavLink would match the path alone, so every library row would count. */
+  active: boolean;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <NavLink
+    <Link
       to={to}
-      end
-      className={({ isActive }) => cn(ROW, "group h-8", (active ?? isActive) ? ROW_ON : ROW_IDLE, className)}
+      aria-current={active ? "page" : undefined}
+      className={cn(ROW, "group h-8", active ? ROW_ON : ROW_IDLE, className)}
     >
-      {({ isActive }) => (
-        <>
-          <span
-            aria-hidden="true"
-            className={cn(
-              "flex size-[17px] shrink-0 items-center justify-center transition-colors group-hover:text-text",
-              (active ?? isActive) ? "text-text" : "text-faint",
-            )}
-          >
-            {icon}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{children}</span>
-          {count !== undefined && <span className="text-[11.5px] font-normal text-faint tabular-nums">{count}</span>}
-        </>
-      )}
-    </NavLink>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "flex size-[17px] shrink-0 items-center justify-center transition-colors group-hover:text-text",
+          active ? "text-text" : "text-faint",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {count !== undefined && <span className="text-[11.5px] font-normal text-faint tabular-nums">{count}</span>}
+    </Link>
   );
 }
 
