@@ -60,8 +60,6 @@ PAGES = [
      "The terms for the Vaultime website and the optional invite-only cloud backup service."),
     ("changelog.html", "Changelog", ROOT / "CHANGELOG.md",
      "Every Vaultime release and what changed in it, newest first."),
-    ("applied.html", "Thanks for applying", SITE / "pages/applied.md", None),
-    ("apply-failed.html", "That did not go through", SITE / "pages/apply-failed.md", None),
     ("download-soon.html", "Download not available", SITE / "pages/download-soon.md", None),
     ("404.html", "Page not found", SITE / "pages/404.md", None),
 ]

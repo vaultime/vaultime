@@ -97,22 +97,6 @@ section.doc .lead { margin-top: 10px; font-size: 14px; color: var(--faint); }
 .row p { margin-top: 4px; max-width: 560px; font-size: 14px; color: var(--faint); }
 .release { margin-top: 14px; max-width: 260px; font-size: 14px; color: var(--soft); }
 
-/* Beta application */
-.apply { display: flex; flex-direction: column; gap: 22px; max-width: 560px; }
-.field { display: flex; flex-direction: column; gap: 8px; border: 0; }
-/* Below 16px, iOS zooms into a field when it is tapped. */
-.field input, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid var(--field-edge); border-radius: 12px;
-  background: var(--surface); color: var(--text); font: inherit; font-size: 16px; }
-.field textarea { resize: vertical; min-height: 88px; }
-.field input:focus, .field textarea:focus { outline: 2px solid var(--violet); outline-offset: 1px; border-color: transparent; }
-.choices { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 15px; }
-.choices label, .consent { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.consent { align-items: flex-start; font-size: 14px; color: var(--soft); }
-.consent input { margin-top: 4px; }
-.consent a { color: var(--violet); }
-input[type="radio"], input[type="checkbox"] { accent-color: var(--violet); width: 16px; height: 16px; }
-.bot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-
 /* Text pages: the legal pages and the changelog. */
 .page { padding: 64px 0 80px; border-bottom: 1px solid var(--rule); }
 .prose { max-width: 720px; }
