@@ -34,4 +34,11 @@ describe("gameInFront", () => {
     expect(gameInFront([fresh, recent, older], [fresh, recent, older], new Set(), undefined)).toBe(recent);
     expect(gameInFront([fresh], [fresh], new Set(), undefined)).toBeNull();
   });
+
+  it("is the game picked for the other pages while it is in the library, not on a game page", () => {
+    const all = [fresh, recent, older];
+    expect(gameInFront(all, all, new Set(["recent"]), undefined, "older")).toBe(older);
+    expect(gameInFront(all, all, new Set(), "recent", "older")).toBe(recent);
+    expect(gameInFront(all, all, new Set(), undefined, "removed")).toBe(recent);
+  });
 });

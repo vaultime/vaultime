@@ -3,7 +3,7 @@
 
 import { useState, type ReactNode } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Check, Gamepad2, ImagePlus, Images, Loader2, Pipette, X } from "lucide-react";
+import { Check, ChevronDown, Gamepad2, ImagePlus, Images, Loader2, Pipette, X } from "lucide-react";
 import { PageSection } from "@/components/layout/Page";
 import { Cover } from "@/components/media/Cover";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,8 @@ export function AppearanceSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const withArt = summaries.filter((summary) => summary.cover);
+  const picked = summaries.find((summary) => summary.game.id === appearance.game);
+  const pickedName = picked ? picked.game.title : "Playing or played last";
   const custom = appearance.accent.startsWith("#");
   const accentLightness = ACCENT_LEVELS[mode].lightness;
   const wheel = Array.from({ length: ACCENT_WHEEL_STEPS + 1 }, (_, step) =>
@@ -277,6 +279,44 @@ export function AppearanceSection() {
             </button>
           ))}
         </div>
+
+        {appearance.source === "game" && (
+          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={withArt.length === 0}
+                    aria-label={`Game that lights the other pages, ${pickedName}`}
+                  >
+                    {picked ? (
+                      <Cover title={picked.game.title} src={picked.cover} variant="tile" className="size-5 text-[10px]" />
+                    ) : (
+                      <Gamepad2 className="size-3.5" />
+                    )}
+                    <span className="max-w-[240px] truncate">{pickedName}</span>
+                    <ChevronDown className="size-3.5 text-faint" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuItem onClick={() => change({ game: null })}>
+                  <Gamepad2 className="size-4" />
+                  <span>Playing or played last</span>
+                </DropdownMenuItem>
+                {withArt.map((summary) => (
+                  <DropdownMenuItem key={summary.game.id} onClick={() => change({ game: summary.game.id })}>
+                    <Cover title={summary.game.title} src={summary.cover} variant="tile" className="size-7 text-xs" />
+                    <span className="truncate">{summary.game.title}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <span className="text-[13px] text-faint">Game pages show their own.</span>
+          </div>
+        )}
 
         {appearance.source === "picture" && (
           <div className="mt-5 flex flex-wrap items-center gap-5">

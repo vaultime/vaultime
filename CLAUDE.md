@@ -241,12 +241,13 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   classes of the same names. A guide takes the color of its picture, worked
   out by the rule of the app.
 - The default look is lit by the game in front: the game a page is about,
-  else the one playing, else the one played last. Its art fills the window
+  else the one the player picked for the other pages, else the one playing,
+  else the one played last. Its art fills the window
   behind see-through panels, dimmed more where it would hide the text, and
   the accent, the color of active time, takes the strongest color of that
   art, a light grey for art without one. The window around the page and its
-  icons match the page while it is seen, and show the game playing or played
-  last while the window waits in the tray. The ground is
+  icons match the page while it is seen, and show the game of Home while
+  the window waits in the tray. The ground is
   graphite, a step above black, so the art carries the color. Players can
   pick light mode, another ground tone, a fixed accent, a picture of their
   own or no background. Every color derives from these choices in

@@ -78,6 +78,8 @@ export const SETTING_KEYS = {
   backgroundBlur: "background_blur",
   /** Where the background comes from. Same as BACKGROUND_SOURCE_SETTING in constants.rs. */
   backgroundSource: "background_source",
+  /** The game that lights the pages not about one, empty for the one playing or played last. Same as APPEARANCE_GAME_SETTING in constants.rs. */
+  appearanceGame: "appearance_game",
   /** The version whose changes the player saw or set aside. Same as WHATS_NEW_SEEN_SETTING in constants.rs. */
   whatsNewSeen: "whats_new_seen",
 } as const;

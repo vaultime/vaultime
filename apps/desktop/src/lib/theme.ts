@@ -51,6 +51,8 @@ export interface Appearance {
   dim: number;
   /** Blur of the background picture, in pixels. */
   blur: number;
+  /** The game that lights the pages not about one, null for the one playing or played last. */
+  game: string | null;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -60,6 +62,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   source: "game",
   dim: BACKGROUND_DIM_PERCENT.default,
   blur: BACKGROUND_BLUR_PX.default,
+  game: null,
 };
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
@@ -90,6 +93,7 @@ const APPEARANCE_SETTING_KEYS: Record<keyof Appearance, string> = {
   source: SETTING_KEYS.backgroundSource,
   dim: SETTING_KEYS.backgroundDim,
   blur: SETTING_KEYS.backgroundBlur,
+  game: SETTING_KEYS.appearanceGame,
 };
 
 /** The look from stored settings. Unknown or missing values take the default. */
@@ -105,6 +109,7 @@ export function appearanceFromSettings(values: Record<string, string | undefined
     source: BACKGROUND_SOURCES.includes(source as BackgroundSource) ? (source as BackgroundSource) : DEFAULT_APPEARANCE.source,
     dim: clampedNumber(values[APPEARANCE_SETTING_KEYS.dim], BACKGROUND_DIM_PERCENT),
     blur: clampedNumber(values[APPEARANCE_SETTING_KEYS.blur], BACKGROUND_BLUR_PX),
+    game: values[APPEARANCE_SETTING_KEYS.game] || null,
   };
 }
 
@@ -112,7 +117,7 @@ export function appearanceFromSettings(values: Record<string, string | undefined
 export function appearanceSettings(appearance: Partial<Appearance>): [string, string][] {
   return (Object.keys(appearance) as (keyof Appearance)[]).map((part) => [
     APPEARANCE_SETTING_KEYS[part],
-    String(appearance[part]),
+    String(appearance[part] ?? ""),
   ]);
 }
 

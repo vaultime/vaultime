@@ -10,17 +10,24 @@ import { usePageVisible } from "@/lib/use-page-visible";
 const NOTHING_PLAYING: ReadonlySet<string> = new Set();
 
 /**
- * The game a page is about, else the one playing, else the one played last,
- * as Home shows it.
+ * The game a page is about, else the one the player picked for the other
+ * pages while it is in the library, else the one playing, else the one played
+ * last, as Home shows it.
  */
 export function gameInFront(
   summaries: GameSummary[],
   visible: GameSummary[],
   playing: ReadonlySet<string>,
   pageGameId: string | undefined,
+  pickedGameId: string | null = null,
 ): GameSummary | null {
   if (pageGameId) return summaries.find((summary) => summary.game.id === pageGameId) ?? null;
-  return visible.find((summary) => playing.has(summary.game.id)) ?? visible.find((summary) => summary.lastPlayedAt) ?? null;
+  return (
+    summaries.find((summary) => summary.game.id === pickedGameId) ??
+    visible.find((summary) => playing.has(summary.game.id)) ??
+    visible.find((summary) => summary.lastPlayedAt) ??
+    null
+  );
 }
 
 /**
@@ -53,9 +60,9 @@ export function useShowGameInFront() {
   const polled = usePlaying();
   const playing = seen ? polled : NOTHING_PLAYING;
   const page = useMatch("/library/:gameId");
-  const { showGames } = useAppearance();
-  const front = gameInFront(summaries, visible, playing, page?.params.gameId);
-  const home = gameInFront(summaries, visible, playing, undefined);
+  const { appearance, showGames } = useAppearance();
+  const front = gameInFront(summaries, visible, playing, page?.params.gameId, appearance.game);
+  const home = gameInFront(summaries, visible, playing, undefined, appearance.game);
   const key = artRead ? `${artKey(front)}/${artKey(home)}` : null;
   const report = useEffectEvent(() => showGames({ page: gameArt(front), home: gameArt(home) }));
   useEffect(() => {

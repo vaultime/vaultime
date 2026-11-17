@@ -446,6 +446,7 @@ pub const PAGE_SETTINGS: &[&str] = &[
     BACKGROUND_DIM_SETTING,
     BACKGROUND_BLUR_SETTING,
     BACKGROUND_SOURCE_SETTING,
+    APPEARANCE_GAME_SETTING,
     WHATS_NEW_SEEN_SETTING,
 ];
 /// Folder name prefix of automatic backups, so pruning never touches others.
@@ -559,6 +560,10 @@ pub const BACKGROUND_BLUR_SETTING: &str = "background_blur";
 /// picture or none. Same as `SETTING_KEYS.backgroundSource` in
 /// `lib/constants.ts`.
 pub const BACKGROUND_SOURCE_SETTING: &str = "background_source";
+/// Setting with the game that lights the pages not about one, empty for the
+/// one playing or played last. Same as `SETTING_KEYS.appearanceGame` in
+/// `lib/constants.ts`.
+pub const APPEARANCE_GAME_SETTING: &str = "appearance_game";
 /// Setting with the version whose changes the player saw or set aside. Same
 /// as `SETTING_KEYS.whatsNewSeen` in `lib/constants.ts`.
 pub const WHATS_NEW_SEEN_SETTING: &str = "whats_new_seen";

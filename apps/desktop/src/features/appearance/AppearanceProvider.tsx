@@ -155,11 +155,12 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const mode = resolveMode(appearance.mode, systemDark);
   const gameAccent = accentInUse(GAME_ACCENT, games.page?.colors ?? []);
   const accent = appearance.accent === GAME_ACCENT ? gameAccent : appearance.accent;
-  // The next start opens Home, lit by the game playing or played last.
+  // The next start opens Home, lit by the game picked for it or the one
+  // playing or played last.
   const homeAccent =
     appearance.accent === GAME_ACCENT ? accentInUse(GAME_ACCENT, games.home?.colors ?? []) : appearance.accent;
   // The window and its icons match the page while it is seen. In the tray
-  // they show the game playing or played last.
+  // they show the game of Home.
   const windowAccent = seen ? accent : homeAccent;
   const tokens = useMemo(() => themeTokens(mode, appearance.ground, accent), [mode, appearance.ground, accent]);
 

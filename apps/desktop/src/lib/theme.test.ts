@@ -197,6 +197,7 @@ describe("appearanceFromSettings", () => {
       [SETTING_KEYS.backgroundDim]: "5",
       [SETTING_KEYS.backgroundBlur]: "999",
       [SETTING_KEYS.backgroundSource]: "picture",
+      [SETTING_KEYS.appearanceGame]: "kessler-line",
     });
     expect(appearance).toEqual({
       mode: "light",
@@ -205,8 +206,14 @@ describe("appearanceFromSettings", () => {
       source: "picture",
       dim: BACKGROUND_DIM_PERCENT.min,
       blur: BACKGROUND_BLUR_PX.max,
+      game: "kessler-line",
     });
     expect(appearanceFromSettings(Object.fromEntries(appearanceSettings(appearance)))).toEqual(appearance);
+  });
+
+  it("lights the other pages with the game playing or played last until one is picked", () => {
+    expect(appearanceFromSettings({ [SETTING_KEYS.appearanceGame]: "" }).game).toBeNull();
+    expect(appearanceSettings({ game: null })).toEqual([[SETTING_KEYS.appearanceGame, ""]]);
   });
 
   it("shows the art of the game in front unless told otherwise", () => {

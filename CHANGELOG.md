@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Interface
 
-- **Lit by your game.** The art of the game you play or played last fills the window behind see-through panels, and a game page shows its own. Art that would make text hard to read is dimmed a little more. The accent takes the color of that art too, and the ground is a neutral graphite. Settings, Appearance can show a picture of your own, no background or a fixed accent instead. A picture you chose before stays with its dim and blur. Without one, the background starts out at the new dim and blur.
+- **Lit by your game.** The art of the game you play or played last, or of one you pick, fills the window behind see-through panels, and a game page shows its own. Art that would make text hard to read is dimmed a little more. The accent takes the color of that art too, and the ground is a neutral graphite. Settings, Appearance can show a picture of your own, no background or a fixed accent instead. A picture you chose before stays with its dim and blur. Without one, the background starts out at the new dim and blur.
 - **The logo wears your accent.** Its frame, hands and name take the accent in the app and on the tray, the taskbar and the shortcuts, whether or not you are signed in to a cloud backup server. On Linux, installed from a package, the app menu and the dock show it too.
 - **New type.** Titles are wider and bolder, game pages show a bigger cover, and the sentences about your play are set in Newsreader, a serif made for reading on screens.
 - **What's new.** After an update, a line over the page opens the changes of the new version under the covers of the games you played last. Settings, About and the command palette show them again.
