@@ -912,6 +912,15 @@ mod tests {
     }
 
     #[test]
+    fn picking_a_sync_folder_copies_a_backup_right_away() {
+        let laptop = Pc::new("laptop");
+        let root = sync_folder(&laptop, &laptop.context.app_dir.join("Dropbox"));
+        laptop.act();
+        auto::back_up_to_sync_folder(&laptop.db, &laptop.assets, &laptop.context).unwrap();
+        assert_eq!(backups_in(&root.join("laptop")).len(), 1);
+    }
+
+    #[test]
     fn a_sync_folder_that_is_away_stays_away() {
         let laptop = Pc::new("laptop");
         let away = laptop.context.app_dir.join("nas");

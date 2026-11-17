@@ -18,3 +18,4 @@ pub mod games;
 pub mod pcs;
 pub mod playtime;
 pub mod sessions;
+pub mod sync_folder;

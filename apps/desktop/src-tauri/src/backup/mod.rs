@@ -135,6 +135,12 @@ pub fn export_local_backup(
     )
 }
 
+/// Clears the staging folders an earlier run of the cloud and the sync folder left.
+pub fn sweep(app_dir: &Path) {
+    cloud_merge::sweep(app_dir);
+    folder::sweep(app_dir);
+}
+
 /// Writes a backup folder named `<prefix>-<timestamp>` into `destination_dir`.
 /// Artwork that `previous_backup` holds unchanged is hard linked from there,
 /// so it is stored once however many backups share it.

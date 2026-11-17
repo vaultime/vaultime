@@ -119,6 +119,7 @@ fn log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 }
 
 /// Every command the page may call.
+#[expect(clippy::too_many_lines, reason = "one line per command")]
 fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         commands::app::get_app_version,
@@ -171,6 +172,15 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::backups::export_local_backup,
         commands::backups::inspect_local_backup,
         commands::backups::import_local_backup,
+        commands::sync_folder::get_sync_folder,
+        commands::sync_folder::set_sync_folder,
+        commands::sync_folder::list_sync_folder_pcs,
+        commands::sync_folder::preview_sync_merge,
+        commands::sync_folder::merge_sync_backup,
+        commands::sync_folder::discard_sync_merge,
+        commands::sync_folder::merge_due_sync_backups,
+        commands::sync_folder::inspect_sync_backup,
+        commands::sync_folder::restore_sync_backup,
         commands::cloud::upload_remote_backup,
         commands::cloud::restore_remote_backup,
         commands::cloud::list_cloud_pcs,
@@ -242,7 +252,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         ))
     });
 
-    backup::cloud_merge::sweep(&app_dir);
+    backup::sweep(&app_dir);
     let db_path = app_dir.join(DATABASE_FILE);
     let first_start = !db_path.exists();
     let device_id = device_id(&app_dir, !first_start);

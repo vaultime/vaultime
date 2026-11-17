@@ -65,13 +65,7 @@ pub fn back_up_if_due(
     if !enabled(db) {
         return Ok(None);
     }
-    let folder = folder(db, &app_context.app_dir);
-    fs::create_dir_all(&folder).map_err(|error| {
-        VaultimeError::Backup(format!(
-            "could not create the backup folder {}: {error}",
-            folder.display()
-        ))
-    })?;
+    let folder = made_folder(db, app_context)?;
     let device = this_pc(app_context);
     if newest_age(&folder, &device).is_some_and(|age| age < min_age) {
         // A sync folder that was away gets the newest backup once it is back.
@@ -101,6 +95,26 @@ pub fn back_up_now(
     app_context: &AppContext,
 ) -> Result<LocalBackupSummary> {
     let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
+    let folder = made_folder(db, app_context)?;
+    write_backup(db, asset_manager, app_context, &folder)
+}
+
+/// Saves an automatic backup now and copies it into the sync folder, as when
+/// the player picks one, so the other PCs find this one right away.
+pub fn back_up_to_sync_folder(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+) -> Result<LocalBackupSummary> {
+    let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
+    let folder = made_folder(db, app_context)?;
+    let summary = write_backup(db, asset_manager, app_context, &folder)?;
+    super::folder::publish(db, Path::new(&summary.backup_path))?;
+    Ok(summary)
+}
+
+/// The folder automatic backups go to, made when it is not there yet.
+fn made_folder(db: &Database, app_context: &AppContext) -> Result<PathBuf> {
     let folder = folder(db, &app_context.app_dir);
     fs::create_dir_all(&folder).map_err(|error| {
         VaultimeError::Backup(format!(
@@ -108,7 +122,7 @@ pub fn back_up_now(
             folder.display()
         ))
     })?;
-    write_backup(db, asset_manager, app_context, &folder)
+    Ok(folder)
 }
 
 fn write_backup(
