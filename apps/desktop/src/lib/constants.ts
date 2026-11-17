@@ -149,6 +149,10 @@ export const FALLBACK_DEVICE_ID_CHARS = 10;
 
 // Library and charts
 
+/** Games with their covers at the top of a journal week, the most played first. */
+export const JOURNAL_WEEK_GAMES = 8;
+/** The shortest bar under a cover at the top of a journal week, as a share of the longest. */
+export const JOURNAL_WEEK_BAR_MIN_SHARE = 0.08;
 /** Calendar days that count as recent on the library home, today included. Same as TRAY_RECENT_DAYS in constants.rs. */
 export const RECENT_DAYS = 7;
 

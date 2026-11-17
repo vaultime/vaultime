@@ -18,6 +18,7 @@ import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { scrollMotion } from "@/lib/anchors";
 import { describeError, logFailure } from "@/lib/utils";
 import { DaySection } from "./DaySection";
+import { WeekGames } from "./WeekGames";
 import { dayId, entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
 
 /**
@@ -221,6 +222,13 @@ export function JournalPage() {
     current: shownOffset === 0,
   });
   const weekYear = weekEnd.getFullYear() === now.getFullYear() ? "" : `, ${start.getFullYear()}`;
+  const longestDay =
+    play.longest_day && play.days_played > 1
+      ? {
+          day: play.longest_day,
+          playedMs: days.find((day) => toDayKey(day.start) === play.longest_day)?.playedMs ?? 0,
+        }
+      : null;
 
   return (
     <div className="pb-16">
@@ -276,6 +284,13 @@ export function JournalPage() {
       </PageHeader>
 
       <div className="px-8 xl:px-14">
+        <WeekGames
+          games={play.game_times}
+          byGame={byGame}
+          fillOf={fillOf}
+          longestDay={longestDay}
+          onDay={goToDay}
+        />
         {days.map((day) => (
           <DaySection
             key={day.start.getTime()}

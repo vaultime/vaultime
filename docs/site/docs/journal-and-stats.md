@@ -6,7 +6,7 @@ The journal tells your play week by week in plain sentences. The stats page look
 
 ## The journal
 
-The journal opens on this week. **Previous week** and **Next week** move through your history, and **Go to a day** jumps to any date and scrolls to it. A sentence at the top sums up the week and names the game that took most of it, when one did.
+The journal opens on this week. **Previous week** and **Next week** move through your history, and **Go to a day** jumps to any date and scrolls to it. A sentence at the top sums up the week and names the game that took most of it, when one did. Below it the week's games stand with their covers and hours, the most played first, each with a bar in its color, and its longest day, which jumps to that day.
 
 Each day shows its total and a strip of 24 hours in the colors of the games you played. Below it every session is a sentence, with its start and end time and how much of it was active and idle:
 
