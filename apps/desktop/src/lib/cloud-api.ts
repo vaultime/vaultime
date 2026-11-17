@@ -1,20 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { CLOUD_REQUEST_TIMEOUT_MS, MIN_BACKUP_PASSPHRASE_CHARS, VAULTIME_URL } from "@/lib/constants";
+import { MIN_BACKUP_PASSPHRASE_CHARS } from "@/lib/constants";
+import { cloudRequest } from "@/lib/tauri";
 import { sentence } from "@/lib/words";
-
-const configuredCloudApiBaseUrl = import.meta.env.VITE_CLOUD_API_BASE_URL?.trim();
-
-export const CLOUD_API_BASE_URL = (
-  configuredCloudApiBaseUrl && configuredCloudApiBaseUrl.length > 0
-    ? configuredCloudApiBaseUrl
-    : VAULTIME_URL
-).replace(/\/+$/, "");
 
 /** Shown when the server cannot be reached. */
 export const CLOUD_UNREACHABLE = "Could not reach the cloud server. Check your connection.";
-/** Shown when the server took longer than `CLOUD_REQUEST_TIMEOUT_MS` to answer. */
+/** Shown when the server did not answer in time. */
 export const CLOUD_TIMED_OUT = "The cloud server did not answer in time. Try again later.";
 
 /** Shown when a backup passphrase is shorter than the minimum. */
@@ -30,117 +23,34 @@ export class CloudApiError extends Error {
   }
 }
 
-interface RequestOptions {
-  method?: "GET" | "POST" | "DELETE";
-  body?: unknown;
-  accessToken?: string;
-  signal?: AbortSignal;
+export async function cloudGetJson<T>(server: string, path: string, accessToken?: string): Promise<T> {
+  return send<T>(server, "GET", path, undefined, accessToken);
 }
 
-export async function cloudGetJson<T>(
-  path: string,
-  accessToken?: string,
-  signal?: AbortSignal,
-): Promise<T> {
-  return cloudRequest<T>(path, {
-    method: "GET",
-    accessToken,
-    signal,
-  });
+export async function cloudPostJson<T>(server: string, path: string, body: unknown, accessToken?: string): Promise<T> {
+  return send<T>(server, "POST", path, body, accessToken);
 }
 
-export async function cloudPostJson<T>(
+export async function cloudDelete(server: string, path: string, accessToken?: string): Promise<void> {
+  await send<void>(server, "DELETE", path, undefined, accessToken);
+}
+
+// The core sends every request, so the page needs no network access of its
+// own, and a server that stops answering runs into the core's timeout.
+async function send<T>(
+  server: string,
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body: unknown,
-  accessToken?: string,
-  signal?: AbortSignal,
+  accessToken: string | undefined,
 ): Promise<T> {
-  return cloudRequest<T>(path, {
-    method: "POST",
-    body,
-    accessToken,
-    signal,
-  });
-}
-
-export async function cloudDelete(
-  path: string,
-  accessToken?: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  await cloudRequest<void>(path, {
-    method: "DELETE",
-    accessToken,
-    signal,
-  });
-}
-
-async function cloudRequest<T>(
-  path: string,
-  options: RequestOptions,
-): Promise<T> {
-  const headers = new Headers();
-  if (options.body !== undefined) {
-    headers.set("Content-Type", "application/json");
+  const reply = await cloudRequest(server, method, path, body, accessToken);
+  if (reply.kind === "timed_out") throw new CloudApiError(CLOUD_TIMED_OUT, 0);
+  if (reply.kind === "unreachable") throw new CloudApiError(CLOUD_UNREACHABLE, 0);
+  if (reply.status < 200 || reply.status >= 300) {
+    throw new CloudApiError(extractErrorMessage(reply.body, reply.status), reply.status);
   }
-  if (options.accessToken) {
-    headers.set("Authorization", `Bearer ${options.accessToken}`);
-  }
-
-  // A server that stops answering must not hold up the page or the daily
-  // backup, so every request, its body included, ends after the timeout.
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, CLOUD_REQUEST_TIMEOUT_MS);
-  const abort = () => controller.abort(options.signal?.reason);
-  if (options.signal?.aborted) abort();
-  options.signal?.addEventListener("abort", abort, { once: true });
-  const failed = () => new CloudApiError(timedOut ? CLOUD_TIMED_OUT : CLOUD_UNREACHABLE, 0);
-
-  let response: Response;
-  let payload: unknown;
-  try {
-    try {
-      response = await fetch(new URL(path, CLOUD_API_BASE_URL), {
-        method: options.method ?? "GET",
-        headers,
-        body:
-          options.body === undefined ? undefined : JSON.stringify(options.body),
-        signal: controller.signal,
-      });
-    } catch {
-      throw failed();
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    try {
-      payload = contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
-    } catch (error) {
-      if (controller.signal.aborted) throw failed();
-      throw error;
-    }
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", abort);
-  }
-
-  if (!response.ok) {
-    throw new CloudApiError(
-      extractErrorMessage(payload, response.status),
-      response.status,
-    );
-  }
-
-  return payload as T;
+  return (reply.status === 204 ? undefined : reply.body) as T;
 }
 
 function extractErrorMessage(payload: unknown, status: number): string {
@@ -157,7 +67,8 @@ function extractErrorMessage(payload: unknown, status: number): string {
     return sentence(payload.error.message);
   }
 
-  if (typeof payload === "string" && payload.trim().length > 0) {
+  // A proxy in front of a server that is down answers with a page of its own.
+  if (typeof payload === "string" && payload.trim().length > 0 && !payload.trim().startsWith("<")) {
     return payload;
   }
 

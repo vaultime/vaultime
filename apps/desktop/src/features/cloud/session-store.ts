@@ -24,7 +24,7 @@ export async function loadPersistedSession(): Promise<{ session: CloudAuthSessio
     const secureRaw = await loadCloudSessionSecure();
     keyringRead = true;
     if (secureRaw) {
-      return { session: parseStoredSession(secureRaw), keyringRead };
+      return { session: storedSession(secureRaw), keyringRead };
     }
   } catch {
     // Falls through to the older storage.
@@ -32,7 +32,28 @@ export async function loadPersistedSession(): Promise<{ session: CloudAuthSessio
 
   // Older builds kept the session in localStorage.
   const legacyRaw = window.localStorage.getItem(CLOUD_SESSION_STORAGE_KEY);
-  return { session: legacyRaw ? parseStoredSession(legacyRaw) : null, keyringRead };
+  return { session: legacyRaw ? storedSession(legacyRaw) : null, keyringRead };
+}
+
+/** The saved session. One of the hosted server, which is gone, is cleared with its backup key. */
+function storedSession(raw: string): CloudAuthSession | null {
+  const session = parseStoredSession(raw);
+  if (!session) {
+    const account = hostedAccount(raw);
+    if (account) void clearPersistedSessionStorage(account).catch(logFailure("forgetting the sign-in to the hosted server"));
+  }
+  return session;
+}
+
+/** The account of a saved session that names no server, as those of the hosted server do. */
+function hostedAccount(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw) as { server?: unknown; user?: { id?: unknown } } | null;
+    const account = parsed?.user?.id;
+    return parsed && parsed.server === undefined && typeof account === "string" ? account : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function persistCloudSession(session: CloudAuthSession): Promise<void> {
@@ -51,7 +72,7 @@ export async function forgetStoredSession(): Promise<void> {
 
 /** Ends a session a refresh returned after the player signed out. */
 export function revokeLateSession(late: CloudAuthSession) {
-  void cloudPostJson("/v1/auth/logout", { refresh_token: late.refresh_token }).catch(
+  void cloudPostJson(late.server, "/v1/auth/logout", { refresh_token: late.refresh_token }).catch(
     logFailure("signing out a session that was renewed after signing out"),
   );
 }
@@ -112,6 +133,8 @@ export function parseStoredSession(raw: string): CloudAuthSession | null {
       !parsed ||
       typeof parsed.access_token !== "string" ||
       typeof parsed.refresh_token !== "string" ||
+      // Sessions of the hosted server, which is gone, name no server.
+      typeof parsed.server !== "string" ||
       !parsed.user
     ) {
       return null;

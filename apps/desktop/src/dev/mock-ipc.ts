@@ -35,7 +35,6 @@
 // a local one or one in the cloud, asks whether this PC is the Laptop set up again.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { CLOUD_API_BASE_URL } from "@/lib/cloud-api";
 import { DAY_MS, DEVICE_NAME_MAX_CHARS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
 import {
@@ -745,6 +744,8 @@ let ignoredPrograms: IgnoredProgram[] =
     : [];
 
 const MOCK_CLOUD_PASSWORD = "correct horse battery";
+/** The server of the mock account. */
+const MOCK_CLOUD_SERVER = "https://vaultime.example.com";
 
 function cloudSession(): CloudAuthSession {
   return {
@@ -753,6 +754,7 @@ function cloudSession(): CloudAuthSession {
     expires_at: iso(now + 15 * MINUTE_MS),
     refresh_expires_at: iso(now + 30 * DAY_MS),
     user: { id: "account-1", email: "player@example.com" },
+    server: MOCK_CLOUD_SERVER,
   };
 }
 
@@ -799,7 +801,7 @@ const cloudDevice: CloudDevice = {
 };
 
 function cloudReply(status: number, body: unknown) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  return { status, body };
 }
 
 /** The PCs of the mock account: this one, the laptop, and two left from earlier tests. */
@@ -810,14 +812,9 @@ let mockDevices: CloudDevice[] = [
   { ...cloudDevice, id: "device-test-2", client_device_id: "test-2", device_name: "Vaultime Windows Desktop", app_version: "0.5.0", last_seen_at: iso(now - 29 * HOUR_MS) },
 ];
 
-// Answers the cloud API in the browser, so the preview never reaches a server.
-const realFetch = window.fetch.bind(window);
-window.fetch = async (input, init) => {
-  const url = new URL(input instanceof Request ? input.url : input.toString());
-  if (url.origin !== new URL(CLOUD_API_BASE_URL).origin) return realFetch(input, init);
-  if (params.get("offline") === "1") throw new TypeError("Failed to fetch");
-  const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, string>) : {};
-  switch (url.pathname) {
+/** Answers the cloud API as a server would, so the preview never reaches one. */
+function mockCloud(method: string, path: string, body: Record<string, string>): { status: number; body: unknown } {
+  switch (path) {
     case "/v1/auth/refresh":
       return cloudReply(200, cloudSession());
     case "/v1/auth/login":
@@ -847,13 +844,13 @@ window.fetch = async (input, init) => {
     case "/v1/storage":
       return cloudReply(200, { backup_bytes: 480_000, artwork_bytes: 8_700_000, limit_bytes: 2048 * 1024 * 1024 });
     default:
-      if (url.pathname.startsWith("/v1/devices/") && init?.method === "DELETE") {
-        mockDevices = mockDevices.filter((each) => each.id !== url.pathname.slice("/v1/devices/".length));
-        return new Response(null, { status: 204 });
+      if (path.startsWith("/v1/devices/") && method === "DELETE") {
+        mockDevices = mockDevices.filter((each) => each.id !== path.slice("/v1/devices/".length));
+        return cloudReply(204, "");
       }
       return cloudReply(404, { error: { code: "not_found", message: "not found" } });
   }
-};
+}
 
 /** Types into a React controlled input. */
 function typeInto(id: string, value: string) {
@@ -1796,6 +1793,10 @@ mockIPC((cmd, payload) => {
       return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", controller_detection: "xinput", controllers_connected: 1, poll_interval_seconds: 5 };
     case "load_cloud_session_secure":
       return signedIn ? JSON.stringify(cloudSession()) : null;
+    case "cloud_request":
+      return params.get("offline") === "1"
+        ? { kind: "unreachable" }
+        : { kind: "answer", ...mockCloud(String(args.method), String(args.path), (args.body ?? {}) as Record<string, string>) };
     case "has_cloud_backup_key_secure":
       return signedIn;
     case "tray_status":

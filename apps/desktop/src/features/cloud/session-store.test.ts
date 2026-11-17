@@ -7,8 +7,8 @@ import { MINUTE_MS } from "@/lib/constants";
 import { isExpired, parseStoredSession, shouldClearPersistedSession } from "./session-store";
 
 describe("parseStoredSession", () => {
-  it("takes a session with both tokens and a user", () => {
-    const stored = { access_token: "a", refresh_token: "r", user: { id: "u" } };
+  it("takes a session with both tokens, a user and its server", () => {
+    const stored = { access_token: "a", refresh_token: "r", user: { id: "u" }, server: "https://vaultime.example.com" };
     expect(parseStoredSession(JSON.stringify(stored))).toEqual(stored);
   });
 
@@ -17,6 +17,8 @@ describe("parseStoredSession", () => {
     expect(parseStoredSession("null")).toBeNull();
     expect(parseStoredSession(JSON.stringify({ access_token: "a", user: {} }))).toBeNull();
     expect(parseStoredSession(JSON.stringify({ access_token: "a", refresh_token: "r" }))).toBeNull();
+    // A session of the hosted server, which is gone.
+    expect(parseStoredSession(JSON.stringify({ access_token: "a", refresh_token: "r", user: { id: "u" } }))).toBeNull();
   });
 });
 

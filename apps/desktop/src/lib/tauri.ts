@@ -10,6 +10,8 @@ import type {
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
   CloudPc,
+  CloudReply,
+  CloudServerInfo,
   FolderPc,
   AwayTimer,
   SeenGame,
@@ -98,6 +100,22 @@ export async function previewMerge(path: string, trustNewKeys = false): Promise<
 
 export async function mergeBackup(path: string, choices: GameChoice[], trustNewKeys = false): Promise<MergeSummary> {
   return invoke<MergeSummary>("merge_backup", { path, choices, trustNewKeys });
+}
+
+/** Checks that a Vaultime server answers at the address the player typed. */
+export async function checkCloudServer(address: string): Promise<CloudServerInfo> {
+  return invoke<CloudServerInfo>("check_cloud_server", { address });
+}
+
+/** Sends one JSON request to the player's cloud server through the core. */
+export async function cloudRequest(
+  server: string,
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  body: unknown,
+  accessToken: string | undefined,
+): Promise<CloudReply> {
+  return invoke<CloudReply>("cloud_request", { server, method, path, body: body ?? null, accessToken: accessToken ?? null });
 }
 
 /** The newest cloud backup of every other PC of the account. */

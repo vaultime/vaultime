@@ -8,13 +8,14 @@
  * which the server would answer as an expired session.
  */
 export function createTokenRefresher<Session extends { refresh_token: string }>(
-  request: (refreshToken: string) => Promise<Session>,
+  request: (stale: Session) => Promise<Session>,
   current: () => Session | null,
   swap: (next: Session) => void,
-): (refreshToken: string) => Promise<Session> {
+): (stale: Session) => Promise<Session> {
   let pending: { token: string; promise: Promise<Session> } | null = null;
 
-  return (refreshToken) => {
+  return (stale) => {
+    const refreshToken = stale.refresh_token;
     const latest = current();
     if (latest && latest.refresh_token !== refreshToken) {
       return Promise.resolve(latest);
@@ -22,7 +23,7 @@ export function createTokenRefresher<Session extends { refresh_token: string }>(
     if (pending?.token === refreshToken) {
       return pending.promise;
     }
-    const promise = request(refreshToken)
+    const promise = request(stale)
       .then((next) => {
         if (current()?.refresh_token === refreshToken) {
           swap(next);

@@ -11,7 +11,6 @@ import {
 import { info, warn } from "@tauri-apps/plugin-log";
 import {
   BACKUP_PASSPHRASE_TOO_SHORT,
-  CLOUD_API_BASE_URL,
   CloudApiError,
   cloudDelete,
   cloudGetJson,
@@ -23,6 +22,7 @@ import {
   MIN_BACKUP_PASSPHRASE_CHARS,
   SETTING_KEYS,
   TOKEN_REFRESH_MARGIN_MS,
+  VAULTIME_URL,
 } from "@/lib/constants";
 import {
   clearCloudBackupKeySecure,
@@ -67,6 +67,15 @@ import {
   shouldClearPersistedSession,
 } from "./session-store";
 
+/** Where a new sign-in goes. */
+const DEFAULT_SERVER = VAULTIME_URL;
+
+/** A session the server hands out, which remembers that server. */
+async function sessionFrom(server: string, path: string, body: unknown, accessToken?: string): Promise<CloudAuthSession> {
+  const answer = await cloudPostJson<Omit<CloudAuthSession, "server">>(server, path, body, accessToken);
+  return { ...answer, server };
+}
+
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
@@ -93,10 +102,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const appVersionRef = useRef<string | null>(null);
   const [refreshWithToken] = useState(() =>
     createTokenRefresher<CloudAuthSession>(
-      (refreshToken) =>
-        cloudPostJson<CloudAuthSession>("/v1/auth/refresh", {
-          refresh_token: refreshToken,
-        }),
+      (stale) => sessionFrom(stale.server, "/v1/auth/refresh", { refresh_token: stale.refresh_token }),
       () => sessionRef.current,
       (next) => {
         sessionRef.current = next;
@@ -145,7 +151,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     }
     try {
       const done = await withAuthenticatedSession((current) =>
-        mergeDueCloudBackups(CLOUD_API_BASE_URL, current.access_token, current.user.id),
+        mergeDueCloudBackups(current.server, current.access_token, current.user.id),
       );
       setWaitingMerges(done.filter((merge) => merge.outcome !== "merged"));
     } catch (error) {
@@ -221,7 +227,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
       const signOuts = signOutsRef.current;
       try {
-        const refreshed = await refreshWithToken(stored.refresh_token);
+        const refreshed = await refreshWithToken(stored);
         if (signOuts !== signOutsRef.current) {
           revokeLateSession(refreshed);
           return;
@@ -266,14 +272,11 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     password: string,
     backupPassphrase?: string | null,
   ) {
-    const next = await cloudPostJson<CloudAuthSession>("/v1/auth/login", {
-      email,
-      password,
-    });
+    const next = await sessionFrom(DEFAULT_SERVER, "/v1/auth/login", { email, password });
     await persistCloudSession(next);
     if (backupPassphrase?.trim()) {
       const backups = await backupsForKeyCheck(() =>
-        cloudGetJson<CloudBackupRecord[]>("/v1/backups", next.access_token),
+        cloudGetJson<CloudBackupRecord[]>(next.server, "/v1/backups", next.access_token),
       );
       await persistBackupPassphrase(next, backupPassphrase, backups);
       setBackupKeyReady(true);
@@ -290,7 +293,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     password: string,
     backupPassphrase: string,
   ) {
-    const next = await cloudPostJson<CloudAuthSession>("/v1/auth/signup", { email, password });
+    const next = await sessionFrom(DEFAULT_SERVER, "/v1/auth/signup", { email, password });
     await persistCloudSession(next);
     await persistBackupPassphrase(next, backupPassphrase, []);
     setBackupKeyReady(true);
@@ -312,7 +315,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     const signOuts = signOutsRef.current;
     const backups = await backupsForKeyCheck(() =>
-      withAuthenticatedSession((active) => cloudGetJson<CloudBackupRecord[]>("/v1/backups", active.access_token)),
+      withAuthenticatedSession((active) => cloudGetJson<CloudBackupRecord[]>(active.server, "/v1/backups", active.access_token)),
     );
     await persistBackupPassphrase(current, normalized, backups);
     // Signed out while the check ran: the key must not stay behind.
@@ -336,7 +339,8 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   // The server signs out every other device and returns a new session for this one.
   async function changePassword(currentPassword: string, newPassword: string) {
     const next = await withAuthenticatedSession((current) =>
-      cloudPostJson<CloudAuthSession>(
+      sessionFrom(
+        current.server,
         "/v1/auth/password",
         { current_password: currentPassword, new_password: newPassword },
         current.access_token,
@@ -357,7 +361,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await cloudPostJson("/v1/auth/logout", {
+      await cloudPostJson(current.server, "/v1/auth/logout", {
         refresh_token: current.refresh_token,
       });
     } catch {
@@ -379,7 +383,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     const signOuts = signOutsRef.current;
     try {
-      const refreshed = await refreshWithToken(current.refresh_token);
+      const refreshed = await refreshWithToken(current);
       if (signOuts !== signOutsRef.current) {
         revokeLateSession(refreshed);
         return null;
@@ -405,23 +409,23 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
   async function listBackups() {
     return withAuthenticatedSession((current) =>
-      cloudGetJson<CloudBackupRecord[]>("/v1/backups", current.access_token),
+      cloudGetJson<CloudBackupRecord[]>(current.server, "/v1/backups", current.access_token),
     );
   }
 
   async function listDevices() {
-    return withAuthenticatedSession((current) => cloudGetJson<CloudDevice[]>("/v1/devices", current.access_token));
+    return withAuthenticatedSession((current) => cloudGetJson<CloudDevice[]>(current.server, "/v1/devices", current.access_token));
   }
 
   async function removeDevice(deviceId: string) {
     await withAuthenticatedSession((current) =>
-      cloudDelete(`/v1/devices/${encodeURIComponent(deviceId)}`, current.access_token),
+      cloudDelete(current.server, `/v1/devices/${encodeURIComponent(deviceId)}`, current.access_token),
     );
   }
 
   async function getStorage() {
     return withAuthenticatedSession((current) =>
-      cloudGetJson<CloudStorage>("/v1/storage", current.access_token),
+      cloudGetJson<CloudStorage>(current.server, "/v1/storage", current.access_token),
     );
   }
 
@@ -430,7 +434,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       await ensureBackupKeyForSession(current);
       const activeDeviceId = await ensureRemoteBackupDeviceId();
       return uploadRemoteBackupCommand(
-        CLOUD_API_BASE_URL,
+        current.server,
         current.access_token,
         current.user.id,
         activeDeviceId,
@@ -443,7 +447,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     return withAuthenticatedSession(async (current) => {
       await ensureBackupKeyForSession(current);
       return restoreRemoteBackupCommand(
-        CLOUD_API_BASE_URL,
+        current.server,
         current.access_token,
         current.user.id,
         backupId,
@@ -455,14 +459,14 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   async function listCloudPcs() {
     return withAuthenticatedSession(async (current) => {
       await ensureBackupKeyForSession(current);
-      return listCloudPcsCommand(CLOUD_API_BASE_URL, current.access_token, current.user.id);
+      return listCloudPcsCommand(current.server, current.access_token, current.user.id);
     });
   }
 
   async function previewCloudMerge(backupId: string, trustNewKeys: boolean) {
     return withAuthenticatedSession(async (current) => {
       await ensureBackupKeyForSession(current);
-      return previewCloudMergeCommand(CLOUD_API_BASE_URL, current.access_token, current.user.id, backupId, trustNewKeys);
+      return previewCloudMergeCommand(current.server, current.access_token, current.user.id, backupId, trustNewKeys);
     });
   }
 
@@ -470,7 +474,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     const summary = await withAuthenticatedSession(async (current) => {
       await ensureBackupKeyForSession(current);
       return mergeCloudBackupCommand(
-        CLOUD_API_BASE_URL,
+        current.server,
         current.access_token,
         current.user.id,
         backupId,
@@ -489,6 +493,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   async function deleteBackup(backupId: string) {
     return withAuthenticatedSession((current) =>
       cloudDelete(
+        current.server,
         `/v1/backups/${encodeURIComponent(backupId)}`,
         current.access_token,
       ),
@@ -522,7 +527,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     const signOuts = signOutsRef.current;
     let refreshed: CloudAuthSession;
     try {
-      refreshed = await refreshWithToken(current.refresh_token);
+      refreshed = await refreshWithToken(current);
     } catch (error) {
       if (shouldClearPersistedSession(error)) {
         applyClearedSession();
@@ -571,6 +576,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       };
 
       const registered = await cloudPostJson<CloudDevice>(
+        activeSession.server,
         "/v1/devices/register",
         payload,
         activeSession.access_token,
@@ -634,7 +640,7 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
   const value: CloudSessionContextValue = {
     enabled,
-    apiBaseUrl: CLOUD_API_BASE_URL,
+    apiBaseUrl: session?.server ?? DEFAULT_SERVER,
     initializing,
     session,
     device,

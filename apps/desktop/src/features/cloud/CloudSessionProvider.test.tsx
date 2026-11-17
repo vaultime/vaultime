@@ -2,15 +2,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { render, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsContext } from "@/features/settings/settings-context";
-import { isDevelopmentBuild, loadCloudSessionSecure, mergeDueCloudBackups, uploadRemoteBackup } from "@/lib/tauri";
+import {
+  clearCloudBackupKeySecure,
+  clearCloudSessionSecure,
+  cloudRequest,
+  isDevelopmentBuild,
+  loadCloudSessionSecure,
+  mergeDueCloudBackups,
+  uploadRemoteBackup,
+} from "@/lib/tauri";
 import { CloudSessionProvider } from "./CloudSessionProvider";
 
 vi.mock("@tauri-apps/plugin-log", () => ({ info: vi.fn(async () => {}), warn: vi.fn(async () => {}) }));
 vi.mock("@/lib/tauri", () => ({
   clearCloudBackupKeySecure: vi.fn(async () => true),
   clearCloudSessionSecure: vi.fn(async () => true),
+  cloudRequest: vi.fn(),
   getAppVersion: vi.fn(async () => "0.5.0"),
   getBackupDeviceId: vi.fn(async () => "this-pc"),
   isDevelopmentBuild: vi.fn(async () => false),
@@ -30,6 +39,7 @@ const SESSION = JSON.stringify({
   expires_at: "2099-01-01T00:00:00.000Z",
   refresh_expires_at: "2099-01-01T00:00:00.000Z",
   user: { id: "account-1", email: "player@example.com" },
+  server: "https://vaultime.example.com",
 });
 
 /** The provider on a PC from before the cloud switch, whose settings hold none. */
@@ -65,16 +75,15 @@ function backupOf(pc: string, hoursAgo: number) {
 
 /** A server that lists `backups`, renews the session and registers any PC. */
 function server(backups: unknown[]) {
-  return vi.fn(async (url: URL | string) => {
-    const path = new URL(url).pathname;
+  return async (_server: string, _method: string, path: string) => {
     const body =
       path === "/v1/backups"
         ? backups
         : path === "/v1/auth/refresh"
           ? JSON.parse(SESSION)
           : { id: "device", client_device_id: "client", device_name: "PC", platform: "windows", app_version: "0.5.0" };
-    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-  });
+    return { kind: "answer" as const, status: 200, body };
+  };
 }
 
 describe("the daily cloud backup", () => {
@@ -84,18 +93,14 @@ describe("the daily cloud backup", () => {
     vi.mocked(mergeDueCloudBackups).mockClear();
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("uploads when this PC's newest backup is a day old, whatever another PC uploaded", async () => {
-    vi.stubGlobal("fetch", server([backupOf("laptop", 1), backupOf("this-pc", 30)]));
+    vi.mocked(cloudRequest).mockImplementation(server([backupOf("laptop", 1), backupOf("this-pc", 30)]));
     start({ cloud_backup: "true" });
     await waitFor(() => expect(uploadRemoteBackup).toHaveBeenCalled());
   });
 
   it("waits while this PC uploaded within the day, and merges what is due", async () => {
-    vi.stubGlobal("fetch", server([backupOf("laptop", 30), backupOf("this-pc", 2)]));
+    vi.mocked(cloudRequest).mockImplementation(server([backupOf("laptop", 30), backupOf("this-pc", 2)]));
     start({ cloud_backup: "true" });
     await waitFor(() => expect(mergeDueCloudBackups).toHaveBeenCalled());
     expect(uploadRemoteBackup).not.toHaveBeenCalled();
@@ -106,17 +111,25 @@ describe("deciding cloud backup on a PC from before the switch", () => {
   beforeEach(() => {
     vi.mocked(loadCloudSessionSecure).mockReset();
     // The server stays out of reach, a renewal fails without a word.
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.mocked(cloudRequest).mockResolvedValue({ kind: "unreachable" });
   });
 
   it("keeps it on while this PC is signed in", async () => {
     vi.mocked(loadCloudSessionSecure).mockResolvedValue(SESSION);
     const save = start();
     await waitFor(() => expect(save).toHaveBeenCalledWith("cloud_backup", "true"));
+  });
+
+  it("forgets a sign-in to the hosted server, which names no server, with its backup key", async () => {
+    const hosted = JSON.parse(SESSION) as Record<string, unknown>;
+    delete hosted.server;
+    vi.mocked(loadCloudSessionSecure).mockResolvedValue(JSON.stringify(hosted));
+    vi.mocked(clearCloudSessionSecure).mockClear();
+    vi.mocked(clearCloudBackupKeySecure).mockClear();
+    const save = start();
+    await waitFor(() => expect(save).toHaveBeenCalledWith("cloud_backup", "false"));
+    expect(clearCloudSessionSecure).toHaveBeenCalled();
+    expect(clearCloudBackupKeySecure).toHaveBeenCalledWith("account-1");
   });
 
   it("turns it off when the keyring holds no sign-in", async () => {

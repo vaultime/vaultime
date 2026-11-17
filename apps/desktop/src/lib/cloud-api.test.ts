@@ -1,76 +1,63 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { CLOUD_TIMED_OUT, CLOUD_UNREACHABLE, cloudGetJson } from "./cloud-api";
-import { CLOUD_REQUEST_TIMEOUT_MS } from "./constants";
+vi.mock("@/lib/tauri", () => ({ cloudRequest: vi.fn() }));
 
-/** A fetch that never answers until its signal aborts. */
-function hangingFetch() {
-  return vi.fn(
-    (_url: URL, init: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-      }),
-  );
-}
-
-afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-});
+const SERVER = "https://vaultime.example.com";
 
 describe("cloud requests", () => {
-  it("give up on a server that never answers", async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal("fetch", hangingFetch());
-    const request = cloudGetJson("/v1/storage", "token");
-    const settled = expect(request).rejects.toMatchObject({ name: "CloudApiError", message: CLOUD_TIMED_OUT, status: 0 });
-    await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
-    await settled;
+  // These tests share a module cache with the files before them in the
+  // worker, where cloud-api may already hold another mock of the core.
+  let cloudRequest: typeof import("@/lib/tauri").cloudRequest;
+  let api: typeof import("./cloud-api");
+  beforeAll(async () => {
+    vi.resetModules();
+    ({ cloudRequest } = await import("@/lib/tauri"));
+    api = await import("./cloud-api");
   });
 
-  it("give up on an answer whose body never ends", async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: URL, init: RequestInit) => {
-        // As in a browser, aborting the request breaks off its body.
-        const body = new ReadableStream({
-          start(stream) {
-            init.signal?.addEventListener("abort", () => stream.error(new DOMException("aborted", "AbortError")));
-          },
-        });
-        return new Response(body, { headers: { "content-type": "application/json" } });
-      }),
-    );
-    const request = cloudGetJson("/v1/backups", "token");
-    const settled = expect(request).rejects.toMatchObject({ name: "CloudApiError", message: CLOUD_TIMED_OUT, status: 0 });
-    await vi.advanceTimersByTimeAsync(CLOUD_REQUEST_TIMEOUT_MS);
-    await settled;
+  it("go through the core with the server, the body and the token", async () => {
+    vi.mocked(cloudRequest).mockResolvedValueOnce({ kind: "answer", status: 200, body: { ok: true } });
+    await expect(api.cloudPostJson(SERVER, "/v1/auth/login", { email: "a@b.c" }, "token")).resolves.toEqual({ ok: true });
+    expect(cloudRequest).toHaveBeenCalledWith(SERVER, "POST", "/v1/auth/login", { email: "a@b.c" }, "token");
+  });
+
+  it("say when the server did not answer in time", async () => {
+    vi.mocked(cloudRequest).mockResolvedValueOnce({ kind: "timed_out" });
+    await expect(api.cloudGetJson(SERVER, "/v1/storage", "token")).rejects.toMatchObject({
+      name: "CloudApiError",
+      message: api.CLOUD_TIMED_OUT,
+      status: 0,
+    });
   });
 
   it("say when the server cannot be reached", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-    await expect(cloudGetJson("/v1/storage")).rejects.toMatchObject({ name: "CloudApiError", message: CLOUD_UNREACHABLE, status: 0 });
+    vi.mocked(cloudRequest).mockResolvedValueOnce({ kind: "unreachable" });
+    await expect(api.cloudGetJson(SERVER, "/v1/storage")).rejects.toMatchObject({
+      name: "CloudApiError",
+      message: api.CLOUD_UNREACHABLE,
+      status: 0,
+    });
   });
 
   it("pass on the server's message and status", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        Response.json({ error: { code: "full", message: "storage is full" } }, { status: 413 }),
-      ),
-    );
-    await expect(cloudGetJson("/v1/storage")).rejects.toMatchObject({ name: "CloudApiError", message: "Storage is full.", status: 413 });
+    vi.mocked(cloudRequest).mockResolvedValueOnce({
+      kind: "answer",
+      status: 413,
+      body: { error: { code: "full", message: "storage is full" } },
+    });
+    await expect(api.cloudGetJson(SERVER, "/v1/storage")).rejects.toMatchObject({ name: "CloudApiError", message: "Storage is full.", status: 413 });
   });
 
-  it("stop with the caller's signal", async () => {
-    vi.stubGlobal("fetch", hangingFetch());
-    const caller = new AbortController();
-    const request = cloudGetJson("/v1/storage", undefined, caller.signal);
-    caller.abort();
-    await expect(request).rejects.toMatchObject({ name: "CloudApiError", message: CLOUD_UNREACHABLE, status: 0 });
+  it("leave out the page a proxy answers with", async () => {
+    vi.mocked(cloudRequest).mockResolvedValueOnce({ kind: "answer", status: 502, body: "<html><body>Bad gateway</body></html>" });
+    await expect(api.cloudGetJson(SERVER, "/v1/storage")).rejects.toMatchObject({ message: "The cloud server answered with error 502.", status: 502 });
+  });
+
+  it("take an empty answer as nothing", async () => {
+    vi.mocked(cloudRequest).mockResolvedValueOnce({ kind: "answer", status: 204, body: "" });
+    await expect(api.cloudDelete(SERVER, "/v1/devices/1", "token")).resolves.toBeUndefined();
   });
 });

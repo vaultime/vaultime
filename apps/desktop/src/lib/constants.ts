@@ -124,7 +124,7 @@ export const IDLE_SAVE_DELAY_MS = 600;
 
 // Cloud
 
-/** Address of the website and the cloud server. Same as CLOUD_API_BASE_URL in constants.rs. */
+/** Address of the website. Same as WEBSITE_URL in constants.rs. */
 export const VAULTIME_URL = "https://vaultime.codfishcloud.de";
 
 /** Copyright notice in the rail and in Settings, the holder of the SPDX headers. */
@@ -132,8 +132,6 @@ export const COPYRIGHT_NOTICE = "© 2026 Dominik Schwimmbeck";
 
 /** Refresh the access token when it expires within this window. */
 export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;
-/** How long a request to the cloud server may take, its answer included. */
-export const CLOUD_REQUEST_TIMEOUT_MS = 30 * SECOND_MS;
 /** Age of the newest cloud backup at which the daily automatic one is due. */
 export const CLOUD_AUTO_BACKUP_INTERVAL_MS = DAY_MS;
 /** How often a signed in app checks whether the daily cloud backup is due. */

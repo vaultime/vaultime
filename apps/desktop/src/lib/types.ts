@@ -677,7 +677,22 @@ export interface CloudAuthSession {
   expires_at: string;
   refresh_expires_at: string;
   user: CloudAuthUser;
+  /** The server that handed out the session, without a trailing slash. */
+  server: string;
 }
+
+/** A Vaultime server the player set up, as its health check describes it. */
+export interface CloudServerInfo {
+  /** The address requests go to, without a trailing slash. */
+  address: string;
+  signups_open: boolean;
+}
+
+/** What came back for a cloud request the core sent. */
+export type CloudReply =
+  | { kind: "answer"; status: number; body: unknown }
+  | { kind: "timed_out" }
+  | { kind: "unreachable" };
 
 export interface CloudDevice {
   id: string;
