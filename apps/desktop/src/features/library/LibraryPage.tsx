@@ -76,7 +76,9 @@ export function LibraryPage() {
         </p>
       )}
 
+      {/* Each view starts with its own filter and search, so it shows what its rail row counts. */}
       <GameGrid
+        key={favorites ? "favorites" : (launcher ?? "all")}
         summaries={shown}
         launcher={launcher}
         favorites={favorites}
