@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Loader2, Search } from "lucide-react";
 import { Notice } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { seenGamesChanged } from "@/features/library/use-seen-games";
+import { MINUTE_MS, SECOND_MS, SEEN_RUNNING_MIN_MS } from "@/lib/constants";
 import { foundGamesText, offeredPaths } from "@/lib/found-games";
 import { compareTitles } from "@/lib/game-sort";
 import { whereFrom } from "@/lib/links";
 import * as api from "@/lib/tauri";
-import type { DiscoveredGame, NewGames } from "@/lib/types";
+import { formatHoursMinutes } from "@/lib/time";
+import type { DiscoveredGame, NewGames, SeenGame } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
@@ -77,6 +80,22 @@ export function DiscoverGamesDialog({
   // Games marked as another install of a library game that the player keeps as games of their own.
   const [apart, setApart] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  // Programs from the game folders that ran in front for a while, read each time the dialog opens.
+  const [seen, setSeen] = useState<SeenGame[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api
+      .listSeenGames()
+      .then((found) => {
+        if (!cancelled) setSeen(found);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Start over every time the dialog opens, with the found games if there are any.
   const [wasOpen, setWasOpen] = useState(open);
@@ -133,6 +152,15 @@ export function DiscoverGamesDialog({
           launcherFolders.some((folder) => pathKey(game.executable_path).startsWith(`${folder}/`));
         if (!insideLauncherFolder && !byPath.has(game.executable_path)) byPath.set(game.executable_path, game);
       }
+      // A launcher's row of a program seen running wins, as it knows the launcher. A folder
+      // find of one gives way to its row above.
+      const launcherPaths = new Set([...steamGames, ...launcherGames].map((game) => pathKey(game.executable_path)));
+      const keptSeen = seen.filter((game) => !launcherPaths.has(pathKey(game.executable_path)));
+      setSeen(keptSeen);
+      const seenPaths = new Set(keptSeen.map((game) => pathKey(game.executable_path)));
+      for (const [path, game] of byPath) {
+        if (game.source === "folder_scan" && seenPaths.has(pathKey(path))) byPath.delete(path);
+      }
       const merged = [...byPath.values()].sort((a, b) =>
         a.already_added !== b.already_added ? (a.already_added ? 1 : -1) : compareTitles(a.title, b.title),
       );
@@ -168,6 +196,29 @@ export function DiscoverGamesDialog({
         next.delete(game.executable_path);
         return next;
       });
+    } catch (ignoreError) {
+      setError(describeError(ignoreError));
+    }
+  }
+
+  async function addSeen(game: SeenGame) {
+    try {
+      setError(null);
+      await api.importDiscoveredGames([game]);
+      setSeen((previous) => previous.filter((entry) => entry.executable_path !== game.executable_path));
+      seenGamesChanged();
+      onImported();
+    } catch (addError) {
+      setError(describeError(addError));
+    }
+  }
+
+  async function ignoreSeen(game: SeenGame) {
+    try {
+      setError(null);
+      await api.ignoreProgram(game.executable_path, game.title);
+      setSeen((previous) => previous.filter((entry) => entry.executable_path !== game.executable_path));
+      seenGamesChanged();
     } catch (ignoreError) {
       setError(describeError(ignoreError));
     }
@@ -225,6 +276,47 @@ export function DiscoverGamesDialog({
         </DialogHeader>
 
         {error && <Notice tone="warning">{error}</Notice>}
+
+        {seen.length > 0 && (
+          <section aria-label="Seen running">
+            <h3 className="label-small">Seen running</h3>
+            <p className="mt-1 text-[13px] text-faint">
+              Programs from your game folders that ran in front for at least{" "}
+              {plural(SEEN_RUNNING_MIN_MS / MINUTE_MS, "minute")}. Vaultime notes no other program.
+            </p>
+            <ul className="mt-2 border-y border-rule">
+              {seen.map((game) => (
+                <li key={game.executable_path} className="flex items-center gap-3 border-b border-rule py-2.5 last:border-b-0">
+                  <span className="min-w-0 flex-1 px-1">
+                    <span className="flex items-baseline gap-2">
+                      <span className="truncate text-sm text-text">{game.title}</span>
+                      <span className="label-small shrink-0 tabular-nums">
+                        Ran {formatHoursMinutes(game.front_seconds * SECOND_MS)}
+                      </span>
+                    </span>
+                    <span className="block truncate font-mono text-[11px] text-faint">{game.executable_path}</span>
+                    {game.same_game && (
+                      <span className="block truncate text-[13px] text-soft">
+                        Adds it as another copy of {game.same_game.title} {whereFrom(game.same_game.launcher_source)}
+                      </span>
+                    )}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => void addSeen(game)}>
+                    Add
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Never suggest it again and never track it."
+                    onClick={() => void ignoreSeen(game)}
+                  >
+                    Not a game
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {!scanned ? (
           <div className="py-2">

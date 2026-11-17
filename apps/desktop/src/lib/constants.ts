@@ -80,6 +80,10 @@ export const SETTING_KEYS = {
 export const AUTO_BACKUP_KEEP = 7;
 /** Backups of a PC kept in the sync folder. Same as SYNC_BACKUP_KEEP in constants.rs. */
 export const SYNC_BACKUP_KEEP = 3;
+/** Time a program from a game folder runs in front before Discover offers it. Same as `SEEN_RUNNING_MIN` in constants.rs. */
+export const SEEN_RUNNING_MIN_MS = 10 * MINUTE_MS;
+/** How often the rail looks for programs seen running that wait in Discover. */
+export const SEEN_GAMES_CHECK_MS = 10 * MINUTE_MS;
 /** How often the running app brings in newer backups from the sync folder. */
 export const SYNC_FOLDER_CHECK_MS = HOUR_MS;
 

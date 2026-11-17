@@ -11,6 +11,7 @@ import type {
   CloudBackupUploadResult,
   CloudPc,
   FolderPc,
+  SeenGame,
   CreateGameInput,
   CropRect,
   Device,
@@ -452,6 +453,11 @@ export async function importLocalBackup(
   takeOver: boolean,
 ): Promise<LocalBackupSummary> {
   return invoke<LocalBackupSummary>("import_local_backup", { path, takeOver });
+}
+
+/** Programs from the game folders that ran in front for a while, the last seen first. */
+export async function listSeenGames(): Promise<SeenGame[]> {
+  return invoke<SeenGame[]>("list_seen_games");
 }
 
 /** Where backups sync, if anywhere. */

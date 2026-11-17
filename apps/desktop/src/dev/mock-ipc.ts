@@ -1839,6 +1839,11 @@ mockIPC((cmd, payload) => {
           launcher_source: games[3].launcher_source,
         }),
       ];
+    // ?seen=1: a game from the games folder ran for a while.
+    case "list_seen_games":
+      return params.has("seen")
+        ? [{ ...discovered("Ember Atlas", "C:/Games/Ember Atlas/EmberAtlas.exe", "folder_scan"), front_seconds: 25 * 60 }]
+        : [];
     case "get_default_scan_paths":
       return ["C:/Games"];
     case "discover_games":

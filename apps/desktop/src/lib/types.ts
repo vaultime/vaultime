@@ -590,6 +590,12 @@ export interface LocalBackupSummary {
 }
 
 /** A game candidate found during auto-discovery. */
+/** A program from the game folders that ran in front for a while, which Discover offers to add. */
+export interface SeenGame extends DiscoveredGame {
+  /** How long it had the foreground, over every run of Vaultime. */
+  front_seconds: number;
+}
+
 export interface DiscoveredGame {
   title: string;
   executable_path: string;

@@ -10,9 +10,11 @@ import { Cover } from "@/components/media/Cover";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { LastPlayed } from "@/features/library/components/LastPlayed";
 import { useCurrentSession, useLibrary, usePlaying } from "@/features/library/library-context";
+import { useSeenGamesCount } from "@/features/library/use-seen-games";
 import { RAIL_RECENT_GAMES } from "@/lib/constants";
 import { launcherCounts, launcherTitle } from "@/lib/launchers";
 import { cn } from "@/lib/utils";
+import { plural } from "@/lib/words";
 
 const PAGES = [
   { to: "/home", label: "Home", icon: House },
@@ -32,6 +34,7 @@ const MARK_ICON = "size-[15px]";
 /** The pages, the library by launcher and the games played last, on the left of every page. */
 export function Rail() {
   const { games, visible: summaries } = useLibrary();
+  const seenGames = useSeenGamesCount();
   const playing = usePlaying();
   const currentSession = useCurrentSession();
   const current = currentSession ? (games.find((game) => game.id === currentSession.game_id) ?? null) : null;
@@ -70,11 +73,12 @@ export function Rail() {
           action={
             <Link
               to="/library?discover=1"
-              aria-label="Discover games"
-              title="Discover games"
-              className="flex size-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-glint/5 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+              aria-label={seenGames > 0 ? `Discover games, ${plural(seenGames, "game")} seen running` : "Discover games"}
+              title={seenGames > 0 ? `Discover games, ${plural(seenGames, "game")} seen running` : "Discover games"}
+              className="relative flex size-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-glint/5 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
             >
               <Plus className="size-4" strokeWidth={1.8} />
+              {seenGames > 0 && <span aria-hidden="true" className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-violet" />}
             </Link>
           }
         >
