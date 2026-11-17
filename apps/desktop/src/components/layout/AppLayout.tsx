@@ -44,6 +44,8 @@ export function AppLayout() {
       <Backdrop />
       <Rail />
       <div className="panel flex min-h-0 flex-col">
+        {/* Above the scroller, where a tinted header reaching up under the top bar cannot cover it. */}
+        <UpdateBanner />
         {/* Relative, so hidden inputs and other positioned content stay inside the
             scroller. Outside it they stretch the shell, and focusing one scrolls
             the whole app up. */}
@@ -52,7 +54,6 @@ export function AppLayout() {
           onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
         >
           <TopBar scrolled={scrolled} onSearch={() => setPaletteOpen(true)} />
-          <UpdateBanner />
           <Outlet />
         </main>
       </div>
