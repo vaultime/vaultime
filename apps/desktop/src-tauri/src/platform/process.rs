@@ -4,6 +4,7 @@
 //! Process enumeration and game executable matching.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Component, Path};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
@@ -144,7 +145,9 @@ impl InstallFolder {
         let resolved = std::fs::canonicalize(folder)
             .ok()
             .map(|path| strip_verbatim_prefix(&path.to_string_lossy()).to_owned());
-        if resolved.as_deref().is_some_and(is_mount_point) {
+        // A share that is not open now still names its folder.
+        let checked = resolved.as_deref().unwrap_or(folder);
+        if is_mount_point(checked) || is_network_place(checked) {
             return Self { keys: Vec::new() };
         }
         let resolved = resolved.filter(|path| below_a_root(path));
@@ -175,16 +178,86 @@ fn below_a_root(path: &str) -> bool {
         .any(|component| matches!(component, Component::Normal(_)))
 }
 
-/// Whether a drive is mounted at `path`, as Linux gives each drive a
-/// folder: the folder lies on another device than the one above it.
-#[cfg(unix)]
+/// Whether a drive or share is mounted at `path`. Linux lists every mount in
+/// its mount table, where a btrfs subvolume that was never mounted is a
+/// folder like any other.
+#[cfg(target_os = "linux")]
 fn is_mount_point(path: &str) -> bool {
+    std::fs::read_to_string("/proc/self/mountinfo").map_or_else(
+        |_| on_another_device(path),
+        |table| mount_points(&table).any(|point| Path::new(&point) == Path::new(path)),
+    )
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn is_mount_point(path: &str) -> bool {
+    on_another_device(path)
+}
+
+/// Whether the folder lies on another device than the one above it, as a
+/// drive mounted at a folder does.
+#[cfg(unix)]
+fn on_another_device(path: &str) -> bool {
     use std::os::unix::fs::MetadataExt;
     let path = Path::new(path);
     let device = |path: &Path| std::fs::metadata(path).map(|meta| meta.dev()).ok();
     path.parent()
         .and_then(device)
         .is_some_and(|above| device(path).is_some_and(|here| here != above))
+}
+
+/// The mount points of a table in the format of `/proc/self/mountinfo`,
+/// whose fifth field is the mount point.
+#[cfg(any(target_os = "linux", test))]
+fn mount_points(table: &str) -> impl Iterator<Item = String> + '_ {
+    table
+        .lines()
+        .filter_map(|line| line.split(' ').nth(4))
+        .map(unescape_octal)
+}
+
+/// Undoes the `\ooo` escapes the kernel writes in the mount table for a
+/// space, tab, newline or backslash.
+#[cfg(any(target_os = "linux", test))]
+fn unescape_octal(field: &str) -> String {
+    let bytes = field.as_bytes();
+    let mut unescaped = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let escaped = (bytes[index] == b'\\')
+            .then(|| field.get(index + 1..index + 4))
+            .flatten()
+            .filter(|digits| digits.bytes().all(|digit| (b'0'..=b'7').contains(&digit)))
+            .and_then(|digits| u8::from_str_radix(digits, 8).ok());
+        if let Some(byte) = escaped {
+            unescaped.push(byte);
+            index += 4;
+        } else {
+            unescaped.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&unescaped).into_owned()
+}
+
+/// Whether `path` is a share, or a folder above shares, where GNOME and KDE
+/// open network places: a share is a folder of its own in
+/// `/run/user/<uid>/gvfs`, and `<protocol>/<host>/<share>` in
+/// `/run/user/<uid>/kio-fuse-*`.
+fn is_network_place(path: &str) -> bool {
+    let Ok(rest) = Path::new(path).strip_prefix("/run/user") else {
+        return false;
+    };
+    // The parts of a path given as text are text.
+    let parts: Vec<&str> = rest.iter().filter_map(OsStr::to_str).collect();
+    let is_uid = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+    match parts.as_slice() {
+        [uid, "gvfs", below @ ..] if is_uid(uid) => below.len() <= 1,
+        [uid, place, below @ ..] if is_uid(uid) && place.starts_with("kio-fuse-") => {
+            below.len() <= 3
+        }
+        _ => false,
+    }
 }
 
 /// Whether a drive is mounted at `path`: the folder is the root of the volume
@@ -480,6 +553,49 @@ mod tests {
         let game = running(&format!("{}/game", folder.display()));
         assert!(runs_from_folder(&game, &folder.to_string_lossy()));
         std::fs::remove_dir(&folder).unwrap();
+    }
+
+    #[test]
+    fn the_mount_table_names_its_mount_points() {
+        let table = r"22 1 0:21 / / rw,relatime shared:1 - btrfs /dev/nvme0n1p2 rw,subvol=/root
+35 22 0:21 /home /home rw,relatime shared:28 - btrfs /dev/nvme0n1p2 rw,subvol=/home
+61 22 8:17 / /mnt/My\040Games rw,relatime shared:33 - ext4 /dev/sdb1 rw
+70 22 0:55 / /run/user/1000/gvfs rw,nosuid,nodev,relatime shared:40 - fuse.gvfsd-fuse gvfsd-fuse rw
+";
+        assert_eq!(
+            mount_points(table).collect::<Vec<_>>(),
+            ["/", "/home", "/mnt/My Games", "/run/user/1000/gvfs"]
+        );
+        assert_eq!(unescape_octal(r"/mnt/a\134b\011c"), "/mnt/a\\b\tc");
+        assert_eq!(unescape_octal(r"/mnt/a\9b\04"), r"/mnt/a\9b\04");
+    }
+
+    #[test]
+    fn a_share_the_desktop_opened_is_no_install_folder() {
+        for place in [
+            "/run/user/1000/gvfs/smb-share:server=nas,share=games",
+            "/run/user/1000/gvfs",
+            "/run/user/1000/kio-fuse-AbCdEf/smb/nas/games",
+            "/run/user/1000/kio-fuse-AbCdEf/smb/nas",
+        ] {
+            assert!(is_network_place(place), "{place}");
+        }
+        for folder in [
+            "/run/user/1000/gvfs/smb-share:server=nas,share=games/Hades",
+            "/run/user/1000/kio-fuse-AbCdEf/smb/nas/games/Hades",
+            "/run/user/me/gvfs/share",
+            "/home/me/gvfs/share",
+        ] {
+            assert!(!is_network_place(folder), "{folder}");
+        }
+        if cfg!(unix) {
+            // Also while the share is not open, so its folder does not exist.
+            let share = "/run/user/1000/gvfs/smb-share:server=nas,share=games";
+            assert!(!runs_from_folder(
+                &running(&format!("{share}/Hades/hades")),
+                share
+            ));
+        }
     }
 
     #[cfg(unix)]
