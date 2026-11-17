@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { CloudBackupRecord } from "@/lib/types";
-import { backupSize, backupSource, formatApiHostname, formatByteSize, formatTimestamp, toIsoTimestamp } from "./backups";
+import { backupSize, backupSource, formatByteSize, formatServerAddress, formatTimestamp, toIsoTimestamp } from "./backups";
 
 function record(overrides: Partial<CloudBackupRecord> = {}): CloudBackupRecord {
   return {
@@ -53,10 +53,11 @@ describe("toIsoTimestamp", () => {
   });
 });
 
-describe("formatApiHostname", () => {
-  it("shows the host of an address and copes with a bare one", () => {
-    expect(formatApiHostname("https://vaultime.example.org/api")).toBe("vaultime.example.org");
-    expect(formatApiHostname("https://not a url")).toBe("not a url");
+describe("formatServerAddress", () => {
+  it("shows an address without its scheme and copes with a bare one", () => {
+    expect(formatServerAddress("https://vaultime.example.org")).toBe("vaultime.example.org");
+    expect(formatServerAddress("https://nas.example.org:8443/vaultime")).toBe("nas.example.org:8443/vaultime");
+    expect(formatServerAddress("https://not a url")).toBe("not a url");
   });
 });
 

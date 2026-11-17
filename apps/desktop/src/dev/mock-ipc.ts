@@ -15,6 +15,8 @@
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
 // password dialog on the cloud page. Signed out, ?signin=empty|wrong|ok and
 // ?signup=empty|short|closed|ok fill and send the forms of the cloud page.
+// ?server=1 remembers the mock server, so a signed out page connects to it,
+// and ?server=missing makes every address fail its check.
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
 // fills the three days before today with games that ran side by side.
 // ?midnight=1 fills the week with sessions that run past midnight.
@@ -82,6 +84,10 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const params = new URLSearchParams(window.location.search);
 const scenario = params.get("mock");
 const signedIn = params.get("cloud") === "1" || params.has("password");
+/** The server of the last sign-in, which the forms of ?signin and ?signup need. */
+let cloudServerSetting: string | null = ["server", "signin", "signup"].some((key) => params.has(key))
+  ? "https://vaultime.example.com"
+  : null;
 let cloudBackupSetting: string | null = params.has("cloudfresh") ? null : params.get("cloud") === "off" ? "false" : "true";
 const takeoverPreview = params.get("takeover") === "1";
 
@@ -981,6 +987,7 @@ function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
         appearanceValues.set(String(args.key), String(args.value));
       }
       if (args.key === "cloud_backup") cloudBackupSetting = String(args.value);
+      if (args.key === "cloud_server") cloudServerSetting = String(args.value);
       return true;
     case "get_background_image":
       return backgroundPicture;
@@ -1787,12 +1794,18 @@ mockIPC((cmd, payload) => {
         // ?whatsnew=1: just updated from an older version.
         { key: "whats_new_seen", value: params.has("whatsnew") ? "0.5.0" : "0.6.0", updated_at: iso(now) },
         ...(cloudBackupSetting === null ? [] : [{ key: "cloud_backup", value: cloudBackupSetting, updated_at: iso(now) }]),
+        ...(cloudServerSetting === null ? [] : [{ key: "cloud_server", value: cloudServerSetting, updated_at: iso(now) }]),
         ...[...appearanceValues].map(([key, value]) => ({ key, value, updated_at: iso(now) })),
       ];
     case "get_tracking_diagnostics":
       return { platform: "windows", running: true, foreground_detection: "win32_api", idle_detection: "win32_api", controller_detection: "xinput", controllers_connected: 1, poll_interval_seconds: 5 };
     case "load_cloud_session_secure":
       return signedIn ? JSON.stringify(cloudSession()) : null;
+    case "check_cloud_server": {
+      if (params.get("server") === "missing") throw { kind: "cloud", message: "no Vaultime server answers at that address." };
+      const typed = String(args.address).trim().replace(/\/+$/, "");
+      return { address: typed.includes("://") ? typed : `https://${typed}`, signups_open: params.get("signup") !== "closed" };
+    }
     case "cloud_request":
       return params.get("offline") === "1"
         ? { kind: "unreachable" }

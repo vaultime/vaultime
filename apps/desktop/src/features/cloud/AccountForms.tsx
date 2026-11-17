@@ -22,7 +22,7 @@ import {
 
 const FORM_CLASS = "grid max-w-[520px] gap-4";
 
-export function SignInForm({ onDone }: { onDone: (message: string) => void }) {
+export function SignInForm({ server, onDone }: { server: string; onDone: (message: string) => void }) {
   const { login } = useCloudSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +36,7 @@ export function SignInForm({ onDone }: { onDone: (message: string) => void }) {
       className={FORM_CLASS}
       onSubmit={(event) =>
         form.submit(event, async () => {
-          const session = await login(email, password);
+          const session = await login(server, email, password);
           onDone(`Signed in as ${session.user.email}.`);
         })
       }
@@ -63,7 +63,7 @@ export function SignInForm({ onDone }: { onDone: (message: string) => void }) {
   );
 }
 
-export function SignUpForm({ onDone }: { onDone: (message: string) => void }) {
+export function SignUpForm({ server, onDone }: { server: string; onDone: (message: string) => void }) {
   const { signUp } = useCloudSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -81,7 +81,7 @@ export function SignUpForm({ onDone }: { onDone: (message: string) => void }) {
       className={FORM_CLASS}
       onSubmit={(event) =>
         form.submit(event, async () => {
-          const session = await signUp(email, password, passphrase);
+          const session = await signUp(server, email, password, passphrase);
           onDone(`Cloud account created for ${session.user.email}.`);
         })
       }

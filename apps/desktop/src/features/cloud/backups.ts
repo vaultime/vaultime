@@ -51,9 +51,11 @@ export function toIsoTimestamp(value: string) {
   return parsed.toISOString();
 }
 
-export function formatApiHostname(value: string) {
+/** A server address without its scheme, as the player would type it. */
+export function formatServerAddress(value: string) {
   try {
-    return new URL(value).hostname;
+    const url = new URL(value);
+    return `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
   } catch {
     return value.replace(/^https?:\/\//, "");
   }

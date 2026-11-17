@@ -53,6 +53,8 @@ export const SETTING_KEYS = {
   cloudAutoBackup: "cloud_auto_backup_enabled",
   /** Shows the Cloud page and lets this PC sign in with `true`. Same as CLOUD_BACKUP_SETTING in constants.rs. */
   cloudBackup: "cloud_backup",
+  /** The address of the cloud server this PC connected to last. Same as CLOUD_SERVER_SETTING in constants.rs. */
+  cloudServer: "cloud_server",
   /**
    * How All games sorts the games, under its name from when the rail listed
    * them. Same as LIBRARY_SORT_SETTING in constants.rs.

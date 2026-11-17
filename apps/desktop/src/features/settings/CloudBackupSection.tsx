@@ -27,7 +27,7 @@ export function CloudBackupSection({ onError }: { onError: (message: string | nu
   return (
     <PageSection
       title="Cloud backup"
-      description="Encrypted backups on a small server. Vaultime works fully without it."
+      description="Encrypted backups on a Vaultime server that you or a friend set up, on a rented server or a NAS at home. Vaultime works fully without it."
     >
       <PageRow
         label="Use cloud backup"
@@ -42,7 +42,7 @@ export function CloudBackupSection({ onError }: { onError: (message: string | nu
               to turn it off.
             </>
           ) : enabled ? (
-            "The Cloud page in the menu signs this PC in, or creates an account."
+            "The Cloud page in the menu connects to the server and signs this PC in."
           ) : (
             "Off, the Cloud page stays out of the menu and this PC neither signs in nor uploads backups."
           )

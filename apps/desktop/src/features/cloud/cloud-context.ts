@@ -10,6 +10,7 @@ import type {
   CloudBackupUploadResult,
   CloudDevice,
   CloudPc,
+  CloudServerInfo,
   CloudStorage,
   GameChoice,
   MergePreview,
@@ -19,7 +20,14 @@ import type {
 export interface CloudSessionContextValue {
   /** Whether this PC uses cloud backup, which brings the Cloud page. Off on new installs. */
   enabled: boolean;
-  apiBaseUrl: string;
+  /** The server to sign in to, checked, while this PC is signed out. */
+  server: CloudServerInfo | null;
+  /** Checks the server at `address` and remembers it for this PC. */
+  connectServer: (address: string) => Promise<CloudServerInfo>;
+  /** Lets the player pick another server. */
+  forgetServer: () => void;
+  /** Connects to the server of the last sign-in, once per run. A failure only goes to the log. */
+  reconnectServer: () => void;
   initializing: boolean;
   session: CloudAuthSession | null;
   device: CloudDevice | null;
@@ -33,11 +41,13 @@ export interface CloudSessionContextValue {
   autoBackupError: string | null;
   setAutoBackup: (enabled: boolean) => Promise<void>;
   login: (
+    server: string,
     email: string,
     password: string,
     backupPassphrase?: string | null,
   ) => Promise<CloudAuthSession>;
   signUp: (
+    server: string,
     email: string,
     password: string,
     backupPassphrase: string,

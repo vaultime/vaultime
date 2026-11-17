@@ -22,9 +22,9 @@ import {
   MIN_BACKUP_PASSPHRASE_CHARS,
   SETTING_KEYS,
   TOKEN_REFRESH_MARGIN_MS,
-  VAULTIME_URL,
 } from "@/lib/constants";
 import {
+  checkCloudServer,
   clearCloudBackupKeySecure,
   discardCloudMerge as discardCloudMergeCommand,
   getAppVersion,
@@ -44,6 +44,7 @@ import type {
   CloudAuthSession,
   CloudBackupRecord,
   CloudDevice,
+  CloudServerInfo,
   CloudStorage,
   GameChoice,
 } from "@/lib/types";
@@ -67,9 +68,6 @@ import {
   shouldClearPersistedSession,
 } from "./session-store";
 
-/** Where a new sign-in goes. */
-const DEFAULT_SERVER = VAULTIME_URL;
-
 /** A session the server hands out, which remembers that server. */
 async function sessionFrom(server: string, path: string, body: unknown, accessToken?: string): Promise<CloudAuthSession> {
   const answer = await cloudPostJson<Omit<CloudAuthSession, "server">>(server, path, body, accessToken);
@@ -79,6 +77,7 @@ async function sessionFrom(server: string, path: string, body: unknown, accessTo
 export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
+  const [server, setServer] = useState<CloudServerInfo | null>(null);
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -95,6 +94,10 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef<CloudAuthSession | null>(null);
   // Counts sign-outs, so a refresh that finishes after one cannot sign back in.
   const signOutsRef = useRef(0);
+  // Counts server checks, so one that finishes after a newer one or a change
+  // of server is dropped.
+  const serverChecksRef = useRef(0);
+  const reconnectedRef = useRef(false);
   const bootstrappedRef = useRef(false);
   // Set when the server could not be reached at start, so this PC registers
   // once a later renewal of the session works.
@@ -267,12 +270,36 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     setBackupKeyReady(false);
   }
 
+  async function connectServer(address: string) {
+    const check = ++serverChecksRef.current;
+    const info = await checkCloudServer(address);
+    if (check === serverChecksRef.current) {
+      setServer(info);
+      await save(SETTING_KEYS.cloudServer, info.address);
+    }
+    return info;
+  }
+
+  function forgetServer() {
+    serverChecksRef.current += 1;
+    setServer(null);
+  }
+
+  // Once per run, so Change stays on the address field.
+  function reconnectServer() {
+    const saved = values[SETTING_KEYS.cloudServer];
+    if (reconnectedRef.current || !saved) return;
+    reconnectedRef.current = true;
+    connectServer(saved).catch(logFailure("connecting to the server of the last sign-in"));
+  }
+
   async function login(
+    server: string,
     email: string,
     password: string,
     backupPassphrase?: string | null,
   ) {
-    const next = await sessionFrom(DEFAULT_SERVER, "/v1/auth/login", { email, password });
+    const next = await sessionFrom(server, "/v1/auth/login", { email, password });
     await persistCloudSession(next);
     if (backupPassphrase?.trim()) {
       const backups = await backupsForKeyCheck(() =>
@@ -289,11 +316,12 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(
+    server: string,
     email: string,
     password: string,
     backupPassphrase: string,
   ) {
-    const next = await sessionFrom(DEFAULT_SERVER, "/v1/auth/signup", { email, password });
+    const next = await sessionFrom(server, "/v1/auth/signup", { email, password });
     await persistCloudSession(next);
     await persistBackupPassphrase(next, backupPassphrase, []);
     setBackupKeyReady(true);
@@ -640,7 +668,10 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
   const value: CloudSessionContextValue = {
     enabled,
-    apiBaseUrl: session?.server ?? DEFAULT_SERVER,
+    server,
+    connectServer,
+    forgetServer,
+    reconnectServer,
     initializing,
     session,
     device,

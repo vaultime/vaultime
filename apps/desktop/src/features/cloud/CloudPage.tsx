@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { SignInForm, SignUpForm, UnlockBackupsForm } from "@/features/cloud/AccountForms";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
+import { ServerForm } from "@/features/cloud/ServerForm";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
 import { useFinishRestore } from "@/features/settings/use-finish-restore";
@@ -19,7 +20,7 @@ import { capitalize } from "@/lib/words";
 import { BackupRow, DeleteBackupDialog, RestoreBackupDialog } from "./BackupDialogs";
 import {
   backupSource,
-  formatApiHostname,
+  formatServerAddress,
   formatByteSize,
   formatTimestamp,
   loadCachedBackups,
@@ -29,7 +30,6 @@ import { RegisteredPcsSection } from "./RegisteredPcsSection";
 
 export function CloudPage() {
   const {
-    apiBaseUrl,
     autoBackup,
     autoBackupError,
     backupKeyReady,
@@ -45,6 +45,7 @@ export function CloudPage() {
     refreshSession,
     registerCurrentDevice,
     restoreRemoteBackup,
+    server,
     session,
     setAutoBackup,
     uploadRemoteBackup,
@@ -311,7 +312,7 @@ export function CloudPage() {
             ? backupKeyReady
               ? "Backups are encrypted on this PC before they leave it. The server never sees your passphrase."
               : "Unlock backups on this PC with your backup passphrase to start."
-            : "Encrypted backups of your library on a small server. Vaultime works fully without it."}
+            : "Encrypted backups of your library on a server that you or a friend set up. Vaultime works fully without it."}
       </PageHeader>
 
       <div className="px-8 xl:px-14">
@@ -338,16 +339,27 @@ export function CloudPage() {
 
         {!session ? (
           <>
-            <PageSection title="Sign in" description="With an account you already have.">
-              <SignInForm onDone={showDone} />
+            <PageSection
+              title="Your server"
+              description="Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home."
+            >
+              <ServerForm />
             </PageSection>
 
-            <PageSection
-              title="Create an account"
-              description="The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
-            >
-              <SignUpForm onDone={showDone} />
-            </PageSection>
+            {server && (
+              <PageSection title="Sign in" description="With an account you already have on this server.">
+                <SignInForm server={server.address} onDone={showDone} />
+              </PageSection>
+            )}
+
+            {server?.signups_open && (
+              <PageSection
+                title="Create an account"
+                description="The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
+              >
+                <SignUpForm server={server.address} onDone={showDone} />
+              </PageSection>
+            )}
           </>
         ) : (
           <>
@@ -480,6 +492,9 @@ export function CloudPage() {
 
             <PageSection title="Account">
               <PageRow label="Email">{session.user.email}</PageRow>
+              <PageRow label="Server">
+                <span className="font-mono text-sm">{formatServerAddress(session.server)}</span>
+              </PageRow>
               <PageRow label="Signed in until">{formatTimestamp(session.refresh_expires_at)}</PageRow>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleRefreshSession} disabled={authBusy}>
@@ -500,10 +515,7 @@ export function CloudPage() {
           </>
         )}
 
-        <PageSection title="Server">
-          <PageRow label="Address">
-            <span className="font-mono text-sm">{formatApiHostname(apiBaseUrl)}</span>
-          </PageRow>
+        <PageSection title="Protection">
           <PageRow label="Encryption" hint="With your backup passphrase, before the backup leaves this PC.">
             XChaCha20-Poly1305
           </PageRow>

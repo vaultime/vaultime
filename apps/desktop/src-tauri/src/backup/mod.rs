@@ -31,9 +31,9 @@ use crate::assets::{AssetManager, is_plain_name};
 use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, AWAY_TIMER_SETTING, BACKGROUND_BLUR_SETTING,
-    BACKGROUND_DIM_SETTING, BACKUP_VERSION, CLOUD_BACKUP_SETTING, DATABASE_BUSY_TIMEOUT,
-    DATABASE_FILE, HASH_BUFFER_BYTES, PLAY_SLICES_VERSION_SETTING, SYNC_FOLDER_SETTING,
-    WHATS_NEW_SEEN_SETTING, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
+    BACKGROUND_DIM_SETTING, BACKUP_VERSION, CLOUD_BACKUP_SETTING, CLOUD_SERVER_SETTING,
+    DATABASE_BUSY_TIMEOUT, DATABASE_FILE, HASH_BUFFER_BYTES, PLAY_SLICES_VERSION_SETTING,
+    SYNC_FOLDER_SETTING, WHATS_NEW_SEEN_SETTING, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -48,12 +48,13 @@ pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 /// backup cannot send the daily backups or their copies to a folder of its
 /// choosing, the
 /// look stays with the background picture, which backups leave out, the
-/// window keeps a size made for this screen, and cloud backup stays as this
-/// PC's sign in has it.
+/// window keeps a size made for this screen, and cloud backup and its server
+/// stay as this PC's sign in has them.
 const DEVICE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
     SYNC_FOLDER_SETTING,
     CLOUD_BACKUP_SETTING,
+    CLOUD_SERVER_SETTING,
     APPEARANCE_MODE_SETTING,
     APPEARANCE_GROUND_SETTING,
     APPEARANCE_ACCENT_SETTING,

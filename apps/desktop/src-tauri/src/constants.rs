@@ -409,6 +409,9 @@ pub const CLOUD_AUTO_BACKUP_SETTING: &str = "cloud_auto_backup_enabled";
 /// Setting that shows the Cloud page and lets this PC sign in with `true`.
 /// Same as `SETTING_KEYS.cloudBackup` in `lib/constants.ts`.
 pub const CLOUD_BACKUP_SETTING: &str = "cloud_backup";
+/// Setting with the address of the cloud server this PC connected to last.
+/// Same as `SETTING_KEYS.cloudServer` in `lib/constants.ts`.
+pub const CLOUD_SERVER_SETTING: &str = "cloud_server";
 /// Setting with how All games sorts the games, under its name from when the
 /// rail listed them. Same as `SETTING_KEYS.librarySort`
 /// in `lib/constants.ts`.
@@ -432,6 +435,7 @@ pub const PAGE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
     CLOUD_AUTO_BACKUP_SETTING,
     CLOUD_BACKUP_SETTING,
+    CLOUD_SERVER_SETTING,
     LIBRARY_SORT_SETTING,
     LIBRARY_GROUP_SETTING,
     AUTO_DISCOVER_SETTING,

@@ -65,7 +65,9 @@ function renderPage(backup: CloudBackupRecord, result: CloudBackupRestoreResult)
   const restoreRemoteBackup = vi.fn(async () => result);
   const cloud = {
     enabled: true,
-    apiBaseUrl: "https://vaultime.example",
+    server: null,
+    connectServer: vi.fn(),
+    forgetServer: vi.fn(),
     initializing: false,
     session: SESSION,
     device: null,
