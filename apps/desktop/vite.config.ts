@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -34,6 +34,10 @@ export default defineConfig({
     strictPort: true,
     watch: {
       ignored: ["**/src-tauri/**"],
+    },
+    // What's new reads the changelog at the root of the repository.
+    fs: {
+      allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(import.meta.dirname, "../../CHANGELOG.md")],
     },
   },
 });
