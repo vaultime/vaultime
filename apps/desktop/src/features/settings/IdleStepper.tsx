@@ -37,6 +37,8 @@ export function IdleStepper({
   const atMax = seconds >= MAX_IDLE_THRESHOLD_SECS;
 
   function step(by: 1 | -1) {
+    // The arrow keys stop where the buttons do, so a short typed time never steps up.
+    if (by > 0 ? atMax : atMin) return;
     const next = by > 0 ? Math.floor(minutes) + 1 : Math.ceil(minutes) - 1;
     const nextSeconds = Math.min(MAX_IDLE_THRESHOLD_SECS, Math.max(IDLE_STEP_MIN_MINUTES, next) * SECONDS_PER_MINUTE);
     onChange(nextSeconds);
