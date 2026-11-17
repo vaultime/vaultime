@@ -355,6 +355,22 @@ pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Starts Vaultime out of sight for a login item: in the tray, or minimized
+/// where the desktop shows no tray icons, so it never runs without a window
+/// to come back to.
+pub fn start_minimized<R: Runtime>(app: &AppHandle<R>) {
+    if app.state::<TrayState>().shown {
+        hide_main_window(app);
+    } else if let Some(window) = app.get_webview_window("main") {
+        let webview: &Webview<R> = window.as_ref();
+        let _ = webview.show();
+        let _ = window.minimize();
+        let _ = window.show();
+        // GTK on Wayland drops a minimize sent before the window is mapped.
+        let _ = window.minimize();
+    }
+}
+
 /// Puts the window away on close: into the tray, or down to the taskbar or
 /// dock when the desktop shows no tray icons, so Vaultime stays in sight.
 pub fn put_main_window_away<R: Runtime>(app: &AppHandle<R>) {

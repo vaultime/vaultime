@@ -336,14 +336,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // The window starts hidden and a login item leaves it that way, in the tray
-    // or without one. Opening Vaultime again shows the window of this instance.
+    // The window starts hidden and a login item leaves it out of sight.
+    // Opening Vaultime again shows the window of this instance.
     // It takes its size while still hidden, so it never shows at another one.
     app.manage(tray::create(app.handle()));
     window_look::show_stored(app.handle());
     window_size::fit_main_window(app.handle(), true);
     if std::env::args().any(|arg| arg == tray::MINIMIZED_ARG) {
-        tray::hide_main_window(app.handle());
+        tray::start_minimized(app.handle());
     } else {
         tray::show_main_window(app.handle());
     }
