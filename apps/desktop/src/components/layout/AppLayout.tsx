@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useState } from "react";
-import { Outlet, useSearchParams } from "react-router";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { NavigationType, Outlet, useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Backdrop } from "@/features/appearance/Backdrop";
 import { DiscoverGamesDialog } from "@/features/library/components/DiscoverGamesDialog";
 import { useLibrary } from "@/features/library/library-context";
@@ -15,9 +15,30 @@ import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
 import { UpdateBanner } from "./UpdateBanner";
 
+/**
+ * Every page shares one scroller, so a new page starts at its top, while a
+ * link to a part of a page and a dialog opened over it keep the place. It
+ * sits before the page, so its effect runs before one a page scrolls with.
+ */
+function ScrollToTop({ scroller }: { scroller: RefObject<HTMLElement | null> }) {
+  const { key, pathname, search, hash } = useLocation();
+  const navigationType = useNavigationType();
+  const shown = useRef({ pathname, search });
+  useLayoutEffect(() => {
+    const before = shown.current;
+    shown.current = { pathname, search };
+    const samePage = before.pathname === pathname;
+    const dialog = samePage && [before.search, search].some((each) => otherDialogOpen(new URLSearchParams(each), false));
+    if (hash || dialog || (samePage && navigationType !== NavigationType.Push)) return;
+    scroller.current?.scrollTo({ top: 0 });
+  }, [key, pathname, search, hash, navigationType, scroller]);
+  return null;
+}
+
 export function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const scroller = useRef<HTMLElement>(null);
   const [searchParams] = useSearchParams();
   const { refresh } = useLibrary();
   const { found, dismiss } = useFoundGames(otherDialogOpen(searchParams, paletteOpen));
@@ -50,10 +71,12 @@ export function AppLayout() {
             scroller. Outside it they stretch the shell, and focusing one scrolls
             the whole app up. */}
         <main
+          ref={scroller}
           className="relative min-h-0 flex-1 overflow-y-auto"
           onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
         >
           <TopBar scrolled={scrolled} onSearch={() => setPaletteOpen(true)} />
+          <ScrollToTop scroller={scroller} />
           <Outlet />
         </main>
       </div>
