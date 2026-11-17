@@ -8,6 +8,8 @@ pub mod cloud_merge;
 pub(crate) mod crypto;
 pub mod merge;
 pub mod remote;
+#[cfg(test)]
+pub(crate) mod testing;
 
 use std::collections::HashMap;
 use std::fmt::Write;
