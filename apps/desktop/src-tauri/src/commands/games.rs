@@ -102,9 +102,10 @@ pub fn set_game_favorite(
 #[tauri::command(async)]
 pub fn list_game_assets(
     db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
     game_id: String,
 ) -> Result<Vec<GameAssetView>, VaultimeError> {
-    assets::list_game_assets(&db, &game_id)
+    assets::list_game_assets(&db, &asset_manager, &game_id)
 }
 
 #[tauri::command(async)]

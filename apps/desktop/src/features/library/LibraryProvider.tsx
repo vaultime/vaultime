@@ -137,8 +137,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setCovers(
         Object.fromEntries(
           assets
-            .filter((asset) => asset.preview_data_url)
-            .map((asset) => [asset.game_id, asset.preview_data_url as string]),
+            .filter((asset) => asset.image_url)
+            .map((asset) => [asset.game_id, asset.image_url as string]),
         ),
       );
       setArtTints((current) => tintsOfCovers(assets, current));

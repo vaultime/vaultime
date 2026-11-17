@@ -82,7 +82,11 @@ function cardColors(mode: ThemeMode, look: CardLook): Colors {
 
 const images = new Map<string, Promise<HTMLImageElement | null>>();
 
-/** A decoded image, null when it cannot be read. Covers are data URLs or same origin files, so the canvas stays clean. */
+/**
+ * A decoded image, null when it cannot be read. A card to save gets covers as
+ * data URLs, so its canvas stays clean. The preview, only shown, may draw art
+ * of the app's scheme.
+ */
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   let image = images.get(src);
   if (!image) {

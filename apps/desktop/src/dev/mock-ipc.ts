@@ -749,7 +749,7 @@ function coverAssets() {
       cache_path: null,
       hash: null,
       created_at: iso(now),
-      preview_data_url: `/covers/${file}`,
+      ...shownAt(`/covers/${file}`),
       tint: null,
       is_preferred: true,
     };
@@ -1036,7 +1036,7 @@ function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
       return backgroundPicture;
     case "set_background_from_game": {
       const index = allGames.findIndex((game) => game.id === args.gameId);
-      backgroundPicture = coverFiles && index >= 0 ? coverAssets()[index].preview_data_url : samplePicture();
+      backgroundPicture = coverFiles && index >= 0 ? (coverAssets()[index].image_url ?? samplePicture()) : samplePicture();
       return backgroundPicture;
     }
     case "clear_background_image":
@@ -1176,7 +1176,7 @@ function saveCover(gameId: string, art: MockArt, crop: CropRect) {
       cache_path: null,
       hash: null,
       created_at: iso(now),
-      preview_data_url: drawCover(art, crop),
+      ...shownAt(drawCover(art, crop)),
       tint: null,
       is_preferred: true,
     },
@@ -1464,7 +1464,7 @@ function posterAsset(gameId: string): GameAssetView[] {
       cache_path: null,
       hash: null,
       created_at: iso(now),
-      preview_data_url: drawPoster(allGames[index].title, index),
+      ...shownAt(drawPoster(allGames[index].title, index)),
       tint: null,
       is_preferred: true,
     };
@@ -1486,7 +1486,7 @@ function sampleCovers(gameId: string): GameAssetView[] {
       cache_path: null,
       hash: null,
       created_at: iso(now),
-      preview_data_url: drawCover(art, toCrop(fillView(art), art)),
+      ...shownAt(drawCover(art, toCrop(fillView(art), art))),
       tint: null,
       is_preferred: false,
     });
@@ -1537,6 +1537,11 @@ if (deleteStep || params.get("focus") === "delete") {
   }
 }
 
+/** A sample image as the core sends it. */
+function shownAt(src: string) {
+  return { image_url: src };
+}
+
 function preferredAssets(): GameAssetView[] {
   return allGames.flatMap((game) => gameAssets(game.id).filter((asset) => asset.is_preferred));
 }
@@ -1546,7 +1551,7 @@ async function openAsset(gameId: string, assetId: string): Promise<ArtworkSource
   if (picked && picked.asset.id === assetId) return { ...picked.art.source, crop: picked.crop };
   const asset = gameAssets(gameId).find((candidate) => candidate.id === assetId);
   const image = new Image();
-  image.src = asset?.preview_data_url ?? "";
+  image.src = asset?.image_url ?? "";
   await image.decode();
   pickedArt = mockArt(image, image.naturalWidth, image.naturalHeight, true);
   return { ...pickedArt.source, from_original: false };
@@ -1954,7 +1959,7 @@ mockIPC((cmd, payload) => {
       // Sample covers are files of the preview or data URLs, which a canvas can save.
       const wanted = new Set(args.gameIds as string[]);
       return Object.fromEntries(
-        preferredAssets().flatMap((asset) => (wanted.has(asset.game_id) && asset.preview_data_url ? [[asset.game_id, asset.preview_data_url]] : [])),
+        preferredAssets().flatMap((asset) => (wanted.has(asset.game_id) && asset.image_url ? [[asset.game_id, asset.image_url]] : [])),
       );
     }
     case "list_preferred_game_assets":
@@ -1962,7 +1967,7 @@ mockIPC((cmd, payload) => {
       return Promise.all(
         preferredAssets().map(async (asset) => ({
           ...asset,
-          tint: asset.preview_data_url ? await artOfImage(asset.preview_data_url) : null,
+          tint: asset.image_url ? await artOfImage(asset.image_url) : null,
         })),
       );
     case "list_ignored_programs":

@@ -45,7 +45,7 @@ export function gameArt(summary: GameSummary | null): GameInFront | null {
 function artKey(summary: GameSummary | null): string {
   const art = gameArt(summary);
   if (!summary || !art) return "";
-  return `${summary.game.id}|${art.lightness}|${art.colors.map((color) => `${color.hue}/${color.chroma}`).join(",")}`;
+  return `${summary.game.id}|${art.cover}|${art.lightness}|${art.colors.map((color) => `${color.hue}/${color.chroma}`).join(",")}`;
 }
 
 /**

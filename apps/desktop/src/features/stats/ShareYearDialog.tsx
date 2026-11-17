@@ -167,8 +167,8 @@ export function ShareYearDialog({
 
   /**
    * The card for the options set now. The preview may still show the one
-   * before a change. Its covers are data URLs, so its canvas can be saved and
-   * copied.
+   * before a change. Its covers are data URLs, as a canvas that holds art of
+   * the app's scheme cannot be saved or copied.
    */
   async function drawForExport(): Promise<HTMLCanvasElement> {
     if (!card) throw new Error("there is no card to draw");

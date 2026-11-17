@@ -656,7 +656,7 @@ export interface ArtworkSource {
   crop: CropRect | null;
 }
 
-/** Artwork entry plus an inline preview payload returned by the core. */
+/** Artwork entry with where the window loads it from. */
 export interface GameAssetView {
   id: string;
   game_id: string;
@@ -666,7 +666,8 @@ export interface GameAssetView {
   cache_path: string | null;
   hash: string | null;
   created_at: string;
-  preview_data_url: string | null;
+  /** The cached image from the app's art scheme, null without one. */
+  image_url: string | null;
   /** The colors of the image, worked out for the covers of the library. */
   tint: ArtTint | null;
   is_preferred: boolean;

@@ -36,7 +36,7 @@ export function CoverPicker({
   const [error, setError] = useState<string | null>(null);
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const withPreview = assets.filter((asset) => asset.preview_data_url);
+  const withPreview = assets.filter((asset) => asset.image_url);
   const inUse = withPreview.find((asset) => asset.is_preferred);
   const added = withPreview.filter((asset) => asset.source === PLAYER_ARTWORK_SOURCE);
   const found = withPreview.filter((asset) => asset.source !== PLAYER_ARTWORK_SOURCE);
@@ -210,7 +210,7 @@ function CoverGroup({
                     marked && "border-destructive opacity-100",
                   )}
                 >
-                  <img src={asset.preview_data_url ?? undefined} alt="" className="size-full object-cover" />
+                  <img src={asset.image_url ?? undefined} alt="" className="size-full object-cover" />
                 </button>
                 <button
                   type="button"

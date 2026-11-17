@@ -3,7 +3,7 @@
 
 //! Artwork scanning, thumbnail caching and cover selection.
 
-mod art;
+pub mod art;
 pub mod crop;
 pub mod tint;
 
@@ -64,109 +64,137 @@ pub struct GameAssetView {
     pub cache_path: Option<String>,
     pub hash: Option<String>,
     pub created_at: String,
-    pub preview_data_url: Option<String>,
+    /// The cached image as the window loads it, None without one.
+    pub image_url: Option<String>,
     /// The colors of the image, worked out for the covers of the library.
     pub tint: Option<ArtTint>,
     pub is_preferred: bool,
 }
 
-pub fn list_game_assets(db: &Database, game_id: &str) -> Result<Vec<GameAssetView>> {
+pub fn list_game_assets(
+    db: &Database,
+    asset_manager: &AssetManager,
+    game_id: &str,
+) -> Result<Vec<GameAssetView>> {
     let game = games::get_game(db, game_id)?;
     let assets = game_assets::list_assets_for_game(db, game_id)?;
     let preferred_asset_id = preferred_asset_id(&game);
-    Ok(build_asset_views(&assets, preferred_asset_id.as_deref()))
+    Ok(build_asset_views(
+        &assets,
+        preferred_asset_id.as_deref(),
+        asset_manager.cache_dir(),
+    ))
 }
 
-/// One cover per game with a preview and its colors. When the preferred
+/// One cover per game with its colors. When the preferred
 /// cover cannot be read, the next readable asset stands in.
 pub fn list_preferred_game_assets(
     db: &Database,
     asset_manager: &AssetManager,
 ) -> Result<Vec<GameAssetView>> {
-    let mut views = Vec::new();
-    let mut by_game = game_assets::list_assets_by_game(db)?;
-
-    for game in games::list_all_games(db)? {
-        let assets = by_game.remove(&game.id).unwrap_or_default();
-        let preferred = resolve_preferred(&assets, preferred_asset_id(&game).as_deref());
-        let is_preferred = |asset: &GameAsset| preferred.is_some_and(|p| p.id == asset.id);
-        let cover = preferred
-            .into_iter()
-            .chain(assets.iter().filter(|asset| !is_preferred(asset)))
-            .find_map(|asset| {
-                let preview = build_preview_data_url(asset).ok()?;
-                Some(asset_view(asset, Some(preview), is_preferred(asset)))
-            });
-
-        views.extend(cover);
-    }
-
     let cache_dir = asset_manager.cache_dir();
-    let mut unread = Vec::new();
-    for (index, view) in views.iter_mut().enumerate() {
-        let Some(cache_path) = view.cache_path.as_deref() else {
-            continue;
-        };
-        match art::known_tint(cache_dir, cache_path) {
-            art::Known::Tint(tint) => view.tint = Some(tint),
-            art::Known::Unread => unread.push(index),
-            art::Known::Missing => {}
-        }
-    }
-    let paths: Vec<&str> = unread
+    let mut by_game = game_assets::list_assets_by_game(db)?;
+    // Each game's assets in the order they stand in, the preferred one first.
+    let candidates: Vec<Vec<(GameAsset, bool)>> = games::list_all_games(db)?
         .iter()
-        .filter_map(|&index| views[index].cache_path.as_deref())
+        .map(|game| {
+            let mut assets = by_game.remove(&game.id).unwrap_or_default();
+            let preferred = resolve_preferred(&assets, preferred_asset_id(game).as_deref())
+                .map(|asset| asset.id.clone());
+            assets.sort_by_key(|asset| Some(&asset.id) != preferred.as_ref());
+            assets
+                .into_iter()
+                .map(|asset| {
+                    let is_preferred = Some(&asset.id) == preferred.as_ref();
+                    (asset, is_preferred)
+                })
+                .collect()
+        })
         .collect();
-    let tints = work_out_tints(cache_dir, &paths);
-    for (index, tint) in unread.into_iter().zip(tints) {
-        views[index].tint = tint;
+
+    // Covers whose thumbnail and colors are kept show right away, the others
+    // open their image, on a few threads.
+    let mut covers = Vec::with_capacity(candidates.len());
+    let mut unread = Vec::new();
+    for (index, assets) in candidates.iter().enumerate() {
+        let mut cover = None;
+        for (asset, is_preferred) in assets {
+            let Some(cache_path) = asset.cache_path.as_deref() else {
+                continue;
+            };
+            match art::known_cover(cache_dir, cache_path) {
+                art::Known::Art(art) => cover = Some(asset_view(asset, Some(art), *is_preferred)),
+                art::Known::Unread => unread.push(index),
+                art::Known::Missing => continue,
+            }
+            break;
+        }
+        covers.push(cover);
     }
-    Ok(views)
+    let made = in_parallel(&unread, |&index| {
+        candidates[index].iter().find_map(|(asset, is_preferred)| {
+            let cache_path = asset.cache_path.as_deref()?;
+            let art = art::cover_art(cache_dir, cache_path)
+                .inspect_err(|error| log::debug!("cover {cache_path} not shown: {error}"))
+                .ok()?;
+            Some(asset_view(asset, Some(art), *is_preferred))
+        })
+    });
+    for (index, cover) in unread.into_iter().zip(made) {
+        covers[index] = cover;
+    }
+    Ok(covers.into_iter().flatten().collect())
 }
 
-/// Works out the colors of covers on a few threads, as each opens an image.
-/// A cover whose colors cannot be read keeps the color of its title.
-fn work_out_tints(cache_dir: &Path, cache_paths: &[&str]) -> Vec<Option<ArtTint>> {
-    let tint = |cache_path: &&str| {
-        art::cover_tint(cache_dir, cache_path)
-            .inspect_err(|error| log::debug!("colors of {cache_path} not read: {error}"))
-            .ok()
-    };
+/// Runs `work` on a few threads, as each item opens an image, and keeps the
+/// order. An item whose work panicked gives None.
+fn in_parallel<T: Sync, R: Send>(
+    items: &[T],
+    work: impl Fn(&T) -> Option<R> + Sync,
+) -> Vec<Option<R>> {
     let threads = std::thread::available_parallelism()
         .map_or(1, usize::from)
         .min(ART_THREADS_MAX)
-        .min(cache_paths.len());
+        .min(items.len());
     if threads <= 1 {
-        return cache_paths.iter().map(tint).collect();
+        return items.iter().map(&work).collect();
     }
+    let work = &work;
     std::thread::scope(|scope| {
-        let parts: Vec<_> = cache_paths
-            .chunks(cache_paths.len().div_ceil(threads))
+        let parts: Vec<_> = items
+            .chunks(items.len().div_ceil(threads))
             .map(|part| {
                 (
                     part.len(),
-                    scope.spawn(move || part.iter().map(tint).collect()),
+                    scope.spawn(move || part.iter().map(work).collect::<Vec<_>>()),
                 )
             })
             .collect();
         parts
             .into_iter()
-            .flat_map(|(count, part)| part.join().unwrap_or_else(|_| vec![None; count]))
+            .flat_map(|(count, part)| {
+                part.join()
+                    .unwrap_or_else(|_| std::iter::repeat_with(|| None).take(count).collect())
+            })
             .collect()
     })
 }
 
 /// The covers of some games as data URLs, for pictures the page draws and
-/// saves.
+/// saves, which cannot take images of the art scheme.
 pub fn cover_data_urls(
     db: &Database,
     asset_manager: &AssetManager,
     game_ids: &[String],
 ) -> Result<HashMap<String, String>> {
+    let cache_dir = asset_manager.cache_dir();
     Ok(list_preferred_game_assets(db, asset_manager)?
         .into_iter()
         .filter(|cover| game_ids.contains(&cover.game_id))
-        .filter_map(|cover| Some((cover.game_id, cover.preview_data_url?)))
+        .filter_map(|cover| {
+            let path = art::image_path(cache_dir, cover.cache_path.as_deref()?)?;
+            Some((cover.game_id, data_url_of(&path).ok()?))
+        })
         .collect())
 }
 
@@ -332,7 +360,7 @@ pub fn scan_game_assets(
     });
     ensure_preferred_asset(db, game_id, best_found.map(|asset| asset.id.as_str()))?;
 
-    list_game_assets(db, game_id)
+    list_game_assets(db, asset_manager, game_id)
 }
 
 /// Scans every Steam game once for the covers Steam keeps, skipping games
@@ -505,7 +533,7 @@ pub fn import_game_asset(
     };
 
     use_cover(db, &game, &asset.id, Some(crop))?;
-    list_game_assets(db, game_id)
+    list_game_assets(db, asset_manager, game_id)
 }
 
 /// Deletes one of the game's images with its cached copy, never the file it
@@ -526,7 +554,7 @@ pub fn delete_game_asset(
     })?;
     // The next image takes over when it was the cover.
     ensure_preferred_asset(db, game_id, None)?;
-    list_game_assets(db, game_id)
+    list_game_assets(db, asset_manager, game_id)
 }
 
 /// Cuts one of the game's images again and makes it the cover. It stays one
@@ -544,7 +572,7 @@ pub fn crop_game_asset(
     let asset = replace_cover(db, asset_manager, &asset, &asset.file_path, &cache_path)?;
     // A crop of the cached cover says nothing about the original file.
     use_cover(db, &game, &asset.id, from_original.then_some(crop))?;
-    list_game_assets(db, game_id)
+    list_game_assets(db, asset_manager, game_id)
 }
 
 fn game_and_asset(db: &Database, game_id: &str, asset_id: &str) -> Result<(Game, GameAsset)> {
@@ -688,26 +716,27 @@ fn resolve_preferred<'a>(
         .or_else(|| assets.first())
 }
 
-fn build_asset_views(assets: &[GameAsset], preferred_asset_id: Option<&str>) -> Vec<GameAssetView> {
+fn build_asset_views(
+    assets: &[GameAsset],
+    preferred_asset_id: Option<&str>,
+    cache_dir: &Path,
+) -> Vec<GameAssetView> {
     let preferred = resolve_preferred(assets, preferred_asset_id);
     assets
         .iter()
         .take(MAX_LIBRARY_PREVIEWS)
         .map(|asset| {
-            asset_view(
-                asset,
-                build_preview_data_url(asset).ok(),
-                preferred.is_some_and(|p| p.id == asset.id),
-            )
+            let art = asset
+                .cache_path
+                .as_deref()
+                .and_then(|cache_path| art::image_art(cache_dir, cache_path));
+            asset_view(asset, art, preferred.is_some_and(|p| p.id == asset.id))
         })
         .collect()
 }
 
-fn asset_view(
-    asset: &GameAsset,
-    preview_data_url: Option<String>,
-    is_preferred: bool,
-) -> GameAssetView {
+fn asset_view(asset: &GameAsset, art: Option<art::Art>, is_preferred: bool) -> GameAssetView {
+    let (image_url, tint) = art.map_or((None, None), |art| (Some(art.image_url), art.tint));
     GameAssetView {
         id: asset.id.clone(),
         game_id: asset.game_id.clone(),
@@ -717,25 +746,17 @@ fn asset_view(
         cache_path: asset.cache_path.clone(),
         hash: asset.hash.clone(),
         created_at: asset.created_at.clone(),
-        preview_data_url,
-        tint: None,
+        image_url,
+        tint,
         is_preferred,
     }
 }
 
 /// Only the cached copy is shown. The original path can come from another PC
 /// through a restored backup, so it is never read here.
-fn build_preview_data_url(asset: &GameAsset) -> Result<String> {
-    let data_path = PathBuf::from(
-        asset
-            .cache_path
-            .as_deref()
-            .ok_or_else(|| VaultimeError::Asset("artwork has no cached copy".into()))?,
-    );
-    let bytes = read_artwork(&data_path)?;
-
-    let mime = mime_for_path(&data_path);
-
+fn data_url_of(path: &Path) -> Result<String> {
+    let bytes = read_artwork(path)?;
+    let mime = mime_for_path(path);
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
     Ok(format!("data:{mime};base64,{encoded}"))
 }
@@ -1134,11 +1155,11 @@ mod tests {
         }
         let preferred = assets.iter().find(|asset| asset.is_preferred).unwrap();
         println!(
-            "{} assets, cover {} from {}, preview {} bytes",
+            "{} assets, cover {} from {}, shown at {}",
             assets.len(),
             preferred.file_path,
             preferred.source,
-            preferred.preview_data_url.as_ref().map_or(0, String::len)
+            preferred.image_url.as_deref().unwrap_or_default()
         );
         assert_eq!(preferred.source, "steam_cache");
         fs::remove_dir_all(cache.cache_dir()).unwrap();
@@ -1209,8 +1230,8 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         let asset_manager = test_cache();
         let game = create_game(&db);
-        let readable = asset_manager.cache_dir().join("readable.png");
-        fs::write(&readable, b"png").unwrap();
+        let image = image::DynamicImage::ImageRgb8(image::RgbImage::new(60, 80));
+        let readable = write_cached_image(&asset_manager, &game, &image, true).unwrap();
         let add_asset = |cache_path: &Path| {
             game_assets::create_asset(
                 &db,
@@ -1223,14 +1244,20 @@ mod tests {
             )
             .unwrap()
         };
-        let missing = add_asset(&asset_manager.cache_dir().join("missing.png"));
+        let missing = add_asset(
+            &asset_manager
+                .cache_dir()
+                .join(&game.id)
+                .join(format!("{}.jpg", uuid::Uuid::new_v4())),
+        );
         let fallback = add_asset(&readable);
         set_preferred_game_asset(&db, &game.id, &missing.id).unwrap();
 
         let covers = list_preferred_game_assets(&db, &asset_manager).unwrap();
         assert_eq!(covers.len(), 1);
         assert_eq!(covers[0].id, fallback.id);
-        assert!(covers[0].preview_data_url.is_some());
+        let name = readable.file_name().unwrap().to_string_lossy();
+        assert!(covers[0].image_url.as_deref().unwrap().ends_with(&*name));
 
         fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
     }
@@ -1303,7 +1330,7 @@ mod tests {
             None,
         )
         .unwrap();
-        // A cached file that is no image keeps the color of its title.
+        // A cached file that is no image shows no cover.
         let broken = asset_manager
             .cache_dir()
             .join(&plain.id)
@@ -1326,15 +1353,14 @@ mod tests {
                 .unwrap()
                 .into_iter()
                 .find(|view| view.game_id == game_id)
-                .unwrap()
-                .tint
+                .map(|view| view.tint.unwrap())
         };
         let tint = tint_of(&game.id).unwrap();
         assert_eq!(tint.colors.len(), 1);
         assert_eq!(tint_of(&plain.id), None);
 
         // The next listing reads what was kept instead of the image.
-        let kept = art::derived_files(&cache_path).remove(0);
+        let kept = art::derived_files(&cache_path).pop().unwrap();
         let mut changed = tint.clone();
         changed.strength = 0.5;
         fs::write(
@@ -1544,7 +1570,9 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         let asset_manager = test_cache();
         let (game, cover) = scanned_game(&db, &asset_manager);
-        let scanned = list_game_assets(&db, &game.id).unwrap().remove(0);
+        let scanned = list_game_assets(&db, &asset_manager, &game.id)
+            .unwrap()
+            .remove(0);
         let cached = PathBuf::from(scanned.cache_path.clone().unwrap());
         assert!(cached.exists());
 
@@ -1589,7 +1617,9 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         let asset_manager = test_cache();
         let (game, _) = scanned_game(&db, &asset_manager);
-        let scanned = list_game_assets(&db, &game.id).unwrap().remove(0);
+        let scanned = list_game_assets(&db, &asset_manager, &game.id)
+            .unwrap()
+            .remove(0);
         delete_game_asset(&db, &asset_manager, &game.id, &scanned.id).unwrap();
 
         let rescanned = scan_game_assets(&db, &asset_manager, &game.id).unwrap();
@@ -1639,7 +1669,9 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         let asset_manager = test_cache();
         let (game, cover) = scanned_game(&db, &asset_manager);
-        let old = list_game_assets(&db, &game.id).unwrap().remove(0);
+        let old = list_game_assets(&db, &asset_manager, &game.id)
+            .unwrap()
+            .remove(0);
         let old_cache = PathBuf::from(old.cache_path.clone().unwrap());
         fs::remove_file(&cover).unwrap();
         write_logo(&cover.parent().unwrap().join("poster.png"));
@@ -1686,7 +1718,9 @@ mod tests {
         let asset_manager = test_cache();
         let (game, _) = scanned_game(&db, &asset_manager);
         let other = create_game(&db);
-        let scanned = list_game_assets(&db, &game.id).unwrap().remove(0);
+        let scanned = list_game_assets(&db, &asset_manager, &game.id)
+            .unwrap()
+            .remove(0);
 
         assert!(delete_game_asset(&db, &asset_manager, &other.id, &scanned.id).is_err());
         assert!(game_assets::get_asset(&db, &scanned.id).is_ok());
@@ -1729,7 +1763,9 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         let asset_manager = test_cache();
         let (game, cover) = scanned_game(&db, &asset_manager);
-        let before = list_game_assets(&db, &game.id).unwrap().remove(0);
+        let before = list_game_assets(&db, &asset_manager, &game.id)
+            .unwrap()
+            .remove(0);
         image::RgbImage::from_pixel(400, 200, image::Rgb([40, 200, 90]))
             .save_with_format(&cover, ImageFormat::Png)
             .unwrap();

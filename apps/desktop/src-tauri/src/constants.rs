@@ -358,6 +358,9 @@ pub const THUMBNAIL_HEIGHT_PX: u32 = 480;
 /// Version of the rule that works out the colors of art. Raising it works
 /// them out again for every cover.
 pub const ART_TINT_RULES_VERSION: u32 = 1;
+/// How long the window may keep an image of the art scheme. A cached image
+/// never changes under its name, so a year.
+pub const ART_CACHE_MAX_AGE_SECS: u64 = 365 * 24 * 60 * 60;
 /// Most threads that write thumbnails and work out colors of covers at once.
 pub const ART_THREADS_MAX: usize = 8;
 

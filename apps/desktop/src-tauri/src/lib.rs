@@ -46,7 +46,7 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use appearance::BackgroundStore;
 use assets::AssetManager;
 use constants::{
-    APPEARANCE_DIR, ASSET_CACHE_DIR, AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL,
+    APPEARANCE_DIR, ART_SCHEME, ASSET_CACHE_DIR, AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL,
     DATABASE_FILE, DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
 };
 use db::connection::Database;
@@ -82,6 +82,15 @@ pub fn run() {
                 .build(),
         )
         .setup(setup)
+        // Cached artwork, served from the disk instead of sent as text.
+        .register_asynchronous_uri_scheme_protocol(ART_SCHEME, |context, request, responder| {
+            let app = context.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let assets = app.try_state::<AssetManager>();
+                let cache_dir = assets.as_ref().map(|assets| assets.cache_dir());
+                responder.respond(assets::art::respond(cache_dir, request.uri().path()));
+            });
+        })
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
