@@ -450,6 +450,10 @@ pub const AUTO_BACKUP_INTERVAL: Duration = Duration::from_hours(24);
 pub const AUTO_BACKUP_ON_QUIT_MIN_AGE: Duration = Duration::from_hours(1);
 /// How often the running app checks whether the daily backup is due.
 pub const AUTO_BACKUP_CHECK_INTERVAL: Duration = Duration::from_hours(1);
+/// An unfinished automatic backup that started this long ago is left over
+/// from a crash, never one another PC is still writing or a sync service is
+/// still bringing in.
+pub const AUTO_BACKUP_UNFINISHED_AGE: Duration = Duration::from_hours(24);
 /// Unix permissions of the files in a cloud backup archive.
 pub const ARCHIVE_FILE_MODE: u32 = 0o644;
 /// Read buffer size for hashing backup files.

@@ -3,13 +3,15 @@
 
 //! Automatic local backups, once a day while Vaultime runs and when it quits.
 //! They get their own folder name prefix, so only the newest few automatic
-//! backups are kept and backups made by hand are never touched.
+//! backups are kept and backups made by hand are never touched. A PC counts
+//! only the backups its manifests name, so several PCs can share a folder.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
+use chrono::{NaiveDateTime, Utc};
 use log::{info, warn};
 
 use super::{BACKUP_MANIFEST_FILE, LocalBackupSummary, export_backup_to};
@@ -17,11 +19,12 @@ use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::constants::{
     AUTO_BACKUP_DIR, AUTO_BACKUP_ENABLED_SETTING, AUTO_BACKUP_FOLDER_SETTING, AUTO_BACKUP_KEEP,
-    AUTO_BACKUP_PREFIX,
+    AUTO_BACKUP_PREFIX, AUTO_BACKUP_UNFINISHED_AGE,
 };
 use crate::db::connection::Database;
 use crate::db::repo::{backup_snapshots, settings};
 use crate::error::{Result, VaultimeError};
+use crate::integrity;
 
 /// Snapshot label in the backup history.
 const LABEL: &str = "Automatic";
@@ -69,7 +72,7 @@ pub fn back_up_if_due(
             folder.display()
         ))
     })?;
-    if newest_age(&folder).is_some_and(|age| age < min_age) {
+    if newest_age(&folder, &this_pc(app_context)).is_some_and(|age| age < min_age) {
         return Ok(None);
     }
     write_backup(db, asset_manager, app_context, &folder).map(Some)
@@ -99,7 +102,8 @@ fn write_backup(
     app_context: &AppContext,
     folder: &Path,
 ) -> Result<LocalBackupSummary> {
-    let previous = newest_complete(folder);
+    let device = this_pc(app_context);
+    let previous = newest_complete(folder, &device);
     let summary = export_backup_to(
         db,
         asset_manager,
@@ -117,16 +121,22 @@ fn write_backup(
     ) {
         warn!("failed to record the automatic backup: {error}");
     }
-    prune(folder, AUTO_BACKUP_KEEP);
+    prune(folder, AUTO_BACKUP_KEEP, &device);
     info!("automatic backup written to {}", summary.backup_path);
     Ok(summary)
 }
 
-/// Age of the newest complete automatic backup. The manifest is written last,
-/// so its time is when the backup finished.
-fn newest_age(folder: &Path) -> Option<Duration> {
+/// The PC automatic backups made here name, as `export_backup_to` writes it.
+fn this_pc(app_context: &AppContext) -> String {
+    integrity::ledger::this_device().unwrap_or_else(|_| app_context.device_id.clone())
+}
+
+/// Age of the newest complete automatic backup of `device`. The manifest is
+/// written last, so its time is when the backup finished.
+fn newest_age(folder: &Path, device: &str) -> Option<Duration> {
     automatic_backups(folder)
         .iter()
+        .filter(|backup| made_by(backup, device))
         .filter_map(|backup| {
             fs::metadata(backup.join(BACKUP_MANIFEST_FILE))
                 .ok()?
@@ -137,13 +147,32 @@ fn newest_age(folder: &Path) -> Option<Duration> {
         .map(|newest| SystemTime::now().duration_since(newest).unwrap_or_default())
 }
 
-/// The newest automatic backup in `folder` that finished, to start from
-/// when the database does not open.
-pub fn newest_complete(folder: &Path) -> Option<PathBuf> {
+/// The newest automatic backup of `device` in `folder` that finished, to
+/// start from when the database does not open.
+pub fn newest_complete(folder: &Path, device: &str) -> Option<PathBuf> {
     automatic_backups(folder)
         .into_iter()
         .rev()
-        .find(|backup| backup.join(BACKUP_MANIFEST_FILE).is_file())
+        .find(|backup| made_by(backup, device))
+}
+
+/// Whether `backup` finished and its manifest names `device` as its PC.
+fn made_by(backup: &Path, device: &str) -> bool {
+    #[derive(serde::Deserialize)]
+    struct Source {
+        source_device_id: String,
+    }
+    fs::read_to_string(backup.join(BACKUP_MANIFEST_FILE))
+        .ok()
+        .and_then(|manifest| serde_json::from_str::<Source>(&manifest).ok())
+        .is_some_and(|source| source.source_device_id == device)
+}
+
+/// When an automatic backup started, from the timestamp its name ends in.
+fn started_at(backup: &Path) -> Option<NaiveDateTime> {
+    let name = backup.file_name()?.to_str()?;
+    let stamp = name.strip_prefix(&format!("{AUTO_BACKUP_PREFIX}-"))?;
+    NaiveDateTime::parse_from_str(stamp.get(..15)?, "%Y%m%dT%H%M%S").ok()
 }
 
 /// Automatic backup folders, oldest first. Their names end in a timestamp
@@ -164,13 +193,26 @@ fn automatic_backups(folder: &Path) -> Vec<PathBuf> {
     backups
 }
 
-/// Deletes unfinished automatic backups and all but the newest `keep` others.
-fn prune(folder: &Path, keep: usize) {
-    let (complete, unfinished): (Vec<PathBuf>, Vec<PathBuf>) = automatic_backups(folder)
-        .into_iter()
-        .partition(|backup| backup.join(BACKUP_MANIFEST_FILE).is_file());
-    let surplus = complete.len().saturating_sub(keep);
-    for backup in unfinished.iter().chain(complete.iter().take(surplus)) {
+/// Deletes all but the newest `keep` automatic backups of `device`, and
+/// unfinished ones that started long enough ago to be left over. Another
+/// PC's backups stay, also one it is writing into the same folder now.
+fn prune(folder: &Path, keep: usize, device: &str) {
+    let backups = automatic_backups(folder);
+    let now = Utc::now().naive_utc();
+    let unfinished = backups.iter().filter(|backup| {
+        !backup.join(BACKUP_MANIFEST_FILE).is_file()
+            && started_at(backup).is_some_and(|started| {
+                (now - started)
+                    .to_std()
+                    .is_ok_and(|age| age > AUTO_BACKUP_UNFINISHED_AGE)
+            })
+    });
+    let mine: Vec<&PathBuf> = backups
+        .iter()
+        .filter(|backup| made_by(backup, device))
+        .collect();
+    let surplus = mine.len().saturating_sub(keep);
+    for backup in unfinished.chain(mine.into_iter().take(surplus)) {
         if let Err(error) = fs::remove_dir_all(backup) {
             warn!(
                 "could not delete the old backup {}: {error}",
@@ -185,11 +227,12 @@ mod tests {
     use super::*;
     use crate::constants::ASSET_CACHE_DIR;
 
-    fn backup(folder: &Path, name: &str, complete: bool) -> PathBuf {
+    fn backup(folder: &Path, name: &str, device: Option<&str>) -> PathBuf {
         let path = folder.join(name);
         fs::create_dir_all(&path).unwrap();
-        if complete {
-            fs::write(path.join(BACKUP_MANIFEST_FILE), "{}").unwrap();
+        if let Some(device) = device {
+            let manifest = serde_json::json!({ "source_device_id": device }).to_string();
+            fs::write(path.join(BACKUP_MANIFEST_FILE), manifest).unwrap();
         }
         path
     }
@@ -290,18 +333,41 @@ mod tests {
     fn keeps_the_newest_and_never_touches_other_backups() {
         let folder =
             std::env::temp_dir().join(format!("vaultime-auto-test-{}", uuid::Uuid::new_v4()));
-        let oldest = backup(&folder, "vaultime-auto-20260901T010000Z", true);
-        let middle = backup(&folder, "vaultime-auto-20260902T010000Z", true);
-        let newest = backup(&folder, "vaultime-auto-20260903T010000Z", true);
-        let unfinished = backup(&folder, "vaultime-auto-20260904T010000Z", false);
-        let by_hand = backup(&folder, "vaultime-backup-20250101T010000Z", true);
+        let me = Some("desktop");
+        let oldest = backup(&folder, "vaultime-auto-20260901T010000Z", me);
+        let middle = backup(&folder, "vaultime-auto-20260902T010000Z", me);
+        let newest = backup(&folder, "vaultime-auto-20260903T010000Z", me);
+        let unfinished = backup(&folder, "vaultime-auto-20260904T010000Z", None);
+        let by_hand = backup(&folder, "vaultime-backup-20250101T010000Z", me);
 
-        prune(&folder, 2);
+        prune(&folder, 2, "desktop");
         assert!(!oldest.exists());
         assert!(middle.exists() && newest.exists());
         assert!(!unfinished.exists(), "an unfinished backup is removed");
         assert!(by_hand.exists(), "backups made by hand stay");
-        assert!(newest_age(&folder).is_some_and(|age| age < Duration::from_secs(60)));
+        assert!(newest_age(&folder, "desktop").is_some_and(|age| age < Duration::from_secs(60)));
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn pcs_sharing_a_folder_keep_their_own_backups() {
+        let folder =
+            std::env::temp_dir().join(format!("vaultime-auto-shared-{}", uuid::Uuid::new_v4()));
+        let mine = backup(&folder, "vaultime-auto-20260901T010000Z", Some("desktop"));
+        let theirs = backup(&folder, "vaultime-auto-20260902T010000Z", Some("laptop"));
+        let stamp = Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
+        let writing = backup(&folder, &format!("vaultime-auto-{stamp}"), None);
+
+        prune(&folder, 1, "desktop");
+        assert!(mine.exists() && theirs.exists());
+        assert!(writing.exists(), "a backup another PC is writing stays");
+        assert_eq!(newest_complete(&folder, "desktop"), Some(mine.clone()));
+        assert_eq!(newest_complete(&folder, "laptop"), Some(theirs));
+        assert_eq!(newest_complete(&folder, "tablet"), None);
+
+        let newer = backup(&folder, "vaultime-auto-20260903T010000Z", Some("desktop"));
+        prune(&folder, 1, "desktop");
+        assert!(!mine.exists() && newer.exists());
         fs::remove_dir_all(folder).unwrap();
     }
 }

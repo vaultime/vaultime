@@ -109,7 +109,7 @@ fn open_or_restore(
     if !reason.ends_with('.') {
         reason.push('.');
     }
-    let Some(newest) = auto::newest_complete(&folder) else {
+    let Some(newest) = auto::newest_complete(&folder, &context.device_id) else {
         return Err(Stop::Fatal(format!(
             "Vaultime could not open its database. {reason}\n\nThere is no automatic backup in {} to start from. The database is {}.",
             folder.display(),
@@ -393,7 +393,9 @@ mod tests {
         assert_eq!(files(&context.app_dir), before);
 
         // A backup whose database was damaged as well does not restore.
-        let backup = auto::newest_complete(&context.app_dir.join(AUTO_BACKUP_DIR)).unwrap();
+        let backup =
+            auto::newest_complete(&context.app_dir.join(AUTO_BACKUP_DIR), &context.device_id)
+                .unwrap();
         fs::write(backup.join(crate::constants::DATABASE_FILE), "damaged too").unwrap();
         let failed = open_or_restore(&context, &assets, &db_path, |_, _| true).err();
         assert!(
