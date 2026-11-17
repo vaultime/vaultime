@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/library.png" alt="The Vaultime library with the game playing now, the past week in numbers and the games to continue" width="880">
+  <img src="assets/screenshots/library.png" alt="Vaultime's Home with the game playing now, the past week in numbers and the games to continue" width="880">
 </p>
 
 Vaultime notices when a game starts, from any launcher, and keeps the time it was open, the time you actually played and the time it sat idle apart. Your play reads like a journal, your library looks like a library, and everything stays on your PC.

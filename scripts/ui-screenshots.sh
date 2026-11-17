@@ -12,9 +12,10 @@
 # window is 900 by 600. PORT is the preview port, 4173 by default.
 # Uses the Microsoft Edge that ships with Windows, in headless mode.
 #
-# The screenshots in assets/screenshots are taken at 1600 by 1000 with drawn
-# posters instead of real covers: library?posters=1 stats?posters=1
-# journal?posters=1 library/game-1?posters=1.
+# The screenshots in assets/screenshots are taken at 1600 by 1000 with made-up
+# games: copy assets/mock-covers to dist-mock/covers after the build, then
+# home?mock=fictional journal?mock=fictional stats?mock=fictional
+# library/game-1?mock=fictional.
 set -euo pipefail
 
 out=${1:?usage: ui-screenshots.sh <output-folder> [page ...]}

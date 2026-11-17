@@ -6,6 +6,9 @@
 // the URL for a fresh install, ?mock=unplayed for games without sessions or
 // ?mock=covers for artwork. Covers are not in the repo, copy portrait images
 // to dist-mock/covers/<n>.jpg (n = 1 to 7) after building to see them.
+// ?mock=fictional names the games after made-up ones, for the screenshots in
+// the README and on the website. Copy assets/mock-covers to dist-mock/covers
+// after building for their covers.
 // ?palette=1 opens the command palette. ?hidden=1 hides Celeste from the
 // library. ?cloud=1 signs in to a fake cloud
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
@@ -82,7 +85,10 @@ const takeoverPreview = params.get("takeover") === "1";
 const titles =
   scenario === "covers"
     ? ["Balatro", "Hades II", "Slay the Spire 2", "Ghost of Tsushima Director's Cut", "Sun Haven", "Counter-Strike 2", "Crab Champions"]
-    : ["Elden Ring", "Hades II", "Balatro", "Hollow Knight", "Celeste", "Stardew Valley", "Outer Wilds"];
+    : scenario === "fictional"
+      ? ["Mournhollow", "Kessler Line", "Wild Ante", "Moss & Marrow", "Sundown Rally", "Lanternbrook", "Tidecrown"]
+      : ["Elden Ring", "Hades II", "Balatro", "Hollow Knight", "Celeste", "Stardew Valley", "Outer Wilds"];
+const coverFiles = scenario === "covers" || scenario === "fictional";
 
 const games: Game[] = titles.map((title, index) => ({
   id: `game-${index + 1}`,
@@ -119,7 +125,7 @@ const random = () => {
   return seed / 2147483647;
 };
 const HISTORY_DAYS = 420;
-const LEFT_RUNNING = "Stardew Valley";
+const LEFT_RUNNING = titles[5];
 for (let day = HISTORY_DAYS; day >= 1; day -= 1) {
   const weekday = new Date(now - day * DAY_MS).getDay();
   const weekend = weekday === 0 || weekday === 6;
@@ -623,20 +629,23 @@ function runningNow(): Session[] {
   );
 }
 
-/** One cover per game for ?mock=covers, served from dist-mock/covers. */
+/** One cover per game for ?mock=covers and ?mock=fictional, served from dist-mock/covers. */
 function coverAssets() {
-  return allGames.map((game, index) => ({
-    id: `asset-${game.id}`,
-    game_id: game.id,
-    asset_type: "cover",
-    source: "scanned_local",
-    file_path: `covers/${index + 1}.jpg`,
-    cache_path: null,
-    hash: null,
-    created_at: iso(now),
-    preview_data_url: `/covers/${index + 1}.jpg`,
-    is_preferred: true,
-  }));
+  return allGames.map((game, index) => {
+    const file = scenario === "fictional" ? `${game.title.toLowerCase().replace(/[^a-z]/g, "")}.jpg` : `${index + 1}.jpg`;
+    return {
+      id: `asset-${game.id}`,
+      game_id: game.id,
+      asset_type: "cover",
+      source: "scanned_local",
+      file_path: `covers/${file}`,
+      cache_path: null,
+      hash: null,
+      created_at: iso(now),
+      preview_data_url: `/covers/${file}`,
+      is_preferred: true,
+    };
+  });
 }
 
 /** A result of the discovery scan, for the discover dialog. */
@@ -923,7 +932,7 @@ function appearanceIpc(cmd: string, args: Record<string, unknown>): unknown {
       return backgroundPicture;
     case "set_background_from_game": {
       const index = allGames.findIndex((game) => game.id === args.gameId);
-      backgroundPicture = scenario === "covers" && index >= 0 ? `/covers/${index + 1}.jpg` : samplePicture();
+      backgroundPicture = coverFiles && index >= 0 ? coverAssets()[index].preview_data_url : samplePicture();
       return backgroundPicture;
     }
     case "clear_background_image":
@@ -1389,7 +1398,7 @@ function sampleCovers(gameId: string): GameAssetView[] {
 
 function gameAssets(gameId: string): GameAssetView[] {
   const picked = pickedCovers.get(gameId)?.asset;
-  const covers = scenario === "covers" ? coverAssets().filter((asset) => asset.game_id === gameId) : posterAsset(gameId);
+  const covers = coverFiles ? coverAssets().filter((asset) => asset.game_id === gameId) : posterAsset(gameId);
   const listed = picked ? [picked, ...covers.map((asset) => ({ ...asset, is_preferred: false }))] : covers;
   const all = [...listed, ...sampleCovers(gameId)].filter((asset) => !deletedAssets.has(asset.id));
   // As in the core, one image is always the cover.

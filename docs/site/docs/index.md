@@ -2,7 +2,7 @@
 
 Vaultime counts how long you play your PC games, keeps active and idle time apart and writes every session down like a journal. These pages explain how it counts, what its labels mean and where your data lives.
 
-![The Vaultime library with the game playing now, the past week in numbers and the games to continue](../../../assets/screenshots/library.png "The library opens on the game you play now, tinted from its cover.")
+![Vaultime's Home with the game playing now, the past week in numbers and the games to continue](../../../assets/screenshots/library.png "Home leads with the game you play now, tinted from its cover.")
 
 ## The short version
 
