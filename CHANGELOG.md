@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No lost window on GNOME.** On a desktop that shows no tray icons, like GNOME without an AppIndicator extension, closing the window now minimizes Vaultime instead of hiding it where no icon could bring it back. It keeps counting either way, and Settings says which your desktop does.
 - **Updates through your package manager.** When a package manager installed Vaultime and its package says so, the app leaves updates to it and never replaces files it does not own. Settings says where its updates come from.
 - **Publisher in Windows.** Apps and features and the program's properties now name the publisher Vaultime instead of vaultime.
-- **Legacy Games and Big Fish by name.** Games found through these two launchers named no launcher and read as added by hand.
+- **Legacy Games and Big Fish by name.** Games found through these two launchers named no launcher and read as added by hand. They now name their launcher.
 - **Wednesday fits in the journal.** In a window of 1280 pixels and wider, the journal's day names no longer run into the strip of play beside them.
 
 ## [0.6.0] - 2026-10-20
