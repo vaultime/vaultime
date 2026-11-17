@@ -17,6 +17,7 @@ import {
 import { useLibrary } from "@/features/library/library-context";
 import { VAULTIME_URL, WHATS_NEW_COVERS } from "@/lib/constants";
 import { formatLongDate } from "@/lib/time";
+import { logFailure } from "@/lib/utils";
 import { FIXES_HEADING, type Release } from "@/lib/whats-new";
 
 /** The changes of a release, under the covers of the games played last. */
@@ -81,7 +82,10 @@ export function WhatsNewDialog({ release, onClose }: { release: Release; onClose
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => void openUrl(`${VAULTIME_URL}/changelog.html`)}>
+          <Button
+            variant="ghost"
+            onClick={() => openUrl(`${VAULTIME_URL}/changelog.html`).catch(logFailure("opening the changelog"))}
+          >
             <ExternalLink className="size-3.5" />
             Full changelog
           </Button>

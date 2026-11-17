@@ -411,7 +411,7 @@ export function SettingsPage() {
           <PageRow label="License">GPL 3.0 or later</PageRow>
           <div className="mt-5 flex flex-wrap gap-2">
             {LINKS.map((link) => (
-              <Button key={link.url} variant="outline" size="sm" onClick={() => openUrl(link.url)}>
+              <Button key={link.url} variant="outline" size="sm" onClick={() => openUrl(link.url).catch(logFailure(`opening ${link.url}`))}>
                 <ExternalLink className="size-3.5" />
                 {link.label}
               </Button>

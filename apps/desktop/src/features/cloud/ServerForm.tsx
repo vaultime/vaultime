@@ -12,6 +12,7 @@ import { useCheckedForm } from "@/features/cloud/checked-form";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useSettings } from "@/features/settings/settings-context";
 import { SETTING_KEYS, VAULTIME_URL } from "@/lib/constants";
+import { logFailure } from "@/lib/utils";
 import { formatServerAddress } from "./backups";
 
 /** The page of the documentation on setting up a server. */
@@ -84,7 +85,7 @@ function AddressForm({ saved }: { saved: string }) {
           {form.busy ? <Loader2 className="size-4 animate-spin" /> : <Server className="size-4" />}
           {form.busy ? "Connecting" : "Connect"}
         </Button>
-        <Button type="button" variant="ghost" onClick={() => void openUrl(OWN_SERVER_DOCS)}>
+        <Button type="button" variant="ghost" onClick={() => openUrl(OWN_SERVER_DOCS).catch(logFailure("opening the server guide"))}>
           <ExternalLink className="size-3.5" />
           Set up a server
         </Button>
