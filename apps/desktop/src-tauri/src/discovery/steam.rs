@@ -200,19 +200,26 @@ fn registry_steam_root() -> Option<PathBuf> {
 /// The Steam root plus every extra library listed in `libraryfolders.vdf`.
 fn find_library_folders(steam_root: &Path) -> Vec<PathBuf> {
     let mut folders = vec![steam_root.to_path_buf()];
-    let mut seen: HashSet<String> = HashSet::from([path_key(&steam_root.to_string_lossy())]);
+    let mut seen: HashSet<String> = HashSet::from([folder_key(steam_root)]);
 
     let vdf = steam_root.join("steamapps/libraryfolders.vdf");
     if let Ok(content) = fs::read_to_string(vdf) {
         for path in parse_library_paths(&content) {
             let folder = PathBuf::from(&path);
-            if folder.is_dir() && seen.insert(path_key(&path)) {
+            if folder.is_dir() && seen.insert(folder_key(&folder)) {
                 folders.push(folder);
             }
         }
     }
 
     folders
+}
+
+/// A folder as the disk names it, so a link to it, like Linux's
+/// `~/.steam/steam`, counts as the folder itself.
+fn folder_key(folder: &Path) -> String {
+    let real = fs::canonicalize(folder).unwrap_or_else(|_| folder.to_path_buf());
+    path_key(&real.to_string_lossy())
 }
 
 fn parse_library_paths(content: &str) -> Vec<String> {
@@ -521,6 +528,28 @@ mod tests {
             extract_vdf_value(r#"		"name"		"Counter-Strike 2""#, "path"),
             None
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_the_main_library_counts_once() {
+        let home = std::env::temp_dir().join(format!("vaultime-steam-{}", uuid::Uuid::new_v4()));
+        let real = home.join(".local/share/Steam");
+        fs::create_dir_all(real.join("steamapps")).unwrap();
+        fs::write(
+            real.join("steamapps/libraryfolders.vdf"),
+            format!(
+                "\"libraryfolders\"\n{{\n  \"0\"\n  {{\n    \"path\"    \"{}\"\n  }}\n}}\n",
+                real.display()
+            ),
+        )
+        .unwrap();
+        fs::create_dir_all(home.join(".steam")).unwrap();
+        std::os::unix::fs::symlink(&real, home.join(".steam/steam")).unwrap();
+
+        let folders = find_library_folders(&home.join(".steam/steam"));
+        fs::remove_dir_all(&home).unwrap();
+        assert_eq!(folders.len(), 1);
     }
 
     #[test]
