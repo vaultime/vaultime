@@ -22,6 +22,7 @@ function statsFor(sessions: Session[], year = 2026, play: Partial<YearPlay> = {}
     days_played: 0,
     longest_streak: null,
     current_streak: 0,
+    launchers: [],
     ...estimateYearSessions(sessions, year),
     ...play,
   });

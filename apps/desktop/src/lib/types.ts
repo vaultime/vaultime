@@ -328,6 +328,16 @@ export interface YearPlay {
   session_lengths: [number, number, number, number, number];
   /** The longest session that started in the year. */
   longest_session_id: string | null;
+  /** Each launcher's time in the year, by the copy that recorded it, the most first. */
+  launchers: LauncherPlay[];
+}
+
+/** The time one launcher's copies played in a stretch of days. Mirrors the Rust `LauncherPlay` struct. */
+export interface LauncherPlay {
+  /** Where the copies came from as their game names it, like "steam" or "folder_scan", null for a game added by hand. */
+  launcher: string | null;
+  /** Time that counts, a stretch two copies shared counted once. */
+  runtime_ms: number;
 }
 
 /** One game's totals, every install that counts as it included. Mirrors the Rust `GameTotals` struct. */

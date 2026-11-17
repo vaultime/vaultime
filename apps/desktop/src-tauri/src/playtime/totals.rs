@@ -869,6 +869,69 @@ pub fn play_totals<Tz: TimeZone>(
     Ok(bucketed(tz, &once_at_a_time(&range.slices, &links), bucket))
 }
 
+/// The time one launcher's copies played in a stretch of days.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LauncherPlay {
+    /// Where the copies came from as their game names it, like `steam` or
+    /// `folder_scan`, none for a game added by hand.
+    pub launcher: Option<String>,
+    /// Time that counts, a stretch two copies shared counted once.
+    pub runtime_ms: i64,
+}
+
+/// Each launcher's time between the local days `from` and `to`, by the
+/// launcher of the copy that recorded it, the most first. Copies of one game
+/// running at the same time count once, as in `play_totals`.
+pub fn launcher_play<Tz: TimeZone>(
+    db: &Database,
+    live: &LiveSessions,
+    tz: &Tz,
+    from: NaiveDate,
+    to: NaiveDate,
+    now_ms: i64,
+) -> Result<Vec<LauncherPlay>> {
+    let links = games::links(db)?;
+    let range = range_play(
+        db,
+        live,
+        &links,
+        day_start_ms(tz, from),
+        day_start_ms(tz, to),
+        None,
+        now_ms,
+        false,
+    )?;
+    let launcher_of: HashMap<String, Option<String>> = games::list_all_games(db)?
+        .into_iter()
+        .map(|game| (game.id, game.launcher_source))
+        .collect();
+    let shown: Vec<(&str, Slice)> = range
+        .slices
+        .iter()
+        .map(|(game, slice)| {
+            (
+                links.get(game).map_or(game.as_str(), String::as_str),
+                *slice,
+            )
+        })
+        .collect();
+    let mut by_launcher: BTreeMap<Option<String>, i64> = BTreeMap::new();
+    for ((recorded, _), slice) in range.slices.iter().zip(counted_once(&shown)) {
+        let launcher = launcher_of.get(recorded).cloned().flatten();
+        *by_launcher.entry(launcher).or_default() += slice.runtime_ms;
+    }
+    let mut play: Vec<LauncherPlay> = by_launcher
+        .into_iter()
+        .filter(|(_, runtime_ms)| *runtime_ms > 0)
+        .map(|(launcher, runtime_ms)| LauncherPlay {
+            launcher,
+            runtime_ms,
+        })
+        .collect();
+    play.sort_by_key(|play| std::cmp::Reverse(play.runtime_ms));
+    Ok(play)
+}
+
 /// The runtime of `span` that falls between `from` and `to`, spread evenly.
 /// One without length counts where it ended.
 fn runtime_within(span: &Span, from: i64, to: i64) -> i128 {

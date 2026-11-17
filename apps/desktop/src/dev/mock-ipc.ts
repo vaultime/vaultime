@@ -1667,9 +1667,9 @@ mockIPC((cmd, payload) => {
         Object.fromEntries(earlierPlaytime.map((entry) => [entry.game_id, entry.earlier_ms])),
       );
     case "get_year_play":
-      return estimateYearPlay(sessionsNow(), Number(args.year));
+      return estimateYearPlay(sessionsNow(), Number(args.year), Date.now(), allGames);
     case "get_all_time_play":
-      return estimateAllTimePlay(sessionsNow());
+      return estimateAllTimePlay(sessionsNow(), Date.now(), allGames);
     case "get_recent_play":
       return estimateRecentPlay(sessionsNow(), Number(args.days));
     case "get_steps_aside_hint":

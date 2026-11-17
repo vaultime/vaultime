@@ -24,6 +24,7 @@ import type {
   GameTotals,
   JournalDayPlay,
   JournalWeekPlay,
+  LauncherPlay,
   LauncherTime,
   PlayRun,
   RecentPlay,
@@ -295,22 +296,41 @@ function playedDays(sessions: Session[], now: number): Set<string> {
   return days;
 }
 
-/** What `get_year_play` answers for `year`. */
-export function estimateYearPlay(sessions: Session[], year: number, now = Date.now()): YearPlay {
-  return estimatePlayBetween(sessions, `${year}-01-01`, `${year + 1}-01-01`, now);
+/** What `get_year_play` answers for `year`, the launchers of `games` for the time by launcher. */
+export function estimateYearPlay(sessions: Session[], year: number, now = Date.now(), games: Game[] = []): YearPlay {
+  return estimatePlayBetween(sessions, `${year}-01-01`, `${year + 1}-01-01`, now, games);
 }
 
 /** What `get_all_time_play` says: every day from the first session up to today. */
-export function estimateAllTimePlay(sessions: Session[], now = Date.now()): YearPlay {
+export function estimateAllTimePlay(sessions: Session[], now = Date.now(), games: Game[] = []): YearPlay {
   const first = sessions.reduce(
     (min, session) => Math.min(min, parseVaultimeDate(session.started_at_wall).getTime()),
     now,
   );
-  return estimatePlayBetween(sessions, toDayKey(new Date(first)), toDayKey(startOfDay(new Date(now), 1)), now);
+  return estimatePlayBetween(sessions, toDayKey(new Date(first)), toDayKey(startOfDay(new Date(now), 1)), now, games);
+}
+
+/**
+ * Each launcher's time in sessions that started from `from` up to `to`, by
+ * the copy that recorded it. Close enough for sample data, where the core
+ * counts quarter hours.
+ */
+function estimateLauncherPlay(sessions: Session[], games: Game[], from: Date, to: Date): LauncherPlay[] {
+  const launcherOf = new Map(games.map((game) => [game.id, game.launcher_source]));
+  const byLauncher = new Map<string | null, number>();
+  for (const session of sessions.filter(countsAsPlay)) {
+    const at = parseVaultimeDate(session.started_at_wall);
+    if (at < from || at >= to) continue;
+    const launcher = launcherOf.get(session.recorded_game_id ?? session.game_id) ?? null;
+    byLauncher.set(launcher, (byLauncher.get(launcher) ?? 0) + session.counted_runtime_ms);
+  }
+  return [...byLauncher]
+    .map(([launcher, runtime_ms]) => ({ launcher, runtime_ms }))
+    .sort((a, b) => b.runtime_ms - a.runtime_ms);
 }
 
 /** The stats page's numbers for the local days `from` up to but not including `to`, both "2026-01-01". */
-function estimatePlayBetween(sessions: Session[], from: string, to: string, now: number): YearPlay {
+function estimatePlayBetween(sessions: Session[], from: string, to: string, now: number, games: Game[]): YearPlay {
   const days = playedDays(sessions, now);
   const inYear = [...days].filter((day) => day >= from && day < to).sort();
   let longest: Streak | null = null;
@@ -345,6 +365,7 @@ function estimatePlayBetween(sessions: Session[], from: string, to: string, now:
     longest_streak: longest,
     current_streak: current,
     ...estimateSessionsBetween(sessions, start, end),
+    launchers: estimateLauncherPlay(sessions, games, start, end),
   };
 }
 

@@ -25,8 +25,8 @@ use crate::integrity;
 use crate::playtime::journal::{GameTime, local_day};
 use crate::playtime::slices::slices_from;
 use crate::playtime::totals::{
-    Bucket, PlayTotal, day_start_ms, day_totals, fill_set_aside, open_session_spans, open_sessions,
-    placed_until, play_totals,
+    Bucket, LauncherPlay, PlayTotal, day_start_ms, day_totals, fill_set_aside, launcher_play,
+    open_session_spans, open_sessions, placed_until, play_totals,
 };
 use crate::tracking::live::LiveSessions;
 
@@ -66,6 +66,9 @@ pub struct YearPlay {
     pub session_lengths: [usize; 5],
     /// The longest session that started in the year.
     pub longest_session_id: Option<String>,
+    /// Each launcher's time in the year, by the copy that recorded it, the
+    /// most first.
+    pub launchers: Vec<LauncherPlay>,
 }
 
 /// The last few days of play, for the library.
@@ -323,6 +326,7 @@ fn play_between<Tz: TimeZone>(
         sessions_by_game,
         session_lengths,
         longest_session_id: longest_of(&started),
+        launchers: launcher_play(db, live, tz, first, next, now_ms)?,
     })
 }
 
@@ -533,6 +537,55 @@ mod tests {
         assert_eq!(year.current_streak, 2);
         assert_eq!(year.days_played, 6);
         assert_eq!(year.played_ms, 180 * MINUTE);
+    }
+
+    #[test]
+    fn the_year_splits_its_time_by_the_launcher_of_each_copy() {
+        let db = database();
+        let steam = game(&db, "Cyberpunk 2077");
+        let gog = game(&db, "Cyberpunk 2077 GOG");
+        let found = game(&db, "Celeste");
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE games SET launcher_source = CASE id WHEN ?1 THEN 'steam' WHEN ?2 THEN 'gog' ELSE 'folder_scan' END",
+                [&steam, &gog],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        games::link_game(&db, &gog, Some(&steam)).unwrap();
+        played(&db, &steam, "2026-03-01T18:00:00Z", 90);
+        played(&db, &gog, "2026-03-02T18:00:00Z", 60);
+        // Both copies at once for half an hour count that half hour once.
+        played(&db, &gog, "2026-03-03T18:00:00Z", 30);
+        played(&db, &steam, "2026-03-03T18:00:00Z", 30);
+        played(&db, &found, "2026-04-01T08:00:00Z", 20);
+        // Last year's play stays out.
+        played(&db, &steam, "2025-12-30T18:00:00Z", 45);
+
+        let now = utc("2026-09-30T19:00:00Z").timestamp_millis();
+        let year = year_play(
+            &db,
+            &LiveSessions::default(),
+            &Berlin,
+            2026,
+            date("2026-09-30"),
+            now,
+        )
+        .unwrap();
+        let minutes: Vec<(Option<&str>, i64)> = year
+            .launchers
+            .iter()
+            .map(|play| (play.launcher.as_deref(), play.runtime_ms / MINUTE))
+            .collect();
+        assert_eq!(
+            minutes,
+            [
+                (Some("steam"), 105),
+                (Some("gog"), 75),
+                (Some("folder_scan"), 20)
+            ]
+        );
     }
 
     #[test]
