@@ -16,7 +16,7 @@
   --display: "Mona Sans", system-ui, sans-serif; --sans: "Geist", system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, monospace;
   /* Marks of the sample games, as the app gives them in the journal. */
-  --hades: oklch(0.74 0.125 160); --elden-ring: oklch(0.74 0.125 85); --balatro: oklch(0.74 0.125 350);
+  --kessler-line: oklch(0.74 0.125 250); --mournhollow: oklch(0.74 0.125 85); --wild-ante: oklch(0.74 0.125 25);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
@@ -65,15 +65,16 @@ nav.top a { padding: 12px 0; }
 .day { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 40px; }
 .day h2 { font-size: 36px; line-height: 1; }
 .day .date { margin-top: 8px; }
-.day .total { margin-top: 14px; font-size: 22px; }
+.day .total { margin-top: 14px; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.day .total small { margin-left: 1px; font-size: 0.62em; font-weight: 500; }
 .strip { position: relative; height: 10px; border-radius: 5px; background: var(--raised); }
 .strip span { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
-.strip .hades { background: var(--hades); }
-.strip .elden-ring { background: var(--elden-ring); }
-.strip .balatro { background: var(--balatro); }
-.entry em.hades { color: var(--hades); }
-.entry em.elden-ring { color: var(--elden-ring); }
-.entry em.balatro { color: var(--balatro); }
+.strip .kessler-line { background: var(--kessler-line); }
+.strip .mournhollow { background: var(--mournhollow); }
+.strip .wild-ante { background: var(--wild-ante); }
+.entry em.kessler-line { color: var(--kessler-line); }
+.entry em.mournhollow { color: var(--mournhollow); }
+.entry em.wild-ante { color: var(--wild-ante); }
 .ticks { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--faint); }
 .entry { display: flex; align-items: baseline; gap: 20px; margin-top: 18px; }
 .entry .when { width: 132px; flex-shrink: 0; font-size: 13px; color: var(--faint); }
