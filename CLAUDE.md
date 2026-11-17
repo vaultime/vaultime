@@ -269,12 +269,12 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   accent takes its second color, and a color shifts only when neither fits.
   Its title in the entries takes its mark, both colors for two-colored art.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
-  frame. The logo files and the website keep violet `#9D7CFF` for the
-  pivot. The app shows the frame, the hands and the wordmark in the accent
-  and the pivot light, in the rail and on its icons, which sit on a graphite
-  tile. The wordmark is Mona
-  Sans 700 at full width (`font-wordmark`), and `scripts/build-brand.py`
-  outlines it for the logo files. The lockups keep the proportions of the
+  frame. The frame, the hands and the wordmark take the accent and the pivot
+  the text color, and icons sit on a graphite tile. The logo files and the
+  website show it as the app does where no game lends it a color, in the
+  grey accent. The wordmark is Mona Sans 700 at full width
+  (`font-wordmark`), and `scripts/build-brand.py` outlines it for the logo
+  files. The lockups keep the proportions of the
   logo in the app, the mark a little taller than the letters. The app draws
   the tray, taskbar, title bar and shortcut icons from those files in the
   accent of the window, or the one picked.

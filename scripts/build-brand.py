@@ -21,7 +21,7 @@ src-tauri/icons. The favicon of docs/site is tile_svg(64).
 
 The app draws the tray, taskbar, title bar and shortcut icons from
 vaultime-icon-accent.svg, its frame and hands in the accent in use instead of
-violet, like the logo in the app.
+the placeholder violet, like the logo in the app.
 """
 
 import io
@@ -38,17 +38,19 @@ ROOT = Path(__file__).resolve().parent.parent
 FONT = ROOT / "apps/desktop/node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-standard-normal.woff2"
 ASSETS = ROOT / "assets"
 
-TILE = "#1A1230"
-LIGHT = "#F1EBFA"
-# The tile and pivot of the icon the app draws in its accent, neutral like the
-# graphite ground, so no accent sits on violet.
+# The logo as the app shows it where no game lends it a color: frame, hands
+# and wordmark in the grey accent of lib/theme.ts, the pivot in the text color,
+# and icons on a graphite tile. The first pair is dark mode, the second light.
 GRAPHITE = "#17181A"
+GREY = "#D1D1D1"
 NEUTRAL_LIGHT = "#F1F2F2"
-VIOLET = "#9D7CFF"
-VIOLET_ON_LIGHT = "#7A55F0"
+GREY_ON_LIGHT = "#2E2E2E"
+TEXT_ON_LIGHT = "#151618"
+# The app swaps this color for the accent in use when it draws its icons.
+ACCENT_PLACEHOLDER = "#9D7CFF"
 
 # The mark on a 64 unit grid: a rounded vault frame and clock hands at five
-# past eleven, which form a V, pivoting in violet at the center of the dial.
+# past eleven, which form a V, pivoting at the center of the dial.
 # The tick at six o'clock keeps it reading as a dial, not a checkbox.
 FRAME = (7, 7, 50, 50, 15)
 FRAME_WIDTH = 3.5
@@ -84,7 +86,7 @@ def framed(size, margin, frame_width=FRAME_WIDTH):
     return scale, offset
 
 
-def tile_svg(size, margin=0.06, rounded=True, ink=LIGHT, pivot=VIOLET, tile=TILE):
+def tile_svg(size, margin=0.06, rounded=True, ink=GREY, pivot=NEUTRAL_LIGHT, tile=GRAPHITE):
     """The mark on a square tile. Rounded tile corners follow the curve of the
     frame, so the margin stays even all the way around."""
     scale, offset = framed(size, margin)
@@ -154,11 +156,9 @@ def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
     (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
-    (ASSETS / "vaultime-icon-accent.svg").write_text(
-        tile_svg(1024, ink=VIOLET, pivot=NEUTRAL_LIGHT, tile=GRAPHITE), encoding="utf8"
-    )
-    (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
-    (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
+    (ASSETS / "vaultime-icon-accent.svg").write_text(tile_svg(1024, ink=ACCENT_PLACEHOLDER), encoding="utf8")
+    (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(GREY, NEUTRAL_LIGHT), encoding="utf8")
+    (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(GREY_ON_LIGHT, TEXT_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))
 
 

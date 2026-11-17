@@ -23,10 +23,10 @@ use crate::db::repo::settings;
 use crate::error::VaultimeError;
 
 /// The logo as `scripts/build-brand.py` writes it for the icons, on a
-/// graphite tile with a violet frame and hands and a light pivot.
+/// graphite tile with a light pivot and a placeholder color for the accent.
 const ICON_SVG: &str = include_str!("../../../../assets/vaultime-icon-accent.svg");
-/// The violet of the logo file, which the accent replaces.
-const LOGO_VIOLET: &str = "#9D7CFF";
+/// The color of the frame and hands in that file, which the accent replaces.
+const ACCENT_PLACEHOLDER: &str = "#9D7CFF";
 
 /// Dark or light mode of the title bar, or the system's.
 #[cfg_attr(not(windows), allow(dead_code, reason = "only Windows sets the mode"))]
@@ -181,7 +181,7 @@ pub fn draw_icon(accent: &str) -> Option<Image<'static>> {
 pub fn draw_logo(accent: &str, size: u32) -> Option<Vec<u8>> {
     // Only a plain color goes into the SVG.
     rgb(accent)?;
-    let svg = ICON_SVG.replace(LOGO_VIOLET, accent);
+    let svg = ICON_SVG.replace(ACCENT_PLACEHOLDER, accent);
     let tree = usvg::Tree::from_str(&svg, &usvg::Options::default())
         .inspect_err(|error| warn!("failed to read the logo: {error}"))
         .ok()?;
