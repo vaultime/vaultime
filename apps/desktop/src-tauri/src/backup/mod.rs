@@ -9,6 +9,7 @@ pub(crate) mod crypto;
 pub mod folder;
 pub mod merge;
 pub mod remote;
+pub mod server;
 #[cfg(test)]
 pub(crate) mod testing;
 

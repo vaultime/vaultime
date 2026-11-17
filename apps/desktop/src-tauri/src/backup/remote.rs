@@ -480,27 +480,37 @@ fn newest_key_check(api: &Api) -> Result<Option<String>> {
         .and_then(|metadata| metadata.get(KEY_CHECK_FIELD)?.as_str().map(str::to_owned)))
 }
 
+/// How the app names itself to a cloud server, as some proxies refuse
+/// requests that name nothing.
+pub(crate) const USER_AGENT: &str = concat!("Vaultime/", env!("CARGO_PKG_VERSION"));
+
 /// The token only goes over https, plain http only to a server on this PC,
 /// as in the round trip test.
-fn checked_base_url(raw: &str) -> Result<String> {
+pub(crate) fn checked_base_url(raw: &str) -> Result<String> {
     let base_url = raw.trim().trim_end_matches('/');
     let url = reqwest::Url::parse(base_url)
-        .map_err(|_| VaultimeError::Cloud("the cloud server address is not valid".into()))?;
+        .map_err(|_| VaultimeError::Cloud("that is not a server address.".into()))?;
     let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
     if url.scheme() == "https" || (url.scheme() == "http" && local) {
         Ok(base_url.to_string())
     } else {
         Err(VaultimeError::Cloud(
-            "the cloud server address must use https".into(),
+            "Vaultime reaches servers over https only. Plain http works only for a server on this PC.".into(),
         ))
     }
 }
 
 impl<'a> Api<'a> {
     fn new(base_url: &str, access_token: &'a str) -> Result<Self> {
-        let client = Client::builder().build().map_err(|error| {
-            VaultimeError::Cloud(format!("failed to build HTTP client: {error}"))
-        })?;
+        let client = Client::builder()
+            // The API never redirects, and a redirect would take the token's
+            // request elsewhere.
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(USER_AGENT)
+            .build()
+            .map_err(|error| {
+                VaultimeError::Cloud(format!("failed to build HTTP client: {error}"))
+            })?;
         Ok(Self {
             client,
             base_url: checked_base_url(base_url)?,

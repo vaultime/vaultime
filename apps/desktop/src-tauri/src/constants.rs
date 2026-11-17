@@ -497,6 +497,9 @@ pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 /// Longest time one backup or artwork upload or download may take. Small
 /// requests keep the HTTP client's default limit.
 pub const CLOUD_TRANSFER_TIMEOUT: Duration = Duration::from_mins(30);
+/// Longest time a request the page sends to the cloud server through the
+/// core may take, its answer included.
+pub const CLOUD_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Cloud backup key length, as `XChaCha20Poly1305` requires.
 pub const BACKUP_KEY_BYTES: usize = 32;
 /// How often the tray menu updates the running game and the recent play.
@@ -523,9 +526,9 @@ pub const SHARE_IMAGE_MAX_BYTES: usize = 32 * 1024 * 1024;
 /// Bytes of the key check stored with each cloud backup, enough to tell two
 /// keys apart. Part of the backup format, changing it breaks the check.
 pub const KEY_CHECK_BYTES: usize = 16;
-/// Address of the website and the cloud server. Release builds use only this
-/// one, whatever the page asks. Same as `VAULTIME_URL` in `lib/constants.ts`.
-pub const CLOUD_API_BASE_URL: &str = "https://vaultime.codfishcloud.de";
+/// Address of the website, where Vaultime is downloaded. Same as `VAULTIME_URL`
+/// in `lib/constants.ts`.
+pub const WEBSITE_URL: &str = "https://vaultime.codfishcloud.de";
 /// Most artwork ids asked about in one request. Same as
 /// `MAX_BLOB_IDS_PER_REQUEST` in the API's `constants.rs`.
 pub const MAX_ARTWORK_IDS_PER_REQUEST: usize = 10_000;

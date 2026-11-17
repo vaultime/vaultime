@@ -17,7 +17,7 @@ use rusqlite::{Connection, OpenFlags};
 use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::backup::{self, BACKUP_MANIFEST_FILE, auto};
-use crate::constants::{AUTO_BACKUP_DIR, AUTO_BACKUP_FOLDER_SETTING, CLOUD_API_BASE_URL};
+use crate::constants::{AUTO_BACKUP_DIR, AUTO_BACKUP_FOLDER_SETTING, WEBSITE_URL};
 use crate::db::connection::Database;
 use crate::db::migrate;
 use crate::error::VaultimeError;
@@ -98,7 +98,7 @@ fn open_or_restore(
         .and_then(|conn| migrate::newer_migration(conn).ok().flatten())
     {
         return Err(Stop::Fatal(format!(
-            "This Vaultime is older than the one that last used its data (it added {newer}). Install the newest Vaultime from {CLOUD_API_BASE_URL} and start it again."
+            "This Vaultime is older than the one that last used its data (it added {newer}). Install the newest Vaultime from {WEBSITE_URL} and start it again."
         )));
     }
     let folder = backup_folder(readable.as_ref(), &context.app_dir);

@@ -13,8 +13,9 @@ use crate::assets::AssetManager;
 use crate::backup::cloud_merge::{AutoMerge, CloudPc};
 use crate::backup::merge::{GameChoice, MergePreview, MergeSummary};
 use crate::backup::remote::{RemoteBackupRestoreResult, RemoteBackupUploadResult};
+use crate::backup::server::{Reply, ServerInfo};
 use crate::backup::{self};
-use crate::constants::{CLOUD_API_BASE_URL, LIBRARY_CHANGED_EVENT};
+use crate::constants::LIBRARY_CHANGED_EVENT;
 use crate::db::connection::Database;
 use crate::error::VaultimeError;
 use crate::secure_storage;
@@ -66,6 +67,33 @@ pub async fn clear_cloud_backup_key_secure(account_id: String) -> Result<bool, V
     Ok(true)
 }
 
+/// Checks that a Vaultime server answers at the address the player typed.
+#[tauri::command]
+pub async fn check_cloud_server(address: String) -> Result<ServerInfo, VaultimeError> {
+    on_blocking_pool(move || backup::server::check(&address)).await
+}
+
+/// Sends one JSON request of the page to the player's cloud server.
+#[tauri::command]
+pub async fn cloud_request(
+    server: String,
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+    access_token: Option<String>,
+) -> Result<Reply, VaultimeError> {
+    on_blocking_pool(move || {
+        backup::server::request(
+            &server,
+            &method,
+            &path,
+            body.as_ref(),
+            access_token.as_deref(),
+        )
+    })
+    .await
+}
+
 /// Shows in the tray and taskbar icon whether this PC is signed in. Runs off
 /// the main thread, as a redraw may wait for it.
 #[tauri::command(async)]
@@ -84,7 +112,7 @@ pub async fn list_cloud_pcs(
     on_blocking_pool(move || {
         backup::cloud_merge::list_cloud_pcs(
             &app.state::<Arc<Database>>(),
-            cloud_api_base_url(&api_base_url),
+            &api_base_url,
             &access_token,
             &account_id,
         )
@@ -106,7 +134,7 @@ pub async fn preview_cloud_merge(
         backup::cloud_merge::preview_cloud_merge(
             &app.state::<Arc<Database>>(),
             &app.state::<AppContext>(),
-            cloud_api_base_url(&api_base_url),
+            &api_base_url,
             &access_token,
             &account_id,
             &backup_id,
@@ -132,7 +160,7 @@ pub async fn merge_cloud_backup(
             &app.state::<Arc<Database>>(),
             &app.state::<AssetManager>(),
             &app.state::<AppContext>(),
-            cloud_api_base_url(&api_base_url),
+            &api_base_url,
             &access_token,
             &account_id,
             &backup_id,
@@ -168,7 +196,7 @@ pub async fn merge_due_cloud_backups(
             &app.state::<Arc<Database>>(),
             &app.state::<AssetManager>(),
             &app.state::<AppContext>(),
-            cloud_api_base_url(&api_base_url),
+            &api_base_url,
             &access_token,
             &account_id,
         )?;
@@ -181,16 +209,6 @@ pub async fn merge_due_cloud_backups(
         Ok(done)
     })
     .await
-}
-
-/// Release builds talk only to the Vaultime server, whatever the page asks.
-/// Development builds follow the page, so a local server can be tried.
-fn cloud_api_base_url(requested: &str) -> &str {
-    if cfg!(debug_assertions) {
-        requested
-    } else {
-        CLOUD_API_BASE_URL
-    }
 }
 
 /// Runs cloud work and the OS credential store on the blocking pool.
@@ -220,7 +238,7 @@ pub async fn upload_remote_backup(
             &db,
             &app.state::<AssetManager>(),
             &app.state::<AppContext>(),
-            cloud_api_base_url(&api_base_url),
+            &api_base_url,
             &access_token,
             &account_id,
             client_device_id.as_deref(),
@@ -258,7 +276,7 @@ pub async fn restore_remote_backup(
                 &db,
                 &app.state::<AssetManager>(),
                 &app.state::<AppContext>(),
-                cloud_api_base_url(&api_base_url),
+                &api_base_url,
                 &access_token,
                 &account_id,
                 &backup_id,
