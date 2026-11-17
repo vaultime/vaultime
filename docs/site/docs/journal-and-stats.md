@@ -41,7 +41,7 @@ Point at a session and pick **Add a note** to keep a line about it, up to 280 ch
 
 ## Steam screenshots
 
-Screenshots you take with Steam during a session show under its entry, matched by the time Steam says each was taken. Click one to see it large, and step through them with the arrow keys. Vaultime reads them from Steam's folder each time you open a week and copies nothing, so a screenshot you delete in Steam goes from the journal too, and backups never hold them. Only sessions this PC recorded show them. **Show Steam screenshots** under Settings, Journal turns them off.
+Up to six screenshots you take with Steam during a session show under its entry, matched by the time Steam says each was taken, and the rest are counted. Click one to see it large, and step through them with the arrow keys. Vaultime reads them from Steam's folder each time you open a week and copies nothing, so a screenshot you delete goes from the journal too, and backups never hold them. Only sessions this PC recorded show them. **Show Steam screenshots** under Settings, Journal turns them off.
 
 ## Correct a session
 
