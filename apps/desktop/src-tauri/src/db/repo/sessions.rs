@@ -314,7 +314,9 @@ pub fn record_tracking_gap(
 ) -> Result<()> {
     let event_time_wall = integrity::now_timestamp();
 
-    db.with_conn(|conn| {
+    // The event and its pin go in together, so a failed pin cannot leave an
+    // event that the next tick records a second time.
+    db.with_transaction(|conn| {
         integrity::append_session_event(
             conn,
             session_id,
