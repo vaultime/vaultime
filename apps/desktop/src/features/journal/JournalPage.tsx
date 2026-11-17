@@ -8,7 +8,8 @@ import { Notice, PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useActiveSessions, useLibrary } from "@/features/library/library-context";
-import { DAYS_PER_WEEK, JOURNAL_LINK_FLASH_MS, LIVE_TOTALS_REFRESH_MS } from "@/lib/constants";
+import { useSettings } from "@/features/settings/settings-context";
+import { DAYS_PER_WEEK, JOURNAL_LINK_FLASH_MS, LIVE_TOTALS_REFRESH_MS, SETTING_KEYS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { weekSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
@@ -39,6 +40,7 @@ const NO_SHARES: DayShare[] = [];
 export function JournalPage() {
   const { sessions: stored, summaries, statusChanges, notes, saveNote, refresh, today, loaded } = useLibrary();
   const active = useActiveSessions();
+  const { values: settingValues } = useSettings();
   // Running sessions as of the last poll, a few seconds old at most. The
   // full list only reloads when a session starts or ends.
   const sessions = useMemo(() => {
@@ -183,9 +185,10 @@ export function JournalPage() {
   // Steam screenshots of the sessions that began in the week, read from Steam's folder each time.
   const [screenshots, setScreenshots] = useState<Map<string, SessionScreenshots>>(() => new Map());
   const startedIds = days.flatMap((day) => day.sessionIds).sort().join(",");
+  const showScreenshots = settingValues[SETTING_KEYS.journalScreenshots] !== "false";
   useEffect(() => {
     let cancelled = false;
-    (startedIds ? api.getSessionScreenshots(startedIds.split(",")) : Promise.resolve([]))
+    (startedIds && showScreenshots ? api.getSessionScreenshots(startedIds.split(",")) : Promise.resolve([]))
       .then((found) => {
         if (!cancelled) setScreenshots(new Map(found.map((each) => [each.session_id, each])));
       })
@@ -193,7 +196,7 @@ export function JournalPage() {
     return () => {
       cancelled = true;
     };
-  }, [startedIds, stored]);
+  }, [startedIds, showScreenshots, stored]);
   const screenshotsOf = useCallback((sessionId: string) => screenshots.get(sessionId), [screenshots]);
   const [viewing, setViewing] = useState<{ sessionId: string; index: number } | null>(null);
   const openScreenshot = useCallback((sessionId: string, index: number) => setViewing({ sessionId, index }), []);

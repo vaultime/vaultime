@@ -250,6 +250,9 @@ pub const STEAM_SOURCE: &str = "steam";
 /// Setting that turns the look for new games at start off with `false`.
 /// Same as `SETTING_KEYS.autoDiscover` in `lib/constants.ts`.
 pub const AUTO_DISCOVER_SETTING: &str = "auto_discover_on_start";
+/// Setting that keeps Steam screenshots out of the journal with `false`.
+/// Same as `SETTING_KEYS.journalScreenshots` in `lib/constants.ts`.
+pub const JOURNAL_SCREENSHOTS_SETTING: &str = "journal_steam_screenshots";
 /// Wait after start before looking for new games, so the window, the tracker
 /// and the other start work go first.
 pub const AUTO_DISCOVERY_DELAY: Duration = Duration::from_secs(10);
@@ -423,6 +426,7 @@ pub const PAGE_SETTINGS: &[&str] = &[
     LIBRARY_SORT_SETTING,
     LIBRARY_GROUP_SETTING,
     AUTO_DISCOVER_SETTING,
+    JOURNAL_SCREENSHOTS_SETTING,
     APPEARANCE_MODE_SETTING,
     APPEARANCE_GROUND_SETTING,
     APPEARANCE_ACCENT_SETTING,

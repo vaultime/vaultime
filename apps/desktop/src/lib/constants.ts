@@ -62,6 +62,8 @@ export const SETTING_KEYS = {
   libraryGroup: "library_group",
   /** Looking for new games at start, on unless `false`. Same as AUTO_DISCOVER_SETTING in constants.rs. */
   autoDiscover: "auto_discover_on_start",
+  /** Steam screenshots in the journal, on unless `false`. Same as JOURNAL_SCREENSHOTS_SETTING in constants.rs. */
+  journalScreenshots: "journal_steam_screenshots",
   /** Dark, light or the system's mode. Same as APPEARANCE_MODE_SETTING in constants.rs. */
   appearanceMode: "appearance_mode",
   /** The ground tone. Same as APPEARANCE_GROUND_SETTING in constants.rs. */

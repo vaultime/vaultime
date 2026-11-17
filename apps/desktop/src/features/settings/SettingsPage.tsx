@@ -68,6 +68,7 @@ export function SettingsPage() {
       idleSeconds: Number.isFinite(seconds) ? seconds : DEFAULT_IDLE_THRESHOLD_SECS,
       closeToTray: values[SETTING_KEYS.closeToTray] !== "false",
       autoDiscover: values[SETTING_KEYS.autoDiscover] !== "false",
+      journalScreenshots: values[SETTING_KEYS.journalScreenshots] !== "false",
       autoBackup: values[SETTING_KEYS.autoBackup] !== "false",
       backgroundActive: values[SETTING_KEYS.backgroundActive] === "true",
     };
@@ -95,6 +96,7 @@ export function SettingsPage() {
   const [closeToTray, setCloseToTray] = useState(initial.closeToTray);
   const [autostart, setAutostart] = useState(false);
   const [autoDiscover, setAutoDiscover] = useState(initial.autoDiscover);
+  const [journalScreenshots, setJournalScreenshots] = useState(initial.journalScreenshots);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,6 +305,22 @@ export function SettingsPage() {
         <AppearanceSection />
 
         <WindowSection />
+
+        <PageSection title="Journal" description="What the journal shows beside your sessions.">
+          <PageRow
+            label="Show Steam screenshots"
+            htmlFor="journal-screenshots"
+            hint="Screenshots you take with Steam show under the session they were taken in. Vaultime reads them from Steam's folder and copies nothing."
+          >
+            <Switch
+              id="journal-screenshots"
+              checked={journalScreenshots}
+              onCheckedChange={(checked) =>
+                void toggle(setJournalScreenshots, checked, saveSetting(SETTING_KEYS.journalScreenshots, checked))
+              }
+            />
+          </PageRow>
+        </PageSection>
 
         {hidden.length > 0 && (
           <PageSection

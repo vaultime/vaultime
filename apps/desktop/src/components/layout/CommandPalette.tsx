@@ -56,6 +56,7 @@ const FIXED: Command[] = [
   { id: "setting-cloud", label: "Cloud backup", hint: "Turn the Cloud page on or off", kind: "Setting", to: "/settings#cloud-backup" },
   { id: "setting-appearance", label: "Appearance", hint: "Light or dark, ground, accent and background", kind: "Setting", to: "/settings#appearance" },
   { id: "setting-window", label: "Window size", hint: "Compact to Extra large, or free", kind: "Setting", to: "/settings#window" },
+  { id: "setting-journal", label: "Steam screenshots", hint: "Show them under their sessions in the journal", kind: "Setting", to: "/settings#journal" },
   { id: "setting-ignored", label: "Ignored programs", hint: "Programs that are no game", kind: "Setting", to: "/settings#ignored-programs" },
   { id: "setting-earlier", label: "Earlier playtime", hint: "Steam's count from before Vaultime", kind: "Setting", to: "/settings#earlier-playtime" },
   { id: "setting-about", label: "About", hint: "Version, license and updates", kind: "Setting", to: "/settings#about" },

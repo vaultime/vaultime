@@ -13,10 +13,11 @@ use base64::Engine;
 use serde::Serialize;
 
 use crate::constants::{
-    SCREENSHOTS_PER_SESSION, STEAM_SCREENSHOT_MAX_BYTES, STEAM_THUMBNAIL_MAX_BYTES,
+    JOURNAL_SCREENSHOTS_SETTING, SCREENSHOTS_PER_SESSION, STEAM_SCREENSHOT_MAX_BYTES,
+    STEAM_THUMBNAIL_MAX_BYTES,
 };
 use crate::db::connection::Database;
-use crate::db::repo::{games, map_db};
+use crate::db::repo::{games, map_db, settings};
 use crate::discovery::steam;
 use crate::discovery::steam_screenshots::{self, SteamScreenshot};
 use crate::error::{Result, VaultimeError};
@@ -54,13 +55,17 @@ struct SessionRange {
 }
 
 /// The Steam screenshots taken during each of the sessions among `ids` that
-/// this PC recorded. Sessions without any are left out.
+/// this PC recorded. Sessions without any are left out, and all of them
+/// while the player keeps screenshots out of the journal.
 pub fn for_sessions(
     db: &Database,
     device_id: &str,
     ids: &[String],
     now_ms: i64,
 ) -> Result<Vec<SessionScreenshots>> {
+    if !shown(db)? {
+        return Ok(Vec::new());
+    }
     let Some(root) = steam::find_steam_root() else {
         return Ok(Vec::new());
     };
@@ -106,6 +111,11 @@ pub fn for_sessions(
             })
             .collect(),
     )
+}
+
+/// Whether the journal shows Steam screenshots, which it does unless turned off.
+fn shown(db: &Database) -> Result<bool> {
+    Ok(settings::get_setting(db, JOURNAL_SCREENSHOTS_SETTING)?.as_deref() != Some("false"))
 }
 
 /// One Steam screenshot in full, as a data URL.
@@ -258,6 +268,19 @@ mod tests {
                 ("other game", vec!["c.jpg".to_owned()]),
                 ("night", vec!["d.jpg".to_owned()]),
             ]
+        );
+    }
+
+    #[test]
+    fn screenshots_show_unless_the_player_turned_them_off() {
+        let db = Database::open_in_memory().unwrap();
+        assert!(shown(&db).unwrap());
+        settings::set_setting(&db, JOURNAL_SCREENSHOTS_SETTING, "false").unwrap();
+        assert!(!shown(&db).unwrap());
+        assert!(
+            for_sessions(&db, "this-pc", &["any".to_owned()], 0)
+                .unwrap()
+                .is_empty()
         );
     }
 
