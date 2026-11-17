@@ -13,7 +13,7 @@ import { markColors, tintForTitle } from "@/lib/game-tint";
 import { weekSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
 import { formatDate, isoWeekNumber, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
-import type { DayShare, JournalWeekPlay, Session, SessionEvent } from "@/lib/types";
+import type { DayShare, JournalWeekPlay, Session, SessionEvent, SessionScreenshots } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { scrollMotion } from "@/lib/anchors";
 import { describeError, logFailure } from "@/lib/utils";
@@ -179,6 +179,22 @@ export function JournalPage() {
     };
   }, [gameIds, stored]);
 
+  // Steam screenshots of the sessions that began in the week, read from Steam's folder each time.
+  const [screenshots, setScreenshots] = useState<Map<string, SessionScreenshots>>(() => new Map());
+  const startedIds = days.flatMap((day) => day.sessionIds).sort().join(",");
+  useEffect(() => {
+    let cancelled = false;
+    (startedIds ? api.getSessionScreenshots(startedIds.split(",")) : Promise.resolve([]))
+      .then((found) => {
+        if (!cancelled) setScreenshots(new Map(found.map((each) => [each.session_id, each])));
+      })
+      .catch(logFailure("loading the week's Steam screenshots"));
+    return () => {
+      cancelled = true;
+    };
+  }, [startedIds, stored]);
+  const screenshotsOf = useCallback((sessionId: string) => screenshots.get(sessionId), [screenshots]);
+
   const earliest = useMemo(
     () =>
       stored.reduce<Date | null>((min, session) => {
@@ -307,6 +323,7 @@ export function JournalPage() {
             onSaveNote={saveNote}
             onCorrected={onCorrected}
             longestId={longestId}
+            screenshotsOf={screenshotsOf}
             flashed={flashedDay === toDayKey(day.start)}
             linked={linked !== null && hasSession(day, linked) ? linked : null}
             onLink={setLinked}

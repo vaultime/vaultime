@@ -39,6 +39,10 @@ A session that ran for more than a day reads the same way, with every day it tou
 
 Point at a session and pick **Add a note** to keep a line about it, up to 280 characters. The note shows under the session in quotes.
 
+## Steam screenshots
+
+Screenshots you take with Steam during a session show under its entry, matched by the time Steam says each was taken. Vaultime reads them from Steam's folder each time you open a week and copies nothing, so a screenshot you delete in Steam goes from the journal too, and backups never hold them. Only sessions this PC recorded show them.
+
 ## Correct a session
 
 A game left running overnight should not count as a night of play. Point at the session in the journal or on the game's page and pick **Correct the time**.

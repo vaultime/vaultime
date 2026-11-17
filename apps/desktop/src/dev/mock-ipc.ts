@@ -8,7 +8,8 @@
 // to dist-mock/covers/<n>.jpg (n = 1 to 7) after building to see them.
 // ?mock=fictional names the games after made-up ones, for the screenshots in
 // the README and on the website. Copy assets/mock-covers to dist-mock/covers
-// after building for their covers.
+// after building for their covers, and assets/mock-screenshots to
+// dist-mock/shots for the Steam screenshots of a Mournhollow session.
 // ?palette=1 opens the command palette. ?hidden=1 hides Celeste from the
 // library. ?cloud=1 signs in to a fake cloud
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
@@ -67,6 +68,7 @@ import type {
   SameGame,
   Session,
   SessionEvent,
+  SessionScreenshots,
   SteamPlaytimePreview,
   ThisPc,
   WindowSizeChoice,
@@ -396,6 +398,29 @@ if (scenario !== "empty") {
     .forEach((session, index) => {
       if (index % 3 === 0) session.game_id = gogCopy.id;
     });
+}
+
+/** Made-up screenshots of Mournhollow, for its newest finished session among those asked about. */
+const MOCK_SCREENSHOTS = ["mournhollow-forest.jpg", "mournhollow-camp.jpg", "mournhollow-boss.jpg"];
+
+function mockScreenshots(sessionIds: string[]): SessionScreenshots[] {
+  if (scenario !== "fictional") return [];
+  const asked = new Set(sessionIds);
+  const [newest] = shownSessions().filter(
+    (session) => asked.has(session.id) && session.ended_at_wall && session.game_id === games[0].id,
+  );
+  if (!newest?.ended_at_wall) return [];
+  const start = Date.parse(newest.started_at_wall);
+  const span = Date.parse(newest.ended_at_wall) - start;
+  const shots = MOCK_SCREENSHOTS.map((file, index) => ({
+    app_id: "1000001",
+    file,
+    taken_at_ms: start + Math.round((span * (index + 1)) / (MOCK_SCREENSHOTS.length + 1)),
+    width: 1280,
+    height: 720,
+    thumbnail: `/shots/${file}`,
+  }));
+  return [{ session_id: newest.id, total: shots.length, shots }];
 }
 
 /** Sessions as the core lists them: a linked game's as the game it counts as. */
@@ -1661,6 +1686,10 @@ mockIPC((cmd, payload) => {
         String(args.reason ?? ""),
         typeof args.launcher === "string" ? args.launcher : null,
       );
+    case "session_screenshots":
+      return mockScreenshots(Array.isArray(args.sessionIds) ? args.sessionIds.map(String) : []);
+    case "steam_screenshot":
+      return `/shots/${String(args.file)}`;
     case "get_notable_events_for_game": {
       const ids = new Set(shownSessions().filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id) && event.event_type !== "heartbeat");

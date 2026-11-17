@@ -13,7 +13,8 @@
 # Uses the Microsoft Edge that ships with Windows, in headless mode.
 #
 # The screenshots in assets/screenshots are taken at 1600 by 1000 with made-up
-# games: copy assets/mock-covers to dist-mock/covers after the build, then
+# games: copy assets/mock-covers to dist-mock/covers and assets/mock-screenshots
+# to dist-mock/shots after the build, then
 # home?mock=fictional journal?mock=fictional stats?mock=fictional
 # library/game-1?mock=fictional.
 set -euo pipefail

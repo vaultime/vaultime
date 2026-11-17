@@ -20,9 +20,10 @@ import {
   parseVaultimeDate,
   toDayKey,
 } from "@/lib/time";
-import type { DayShare, PlayRun, Session, SessionEvent } from "@/lib/types";
+import type { DayShare, PlayRun, Session, SessionEvent, SessionScreenshots } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PlayBlock } from "./PlayBlock";
+import { ScreenshotStrip } from "./ScreenshotStrip";
 import { BLEED_PX, HIT_SLOP_PX, hatch, OUTLINE_GAP_PX, placeOnDay, TICKS, type Place } from "./strip";
 import { dayId, entryId, type JournalDay } from "./week";
 
@@ -157,6 +158,7 @@ export const DaySection = memo(function DaySection({
   onSaveNote,
   onCorrected,
   longestId,
+  screenshotsOf,
   flashed,
   linked,
   onLink,
@@ -178,6 +180,8 @@ export const DaySection = memo(function DaySection({
   onCorrected: () => void;
   /** The week's longest session, which says so under its entry. */
   longestId: string | null;
+  /** The Steam screenshots taken during a session. */
+  screenshotsOf: (sessionId: string) => SessionScreenshots | undefined;
   /** Whether a jump just went to this day, which marks its name. */
   flashed: boolean;
   /** The session marked on every day it ran. */
@@ -420,6 +424,7 @@ export const DaySection = memo(function DaySection({
             const laterMs = later.reduce((sum, share) => sum + share.runtime_ms, 0);
 
             const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
+            const screenshots = screenshotsOf(session.id);
             return (
               <div
                 key={session.id}
@@ -440,6 +445,7 @@ export const DaySection = memo(function DaySection({
                   cover={<EntryCover summary={byGame.get(session.game_id)} title={titleOf(session.game_id)} />}
                   highlighted={linked === session.id}
                   record={session.id === longestId ? "The longest session of the week" : undefined}
+                  pictures={screenshots && <ScreenshotStrip screenshots={screenshots} />}
                   amountsNote={
                     later.length > 0 && (
                       <>

@@ -33,6 +33,7 @@ import type {
   RecentPlay,
   Session,
   SessionEvent,
+  SessionScreenshots,
   SessionList,
   SessionNote,
   Setting,
@@ -305,6 +306,16 @@ export async function getActiveSessions(): Promise<ActiveSessions> {
 /** The events of a game's sessions without the checkpoints, newest first. */
 export async function getNotableEventsForGame(gameId: string): Promise<SessionEvent[]> {
   return invoke<SessionEvent[]>("get_notable_events_for_game", { gameId });
+}
+
+/** The Steam screenshots taken during these sessions, for the ones this PC recorded. */
+export async function getSessionScreenshots(sessionIds: string[]): Promise<SessionScreenshots[]> {
+  return invoke<SessionScreenshots[]>("session_screenshots", { sessionIds });
+}
+
+/** One Steam screenshot in full, as a data URL. */
+export async function getSteamScreenshot(appId: string, file: string): Promise<string> {
+  return invoke<string>("steam_screenshot", { appId, file });
 }
 
 /** Saves every finished session to `path` and returns how many. */

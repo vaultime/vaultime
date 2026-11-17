@@ -30,6 +30,7 @@ export function SessionLine({
   cover,
   highlighted = false,
   record,
+  pictures,
   amountsNote,
   bordered = true,
   note,
@@ -57,6 +58,8 @@ export function SessionLine({
   highlighted?: boolean;
   /** A record the session holds, said under its numbers. */
   record?: string;
+  /** Pictures from the session, under its numbers. */
+  pictures?: ReactNode;
   /** Said after the amounts, like how much of the session counts on a later day. */
   amountsNote?: ReactNode;
   bordered?: boolean;
@@ -172,6 +175,7 @@ export function SessionLine({
         ) : (
           note && <p className="font-prose mt-1.5 text-[17px] leading-snug text-soft italic">“{note}”</p>
         )}
+        {pictures}
       </div>
       {!editing && (onSaveNote || correctable) && (
         <span className="flex self-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">

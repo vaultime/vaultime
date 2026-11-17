@@ -193,6 +193,26 @@ export interface GameTime {
   idle_ms: number;
 }
 
+/** A Steam screenshot taken during a session. Mirrors the Rust `Screenshot` struct. */
+export interface Screenshot {
+  app_id: string;
+  /** File name in Steam's folder for the app, which `getSteamScreenshot` takes. */
+  file: string;
+  taken_at_ms: number;
+  width: number;
+  height: number;
+  /** Steam's small copy as a data URL. */
+  thumbnail: string | null;
+}
+
+/** The Steam screenshots of one session, oldest first. Mirrors the Rust `SessionScreenshots` struct. */
+export interface SessionScreenshots {
+  session_id: string;
+  /** Every screenshot taken in the session, of which `shots` holds the first. */
+  total: number;
+  shots: Screenshot[];
+}
+
 /** The part of a session that ran on one local day. Mirrors the Rust `DayShare` struct. */
 export interface DayShare {
   /** "2026-10-05". */

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Interface
 
 - **Year in games.** Your year told in chapters, one card at a time, from the stats page or the command palette: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when you play, where your hours came from and the games you finished. It counts every launcher and play while offline, and Vaultime works it out on your PC.
+- **Steam screenshots in the journal.** Screenshots you take with Steam show under the session they were taken in. Vaultime reads them from Steam's folder and copies nothing.
 - **The week in pictures.** Each week of the journal opens with its games, their covers and hours and a bar in each game's color, and with its longest day. Every entry shows its game's cover, and the longest session of the week says so under its entry.
 - **Hour marks.** The session that takes a game past ten, twenty-five, fifty or a hundred hours and on says so in the journal and on the game's page: Elden Ring passed a hundred hours. The game's page shows the next mark as a ring with the marks passed and when, and Home says when the next one is close. Dates of another year now name the year.
 - **A calmer look.** The default ground is a quiet violet grey a step above black, so cover art carries the color, and the rail, the page and the live bar sit as panels on a darker window. A ground you picked stays.
