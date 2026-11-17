@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { StepButton } from "@/components/layout/Page";
 import {
@@ -31,19 +31,15 @@ export function IdleStepper({
   onChange: (seconds: number) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const field = useRef<HTMLInputElement>(null);
   const minutes = seconds / SECONDS_PER_MINUTE;
   const text = draft ?? minutesText(seconds);
   const atMin = minutes <= IDLE_STEP_MIN_MINUTES;
   const atMax = seconds >= MAX_IDLE_THRESHOLD_SECS;
 
-  function step(by: 1 | -1, fromButton = false) {
+  function step(by: 1 | -1) {
     const next = by > 0 ? Math.floor(minutes) + 1 : Math.ceil(minutes) - 1;
     const nextSeconds = Math.min(MAX_IDLE_THRESHOLD_SECS, Math.max(IDLE_STEP_MIN_MINUTES, next) * SECONDS_PER_MINUTE);
     onChange(nextSeconds);
-    // A button that reaches its limit turns off, so keyboard focus moves to the field instead of the page.
-    const limit = by > 0 ? nextSeconds >= MAX_IDLE_THRESHOLD_SECS : nextSeconds <= IDLE_STEP_MIN_MINUTES * SECONDS_PER_MINUTE;
-    if (fromButton && limit) field.current?.focus();
   }
 
   function commit() {
@@ -61,12 +57,11 @@ export function IdleStepper({
 
   return (
     <span className="inline-flex items-center gap-3">
-      <StepButton label="One minute less" disabled={atMin} onClick={() => step(-1, true)} className="size-8">
+      <StepButton label="One minute less" disabled={atMin} onClick={() => step(-1)} className="size-8">
         <Minus className="size-3.5" strokeWidth={1.8} />
       </StepButton>
       <span className="inline-flex items-baseline gap-1.5">
         <input
-          ref={field}
           id={id}
           role="spinbutton"
           inputMode="decimal"
@@ -93,7 +88,7 @@ export function IdleStepper({
           min
         </span>
       </span>
-      <StepButton label="One minute more" disabled={atMax} onClick={() => step(1, true)} className="size-8">
+      <StepButton label="One minute more" disabled={atMax} onClick={() => step(1)} className="size-8">
         <Plus className="size-3.5" strokeWidth={1.8} />
       </StepButton>
     </span>

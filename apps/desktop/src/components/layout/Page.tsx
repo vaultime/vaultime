@@ -116,10 +116,11 @@ export function StepButton({
       type="button"
       aria-label={label}
       title={label}
-      disabled={disabled}
-      onClick={onClick}
+      // Turned off, it stays focusable, so the keyboard keeps its place at the last step.
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onClick}
       className={cn(
-        "flex size-[34px] shrink-0 items-center justify-center rounded-lg bg-glint/7 text-soft ring-1 ring-glint/8 transition-colors ring-inset hover:bg-glint/11 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:bg-transparent disabled:text-faint/50",
+        "flex size-[34px] shrink-0 items-center justify-center rounded-lg bg-glint/7 text-soft ring-1 ring-glint/8 transition-colors ring-inset hover:bg-glint/11 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none aria-disabled:pointer-events-none aria-disabled:bg-transparent aria-disabled:text-faint/50",
         className,
       )}
     >
