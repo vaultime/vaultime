@@ -23,17 +23,18 @@
       font-family: "Geist", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(720px 520px at 82% 38%, rgb(157 124 255 / 0.16), transparent 70%),
+        linear-gradient(90deg, var(--ink) 38%, rgb(14 11 20 / 0.55) 62%, rgb(14 11 20 / 0.2)),
+        url("../docs/site/art/vista.jpg") 62% 30% / cover,
         var(--ink);
       -webkit-font-smoothing: antialiased;
     }
     .text { position: absolute; left: 72px; top: 64px; width: 470px; }
     .lockup { display: block; height: 40px; width: auto; }
-    .caps { font-size: 13px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+    .label-small { font-size: 15px; font-weight: 500; color: var(--faint); }
     .label { margin-top: 64px; }
     h1 {
       margin-top: 16px;
-      font-family: "Mona Sans", sans-serif; font-stretch: 125%; font-weight: 500;
+      font-family: "Mona Sans", sans-serif; font-stretch: 110%; font-weight: 600;
       font-size: 46px; line-height: 1.08; letter-spacing: -0.02em;
     }
     h1 em { font-style: normal; color: var(--violet); }
@@ -42,7 +43,8 @@
       display: flex; justify-content: space-between; align-items: baseline;
       padding: 11px 0; border-bottom: 1px solid var(--rule);
     }
-    .times b { font-family: "Geist Mono", monospace; font-weight: 400; font-size: 20px; color: var(--soft); }
+    .times b { font-weight: 600; font-size: 22px; font-variant-numeric: tabular-nums; color: var(--soft); }
+    .times small { margin-left: 1px; font-size: 0.62em; font-weight: 500; }
     .times .active b { color: var(--violet); }
     .site {
       position: absolute; left: 72px; bottom: 56px;
@@ -55,6 +57,7 @@
     .shot {
       position: absolute; left: 596px; top: 120px; width: 640px; height: 400px;
       border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden;
+      box-shadow: 0 40px 100px -40px rgb(0 0 0 / 0.85);
     }
     .shot img { display: block; width: 100%; height: 100%; }
   </style>
@@ -62,12 +65,12 @@
 <body>
   <div class="text">
     <img class="lockup" src="vaultime-lockup-light.svg" alt="Vaultime" />
-    <div class="caps label">Free playtime tracker for Windows and Linux</div>
+    <div class="label-small label">Free playtime tracker for Windows and Linux</div>
     <h1>Every hour you play, <em>honestly counted.</em></h1>
     <div class="times">
-      <div><span class="caps">Runtime</span><b>4 h 05</b></div>
-      <div class="active"><span class="caps">Active</span><b>3 h 41</b></div>
-      <div><span class="caps">Idle</span><b>24 min</b></div>
+      <div><span class="label-small">Runtime</span><b>4<small>h</small> 05<small>m</small></b></div>
+      <div class="active"><span class="label-small">Active</span><b>3<small>h</small> 41<small>m</small></b></div>
+      <div><span class="label-small">Idle</span><b>24<small>m</small></b></div>
     </div>
   </div>
   <div class="site">vaultime.codfishcloud.de</div>
