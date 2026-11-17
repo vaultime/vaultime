@@ -186,11 +186,14 @@ function GameChapter({ story, game, animate }: ChapterProps) {
       </p>
       <Facts
         facts={[
-          ["Longest", formatHoursMinutes(top.longestSessionMs)],
+          // A game whose sessions this year all began the year before has no longest one.
+          ...(top.longestSessionMs > 0
+            ? [["Longest", formatHoursMinutes(top.longestSessionMs)] as [string, string]]
+            : []),
           ["Active", `${Math.round((top.activeMs / top.runtimeMs) * 100)} %`],
           ["Best month", formatDate(new Date(story.year, top.bestMonth, 1), { month: "long" })],
         ]}
-        columns={3}
+        columns={top.longestSessionMs > 0 ? 3 : 2}
       />
     </>
   );
