@@ -59,8 +59,6 @@ FONT_FILES = {
 PAGES = [
     ("privacy.html", "Privacy policy", ROOT / "docs/legal/privacy-policy.md",
      "What Vaultime keeps on your PC, what a cloud backup server stores and how to reach the person responsible for the website."),
-    ("terms.html", "Terms of service", ROOT / "docs/legal/terms-of-service.md",
-     "The terms for the Vaultime website and the software you download from it."),
     ("changelog.html", "Changelog", ROOT / "CHANGELOG.md",
      "Every Vaultime release and what changed in it, newest first."),
     ("download-soon.html", "Download not available", SITE / "pages/download-soon.md", None),

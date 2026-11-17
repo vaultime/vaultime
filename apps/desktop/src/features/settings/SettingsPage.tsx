@@ -55,7 +55,6 @@ const LINKS = [
   { label: "Website", url: VAULTIME_URL },
   { label: "Changelog", url: `${VAULTIME_URL}/changelog.html` },
   { label: "Privacy policy", url: `${VAULTIME_URL}/privacy.html` },
-  { label: "Terms of service", url: `${VAULTIME_URL}/terms.html` },
 ];
 
 const PLATFORM_NAMES: Record<string, string> = { windows: "Windows", linux: "Linux", macos: "macOS" };

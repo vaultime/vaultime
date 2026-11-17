@@ -55,11 +55,11 @@ Get the latest version from [vaultime.codfishcloud.de](https://vaultime.codfishc
 
 How playtime is counted, what the trust labels mean, how the ledger and merging several PCs work, backups, where your data lives and Linux notes are all in the **[documentation](https://vaultime.codfishcloud.de/docs/)**.
 
-Vaultime has no analytics and no telemetry. See the [privacy policy](docs/legal/privacy-policy.md) and the [terms](docs/legal/terms-of-service.md).
+Vaultime has no analytics and no telemetry. See the [privacy policy](docs/legal/privacy-policy.md).
 
 ## License
 
-Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its setup files are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
+Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its setup files are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well. The name Vaultime and its logo are not covered by these licenses.
 
 The interface components from shadcn/ui are under the [MIT license](LICENSES/MIT.txt), and the fonts Mona Sans, Newsreader, Geist and Geist Mono under the SIL Open Font License 1.1.
 

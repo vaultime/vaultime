@@ -48,7 +48,7 @@ Cloud backup
 Nothing else
 : No analytics, no telemetry, no crash reports and no ads. Covers come from Steam's files on your PC and from your game folders, not from the internet.
 
-The [privacy policy](../../legal/privacy-policy.md) and the [terms](../../legal/terms-of-service.md) have the full details.
+The [privacy policy](../../legal/privacy-policy.md) has the full details.
 
 ## What Vaultime reads on your PC
 
