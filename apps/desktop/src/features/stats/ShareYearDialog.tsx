@@ -85,7 +85,9 @@ export function ShareYearDialog({
   if (open && held === null) setHeld({ stats, now });
   if (!open && held !== null) setHeld(null);
   const year = held ?? { stats, now };
-  const { appearance, mode, accentHues } = useAppearance();
+  const { appearance, mode, accentHues, accent } = useAppearance();
+  // The accent the app shows, so a look lit by a game draws the game's color, not grey.
+  const look = useMemo(() => ({ ground: appearance.ground, accent }), [appearance.ground, accent]);
   const [format, setFormat] = useState<ShareFormat>("wide");
   const [showGames, setShowGames] = useState(true);
   const [showCalendar, setShowCalendar] = useState(true);
@@ -164,7 +166,7 @@ export function ShareYearDialog({
   async function drawForExport(): Promise<HTMLCanvasElement> {
     if (!card) throw new Error("there is no card to draw");
     const target = document.createElement("canvas");
-    await drawShareCard(target, card, options, appearance);
+    await drawShareCard(target, card, options, look);
     return target;
   }
 
@@ -212,7 +214,7 @@ export function ShareYearDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[min(760px,calc(100dvh-2rem))] w-[min(1180px,calc(100%-2rem))] max-w-none grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-none [&>[data-slot=dialog-close]]:z-20">
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_300px]">
-          <CardPreview card={card} options={options} look={appearance} year={stats.year}>
+          <CardPreview card={card} options={options} look={look} year={stats.year}>
             <SidePanel
               year={stats.year}
               format={format}
