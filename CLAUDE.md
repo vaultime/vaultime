@@ -42,6 +42,7 @@ deploy/vps/       Server install script, systemd unit and admin tools
 docs/             Legal pages, landing page and documentation (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
 packaging/aur/    PKGBUILD of the vaultime-bin AUR package, made from the deb
+packaging/winget/ winget manifests of the latest release
 scripts/          Dev helpers: Linux checks, packaging, cloud round trip, API and
                   site deploy, release upload, logo, UI screenshots, social
                   preview
@@ -87,6 +88,10 @@ From a Windows machine, with Docker:
   its `.SRCINFO`, installs it and checks its libraries. The package names
   the AUR in `/usr/lib/vaultime/package-manager`, so the app leaves updates
   to it.
+
+For winget, `bash scripts/winget-manifest.sh <version>` points the manifests
+in `packaging/winget` at a published release, and
+`winget validate --manifest packaging/winget` checks them.
 
 Run the checks for everything you touched before calling work done, on both
 Windows and Linux when platform code changed. CI treats warnings as errors.
