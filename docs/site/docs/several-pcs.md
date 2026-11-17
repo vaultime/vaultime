@@ -10,7 +10,7 @@ Play on more than one PC and bring it together in one history. Each PC keeps rec
 4. Decide for each game whether it counts as the same game as one on this PC.
 5. Pick **Merge**.
 
-Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. It is one of the automatic backups, so it is deleted once seven newer ones are there. Merge again later and only what is new comes in. Sessions you removed here never come back.
+Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. These backups sit in the folder of the automatic backups, named `vaultime-safety`, and the newest three are kept, apart from the seven daily ones, so merges never push those out. Merge again later and only what is new comes in. Sessions you removed here never come back.
 
 > [!NOTE]
 > A merge is not a sync. The other PC never changes. A backup you pick merges only when you start it, and from a sync folder or the cloud only the first merge of a PC waits for you.

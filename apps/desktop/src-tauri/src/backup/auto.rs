@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Automatic local backups, once a day while Vaultime runs and when it quits.
-//! They get their own folder name prefix, so only the newest few automatic
-//! backups are kept and backups made by hand are never touched. A PC counts
-//! only the backups its manifests name, so several PCs can share a folder.
+//! Automatic local backups, once a day while Vaultime runs and when it quits,
+//! and before each merge. Each sort gets its own folder name prefix, so only
+//! the newest few of each are kept, merges never push out the daily ones,
+//! and backups made by hand are never touched. A PC counts only the backups
+//! its manifests name, so several PCs can share a folder.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,14 +21,32 @@ use crate::assets::AssetManager;
 use crate::constants::{
     AUTO_BACKUP_DIR, AUTO_BACKUP_ENABLED_SETTING, AUTO_BACKUP_FOLDER_SETTING, AUTO_BACKUP_KEEP,
     AUTO_BACKUP_ON_QUIT_MIN_AGE, AUTO_BACKUP_PREFIX, AUTO_BACKUP_UNFINISHED_AGE,
+    SAFETY_BACKUP_KEEP, SAFETY_BACKUP_PREFIX,
 };
 use crate::db::connection::Database;
 use crate::db::repo::{backup_snapshots, settings};
 use crate::error::{Result, VaultimeError};
 use crate::integrity;
 
-/// Snapshot label in the backup history.
-const LABEL: &str = "Automatic";
+/// A sort of automatic backup: its folder name prefix, how many are kept and
+/// its label in the backup history.
+struct Kind {
+    prefix: &'static str,
+    keep: usize,
+    label: &'static str,
+}
+
+const DAILY: Kind = Kind {
+    prefix: AUTO_BACKUP_PREFIX,
+    keep: AUTO_BACKUP_KEEP,
+    label: "Automatic",
+};
+
+const BEFORE_MERGE: Kind = Kind {
+    prefix: SAFETY_BACKUP_PREFIX,
+    keep: SAFETY_BACKUP_KEEP,
+    label: "Before a merge",
+};
 
 /// Where automatic backups go: the folder picked in Settings, otherwise a
 /// folder in Vaultime's data folder.
@@ -97,12 +116,12 @@ fn back_up(
     let device = this_pc(app_context);
     if newest_age(&folder, &device).is_some_and(|age| age < min_age) {
         // A sync folder that was away gets the newest backup once it is back.
-        if to_sync_folder && let Some(newest) = newest_complete(&folder, &device) {
+        if to_sync_folder && let Some(newest) = newest_of(&folder, &device, &DAILY) {
             copy_to_sync_folder(db, &newest);
         }
         return Ok(None);
     }
-    let summary = write_backup(db, asset_manager, app_context, &folder)?;
+    let summary = write_backup(db, asset_manager, app_context, &folder, &DAILY)?;
     if to_sync_folder {
         copy_to_sync_folder(db, Path::new(&summary.backup_path));
     }
@@ -117,16 +136,28 @@ fn copy_to_sync_folder(db: &Database, backup: &Path) {
     }
 }
 
-/// Saves an automatic backup now, also when daily backups are off, as before
-/// a merge, so a restore can undo it.
-pub fn back_up_now(
+/// Saves a backup before a merge, also when daily backups are off, so a
+/// restore can undo the merge. It never goes to the sync folder.
+pub fn back_up_before_merge(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
 ) -> Result<LocalBackupSummary> {
     let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
     let folder = made_folder(db, app_context)?;
-    write_backup(db, asset_manager, app_context, &folder)
+    write_backup(db, asset_manager, app_context, &folder, &BEFORE_MERGE)
+}
+
+/// A daily automatic backup now, for tests.
+#[cfg(test)]
+pub(crate) fn back_up_now(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+) -> Result<LocalBackupSummary> {
+    let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
+    let folder = made_folder(db, app_context)?;
+    write_backup(db, asset_manager, app_context, &folder, &DAILY)
 }
 
 /// Saves an automatic backup now and copies it into the sync folder, as when
@@ -138,7 +169,7 @@ pub fn back_up_to_sync_folder(
 ) -> Result<LocalBackupSummary> {
     let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
     let folder = made_folder(db, app_context)?;
-    let summary = write_backup(db, asset_manager, app_context, &folder)?;
+    let summary = write_backup(db, asset_manager, app_context, &folder, &DAILY)?;
     super::folder::publish(db, Path::new(&summary.backup_path))?;
     Ok(summary)
 }
@@ -160,6 +191,7 @@ fn write_backup(
     asset_manager: &AssetManager,
     app_context: &AppContext,
     folder: &Path,
+    kind: &Kind,
 ) -> Result<LocalBackupSummary> {
     let device = this_pc(app_context);
     let previous = newest_complete(folder, &device);
@@ -168,7 +200,7 @@ fn write_backup(
         asset_manager,
         app_context,
         folder,
-        AUTO_BACKUP_PREFIX,
+        kind.prefix,
         previous.as_deref(),
     )?;
     if let Err(error) = backup_snapshots::create_snapshot(
@@ -176,11 +208,11 @@ fn write_backup(
         Some(&summary.source_device_id),
         &summary.overall_checksum,
         Some(&summary.backup_path),
-        Some(LABEL),
+        Some(kind.label),
     ) {
         warn!("failed to record the automatic backup: {error}");
     }
-    prune(folder, AUTO_BACKUP_KEEP, &device);
+    prune(folder, kind, &device);
     info!("automatic backup written to {}", summary.backup_path);
     Ok(summary)
 }
@@ -190,10 +222,10 @@ fn this_pc(app_context: &AppContext) -> String {
     integrity::ledger::this_device().unwrap_or_else(|_| app_context.device_id.clone())
 }
 
-/// Age of the newest complete automatic backup of `device`. The manifest is
+/// Age of the newest complete daily backup of `device`. The manifest is
 /// written last, so its time is when the backup finished.
 fn newest_age(folder: &Path, device: &str) -> Option<Duration> {
-    automatic_backups(folder)
+    backups_of(folder, &DAILY)
         .iter()
         .filter(|backup| made_by(backup, device))
         .filter_map(|backup| {
@@ -206,10 +238,18 @@ fn newest_age(folder: &Path, device: &str) -> Option<Duration> {
         .map(|newest| SystemTime::now().duration_since(newest).unwrap_or_default())
 }
 
-/// The newest automatic backup of `device` in `folder` that finished, to
-/// start from when the database does not open.
+/// The newest automatic backup of `device` in `folder` that finished, of
+/// either sort, to start from when the database does not open.
 pub fn newest_complete(folder: &Path, device: &str) -> Option<PathBuf> {
-    automatic_backups(folder)
+    [&DAILY, &BEFORE_MERGE]
+        .into_iter()
+        .filter_map(|kind| newest_of(folder, device, kind))
+        .max_by_key(|backup| started_at(backup))
+}
+
+/// The newest backup of one sort of `device` in `folder` that finished.
+fn newest_of(folder: &Path, device: &str, kind: &Kind) -> Option<PathBuf> {
+    backups_of(folder, kind)
         .into_iter()
         .rev()
         .find(|backup| made_by(backup, device))
@@ -230,14 +270,16 @@ fn made_by(backup: &Path, device: &str) -> bool {
 /// When an automatic backup started, from the timestamp its name ends in.
 fn started_at(backup: &Path) -> Option<NaiveDateTime> {
     let name = backup.file_name()?.to_str()?;
-    let stamp = name.strip_prefix(&format!("{AUTO_BACKUP_PREFIX}-"))?;
+    let stamp = [&DAILY, &BEFORE_MERGE]
+        .into_iter()
+        .find_map(|kind| name.strip_prefix(&format!("{}-", kind.prefix)))?;
     NaiveDateTime::parse_from_str(stamp.get(..15)?, "%Y%m%dT%H%M%S").ok()
 }
 
-/// Automatic backup folders, oldest first. Their names end in a timestamp
-/// that sorts by time.
-fn automatic_backups(folder: &Path) -> Vec<PathBuf> {
-    let prefix = format!("{AUTO_BACKUP_PREFIX}-");
+/// The backup folders of one sort, oldest first. Their names end in a
+/// timestamp that sorts by time.
+fn backups_of(folder: &Path, kind: &Kind) -> Vec<PathBuf> {
+    let prefix = format!("{}-", kind.prefix);
     let mut backups: Vec<PathBuf> = fs::read_dir(folder)
         .into_iter()
         .flatten()
@@ -252,11 +294,11 @@ fn automatic_backups(folder: &Path) -> Vec<PathBuf> {
     backups
 }
 
-/// Deletes all but the newest `keep` automatic backups of `device`, and
+/// Deletes all but the newest few backups of one sort of `device`, and
 /// unfinished ones that started long enough ago to be left over. Another
 /// PC's backups stay, also one it is writing into the same folder now.
-fn prune(folder: &Path, keep: usize, device: &str) {
-    let backups = automatic_backups(folder);
+fn prune(folder: &Path, kind: &Kind, device: &str) {
+    let backups = backups_of(folder, kind);
     let now = Utc::now().naive_utc();
     let unfinished = backups.iter().filter(|backup| {
         !backup.join(BACKUP_MANIFEST_FILE).is_file()
@@ -270,7 +312,7 @@ fn prune(folder: &Path, keep: usize, device: &str) {
         .iter()
         .filter(|backup| made_by(backup, device))
         .collect();
-    let surplus = mine.len().saturating_sub(keep);
+    let surplus = mine.len().saturating_sub(kind.keep);
     for backup in unfinished.chain(mine.into_iter().take(surplus)) {
         if let Err(error) = fs::remove_dir_all(backup) {
             warn!(
@@ -316,7 +358,7 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        assert_eq!(automatic_backups(&root.join(AUTO_BACKUP_DIR)).len(), 1);
+        assert_eq!(backups_of(&root.join(AUTO_BACKUP_DIR), &DAILY).len(), 1);
 
         let elsewhere = root.join("elsewhere");
         settings::set_setting(
@@ -330,7 +372,7 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        assert_eq!(automatic_backups(&elsewhere).len(), 1);
+        assert_eq!(backups_of(&elsewhere, &DAILY).len(), 1);
 
         settings::set_setting(&db, AUTO_BACKUP_ENABLED_SETTING, "false").unwrap();
         assert!(
@@ -399,12 +441,38 @@ mod tests {
         let unfinished = backup(&folder, "vaultime-auto-20260904T010000Z", None);
         let by_hand = backup(&folder, "vaultime-backup-20250101T010000Z", me);
 
-        prune(&folder, 2, "desktop");
+        prune(&folder, &Kind { keep: 2, ..DAILY }, "desktop");
         assert!(!oldest.exists());
         assert!(middle.exists() && newest.exists());
         assert!(!unfinished.exists(), "an unfinished backup is removed");
         assert!(by_hand.exists(), "backups made by hand stay");
         assert!(newest_age(&folder, "desktop").is_some_and(|age| age < Duration::from_secs(60)));
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn backups_before_a_merge_leave_the_daily_ones_alone() {
+        let folder =
+            std::env::temp_dir().join(format!("vaultime-auto-merges-{}", uuid::Uuid::new_v4()));
+        let me = Some("desktop");
+        let daily = backup(&folder, "vaultime-auto-20260901T010000Z", me);
+        for day in 2..=6 {
+            backup(
+                &folder,
+                &format!("vaultime-safety-202609{day:02}T010000Z"),
+                me,
+            );
+        }
+
+        prune(&folder, &BEFORE_MERGE, "desktop");
+        assert!(daily.exists());
+        assert_eq!(backups_of(&folder, &BEFORE_MERGE).len(), SAFETY_BACKUP_KEEP);
+        assert_eq!(newest_of(&folder, "desktop", &DAILY), Some(daily));
+        assert_eq!(
+            newest_complete(&folder, "desktop"),
+            Some(folder.join("vaultime-safety-20260906T010000Z")),
+            "a recovery starts from the newest of either sort"
+        );
         fs::remove_dir_all(folder).unwrap();
     }
 
@@ -417,7 +485,7 @@ mod tests {
         let stamp = Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
         let writing = backup(&folder, &format!("vaultime-auto-{stamp}"), None);
 
-        prune(&folder, 1, "desktop");
+        prune(&folder, &Kind { keep: 1, ..DAILY }, "desktop");
         assert!(mine.exists() && theirs.exists());
         assert!(writing.exists(), "a backup another PC is writing stays");
         assert_eq!(newest_complete(&folder, "desktop"), Some(mine.clone()));
@@ -425,7 +493,7 @@ mod tests {
         assert_eq!(newest_complete(&folder, "tablet"), None);
 
         let newer = backup(&folder, "vaultime-auto-20260903T010000Z", Some("desktop"));
-        prune(&folder, 1, "desktop");
+        prune(&folder, &Kind { keep: 1, ..DAILY }, "desktop");
         assert!(!mine.exists() && newer.exists());
         fs::remove_dir_all(folder).unwrap();
     }

@@ -448,6 +448,11 @@ pub const AUTO_BACKUP_PREFIX: &str = "vaultime-auto";
 /// Automatic backups kept, older ones are deleted. Same as `AUTO_BACKUP_KEEP`
 /// in `lib/constants.ts`.
 pub const AUTO_BACKUP_KEEP: usize = 7;
+/// Folder name prefix of the backups made before a merge, kept apart from
+/// the daily ones.
+pub const SAFETY_BACKUP_PREFIX: &str = "vaultime-safety";
+/// Backups made before a merge that are kept, older ones are deleted.
+pub const SAFETY_BACKUP_KEEP: usize = 3;
 /// Age of the newest automatic backup at which the daily one is due.
 pub const AUTO_BACKUP_INTERVAL: Duration = Duration::from_hours(24);
 /// Quitting makes a backup only when the last one is at least this old.

@@ -341,7 +341,7 @@ fn apply_checked(
         return Ok(summary);
     }
     summary.safety_backup_path =
-        Some(auto::back_up_now(db, asset_manager, app_context)?.backup_path);
+        Some(auto::back_up_before_merge(db, asset_manager, app_context)?.backup_path);
 
     // The staged copy is attached for copying, so its own connection closes.
     staged.close();
