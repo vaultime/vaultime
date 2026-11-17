@@ -138,6 +138,8 @@ def link_target(target):
         return f"/screenshots/{name}"
     if "art/" in path:
         return f"/art/{name}"
+    if name.endswith(".md") and name not in URL_FOR_SOURCE:
+        raise SystemExit(f"Link to a page the site does not have: {target}")
     url = URL_FOR_SOURCE.get(name, path)
     return url + (f"#{anchor}" if anchor else "")
 
