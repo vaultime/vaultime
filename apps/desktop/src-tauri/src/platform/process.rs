@@ -187,9 +187,30 @@ fn is_mount_point(path: &str) -> bool {
         .is_some_and(|above| device(path).is_some_and(|here| here != above))
 }
 
-/// Windows gives drives letters, which `below_a_root` refuses. A drive mounted
-/// at a folder is rare there and counts as that folder.
-#[cfg(not(unix))]
+/// Whether a drive is mounted at `path`: the folder is the root of the volume
+/// it lies on, as a drive letter's root is, or a folder a drive is mounted at.
+#[cfg(windows)]
+fn is_mount_point(path: &str) -> bool {
+    use windows_sys::Win32::Storage::FileSystem::GetVolumePathNameW;
+    let wide: Vec<u16> = path.encode_utf16().chain([0]).collect();
+    // The root is the path or a part of it, with a backslash at the end.
+    let mut root = vec![0_u16; wide.len() + 1];
+    let Ok(capacity) = u32::try_from(root.len()) else {
+        return false;
+    };
+    // SAFETY: `wide` is null-terminated and `root` holds `capacity` units,
+    // both outlive the call.
+    if unsafe { GetVolumePathNameW(wide.as_ptr(), root.as_mut_ptr(), capacity) } == 0 {
+        return false;
+    }
+    let end = root
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(root.len());
+    path_key(&String::from_utf16_lossy(&root[..end])) == path_key(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn is_mount_point(_path: &str) -> bool {
     false
 }
@@ -431,6 +452,22 @@ mod tests {
         assert!(!below_a_root(r"\\?\UNC\server\share\"));
         assert!(below_a_root(r"\\server\share\Game"));
         assert!(below_a_root(r"D:\Game"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_root_of_a_volume_is_a_mount_point_and_a_folder_on_it_is_not() {
+        let drive = std::env::var("SystemDrive").unwrap();
+        assert!(is_mount_point(&format!(r"{drive}\")));
+        let folder = std::env::temp_dir().join(format!("vaultime-mount-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&folder).unwrap();
+        let resolved = std::fs::canonicalize(&folder).unwrap();
+        assert!(!is_mount_point(strip_verbatim_prefix(
+            &resolved.to_string_lossy()
+        )));
+        let game = running(&format!(r"{}\game.exe", folder.display()));
+        assert!(runs_from_folder(&game, &folder.to_string_lossy()));
+        std::fs::remove_dir(&folder).unwrap();
     }
 
     #[cfg(target_os = "linux")]
