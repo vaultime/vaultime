@@ -199,9 +199,10 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
 
     async function restoreStoredSession() {
       const { session: stored, keyringRead } = await loadPersistedSession();
-      // A PC from before the switch keeps cloud backup while it is signed in.
-      // Turning it off takes a keyring and settings that could be read, so a
-      // locked keyring at login or a failed read decides nothing for good. A
+      // A PC that never decided keeps cloud backup only while it is signed
+      // in, and a sign-in to the hosted server no longer counts. Turning it
+      // off takes a keyring and settings that could be read, so a locked
+      // keyring at login or a failed read decides nothing for good. A
       // development build reads a sign-in of its own, so it decides nothing.
       if (
         cloudSetting === undefined &&

@@ -65,7 +65,7 @@ Vaultime refuses a backup that is damaged or holds database parts it never write
 
 ### Turning it on
 
-Cloud backup is off on a new install, and the menu has no Cloud page. Turn on **Use cloud backup** under Settings, Cloud backup, and the Cloud page joins the menu. Turned off, Vaultime neither signs in nor uploads backups, and it does not read a saved sign-in from the keyring. A PC that is signed in keeps cloud backup until you sign out. PCs that used Vaultime before the switch existed keep cloud backup on while they are signed in.
+Cloud backup is off on a new install, and the menu has no Cloud page. Turn on **Use cloud backup** under Settings, Cloud backup, and the Cloud page joins the menu. Turned off, Vaultime neither signs in nor uploads backups, and it does not read a saved sign-in from the keyring. A PC that is signed in keeps cloud backup until you sign out.
 
 ### Signing up
 
