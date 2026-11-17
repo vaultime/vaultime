@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Last played order follows. While a game runs, the game list shows when you started it, "Since 20:15".
-- **No lost window on GNOME.** On a desktop that shows no tray icons, like GNOME without an AppIndicator extension, closing the window now minimizes Vaultime instead of hiding it where no icon could bring it back. It keeps counting either way, and Settings says which your desktop does.
+- **No lost window on GNOME.** On a desktop that shows no tray icons, like GNOME without an AppIndicator extension, closing the window now minimizes Vaultime instead of hiding it where no icon could bring it back, and starting with your computer opens it minimized. It keeps counting either way, and Settings says which your desktop does.
 - **Updates through your package manager.** When a package manager installed Vaultime and its package says so, the app leaves updates to it and never replaces files it does not own. Settings says where its updates come from.
 - **Publisher in Windows.** Apps and features and the program's properties now name the publisher Vaultime instead of vaultime.
 - **Legacy Games and Big Fish by name.** Games found through these two launchers named no launcher and read as added by hand. They now name their launcher.
