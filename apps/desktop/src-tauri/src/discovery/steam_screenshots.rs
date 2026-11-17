@@ -78,7 +78,10 @@ fn parse(text: &str) -> Vec<SteamScreenshot> {
                 is_file_name(file).then(|| SteamScreenshot {
                     app_id: app_id.clone(),
                     file: file.to_owned(),
-                    taken_at: number(shot, "creation").unwrap_or_default(),
+                    // Steam writes 32-bit times, so a longer number is damage.
+                    taken_at: number::<u32>(shot, "creation")
+                        .map(i64::from)
+                        .unwrap_or_default(),
                     width: number(shot, "width").unwrap_or_default(),
                     height: number(shot, "height").unwrap_or_default(),
                 })
@@ -131,6 +134,11 @@ mod tests {
 		{
 			"filename"		"632360/screenshots/../../secret.jpg"
 			"creation"		"1740432174"
+		}
+		"2"
+		{
+			"filename"		"632360/screenshots/20250224222254_1.jpg"
+			"creation"		"99999999999999999"
 		}
 	}
 	"not-an-app"
