@@ -54,6 +54,7 @@ import type {
   CloudBackupRecord,
   CloudPc,
   FolderPc,
+  AwayTimer,
   CloudDevice,
   CropRect,
   Device,
@@ -277,7 +278,9 @@ const live: Recorded = {
   integrity_status: "local",
   closed_cleanly: false,
 };
-const played = scenario === "empty" || scenario === "unplayed" ? [] : [live, ...sessions];
+// ?away=alone: only the timer for play away runs, nothing on this PC.
+const nothingRunning = scenario === "empty" || scenario === "unplayed" || params.get("away") === "alone";
+const played = scenario === "empty" || scenario === "unplayed" ? [] : nothingRunning ? sessions : [live, ...sessions];
 const allSessions = played.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
 const allGames = scenario === "empty" ? [] : games;
 
@@ -285,6 +288,9 @@ const allGames = scenario === "empty" ? [] : games;
 // here, one game that came along on its own, and one that failed its check.
 /** The newest cloud backups of the other PCs: the laptop merged before, the Steam Deck not yet. */
 let syncFolder: string | null = params.has("sync") ? "D:\\Dropbox\\Vaultime" : null;
+let awayTimer: AwayTimer | null = params.has("away")
+  ? { game_id: games[1].id, started_at: iso(Date.now() - 42 * MINUTE_MS) }
+  : null;
 let syncPcs: FolderPc[] = [
   {
     device_id: "preview",
@@ -675,7 +681,7 @@ if (leftRunning?.ended_at_wall) {
 if (scenario !== "empty" && scenario !== "unplayed") {
   addManual(games[1].id, iso(now - 2 * DAY_MS - 5 * HOUR_MS), 95 * MINUTE_MS, "On the Steam Deck");
 }
-const running = scenario === "empty" || scenario === "unplayed" ? [] : [live];
+const running = nothingRunning ? [] : [live];
 
 /** The running sessions, counted on like a running game, so every poll brings new values as in the app. */
 function runningNow(): Session[] {
@@ -1841,6 +1847,15 @@ mockIPC((cmd, payload) => {
           launcher_source: games[3].launcher_source,
         }),
       ];
+    // ?away=1: the second game is timed on a handheld since 42 minutes.
+    case "get_away_timer":
+      return awayTimer;
+    case "start_away_timer":
+      awayTimer = { game_id: args.gameId as string, started_at: iso(Date.now()) };
+      return awayTimer;
+    case "clear_away_timer":
+      awayTimer = null;
+      return null;
     // ?seen=1: a game from the games folder ran for a while.
     case "list_seen_games":
       return params.has("seen")

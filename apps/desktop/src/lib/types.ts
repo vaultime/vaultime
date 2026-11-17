@@ -589,13 +589,19 @@ export interface LocalBackupSummary {
   continues_as?: PcTakeover | null;
 }
 
-/** A game candidate found during auto-discovery. */
 /** A program from the game folders that ran in front for a while, which Discover offers to add. */
 export interface SeenGame extends DiscoveredGame {
   /** How long it had the foreground, over every run of Vaultime. */
   front_seconds: number;
 }
 
+/** The timer running for play away from this PC. */
+export interface AwayTimer {
+  game_id: string;
+  started_at: string;
+}
+
+/** A game candidate found during auto-discovery. */
 export interface DiscoveredGame {
   title: string;
   executable_path: string;

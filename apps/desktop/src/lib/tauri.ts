@@ -11,6 +11,7 @@ import type {
   CloudBackupUploadResult,
   CloudPc,
   FolderPc,
+  AwayTimer,
   SeenGame,
   CreateGameInput,
   CropRect,
@@ -458,6 +459,21 @@ export async function importLocalBackup(
 /** Programs from the game folders that ran in front for a while, the last seen first. */
 export async function listSeenGames(): Promise<SeenGame[]> {
   return invoke<SeenGame[]>("list_seen_games");
+}
+
+/** The timer running for play away from this PC, if any. */
+export async function getAwayTimer(): Promise<AwayTimer | null> {
+  return invoke<AwayTimer | null>("get_away_timer");
+}
+
+/** Starts timing play of a game away from this PC. */
+export async function startAwayTimer(gameId: string): Promise<AwayTimer> {
+  return invoke<AwayTimer>("start_away_timer", { gameId });
+}
+
+/** Stops the timer, once its play was saved or set aside. */
+export async function clearAwayTimer(): Promise<void> {
+  await invoke("clear_away_timer");
 }
 
 /** Where backups sync, if anywhere. */

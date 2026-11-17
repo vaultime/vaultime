@@ -24,8 +24,15 @@ import {
   STEAM_LAUNCHER,
 } from "@/lib/constants";
 import * as api from "@/lib/tauri";
-import { formatHoursMinutes, fromLocalInput, toLocalInput } from "@/lib/time";
+import { formatHoursMinutes, fromLocalInput, parseVaultimeDate, toLocalInput } from "@/lib/time";
 import { describeError } from "@/lib/utils";
+
+/** The whole minutes from `from` to `now` as hours and minutes, at most the longest session. */
+function timedLength(from: string, now: number): { hours: string; minutes: string } {
+  const elapsed = Math.floor((now - parseVaultimeDate(from).getTime()) / MINUTE_MS);
+  const total = Math.min(Math.max(elapsed, 0), MANUAL_SESSION_MAX_HOURS * MINUTES_PER_HOUR);
+  return { hours: String(Math.floor(total / MINUTES_PER_HOUR)), minutes: String(total % MINUTES_PER_HOUR) };
+}
 
 /** Adds play Vaultime did not see, like a session on a console or another PC. */
 export function AddSessionDialog({
@@ -35,6 +42,8 @@ export function AddSessionDialog({
   open,
   onOpenChange,
   onAdded,
+  timedFrom,
+  onDiscard,
 }: {
   gameId: string;
   gameTitle: string;
@@ -43,12 +52,18 @@ export function AddSessionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdded: () => void;
+  /** When the timer for play away started, which fills in the start and the length. */
+  timedFrom?: string;
+  /** Sets the timed play aside. */
+  onDiscard?: () => void;
 }) {
   // The dialog mounts when it opens, so this is the moment the player started adding.
   const [openedAt] = useState(() => Date.now());
-  const [startInput, setStartInput] = useState(() => toLocalInput(new Date(openedAt - MANUAL_SESSION_DEFAULT_AGO_MS)));
-  const [hours, setHours] = useState("1");
-  const [minutes, setMinutes] = useState("0");
+  const [startInput, setStartInput] = useState(() =>
+    toLocalInput(timedFrom ? parseVaultimeDate(timedFrom) : new Date(openedAt - MANUAL_SESSION_DEFAULT_AGO_MS)),
+  );
+  const [hours, setHours] = useState(() => (timedFrom ? timedLength(timedFrom, openedAt).hours : "1"));
+  const [minutes, setMinutes] = useState(() => (timedFrom ? timedLength(timedFrom, openedAt).minutes : "0"));
   const [reason, setReason] = useState("");
   const [throughSteam, setThroughSteam] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -87,9 +102,11 @@ export function AddSessionDialog({
       <DialogContent className="sm:max-w-md">
         <form className="grid gap-5" onSubmit={(event) => void save(event)}>
           <DialogHeader>
-            <DialogTitle>Add a session</DialogTitle>
+            <DialogTitle>{timedFrom ? "Save the timed play" : "Add a session"}</DialogTitle>
             <DialogDescription>
-              Play of {gameTitle} that Vaultime did not see. It counts as active time and is labeled Manual.
+              {timedFrom
+                ? `Play of ${gameTitle} away from this PC. Change the length if the timer ran on after you stopped playing. It counts as active time and is labeled Manual.`
+                : `Play of ${gameTitle} that Vaultime did not see. It counts as active time and is labeled Manual.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -165,11 +182,16 @@ export function AddSessionDialog({
           {error && <Notice tone="warning">{error}</Notice>}
 
           <DialogFooter>
+            {onDiscard && (
+              <Button type="button" variant="ghost" className="sm:mr-auto" onClick={onDiscard}>
+                Discard
+              </Button>
+            )}
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {timedFrom ? "Keep timing" : "Cancel"}
             </Button>
             <Button type="submit" disabled={saving || !valid}>
-              {saving ? "Adding" : "Add session"}
+              {saving ? "Adding" : timedFrom ? "Save session" : "Add session"}
             </Button>
           </DialogFooter>
         </form>

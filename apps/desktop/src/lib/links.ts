@@ -6,6 +6,7 @@
 // core links them and shows their sessions as the game they count as. This
 // file names them.
 
+import { STEAM_LAUNCHER } from "@/lib/constants";
 import type { Game, GameLink, Session } from "@/lib/types";
 
 /** What each launcher is called, by the source the core reports. */
@@ -60,6 +61,20 @@ export function linkedTo(
     installs: linked.filter((link) => isInstallHere(link, thisDeviceId)),
     elsewhere: linked.filter((link) => !isInstallHere(link, thisDeviceId)),
   };
+}
+
+/** Whether Steam counts play of the game: through its own launcher, its earlier playtime or another install here. */
+export function countedBySteam(
+  game: Game,
+  earlierSource: string | null | undefined,
+  links: GameLink[],
+  thisDeviceId: string | null,
+): boolean {
+  return (
+    game.launcher_source === STEAM_LAUNCHER ||
+    earlierSource === STEAM_LAUNCHER ||
+    linkedTo(game.id, links, thisDeviceId).installs.some((link) => link.launcher_source === STEAM_LAUNCHER)
+  );
 }
 
 /** "Steam and GOG": the launchers of a game and of its other installs here, or null when none has one. */

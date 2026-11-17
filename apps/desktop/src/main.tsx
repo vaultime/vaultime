@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { AppearanceProvider } from "@/features/appearance/AppearanceProvider";
+import { AwayTimerProvider } from "@/features/away/AwayTimerProvider";
 import { CloudSessionProvider } from "@/features/cloud/CloudSessionProvider";
 import { LibraryProvider } from "@/features/library/LibraryProvider";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
@@ -25,9 +26,11 @@ createRoot(document.getElementById("root")!).render(
           <CloudSessionProvider>
             <LibraryProvider>
               <SyncFolderProvider>
-                <UpdateProvider>
-                  <App />
-                </UpdateProvider>
+                <AwayTimerProvider>
+                  <UpdateProvider>
+                    <App />
+                  </UpdateProvider>
+                </AwayTimerProvider>
               </SyncFolderProvider>
             </LibraryProvider>
           </CloudSessionProvider>

@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
-import { Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Pencil, Plus, Square, Timer, Trash2 } from "lucide-react";
 import { Notice } from "@/components/layout/Page";
 import {
   TintedHeader,
@@ -17,12 +17,13 @@ import { Button } from "@/components/ui/button";
 import { DeleteGameDialog } from "@/features/library/components/DeleteGameDialog";
 import { EditGameDialog } from "@/features/library/components/EditGameDialog";
 import { useLibrary, usePlaying } from "@/features/library/library-context";
+import { useAwayTimer } from "@/features/away/away-timer-context";
 import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { GameHistory } from "@/features/game-details/GameHistory";
 import { FavoriteButton, StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
-import { launchersOf, linkedTo, whereFrom } from "@/lib/links";
+import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
+import { countedBySteam, launchersOf, whereFrom } from "@/lib/links";
 import { runtimeByHour } from "@/lib/play-totals";
 import { gamePlaytime } from "@/lib/sentences";
 import { stepsAside } from "@/lib/game-metadata";
@@ -46,6 +47,7 @@ function GamePage({ gameId }: { gameId: string }) {
   const navigate = useNavigate();
   const { summaries, sessions: allSessions, loaded, refresh, notes, saveNote, setStatus, setFavorite, links, thisDeviceId } =
     useLibrary();
+  const awayTimer = useAwayTimer();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
   const [showAll, setShowAll] = useState(false);
@@ -252,10 +254,33 @@ function GamePage({ gameId }: { gameId: string }) {
               </h2>
               {/* A game of another PC gets its sessions with each merge. */}
               {!game.origin_device_id && (
-                <Button variant="ghost" size="sm" className="-mr-3.5 text-faint" onClick={() => setAddingSession(true)}>
-                  <Plus className="size-3.5" />
-                  Add a session
-                </Button>
+                <div className="-mr-3.5 flex items-center">
+                  {awayTimer.timer?.game_id === game.id ? (
+                    <Button variant="ghost" size="sm" className="text-violet" onClick={awayTimer.stop}>
+                      <Square className="size-3" fill="currentColor" />
+                      Stop the timer
+                    </Button>
+                  ) : (
+                    !awayTimer.timer && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-faint"
+                        title="For play away from this PC, like on a console or a Steam Deck"
+                        onClick={() =>
+                          awayTimer.start(game.id).catch((startError) => setActionError(describeError(startError)))
+                        }
+                      >
+                        <Timer className="size-3.5" />
+                        Start a timer
+                      </Button>
+                    )
+                  )}
+                  <Button variant="ghost" size="sm" className="text-faint" onClick={() => setAddingSession(true)}>
+                    <Plus className="size-3.5" />
+                    Add a session
+                  </Button>
+                </div>
               )}
             </div>
             {sessions.length === 0 ? (
@@ -381,11 +406,7 @@ function GamePage({ gameId }: { gameId: string }) {
         <AddSessionDialog
           gameId={game.id}
           gameTitle={game.title}
-          steamGame={
-            game.launcher_source === STEAM_LAUNCHER ||
-            summary.earlier?.source === STEAM_LAUNCHER ||
-            linkedTo(game.id, links, thisDeviceId).installs.some((link) => link.launcher_source === STEAM_LAUNCHER)
-          }
+          steamGame={countedBySteam(game, summary.earlier?.source, links, thisDeviceId)}
           open={addingSession}
           onOpenChange={setAddingSession}
           onAdded={() => void refresh()}
