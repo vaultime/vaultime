@@ -148,8 +148,8 @@ export function JournalPage() {
   );
 
   // A game keeps one color through the week, the main color of its artwork,
-  // nudged only when it would look like a game that showed up earlier. The
-  // accent stays free for active time.
+  // nudged only when it would look like a game that showed up earlier. A fixed
+  // accent stays free for active time, the game accent is a game's own color.
   const { markOf, fillOf } = useMemo(() => {
     const paletteOf = (gameId: string) => {
       const summary = byGame.get(gameId);

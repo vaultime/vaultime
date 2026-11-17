@@ -259,7 +259,7 @@ describe("windowLook", () => {
     expect(windowLook("dark", "vault", "violet", "system").theme).toBe("system");
   });
 
-  it("keeps the default violet of the logo files", () => {
+  it("keeps the violet swatch at the violet the logo had before", () => {
     const channels = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
     const drawn = channels(windowLook("dark", "vault", "violet", "dark").iconAccent);
     for (const [index, channel] of channels("#9d7cff").entries()) expect(Math.abs(drawn[index] - channel)).toBeLessThanOrEqual(2);

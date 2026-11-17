@@ -16,9 +16,13 @@ export interface GameInFront {
 
 /** The games that light the look. */
 export interface GamesInFront {
-  /** The game a page is about, else the one playing, else the one played last. */
+  /** The game a page is about, else the game of Home. */
   page: GameInFront | null;
-  /** The game playing, else the one played last, for the window and its icons. */
+  /**
+   * The game of Home: the one picked for the pages not about a game, else the
+   * one playing, else the one played last. The tray shows it while the window
+   * is hidden, and the shortcuts and the next start always.
+   */
   home: GameInFront | null;
 }
 

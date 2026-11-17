@@ -7,7 +7,7 @@ export interface StatTile {
   label: string;
   value: string;
   note: string;
-  /** Shows the value in violet. */
+  /** Shows the value in the accent. */
   accent?: boolean;
 }
 

@@ -20,7 +20,7 @@ export interface PlayPoint {
 }
 
 /**
- * One column per point, active time in violet with idle time stacked on top.
+ * One column per point, active time in the accent with idle time stacked on top.
  * Pointing at a column, or tabbing to it, shows its time. The axis names
  * every column, or the first, the middle and the last one.
  */

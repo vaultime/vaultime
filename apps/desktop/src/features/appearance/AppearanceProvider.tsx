@@ -61,7 +61,7 @@ interface CachedLook {
 
 const NO_GAMES: GamesInFront = { page: null, home: null };
 
-/** The game played last in the last run, also as the page's, as a start opens Home. */
+/** The game of Home in the last run, also as the page's, as a start opens Home. */
 function cachedGames(): GamesInFront {
   try {
     const home: unknown = JSON.parse(localStorage.getItem(APPEARANCE_GAME_CACHE_KEY) ?? "null");

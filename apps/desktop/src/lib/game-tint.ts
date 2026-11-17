@@ -86,7 +86,7 @@ function tintForHue(hue: number): GameTint {
 }
 
 /** The accent color, for pages that are not about one game. */
-export const BRAND_TINT = tintFromHue("var(--accent-hue)", 1, [{ hue: BRAND_HUE_DEG, chroma: MARK_LEVELS.chroma }]);
+export const BRAND_TINT = tintFromHue("var(--accent-hue)", 1, []);
 
 /** A stable tint per title, for games without artwork. */
 export function tintForTitle(title: string): GameTint {

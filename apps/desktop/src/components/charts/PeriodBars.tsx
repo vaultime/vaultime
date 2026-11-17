@@ -16,7 +16,7 @@ export interface PeriodColumn {
 }
 
 /**
- * One column per month or year, active time in violet with idle time
+ * One column per month or year, active time in the accent with idle time
  * stacked on top. Pointing at a column, or tabbing to it, shows what was
  * played.
  */

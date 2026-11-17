@@ -440,7 +440,7 @@ export const NUMBER_WORDS_MAX = 999;
 
 // Game tints
 
-/** Hue of Vaultime violet in OKLCH, in degrees. The hue of --violet in index.css. */
+/** Hue of the violet accent swatch in OKLCH, in degrees, the violet the logo had before. */
 export const BRAND_HUE_DEG = 293;
 
 /**
@@ -638,5 +638,5 @@ export const NO_GAME_ACCENT = "#808080";
 export const WINDOW_LOOK_INTERVAL_MS = 120;
 /** Key of the copy of the look in local storage, read before the first paint. public/theme-boot.js repeats it. */
 export const APPEARANCE_CACHE_KEY = "vaultime.appearance";
-/** Key of the game played last in local storage, so a start shows its art and color at once. */
+/** Key of the game of Home in local storage, so a start shows its art and color at once. */
 export const APPEARANCE_GAME_CACHE_KEY = "vaultime.appearance-game";
