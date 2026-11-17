@@ -283,8 +283,14 @@ pub fn import(
     asset_manager: &AssetManager,
     picked: &[DiscoveredGame],
 ) -> Result<Vec<Game>> {
+    // What the page knew may be old, as after a double click or with one
+    // program in two lists, so the library is asked again.
+    let mut existing = library_executables(db)?;
     let mut imported = Vec::new();
     for candidate in picked.iter().filter(|candidate| !candidate.already_added) {
+        if !existing.insert(path_key(&candidate.executable_path)) {
+            continue;
+        }
         let input = CreateGame {
             title: candidate.title.clone(),
             executable_path: Some(candidate.executable_path.clone()),
@@ -753,6 +759,13 @@ mod tests {
             games::links(&db).unwrap().get(&imported[0].id),
             Some(&steam.id)
         );
+        let again = import(&db, &assets, &[candidate("/gog/hades/hades.exe", false)]).unwrap();
+        assert!(again.is_empty(), "a second click adds nothing");
+        let twice = [
+            candidate("/gog/hades2/hades2.exe", false),
+            candidate("/gog/hades2/hades2.exe", false),
+        ];
+        assert_eq!(import(&db, &assets, &twice).unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(cache);
     }
 
