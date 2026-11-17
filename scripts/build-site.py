@@ -12,7 +12,8 @@ with the site, so visitors make no requests to font services.
 
 The documentation lives in docs/site/docs, one Markdown file per page. Its
 sidebar, page order and groups come from DOCS_NAV below, so a new page is a
-new file plus one line there.
+new file plus one line there. The guides in docs/site/guides work the same
+way with GUIDES_NAV.
 
 Every page gets its own search title, description, canonical address and
 Open Graph tags with assets/social-preview.png, which
@@ -29,6 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "docs/site"
 DOCS = SITE / "docs"
+GUIDES = SITE / "guides"
 SCREENSHOTS = ROOT / "assets/screenshots"
 ART = SITE / "art"
 OUT = ROOT / "dist-site"
@@ -92,19 +94,39 @@ DOCS_NAV = [
     ]),
 ]
 
+# The guides to playtime in each launcher, as DOCS_NAV.
+GUIDES_NAV = [
+    ("Overview", [
+        ("index.md", "All guides"),
+        ("all-your-playtime.md", "All your playtime in one place"),
+    ]),
+]
+
 # A page lists its sections beside the text once it has this many.
 TOC_MIN_SECTIONS = 3
 
 CALLOUTS = {"NOTE": "Note", "TIP": "Tip", "CAUTION": "Caution"}
 
 
+def section_url(prefix, source):
+    return prefix if source == "index.md" else f"{prefix}{source.removesuffix('.md')}/"
+
+
 def doc_url(source):
-    return "/docs/" if source == "index.md" else f"/docs/{source.removesuffix('.md')}/"
+    return section_url("/docs/", source)
 
 
-# Links between the Markdown files point at their pages instead.
+def guide_url(source):
+    return section_url("/guides/", source)
+
+
+# Links between the Markdown files point at their pages instead. The guides
+# link to their overview as /guides/, since the docs have an index.md too.
 URL_FOR_SOURCE = {source.name: f"/{page}" for page, _, source, _ in PAGES}
 URL_FOR_SOURCE.update({source: doc_url(source) for _, entries in DOCS_NAV for source, _ in entries})
+URL_FOR_SOURCE.update(
+    {source: guide_url(source) for _, entries in GUIDES_NAV for source, _ in entries if source != "index.md"}
+)
 
 
 def link_target(target):
@@ -114,6 +136,8 @@ def link_target(target):
     name = Path(path).name
     if "screenshots/" in path:
         return f"/screenshots/{name}"
+    if "art/" in path:
+        return f"/art/{name}"
     url = URL_FOR_SOURCE.get(name, path)
     return url + (f"#{anchor}" if anchor else "")
 
@@ -383,6 +407,7 @@ def sitemap():
     """Every page search engines may show, for sitemap.xml."""
     paths = ["/"]
     paths += [doc_url(source) for _, entries in DOCS_NAV for source, _ in entries]
+    paths += [guide_url(source) for _, entries in GUIDES_NAV for source, _ in entries]
     paths += [f"/{name}" for name, _, _, _ in PAGES if name not in UNLISTED]
     urls = "".join(f"  <url><loc>{html.escape(SITE_URL + path)}</loc></url>\n" for path in paths)
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n'
@@ -397,11 +422,11 @@ Sitemap: {SITE_URL}/sitemap.xml
 """
 
 
-def docs_nav(current):
+def docs_nav(current, nav=DOCS_NAV, url=doc_url):
     groups = []
-    for group, entries in DOCS_NAV:
+    for group, entries in nav:
         links = "".join(
-            f'<li><a href="{doc_url(source)}"' + (' aria-current="page"' if source == current else "") + f">{html.escape(label)}</a></li>"
+            f'<li><a href="{url(source)}"' + (' aria-current="page"' if source == current else "") + f">{html.escape(label)}</a></li>"
             for source, label in entries
         )
         groups.append(f'<div class="docs-nav-group"><div class="label-small">{html.escape(group)}</div><ul>{links}</ul></div>')
@@ -415,12 +440,12 @@ def docs_toc(sections):
     return f"<ol>{items}</ol>"
 
 
-def docs_contents(pages):
+def docs_contents(pages, nav=DOCS_NAV, url=doc_url):
     """The overview's list of every page with its lead sentence."""
     groups = []
-    for group, entries in DOCS_NAV:
+    for group, entries in nav:
         rows = "".join(
-            f'<a class="docs-card" href="{doc_url(source)}"><span class="docs-card-title">{html.escape(label)}</span>'
+            f'<a class="docs-card" href="{url(source)}"><span class="docs-card-title">{html.escape(label)}</span>'
             f'<span class="docs-card-lead">{html.escape(pages[source].lead)}</span></a>'
             for source, label in entries
             if source != "index.md"
@@ -430,21 +455,23 @@ def docs_contents(pages):
     return "".join(groups)
 
 
-def build_docs(template):
-    order = [(group, source, label) for group, entries in DOCS_NAV for source, label in entries]
-    pages = {source: markdown((DOCS / source).read_text(encoding="utf8"), anchors=True) for _, source, _ in order}
+def build_docs(template, nav=DOCS_NAV, folder=DOCS, url=doc_url, name="Docs", index_title="Documentation"):
+    """The pages of one section of the site, the docs or the guides."""
+    home = url("index.md")
+    order = [(group, source, label) for group, entries in nav for source, label in entries]
+    pages = {source: markdown((folder / source).read_text(encoding="utf8"), anchors=True) for _, source, _ in order}
     for position, (group, source, label) in enumerate(order):
         rendered = pages[source]
-        body = "\n".join(rendered.blocks).replace("<!--contents-->", docs_contents(pages))
+        body = "\n".join(rendered.blocks).replace("<!--contents-->", docs_contents(pages, nav, url))
         sections = rendered.sections if len([s for s in rendered.sections if s[0] == 2]) >= TOC_MIN_SECTIONS else []
         pager = []
         if position > 0:
             _, previous, previous_label = order[position - 1]
-            pager.append(f'<a class="prev" href="{doc_url(previous)}"><span class="label-small">Previous</span><span class="pager-title">{html.escape(previous_label)}</span></a>')
+            pager.append(f'<a class="prev" href="{url(previous)}"><span class="label-small">Previous</span><span class="pager-title">{html.escape(previous_label)}</span></a>')
         if position + 1 < len(order):
             _, following, following_label = order[position + 1]
-            pager.append(f'<a class="next" href="{doc_url(following)}"><span class="label-small">Next</span><span class="pager-title">{html.escape(following_label)}</span></a>')
-        crumb = '<div class="label-small crumb"><a href="/docs/">Docs</a>' + (f" <span>/</span> {html.escape(group)}" if source != "index.md" else "") + "</div>"
+            pager.append(f'<a class="next" href="{url(following)}"><span class="label-small">Next</span><span class="pager-title">{html.escape(following_label)}</span></a>')
+        crumb = f'<div class="label-small crumb"><a href="{home}">{name}</a>' + (f" <span>/</span> {html.escape(group)}" if source != "index.md" else "") + "</div>"
         toc_side = ""
         if sections:
             toc_side = f'<aside class="docs-toc" aria-label="On this page"><div class="label-small">On this page</div>{docs_toc(sections)}</aside>'
@@ -453,14 +480,14 @@ def build_docs(template):
             at = body.find('<p class="lead">')
             end = body.find("</p>", at) + len("</p>") if at >= 0 else body.find("</h1>") + len("</h1>")
             body = body[:end] + toc_inline + body[end:]
-        edit = f"{REPO_URL}/blob/main/docs/site/docs/{source}"
-        nav = docs_nav(source)
+        edit = f"{REPO_URL}/blob/main/docs/site/{folder.name}/{source}"
+        links = docs_nav(source, nav, url)
         main = (
             '  <div class="docs' + (" has-toc" if sections else "") + '">\n'
-            '    <aside class="docs-side" aria-label="Documentation">\n'
-            f'      <details class="docs-menu"><summary><span class="label-small">Docs</span>'
-            f'<span class="docs-menu-current">{html.escape(label)}</span></summary><nav>{nav}</nav></details>\n'
-            f'      <nav class="docs-nav">{nav}</nav>\n'
+            f'    <aside class="docs-side" aria-label="{name}">\n'
+            f'      <details class="docs-menu"><summary><span class="label-small">{name}</span>'
+            f'<span class="docs-menu-current">{html.escape(label)}</span></summary><nav>{links}</nav></details>\n'
+            f'      <nav class="docs-nav">{links}</nav>\n'
             "    </aside>\n"
             '    <main class="docs-main">\n'
             f'      <article class="docs-article">\n{crumb}\n{body}\n      </article>\n'
@@ -470,11 +497,11 @@ def build_docs(template):
             f"    {toc_side}\n"
             "  </div>"
         )
-        title = rendered.title if source != "index.md" else "Documentation"
-        target = OUT / "docs" / ("" if source == "index.md" else source.removesuffix(".md")) / "index.html"
+        title = rendered.title if source != "index.md" else index_title
+        target = OUT / home.strip("/") / ("" if source == "index.md" else source.removesuffix(".md")) / "index.html"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
-            page(template, title, main, doc_url(source), rendered.lead, "/docs/", "docs-page"), encoding="utf8", newline="\n"
+            page(template, title, main, url(source), rendered.lead, home, "docs-page"), encoding="utf8", newline="\n"
         )
 
 
@@ -505,6 +532,7 @@ def main():
         body = "\n".join(markdown(source.read_text(encoding="utf8")).blocks)
         (OUT / name).write_text(text_page(template, title, body, f"/{name}", description), encoding="utf8", newline="\n")
     build_docs(template)
+    build_docs(template, GUIDES_NAV, GUIDES, guide_url, "Guides", "Playtime guides")
     (OUT / "sitemap.xml").write_text(sitemap(), encoding="utf8", newline="\n")
     (OUT / "robots.txt").write_text(ROBOTS, encoding="utf8", newline="\n")
     print("wrote", ", ".join(sorted(path.name for path in OUT.iterdir())))
