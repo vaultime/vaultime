@@ -115,7 +115,7 @@ function applyLook(mode: ThemeMode, tokens: Record<string, string>) {
 
 /** Dark or light, a ground tone, an accent and a background picture, for the whole app. */
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const { values, save, reloads } = useSettings();
+  const { values, read, save, reloads } = useSettings();
   const [appearance, setAppearance] = useState<Appearance>(() => appearanceFromSettings(values));
   // A restore onto a PC that never chose a look brings the look of the backup.
   const [seenReloads, setSeenReloads] = useState(reloads);
@@ -276,8 +276,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   // its dim and blur. Without one, a dim and blur set for a picture go back to
   // the defaults, as they leave the art too sharp behind the panels. A fresh
   // install saves nothing, so a restore can still bring the look of a backup.
+  // Settings that could not be read decide nothing.
   const settleEarlierBackground = useEffectEvent((picture: string | null) => {
-    if (values[SETTING_KEYS.backgroundSource] !== undefined) return;
+    if (!read || values[SETTING_KEYS.backgroundSource] !== undefined) return;
     if (picture) change({ source: "picture" });
     else if (values[SETTING_KEYS.backgroundDim] !== undefined || values[SETTING_KEYS.backgroundBlur] !== undefined) {
       change({ source: "game", dim: BACKGROUND_DIM_PERCENT.default, blur: BACKGROUND_BLUR_PX.default });

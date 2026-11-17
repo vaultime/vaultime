@@ -155,6 +155,24 @@ describe("an update", () => {
     expect(api.setSetting).not.toHaveBeenCalled();
   });
 
+  it("decides nothing when the settings could not be read", async () => {
+    vi.mocked(api.listSettings).mockRejectedValueOnce(new Error("locked"));
+    vi.mocked(api.getBackgroundImage).mockClear();
+    vi.mocked(api.getBackgroundImage).mockResolvedValueOnce("data:image/png;base64,cGljdHVyZQ==");
+    vi.mocked(api.setSetting).mockClear();
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/teal.jpg" lightness={0.4} />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    await screen.findByLabelText("Dim");
+    await waitFor(() => expect(api.getBackgroundImage).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(api.setSetting).not.toHaveBeenCalled();
+  });
+
   it("leaves dim and blur alone once a background was chosen", async () => {
     vi.mocked(api.listSettings).mockResolvedValueOnce([
       ...EARLIER_DIM_AND_BLUR,
