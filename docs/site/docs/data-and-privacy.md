@@ -40,10 +40,10 @@ Times are in your time zone and durations in seconds.
 ## What goes online
 
 Updates
-: Vaultime asks the Vaultime server whether a new version is out when it starts and every few hours, unless a package manager brings its updates. Updates are signed, and Vaultime only installs ones that carry the right signature.
+: Vaultime asks the Vaultime website whether a new version is out when it starts and every few hours, unless a package manager brings its updates. Updates are signed, and Vaultime only installs ones that carry the right signature.
 
 Cloud backup
-: Only when you turn it on and sign in. Backups are encrypted on your PC before they are uploaded, see [Backups](backups.md#cloud-backup).
+: Only when you turn it on, and only to the server you chose: a check of its address when you enter it, then backups once you sign in. Backups are encrypted on your PC before they are uploaded, see [Backups](backups.md#cloud-backup).
 
 Nothing else
 : No analytics, no telemetry, no crash reports and no ads. Covers come from Steam's files on your PC and from your game folders, not from the internet.
@@ -56,4 +56,4 @@ To find games and tell active from idle time, Vaultime reads which programs run,
 
 ## Remove your data
 
-Delete the data folder to remove your library and history from this PC. Backups you saved elsewhere are not touched. To delete a cloud account with all its backups, write to the address in the privacy policy.
+Delete the data folder to remove your library and history from this PC. Backups you saved elsewhere are not touched. To delete an account on a cloud server with all its backups, ask whoever runs the server.

@@ -66,6 +66,10 @@ Sessions the ledger knows are gone from the history without a note that you remo
 
 ## Cloud backup
 
+### No Vaultime server answers at that address
+
+Check the address for typing errors and that the server runs. Vaultime reaches servers over https only, so the address needs a certificate, as [Your own server](own-server.md) sets up. Plain http works only for a server on the same PC.
+
 ### Signing in fails on Linux
 
 The sign-in is kept in the system keyring. If an error mentions secure storage, install and start a keyring service such as GNOME Keyring or KWallet.

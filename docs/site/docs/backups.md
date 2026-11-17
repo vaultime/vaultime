@@ -1,6 +1,6 @@
 # Backups
 
-Vaultime backs up your library and history to a folder by itself every day. A sync folder keeps those backups on your other PCs too. Cloud backup is an optional extra for invited accounts, encrypted on your PC before anything leaves it.
+Vaultime backs up your library and history to a folder by itself every day. A sync folder keeps those backups on your other PCs too. Cloud backup to a server you or a friend run is an optional extra, encrypted on your PC before anything leaves it.
 
 ## Local backups
 
@@ -61,7 +61,7 @@ Vaultime refuses a backup that is damaged or holds database parts it never write
 ## Cloud backup
 
 > [!NOTE]
-> Cloud backup is a free private beta for people we invite. It may end at any time, and Vaultime works fully without it. You can apply for an invite on the [start page](https://vaultime.codfishcloud.de/#beta).
+> Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home. [Your own server](own-server.md) shows how. Vaultime works fully without it.
 
 ### Turning it on
 
@@ -69,7 +69,7 @@ Cloud backup is off on a new install, and the menu has no Cloud page. Turn on **
 
 ### Signing up
 
-On the Cloud page, **Create an account** asks for your email, a password, your invite code and a backup passphrase. The password signs you in. The passphrase encrypts your backups and is at least 12 characters long.
+On the Cloud page, type the address of the server under **Your server** and pick **Connect**. Vaultime checks that a Vaultime server answers there, remembers it for this PC and says whether it takes new accounts. **Create an account** asks for your email, a password and a backup passphrase. The password signs you in. The passphrase encrypts your backups and is at least 12 characters long.
 
 > [!CAUTION]
 > Keep the backup passphrase safe. Nobody can recover it for you, and without it a cloud backup cannot be restored. Your local backups do not depend on it.
@@ -85,9 +85,7 @@ On the Cloud page, **Create an account** asks for your email, a password, your i
 
 ### Space and rotation
 
-Every account gets the same space, 1 GiB for backups and artwork, and keeps up to 30 backups. **Space used** on the Cloud page shows how much is taken. When there are 30 backups or the space is full, a new backup replaces the oldest ones once it is safely stored. The newest backup of each PC always stays, so your other PCs can merge it. The server refuses a backup larger than 512 MiB or one that does not fit the space beside the newest backups of your other PCs. It also refuses a new backup of a PC less than 15 minutes after that PC's last one.
-
-There are no paid plans and no tiers. The limits are there to stop abuse.
+Every account on a server gets the same space, by default 1 GiB for backups and artwork, and keeps up to 30 backups. Whoever runs the server can [change the limits](own-server.md#limits). **Space used** on the Cloud page shows how much is taken. When there are 30 backups or the space is full, a new backup replaces the oldest ones once it is safely stored. The newest backup of each PC always stays, so your other PCs can merge it. The server refuses a backup larger than 512 MiB or one that does not fit the space beside the newest backups of your other PCs. It also refuses a new backup of a PC less than 15 minutes after that PC's last one. The limits are there so that no account can fill the server.
 
 ### What the server sees
 

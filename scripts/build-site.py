@@ -84,6 +84,7 @@ DOCS_NAV = [
     ]),
     ("Your data", [
         ("backups.md", "Backups"),
+        ("own-server.md", "Your own server"),
         ("data-and-privacy.md", "Your data and privacy"),
     ]),
     ("Help", [
