@@ -34,17 +34,17 @@ function Probe() {
   );
 }
 
-const TEAL = { cover: "/covers/teal.jpg", colors: [{ hue: 190, chroma: 0.12 }] };
-const ORANGE = { cover: "/covers/orange.jpg", colors: [{ hue: 50, chroma: 0.15 }] };
+const TEAL = { cover: "/covers/teal.jpg", colors: [{ hue: 190, chroma: 0.12 }], lightness: 0.4 };
+const ORANGE = { cover: "/covers/orange.jpg", colors: [{ hue: 50, chroma: 0.15 }], lightness: 0.6 };
 
 beforeEach(() => localStorage.clear());
 
 /** Puts `cover` in front, unless the library has not told one, and shows what lies behind the pages. */
-function BackdropProbe({ cover }: { cover: string | null }) {
+function BackdropProbe({ cover, lightness = 0.9 }: { cover: string | null; lightness?: number }) {
   const { backdrop, backdropDim, showGames, change } = useAppearance();
   useEffect(() => {
-    if (cover) showGames({ page: { cover, colors: [] }, home: { cover, colors: [] } });
-  }, [cover, showGames]);
+    if (cover) showGames({ page: { cover, colors: [], lightness }, home: { cover, colors: [], lightness } });
+  }, [cover, lightness, showGames]);
   return (
     <>
       <output aria-label="Backdrop">{backdrop ?? "none"}</output>
@@ -72,6 +72,20 @@ describe("the backdrop", () => {
     await waitFor(() => expect(screen.getByLabelText("Dim").textContent).toBe("75"));
     fireEvent.click(screen.getByRole("button", { name: "None" }));
     expect(backdrop.textContent).toBe("none");
+  });
+
+  it("dims dark art more in light mode, where the text is dark", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce([
+      { key: SETTING_KEYS.appearanceMode, value: "light", updated_at: "2026-11-17T07:00:00.000Z" },
+    ]);
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/night.jpg" lightness={0.1} />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    expect((await screen.findByLabelText("Dim")).textContent).toBe("75");
   });
 });
 

@@ -21,8 +21,8 @@ import { useSettings } from "@/features/settings/settings-context";
 import {
   APPEARANCE_CACHE_KEY,
   APPEARANCE_SAVE_DELAY_MS,
-  BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS,
-  BACKGROUND_BRIGHT_LIGHTNESS,
+  BACKGROUND_CONTRAST_DIM_PER_LIGHTNESS,
+  BACKGROUND_CONTRAST_LIGHTNESS,
   BACKGROUND_DIM_PERCENT,
   BACKGROUND_HEADER_OPACITY_PERCENT,
   BACKGROUND_PANEL_OPACITY_PERCENT,
@@ -77,6 +77,7 @@ function isGameInFront(value: unknown): value is GameInFront {
     typeof game === "object" &&
     game !== null &&
     (game.cover === null || typeof game.cover === "string") &&
+    (game.lightness === null || typeof game.lightness === "number") &&
     Array.isArray(game.colors) &&
     game.colors.every((color) => typeof color?.hue === "number" && typeof color?.chroma === "number")
   );
@@ -127,7 +128,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<GamesInFront>(cachedGames);
   // Until the library tells which games are in front, the window keeps the look the core restored.
   const [gamesKnown, setGamesKnown] = useState(false);
-  const [lightness, setLightness] = useState<{ of: string; value: number | null } | null>(null);
+  const [pictureLightness, setPictureLightness] = useState<{ of: string; value: number | null } | null>(null);
   // Drags wait a moment before they are saved, so a slider saves once.
   const pending = useRef(new Map<string, { value: string; timer: number }>());
 
@@ -203,23 +204,31 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const backdrop =
     appearance.source === "game" ? (games.page?.cover ?? null) : appearance.source === "picture" ? background : null;
 
+  // Cover art brings its lightness, a picture of your own is read once it shows.
+  const picture = appearance.source === "picture" ? background : null;
   useEffect(() => {
-    if (!backdrop) return;
+    if (!picture) return;
     let cancelled = false;
-    void averageLightness(backdrop).then((value) => {
-      if (!cancelled) setLightness({ of: backdrop, value });
+    void averageLightness(picture).then((value) => {
+      if (!cancelled) setPictureLightness({ of: picture, value });
     });
     return () => {
       cancelled = true;
     };
-  }, [backdrop]);
+  }, [picture]);
+  const artLightness =
+    appearance.source === "game"
+      ? (games.page?.lightness ?? null)
+      : pictureLightness?.of === picture
+        ? pictureLightness.value
+        : null;
 
-  // Light art takes more dim, so text on the panels keeps its contrast.
-  const known = lightness?.of === backdrop ? (lightness?.value ?? null) : null;
-  const brightness = Math.max(0, (known ?? 0) - BACKGROUND_BRIGHT_LIGHTNESS);
+  // Art near the color of the text takes more dim, so text keeps its contrast.
+  const towardText = artLightness === null ? 0 : mode === "dark" ? artLightness : 1 - artLightness;
+  const contrastLoss = Math.max(0, towardText - BACKGROUND_CONTRAST_LIGHTNESS);
   const backdropDim = Math.min(
     BACKGROUND_DIM_PERCENT.max,
-    Math.round(appearance.dim + brightness * BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS),
+    Math.round(appearance.dim + contrastLoss * BACKGROUND_CONTRAST_DIM_PER_LIGHTNESS),
   );
 
   useLayoutEffect(() => {

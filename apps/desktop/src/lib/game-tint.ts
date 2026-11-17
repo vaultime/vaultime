@@ -44,6 +44,8 @@ export interface GameTint {
    * the color of the title. Empty for black, white and grey art.
    */
   colors: ArtColor[];
+  /** The average lightness of the artwork, from 0 to 1. Only tints read from art have it. */
+  lightness?: number;
   /** Field for covers and tiles, dark in dark mode and pale in light mode. */
   fill: string;
   /** Border of that field. */
@@ -83,7 +85,7 @@ function tintForHue(hue: number): GameTint {
   return tintFromHue(hue, 1, [{ hue, chroma: MARK_LEVELS.chroma }]);
 }
 
-/** The accent color, for pages that are not about one game. Violet unless the player picks another. */
+/** The accent color, for pages that are not about one game. */
 export const BRAND_TINT = tintFromHue("var(--accent-hue)", 1, [{ hue: BRAND_HUE_DEG, chroma: MARK_LEVELS.chroma }]);
 
 /** A stable tint per title, for games without artwork. */
@@ -187,11 +189,13 @@ export function tintFromPixels(data: Uint8ClampedArray): GameTint {
   let opaque = 0;
   let colorful = 0;
   let sumChroma = 0;
+  let sumLightness = 0;
   let counted = 0;
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] < TINT_MIN_ALPHA) continue;
     opaque += 1;
     const { lightness, a, b } = srgbToOklab(data[i], data[i + 1], data[i + 2]);
+    sumLightness += lightness;
     if (lightness < TINT_MIN_LIGHTNESS || lightness > TINT_MAX_LIGHTNESS) continue;
     const chroma = Math.hypot(a, b);
     sumChroma += chroma;
@@ -205,7 +209,9 @@ export function tintFromPixels(data: Uint8ClampedArray): GameTint {
     bin.chroma += chroma;
     bin.count += 1;
   }
-  if (opaque === 0 || colorful / opaque < TINT_COLORFUL_MIN_SHARE) return tintFromHue(BRAND_HUE_DEG, 0, []);
+  if (opaque === 0) return tintFromHue(BRAND_HUE_DEG, 0, []);
+  const lightness = sumLightness / opaque;
+  if (colorful / opaque < TINT_COLORFUL_MIN_SHARE) return { ...tintFromHue(BRAND_HUE_DEG, 0, []), lightness };
 
   // A band is a bin with its two neighbors, weighted by colorfulness.
   const band = (center: number) =>
@@ -234,7 +240,7 @@ export function tintFromPixels(data: Uint8ClampedArray): GameTint {
     TINT_MAX_STRENGTH,
     Math.max(TINT_MIN_STRENGTH, sumChroma / counted / TINT_TYPICAL_CHROMA),
   );
-  return tintFromHue(colors[0].hue, strength, colors);
+  return { ...tintFromHue(colors[0].hue, strength, colors), lightness };
 }
 
 /** Tints of the images of the latest `tintsFromImages`, by image source. */
@@ -257,24 +263,14 @@ export async function tintsFromImages(images: Record<string, string>): Promise<R
   return tints;
 }
 
-/** Average lightness of pictures, by source, so a picture shown again is not read again. */
+/** Average lightness of background pictures, by source, so a picture shown again is not read again. */
 const pictureLightness = new Map<string, Promise<number | null>>();
 
 /** The average OKLab lightness of a picture, from 0 to 1, null when it cannot be read. */
 export function averageLightness(src: string): Promise<number | null> {
   const known = pictureLightness.get(src);
   if (known) return known;
-  const read = readPixels(src).then((data) => {
-    if (!data) return null;
-    let sum = 0;
-    let opaque = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] < TINT_MIN_ALPHA) continue;
-      sum += srgbToOklab(data[i], data[i + 1], data[i + 2]).lightness;
-      opaque += 1;
-    }
-    return opaque > 0 ? sum / opaque : null;
-  });
+  const read = readPixels(src).then((data) => (data ? (tintFromPixels(data).lightness ?? null) : null));
   pictureLightness.set(src, read);
   return read;
 }

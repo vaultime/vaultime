@@ -20,12 +20,22 @@ export function gameInFront(
   return visible.find((summary) => playing.has(summary.game.id)) ?? visible.find((summary) => summary.lastPlayedAt) ?? null;
 }
 
-function art(summary: GameSummary | null): GameInFront | null {
-  return summary ? { cover: summary.cover, colors: summary.tint.colors } : null;
+/**
+ * The art of a game for the look. Only a tint read from the cover has a
+ * lightness, so a game without art, which has the color of its title, lights
+ * nothing.
+ */
+export function gameArt(summary: GameSummary | null): GameInFront | null {
+  if (!summary) return null;
+  const { lightness, colors } = summary.tint;
+  return { cover: summary.cover, colors: lightness === undefined ? [] : colors, lightness: lightness ?? null };
 }
 
+/** Tells games and their art apart without spelling out the cover, a long data URL. */
 function artKey(summary: GameSummary | null): string {
-  return summary ? `${summary.cover}|${summary.tint.colors.map((color) => `${color.hue}/${color.chroma}`).join(",")}` : "";
+  const art = gameArt(summary);
+  if (!summary || !art) return "";
+  return `${summary.game.id}|${art.lightness}|${art.colors.map((color) => `${color.hue}/${color.chroma}`).join(",")}`;
 }
 
 /**
@@ -40,7 +50,7 @@ export function useShowGameInFront() {
   const front = gameInFront(summaries, visible, playing, page?.params.gameId);
   const home = gameInFront(summaries, visible, playing, undefined);
   const key = artRead ? `${artKey(front)}/${artKey(home)}` : null;
-  const report = useEffectEvent(() => showGames({ page: art(front), home: art(home) }));
+  const report = useEffectEvent(() => showGames({ page: gameArt(front), home: gameArt(home) }));
   useEffect(() => {
     if (key !== null) report();
   }, [key]);

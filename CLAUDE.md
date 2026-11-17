@@ -240,14 +240,16 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   and classes of the same names.
 - The default look is lit by the game in front: the game a page is about,
   else the one playing, else the one played last. Its art fills the window
-  behind see-through panels, dimmed more for light art, and the accent, the
-  color of active time, takes the strongest color of that art, a light grey
-  for art without one. The ground is graphite, a step above black, so the
-  art carries the color. Players can pick light mode, another ground tone, a
-  fixed accent, a picture of their own or no background. Every color derives
-  from these choices in `lib/theme.ts`, so components use tokens only, and
-  the `--violet` tokens mean the accent, whatever its color. Game pages take
-  a tint from the cover art.
+  behind see-through panels, dimmed more where it would hide the text, and
+  the accent, the color of active time, takes the strongest color of that
+  art, a light grey for art without one. The window around the page and its
+  icons take the game playing or played last, not the page. The ground is
+  graphite, a step above black, so the art carries the color. Players can
+  pick light mode, another ground tone, a fixed accent, a picture of their
+  own or no background. Every color derives from these choices in
+  `lib/theme.ts`, so components use tokens only, and the `--violet` tokens
+  mean the accent, whatever its color. Game pages take a tint from the cover
+  art.
 - Shell like a music player: the rail, the page and the live bar are panels
   on the darker window tone. The rail lists Home, Journal and Stats, the
   library with All games, and the games played last, with Cloud and Settings

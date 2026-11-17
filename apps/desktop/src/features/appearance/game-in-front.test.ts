@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import type { GameSummary } from "@/features/library/library-context";
-import { gameInFront } from "./game-in-front";
+import { tintForTitle } from "@/lib/game-tint";
+import { gameArt, gameInFront } from "./game-in-front";
 
 function summary(id: string, lastPlayedAt: string | null): GameSummary {
   return { game: { id, title: id }, lastPlayedAt, cover: `/covers/${id}.jpg` } as unknown as GameSummary;
@@ -18,6 +19,14 @@ describe("gameInFront", () => {
   it("is the game a page is about, a hidden one too", () => {
     expect(gameInFront([recent, older, hidden], [recent, older], new Set(), "hidden")).toBe(hidden);
     expect(gameInFront([recent], [recent], new Set(), "gone")).toBeNull();
+  });
+
+  it("lights the look only with art read from a cover", () => {
+    const withArt = { ...recent, tint: { ...tintForTitle("recent"), lightness: 0.4 } };
+    expect(gameArt(withArt)).toEqual({ cover: "/covers/recent.jpg", colors: withArt.tint.colors, lightness: 0.4 });
+    const titleOnly = { ...older, cover: null, tint: tintForTitle("older") };
+    expect(gameArt(titleOnly)).toEqual({ cover: null, colors: [], lightness: null });
+    expect(gameArt(null)).toBeNull();
   });
 
   it("is the game playing, else the one played last, as Home shows it", () => {

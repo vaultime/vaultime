@@ -325,7 +325,7 @@ export function AppearanceSection() {
 
         {backdrop && (
           <div className="mt-6 grid max-w-[520px] gap-5">
-            <SliderRow label="Dim" value={`${appearance.dim}%`} hint="Light art is dimmed a little more.">
+            <SliderRow label="Dim" value={`${appearance.dim}%`} hint="Art that would hide the text is dimmed a little more.">
               <Slider
                 label="Dim"
                 value={appearance.dim}

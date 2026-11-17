@@ -605,10 +605,14 @@ export const BACKGROUND_DIM_PERCENT = { min: 40, max: 95, default: 55 };
 export const BACKGROUND_BLUR_PX = { min: 0, max: 64, default: 44 };
 /** How much more colorful the blurred background picture is drawn, 1 as it is. */
 export const BACKGROUND_SATURATION = 1.5;
-/** Pictures lighter than this on average, in OKLab lightness, are dimmed more, so text keeps its contrast. */
-export const BACKGROUND_BRIGHT_LIGHTNESS = 0.5;
-/** Extra dim for those, in percent per unit of average lightness above it. */
-export const BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS = 50;
+/**
+ * Art closer to the text color than this on average, in OKLab lightness
+ * counted from the ground, is dimmed more, so text keeps its contrast: light
+ * art in dark mode, dark art in light mode.
+ */
+export const BACKGROUND_CONTRAST_LIGHTNESS = 0.5;
+/** Extra dim for that art, in percent per unit of lightness past that line. */
+export const BACKGROUND_CONTRAST_DIM_PER_LIGHTNESS = 50;
 /** Opacity of tinted headers in front of a background picture, in percent. */
 export const BACKGROUND_HEADER_OPACITY_PERCENT = 30;
 /** Opacity of the panels in front of a background picture, in percent. */

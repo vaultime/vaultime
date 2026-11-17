@@ -10,6 +10,8 @@ export interface GameInFront {
   cover: string | null;
   /** The main colors of its art, the strongest first. */
   colors: ArtColor[];
+  /** The average lightness of its art, from 0 to 1, null without art. */
+  lightness: number | null;
 }
 
 /** The games that light the look. */

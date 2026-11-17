@@ -46,6 +46,13 @@ describe("tintFromPixels", () => {
     expect(oklch(tint.fill.replace("var(--tint-fill)", "0.3")).chroma).toBe(0);
   });
 
+  it("measures how light the art is, and a title's color has no lightness", () => {
+    expect(tintFromPixels(pixels([1024, 255, 255, 255])).lightness).toBeCloseTo(1, 2);
+    expect(tintFromPixels(pixels([512, 0, 0, 0], [512, 255, 255, 255])).lightness).toBeCloseTo(0.5, 2);
+    expect(tintFromPixels(pixels([1024, 0, 0, 0, 0])).lightness).toBeUndefined();
+    expect(tintForTitle("Celeste").lightness).toBeUndefined();
+  });
+
   it("keeps white and grey art grey", () => {
     expect(tintFromPixels(pixels([1024, 250, 250, 250])).colors).toEqual([]);
     expect(tintFromPixels(pixels([1024, 128, 128, 128])).colors).toEqual([]);

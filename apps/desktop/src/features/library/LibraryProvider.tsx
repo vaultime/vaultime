@@ -184,7 +184,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [covers]);
-  const artRead = loaded && artReadFor === covers;
+  // A failed load reads no art, so the look keeps what it had.
+  const artRead = loaded && error === null && artReadFor === covers;
 
   const summaries = useMemo(() => {
     const totalsByGame = new Map(totals.map((total) => [total.game_id, total]));
