@@ -1686,6 +1686,8 @@ mockIPC((cmd, payload) => {
         String(args.reason ?? ""),
         typeof args.launcher === "string" ? args.launcher : null,
       );
+    case "updates_managed_by":
+      return null;
     case "session_screenshots":
       return mockScreenshots(Array.isArray(args.sessionIds) ? args.sessionIds.map(String) : []);
     case "steam_screenshot":

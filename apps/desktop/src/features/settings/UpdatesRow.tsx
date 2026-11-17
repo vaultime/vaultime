@@ -9,7 +9,9 @@ import { formatClockTime } from "@/lib/time";
 
 /** Where the update check stands, with a button to look now or to install. */
 export function UpdatesRow() {
-  const { status, version, error, checkedAt, check, install } = useUpdates();
+  const { status, version, error, checkedAt, managedBy, check, install } = useUpdates();
+
+  if (managedBy) return <PageRow label="Updates" hint={`Updates come through ${managedBy}.`} />;
 
   const hint =
     status === "checking"

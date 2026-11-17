@@ -105,15 +105,18 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       : [];
     const fixed: Command[] = [
       ...FIXED.filter((command) => cloudEnabled || command.id !== "page-cloud"),
-      {
+    ];
+    // A package manager that installed Vaultime brings its updates.
+    if (!updates.managedBy) {
+      fixed.push({
         id: "action-updates",
         label: "Check for updates",
         hint: "Look for a new version of Vaultime now",
         kind: "Action",
         to: "/settings#about",
         run: updates.check,
-      },
-    ];
+      });
+    }
     const forGame: Command[] = [];
     if (pageGame) {
       const { game, status, favorite } = pageGame;
@@ -164,7 +167,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       ...launchers,
       ...fixed.filter((command) => matches(command.label) || matches(command.hint)),
     ];
-  }, [query, summaries, pageGame, setStatus, setFavorite, refresh, updates.check, cloudEnabled]);
+  }, [query, summaries, pageGame, setStatus, setFavorite, refresh, updates.check, updates.managedBy, cloudEnabled]);
 
   const active = Math.min(selected, Math.max(results.length - 1, 0));
 

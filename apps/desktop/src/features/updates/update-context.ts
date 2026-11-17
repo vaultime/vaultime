@@ -3,7 +3,7 @@
 
 import { createContext, useContext } from "react";
 
-export type UpdateStatus = "unknown" | "checking" | "current" | "available" | "installing" | "failed";
+export type UpdateStatus = "unknown" | "checking" | "current" | "available" | "installing" | "failed" | "managed";
 
 export interface UpdateState {
   status: UpdateStatus;
@@ -13,6 +13,8 @@ export interface UpdateState {
   error: string | null;
   /** When the update server last answered. */
   checkedAt: Date | null;
+  /** What brings the updates when a distribution package installed Vaultime, like "the AUR". */
+  managedBy: string | null;
   /** Looks for a new version now. */
   check: () => Promise<void>;
   /** Downloads the new version, installs it and restarts. */

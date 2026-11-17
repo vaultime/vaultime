@@ -308,6 +308,11 @@ export async function getNotableEventsForGame(gameId: string): Promise<SessionEv
   return invoke<SessionEvent[]>("get_notable_events_for_game", { gameId });
 }
 
+/** What brings Vaultime's updates when a distribution package installed it, like "the AUR". */
+export async function updatesManagedBy(): Promise<string | null> {
+  return invoke<string | null>("updates_managed_by");
+}
+
 /** The Steam screenshots taken during these sessions, for the ones this PC recorded. */
 export async function getSessionScreenshots(sessionIds: string[]): Promise<SessionScreenshots[]> {
   return invoke<SessionScreenshots[]>("session_screenshots", { sessionIds });

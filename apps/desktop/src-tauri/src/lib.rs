@@ -26,6 +26,7 @@ pub mod share;
 pub mod shortcut_icon;
 pub mod tracking;
 pub mod tray;
+pub mod updates;
 pub mod window_look;
 pub mod window_size;
 
@@ -122,6 +123,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
     tauri::generate_handler![
         commands::app::get_app_version,
         commands::app::get_device_id,
+        commands::app::updates_managed_by,
         commands::app::get_backup_device_id,
         commands::app::is_development_build,
         commands::pcs::get_this_pc,

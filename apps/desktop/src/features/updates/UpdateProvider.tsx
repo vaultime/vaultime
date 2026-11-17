@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { UPDATE_CHECK_INTERVAL_MS } from "@/lib/constants";
+import * as api from "@/lib/tauri";
 import { describeError } from "@/lib/utils";
 import { UpdateContext, type UpdateStatus } from "./update-context";
 
@@ -14,7 +15,9 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
-  const busy = useRef(false);
+  const [managedBy, setManagedBy] = useState<string | null>(null);
+  // Set until the core says whether a package manager brings the updates.
+  const busy = useRef(true);
   // The player asked, so a failed check is worth saying.
   const asked = useRef(false);
 
@@ -43,12 +46,31 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void look();
-    const timer = setInterval(() => void look(), UPDATE_CHECK_INTERVAL_MS);
-    return () => clearInterval(timer);
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    // Packages of a distribution update through its package manager, never here.
+    api
+      .updatesManagedBy()
+      .catch(() => null)
+      .then((manager) => {
+        if (cancelled) return;
+        if (manager) {
+          setManagedBy(manager);
+          setStatus("managed");
+          return;
+        }
+        busy.current = false;
+        void look();
+        timer = setInterval(() => void look(), UPDATE_CHECK_INTERVAL_MS);
+      });
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [look]);
 
   const check = useCallback(async () => {
+    if (busy.current) return;
     asked.current = true;
     setStatus("checking");
     await look();
@@ -77,8 +99,8 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, version, error, checkedAt, check, install }),
-    [status, version, error, checkedAt, check, install],
+    () => ({ status, version, error, checkedAt, managedBy, check, install }),
+    [status, version, error, checkedAt, managedBy, check, install],
   );
   return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>;
 }

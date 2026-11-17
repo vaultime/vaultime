@@ -250,6 +250,12 @@ pub const STEAM_SOURCE: &str = "steam";
 /// Setting that turns the look for new games at start off with `false`.
 /// Same as `SETTING_KEYS.autoDiscover` in `lib/constants.ts`.
 pub const AUTO_DISCOVER_SETTING: &str = "auto_discover_on_start";
+/// File in which a distribution package names what brings its updates, like
+/// `the AUR`, below the folder above the program's own. The app then leaves
+/// updates to it.
+pub const PACKAGE_MANAGER_FILE: &str = "lib/vaultime/package-manager";
+/// Longest name read from `PACKAGE_MANAGER_FILE`.
+pub const PACKAGE_MANAGER_NAME_MAX_CHARS: usize = 40;
 /// Setting that keeps Steam screenshots out of the journal with `false`.
 /// Same as `SETTING_KEYS.journalScreenshots` in `lib/constants.ts`.
 pub const JOURNAL_SCREENSHOTS_SETTING: &str = "journal_steam_screenshots";

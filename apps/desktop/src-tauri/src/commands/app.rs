@@ -26,6 +26,13 @@ pub fn get_app_version(app_context: State<'_, AppContext>) -> Result<String, Vau
     Ok(app_context.app_version.clone())
 }
 
+/// What brings Vaultime's updates when a distribution package installed it,
+/// so the app leaves them alone.
+#[tauri::command]
+pub fn updates_managed_by() -> Option<String> {
+    crate::updates::managed_by(&std::env::current_exe().ok()?)
+}
+
 /// Whether this is a development build. It keeps its cloud sign-in apart
 /// from the installed app's but shares its settings, so what its own
 /// sign-in says must not decide a setting for both.
