@@ -10,19 +10,20 @@ import { useLibrary } from "@/features/library/library-context";
 import { MergeDialog } from "@/features/settings/MergeDialog";
 import { RestorePreview } from "@/features/settings/RestorePreview";
 import { useSettings } from "@/features/settings/settings-context";
+import { useSyncFolder } from "@/features/settings/sync-folder-context";
 import { useFinishRestore } from "@/features/settings/use-finish-restore";
 import { SETTING_KEYS, SYNC_BACKUP_KEEP } from "@/lib/constants";
 import { backupHint } from "@/lib/merge";
 import * as api from "@/lib/tauri";
 import { formatLongDate } from "@/lib/time";
-import type { FolderPc, LocalBackupSummary, MergePreview } from "@/lib/types";
+import type { AutoMerge, FolderPc, LocalBackupSummary, MergePreview } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
 
 /** What the row of a PC in the sync folder says about it. */
-function pcHint(pc: FolderPc): string {
+function pcHint(pc: FolderPc, waiting: AutoMerge | undefined): string {
   if (pc.this_pc) return `Backup of ${formatLongDate(pc.backup_created_at)}. A new one comes in once a day and when Vaultime quits.`;
-  return backupHint(pc);
+  return backupHint(pc, waiting);
 }
 
 /** The sync folder: where it is, the backups of this PC and the others in it, their merges and restores. */
@@ -36,6 +37,7 @@ export function SyncFolderSection({
   const { sessions, refresh } = useLibrary();
   const { values } = useSettings();
   const finishRestore = useFinishRestore();
+  const { waiting } = useSyncFolder();
   const autoBackup = values[SETTING_KEYS.autoBackup] !== "false";
   const [folder, setFolder] = useState<string | null>(null);
   const [pcs, setPcs] = useState<FolderPc[]>([]);
@@ -154,26 +156,32 @@ export function SyncFolderSection({
           Automatic backups are off, so no new backup of this PC reaches the folder.
         </Notice>
       )}
-      {pcs.map((pc) => (
-        <PageRow
-          key={pc.device_id}
-          label={pc.this_pc ? `${pc.name ?? "This PC"}, this PC` : (pc.name ?? "Another PC")}
-          hint={pcHint(pc)}
-        >
-          <span className="flex gap-2">
-            {!pc.this_pc && !pc.merged_before && (
-              <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void merge(pc)}>
-                <GitMerge className="size-3.5" />
-                {busy === `merge:${pc.device_id}` ? "Reading…" : "Merge"}
+      {pcs.map((pc) => {
+        // Merged by hand since the last check, it waits no more.
+        const waits = pc.newer
+          ? waiting.find((merge) => merge.device_id === pc.device_id && merge.backup_id === pc.backup_id)
+          : undefined;
+        return (
+          <PageRow
+            key={pc.device_id}
+            label={pc.this_pc ? `${pc.name ?? "This PC"}, this PC` : (pc.name ?? "Another PC")}
+            hint={pcHint(pc, waits)}
+          >
+            <span className="flex gap-2">
+              {!pc.this_pc && (!pc.merged_before || waits) && (
+                <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void merge(pc)}>
+                  <GitMerge className="size-3.5" />
+                  {busy === `merge:${pc.device_id}` ? "Reading…" : "Merge"}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void inspect(pc)}>
+                <ArchiveRestore className="size-3.5" />
+                {busy === `restore:${pc.device_id}` ? "Reading…" : "Restore"}
               </Button>
-            )}
-            <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void inspect(pc)}>
-              <ArchiveRestore className="size-3.5" />
-              {busy === `restore:${pc.device_id}` ? "Reading…" : "Restore"}
-            </Button>
-          </span>
-        </PageRow>
-      ))}
+            </span>
+          </PageRow>
+        );
+      })}
       {folder && pcs.length === 0 && <p className="py-3 text-sm text-faint">No backups in the folder yet.</p>}
       {message && <Notice className="mt-5">{message}</Notice>}
       {restoring && (
@@ -184,7 +192,10 @@ export function SyncFolderSection({
           busy={busy !== null}
           onTakeOverChange={setTakeOver}
           onRestore={restore}
-          onCancel={() => setRestoring(null)}
+          onCancel={() => {
+            void api.discardSyncMerge(restoring.deviceId).catch(() => {});
+            setRestoring(null);
+          }}
         />
       )}
       {pending && (

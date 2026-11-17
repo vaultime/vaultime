@@ -8,6 +8,7 @@ import { AppearanceProvider } from "@/features/appearance/AppearanceProvider";
 import { CloudSessionProvider } from "@/features/cloud/CloudSessionProvider";
 import { LibraryProvider } from "@/features/library/LibraryProvider";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
+import { SyncFolderProvider } from "@/features/settings/SyncFolderProvider";
 import { UpdateProvider } from "@/features/updates/UpdateProvider";
 import { App } from "@/App";
 import "./index.css";
@@ -23,9 +24,11 @@ createRoot(document.getElementById("root")!).render(
         <AppearanceProvider>
           <CloudSessionProvider>
             <LibraryProvider>
-              <UpdateProvider>
-                <App />
-              </UpdateProvider>
+              <SyncFolderProvider>
+                <UpdateProvider>
+                  <App />
+                </UpdateProvider>
+              </SyncFolderProvider>
             </LibraryProvider>
           </CloudSessionProvider>
         </AppearanceProvider>

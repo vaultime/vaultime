@@ -6,9 +6,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LibraryContext } from "@/features/library/library-context";
 import { SettingsContext } from "@/features/settings/settings-context";
+import { SyncFolderContext } from "@/features/settings/sync-folder-context";
 import { SETTING_KEYS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
-import type { FolderPc, LocalBackupSummary } from "@/lib/types";
+import type { AutoMerge, FolderPc, LocalBackupSummary } from "@/lib/types";
 import { SyncFolderSection } from "./SyncFolderSection";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(async () => "D:\\Dropbox") }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/tauri", () => ({
   previewSyncMerge: vi.fn(),
   inspectSyncBackup: vi.fn(),
   restoreSyncBackup: vi.fn(),
+  discardSyncMerge: vi.fn(async () => {}),
   listBackupSnapshots: vi.fn(async () => []),
 }));
 
@@ -60,7 +62,7 @@ function laptopBackup(restored: boolean): LocalBackupSummary {
 }
 
 /** The section on a PC with the library and settings around it. */
-function renderSection(values: Record<string, string> = {}) {
+function renderSection(values: Record<string, string> = {}, waiting: AutoMerge[] = []) {
   const library = {
     sessions: [],
     games: [],
@@ -71,7 +73,9 @@ function renderSection(values: Record<string, string> = {}) {
   render(
     <SettingsContext.Provider value={{ values, read: true, save: vi.fn(async () => {}), reload: vi.fn(async () => {}), reloads: 0 }}>
       <LibraryContext.Provider value={library}>
-        <SyncFolderSection onError={vi.fn()} onRestartRequired={onRestartRequired} />
+        <SyncFolderContext.Provider value={{ waiting }}>
+          <SyncFolderSection onError={vi.fn()} onRestartRequired={onRestartRequired} />
+        </SyncFolderContext.Provider>
       </LibraryContext.Provider>
     </SettingsContext.Provider>,
   );
@@ -123,6 +127,41 @@ describe("the sync folder in Settings", () => {
     expect(merges).toHaveLength(1);
     fireEvent.click(merges[0]);
     await waitFor(() => expect(api.previewSyncMerge).toHaveBeenCalledWith("deck"));
+  });
+
+  it("offers the merge of a merged PC whose newest backup waits for the player", async () => {
+    vi.mocked(api.getSyncFolder).mockResolvedValue(FOLDER);
+    vi.mocked(api.listSyncFolderPcs).mockResolvedValue([pc("laptop", "Laptop", { merged_before: true })]);
+    const waits: AutoMerge = {
+      device_id: "laptop",
+      name: "Laptop",
+      backup_id: "laptop-backup",
+      outcome: "new_key",
+      sessions_added: 0,
+      sessions_grown: 0,
+    };
+    renderSection({}, [waits]);
+
+    expect(await screen.findByText(/brings a key this PC does not know yet/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Merge/ })).toBeTruthy();
+  });
+
+  it("waits no more once the player merged that backup by hand", async () => {
+    vi.mocked(api.getSyncFolder).mockResolvedValue(FOLDER);
+    vi.mocked(api.listSyncFolderPcs).mockResolvedValue([pc("laptop", "Laptop", { merged_before: true, newer: false })]);
+    const waits: AutoMerge = {
+      device_id: "laptop",
+      name: "Laptop",
+      backup_id: "laptop-backup",
+      outcome: "new_key",
+      sessions_added: 0,
+      sessions_grown: 0,
+    };
+    renderSection({}, [waits]);
+
+    expect(await screen.findByText("Laptop")).toBeTruthy();
+    expect(screen.queryByText(/brings a key this PC does not know yet/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Merge/ })).toBeNull();
   });
 
   it("restores a PC's backup and takes over its PC when the preview offers it", async () => {

@@ -486,6 +486,11 @@ export async function discardSyncMerge(deviceId: string): Promise<void> {
   return invoke<void>("discard_sync_merge", { deviceId });
 }
 
+/** Merges the newer sync folder backups of PCs merged here before, as far as they need no choice of the player. */
+export async function mergeDueSyncBackups(): Promise<AutoMerge[]> {
+  return invoke<AutoMerge[]>("merge_due_sync_backups");
+}
+
 /** A PC's newest sync folder backup as a restore would see it. */
 export async function inspectSyncBackup(deviceId: string): Promise<LocalBackupSummary> {
   return invoke<LocalBackupSummary>("inspect_sync_backup", { deviceId });

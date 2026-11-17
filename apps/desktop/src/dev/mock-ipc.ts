@@ -304,7 +304,8 @@ let syncPcs: FolderPc[] = [
     sessions_count: 214,
     this_pc: false,
     merged_before: true,
-    newer: false,
+    // Its newer backup is the one that waits with ?waiting=1.
+    newer: params.has("waiting"),
   },
   {
     device_id: "deck",
@@ -1605,6 +1606,11 @@ mockIPC((cmd, payload) => {
       };
     case "discard_sync_merge":
       return null;
+    // ?sync=1&waiting=1: the laptop's newer backup in the sync folder brings a new key.
+    case "merge_due_sync_backups":
+      return syncFolder && params.has("waiting")
+        ? [{ device_id: "laptop", name: "Laptop", backup_id: syncPcs[1].backup_id, outcome: "new_key", sessions_added: 0, sessions_grown: 0 }]
+        : [];
     case "inspect_sync_backup":
       return laptopBackup(true, false);
     case "restore_sync_backup":

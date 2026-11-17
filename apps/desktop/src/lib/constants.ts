@@ -80,6 +80,8 @@ export const SETTING_KEYS = {
 export const AUTO_BACKUP_KEEP = 7;
 /** Backups of a PC kept in the sync folder. Same as SYNC_BACKUP_KEEP in constants.rs. */
 export const SYNC_BACKUP_KEEP = 3;
+/** How often the running app brings in newer backups from the sync folder. */
+export const SYNC_FOLDER_CHECK_MS = HOUR_MS;
 
 /** Event the core sends when games, covers or sessions changed. Same as LIBRARY_CHANGED_EVENT in constants.rs. */
 export const LIBRARY_CHANGED_EVENT = "library-changed";
