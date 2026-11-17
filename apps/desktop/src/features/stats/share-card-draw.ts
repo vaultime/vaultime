@@ -28,7 +28,6 @@ export interface CardLook {
 
 const MONA = "'Mona Sans Variable', system-ui, sans-serif";
 const GEIST = "'Geist Variable', system-ui, sans-serif";
-const MONO = "'Geist Mono Variable', ui-monospace, monospace";
 
 /** Accent shares of the calendar's heat levels, as the YearHeatmap classes have them. */
 const HEAT_ALPHAS = [0, 0.2, 0.35, 0.55, 0.75, 1];
@@ -107,7 +106,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 async function cardFontsReady(): Promise<void> {
   if (typeof document === "undefined" || !document.fonts) return;
   await Promise.all(
-    [`500 64px ${MONA}`, `italic 450 64px ${MONA}`, `400 64px ${GEIST}`, `400 64px ${MONO}`].map((font) =>
+    [`500 64px ${MONA}`, `italic 450 64px ${MONA}`, `400 64px ${GEIST}`, `600 64px ${GEIST}`].map((font) =>
       document.fonts.load(font).catch(() => []),
     ),
   );
@@ -327,10 +326,10 @@ class Painter {
   header(card: ShareCard, x: number, y: number, width: number) {
     const { ctx, colors, scale } = this;
     const label = [card.current ? "Year in play so far" : "Year in play", card.pcName].filter(Boolean).join("  ·  ");
-    this.font(GEIST, scale.header, 500);
+    this.font(GEIST, scale.header * 1.1, 500);
     ctx.fillStyle = colors.faint;
     ctx.textBaseline = "middle";
-    trackedText(ctx, label.toUpperCase(), x, y + scale.header, scale.header * 0.14, width * 0.6);
+    ctx.fillText(fitText(ctx, label, width * 0.6), x, y + scale.header);
     this.logo(x + width, y + scale.header, scale.header * 2);
     ctx.textBaseline = "alphabetic";
   }
@@ -452,20 +451,21 @@ class Painter {
         ctx.fillRect(x, top, width, 1);
         stats.forEach((stat, index) => {
           const left = x + index * column;
-          this.font(GEIST, scale.statLabel, 500);
+          this.font(GEIST, scale.statLabel * 1.1, 500);
           ctx.fillStyle = colors.faint;
           const labelBaseline = top + scale.statLabel * 2;
-          trackedText(ctx, stat.label.toUpperCase(), left, labelBaseline, scale.statLabel * 0.14, column - scale.gap);
+          ctx.fillText(fitText(ctx, stat.label, column - scale.gap), left, labelBaseline);
           const baseline = labelBaseline + scale.statLabel * 0.9 + valueHeight;
-          this.font(MONO, scale.statValue, 450, { tracking: -0.02 });
+          this.font(GEIST, scale.statValue, 600, { tracking: -0.01 });
           ctx.fillStyle = stat.accent ? colors.accent : colors.text;
           const value = fitText(ctx, stat.value, column - scale.gap);
           ctx.fillText(value, left, baseline);
           if (stat.unit) {
             const valueWidth = ctx.measureText(value).width;
-            this.font(MONO, scale.statValue * 0.5, 400);
+            this.font(GEIST, scale.statValue * 0.62, 500);
             ctx.fillStyle = colors.faint;
-            const unit = ` ${stat.unit}`;
+            // A word like days stands apart, a letter like h sits close.
+            const unit = `${stat.unit.length > 1 ? " " : "\u2009"}${stat.unit}`;
             if (valueWidth + ctx.measureText(unit).width <= column - scale.gap) {
               ctx.fillText(unit, left + valueWidth, baseline);
             }
@@ -501,7 +501,7 @@ class Painter {
       height,
       draw: (top) => {
         const amount = activeAmount(card);
-        this.font(MONO, size, 450, { tracking: -0.04 });
+        this.font(GEIST, size, 600, { tracking: -0.02 });
         ctx.fillStyle = colors.accent;
         ctx.fillText(amount.value, x, top + numberHeight);
         const numberWidth = ctx.measureText(amount.value).width;
@@ -525,7 +525,7 @@ class Painter {
     const { ctx, colors, scale } = this;
     const grid = calendarGrid(card.year, width);
     const labelSize = scale.small * 0.85;
-    this.font(MONO, labelSize, 400);
+    this.font(GEIST, labelSize, 400);
     ctx.fillStyle = colors.faint;
     grid.monthColumns.forEach((column, month) => {
       const name = formatDate(new Date(card.year, month, 1), { month: "short" });
@@ -581,14 +581,14 @@ class Painter {
           const left = x + index * (coverWidth + gap);
           this.cover(game, covers.get(game.gameId) ?? null, left, top, coverWidth, coverWidth / COVER_ASPECT);
           const captionTop = top + coverWidth / COVER_ASPECT + scale.caption * 1.4;
-          this.font(MONO, scale.caption * 0.8, 400);
+          this.font(GEIST, scale.caption * 0.8, 400);
           ctx.fillStyle = colors.faint;
           const rank = String(index + 1).padStart(2, "0");
           ctx.fillText(rank, left, captionTop);
           const rankWidth = ctx.measureText(`${rank}  `).width;
           this.font(GEIST, scale.caption, 500);
           this.markedTitle(game, left + rankWidth, captionTop, coverWidth - rankWidth);
-          this.font(MONO, scale.caption * 0.85, 400);
+          this.font(GEIST, scale.caption * 0.85, 500);
           ctx.fillStyle = colors.soft;
           ctx.fillText(formatHoursShort(game.activeMs), left + rankWidth, captionTop + scale.caption * 1.35);
         });
@@ -615,10 +615,10 @@ class Painter {
           const textLeft = x + coverWidth + scale.gap;
           const textWidth = width - coverWidth - scale.gap;
           const middle = rowTop + row / 2;
-          this.font(MONO, scale.caption * 0.6, 400);
+          this.font(GEIST, scale.caption * 0.6, 400);
           ctx.fillStyle = colors.faint;
           ctx.fillText(String(index + 1).padStart(2, "0"), textLeft, middle - scale.caption * 0.75);
-          this.font(MONO, scale.caption * 0.8, 450);
+          this.font(GEIST, scale.caption * 0.8, 500);
           ctx.fillStyle = colors.soft;
           ctx.textAlign = "right";
           const hours = formatHoursShort(game.activeMs);
@@ -646,9 +646,9 @@ class Painter {
     return {
       height,
       draw: (top) => {
-        this.font(GEIST, scale.statLabel, 500);
+        this.font(GEIST, scale.statLabel * 1.1, 500);
         ctx.fillStyle = colors.faint;
-        trackedText(ctx, "GAMES", x, top + scale.statLabel, scale.statLabel * 0.14, width);
+        ctx.fillText("Games", x, top + scale.statLabel);
         const baseline = top + scale.statLabel * 2 + countSize * 0.74;
         this.font(MONA, countSize, 500, { stretch: true, tracking: -0.015 });
         ctx.fillStyle = colors.text;
@@ -766,23 +766,6 @@ function wrapWords(ctx: CanvasRenderingContext2D, text: string, width: number, m
   const kept = lines.slice(0, maxLines);
   kept[maxLines - 1] = fitText(ctx, `${kept[maxLines - 1]} ${lines[maxLines]}…`, width);
   return kept;
-}
-
-/** Spaced capitals, drawn letter by letter where the canvas has no letter spacing. */
-function trackedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, tracking: number, width: number) {
-  if (hasLetterSpacing(ctx)) {
-    ctx.letterSpacing = `${tracking}px`;
-    ctx.fillText(fitText(ctx, text, width), x, y);
-    ctx.letterSpacing = "0px";
-    return;
-  }
-  let left = x;
-  for (const char of text) {
-    const advance = ctx.measureText(char).width + tracking;
-    if (left + advance - x > width) break;
-    ctx.fillText(char, left, y);
-    left += advance;
-  }
 }
 
 // Older WebKit canvases have neither setting.
