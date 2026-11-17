@@ -49,6 +49,8 @@ describe("links", () => {
     expect(launcherName("gog")).toBe("GOG");
     expect(launcherName("folder_scan")).toBeNull();
     expect(whereFrom("steam")).toBe("on Steam");
+    expect(whereFrom("legacy")).toBe("on Legacy Games");
+    expect(whereFrom("bigfish")).toBe("on Big Fish");
     expect(whereFrom("folder_scan")).toBe("found in a folder");
     expect(whereFrom(null)).toBe("added by hand");
   });
