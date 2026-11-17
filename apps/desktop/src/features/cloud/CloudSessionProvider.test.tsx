@@ -32,7 +32,6 @@ vi.mock("@/lib/tauri", () => ({
   hasCloudBackupKeySecure: vi.fn(async () => true),
   loadCloudSessionSecure: vi.fn(),
   restoreRemoteBackup: vi.fn(),
-  setCloudSignedIn: vi.fn(async () => {}),
   storeCloudBackupKeySecure: vi.fn(async () => true),
   storeCloudSessionSecure: vi.fn(async () => true),
   uploadRemoteBackup: vi.fn(),

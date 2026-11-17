@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Local, TimeDelta, Utc};
 use log::{debug, info, warn};
-use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime, Webview};
@@ -22,18 +21,13 @@ use crate::error::Result;
 use crate::integrity;
 use crate::playtime::{summaries, totals};
 use crate::tracking::live::LiveSessions;
-use crate::window_look::{WindowLookState, draw_icon};
+use crate::window_look::draw_icon;
 
 /// Passed by the login item, so Vaultime starts in the tray.
 pub const MINIMIZED_ARG: &str = "--minimized";
 
-/// Tray and window icon while signed in to cloud backup, in violet, until the
-/// page tells the core its accent. `scripts/build-brand.py` describes how it
-/// is made.
-const SIGNED_IN_ICON: &[u8] = include_bytes!("../icons/signed-in.png");
 const TRAY_ID: &str = "main";
 const TOOLTIP: &str = "Vaultime";
-const SIGNED_IN_TOOLTIP: &str = "Vaultime, signed in to cloud backup";
 
 /// Whether this system can show a tray icon at all.
 pub struct TrayState {
@@ -303,39 +297,17 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Shows in the tray and the taskbar whether this PC is signed in to cloud
-/// backup, the way the logo in the app does, in the accent of the app.
-pub fn show_cloud_state<R: Runtime>(app: &AppHandle<R>, signed_in: bool) {
-    if let Some(state) = app.try_state::<WindowLookState>() {
-        state.set_signed_in(signed_in);
-    }
-    crate::window_look::redraw(app);
-}
-
 /// Puts the logo in `accent` on the tray, the taskbar and the title bar, or
 /// the bundled logo until the page has told the core its accent.
-pub fn show_icon<R: Runtime>(app: &AppHandle<R>, accent: Option<&str>, signed_in: bool) {
+pub fn show_icon<R: Runtime>(app: &AppHandle<R>, accent: Option<&str>) {
     let icon = accent
-        .and_then(|accent| draw_icon(accent, signed_in))
-        .or_else(|| {
-            if signed_in {
-                Image::from_bytes(SIGNED_IN_ICON)
-                    .inspect_err(|error| warn!("failed to load the signed in icon: {error}"))
-                    .ok()
-            } else {
-                app.default_window_icon().cloned()
-            }
-        });
+        .and_then(draw_icon)
+        .or_else(|| app.default_window_icon().cloned());
     let Some(icon) = icon else {
         return;
     };
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_icon(Some(icon.clone()));
-        let _ = tray.set_tooltip(Some(if signed_in {
-            SIGNED_IN_TOOLTIP
-        } else {
-            TOOLTIP
-        }));
     }
     if let Some(window) = app.get_webview_window("main") {
         #[cfg(windows)]

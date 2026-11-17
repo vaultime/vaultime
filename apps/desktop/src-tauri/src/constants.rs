@@ -583,7 +583,7 @@ pub const WINDOW_LOOK_SETTING: &str = "window_look";
 /// history in backups and restores.
 pub const MERGED_BACKUPS_SETTING: &str = "merged_backups";
 /// Size the icon of the tray, the taskbar and the title bar is drawn at, the
-/// size of `icons/signed-in.png`.
+/// size Tauri takes from `icons/icon.ico`.
 pub const WINDOW_ICON_PX: u32 = 256;
 /// Sizes in the icon file of this program's shortcuts, as Explorer, the
 /// Start menu and the taskbar pick them at every display scale.

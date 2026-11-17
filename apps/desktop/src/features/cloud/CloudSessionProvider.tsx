@@ -35,7 +35,6 @@ import {
   mergeCloudBackup as mergeCloudBackupCommand,
   mergeDueCloudBackups,
   previewCloudMerge as previewCloudMergeCommand,
-  setCloudSignedIn,
   restoreRemoteBackup as restoreRemoteBackupCommand,
   uploadRemoteBackup as uploadRemoteBackupCommand,
 } from "@/lib/tauri";
@@ -161,12 +160,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       void warn(`automatic merge from the cloud failed: ${describeError(error)}`);
     }
   });
-
-  // The tray and taskbar icon turn violet while signed in, like the logo.
-  const signedIn = session !== null;
-  useEffect(() => {
-    setCloudSignedIn(signedIn).catch(logFailure("coloring the tray icon for cloud backup"));
-  }, [signedIn]);
 
   const accountId = session?.user.id ?? null;
   useEffect(() => {

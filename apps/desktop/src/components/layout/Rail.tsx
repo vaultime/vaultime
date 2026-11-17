@@ -38,7 +38,7 @@ export function Rail() {
   const playing = usePlaying();
   const currentSession = useCurrentSession();
   const current = currentSession ? (games.find((game) => game.id === currentSession.game_id) ?? null) : null;
-  const { enabled: cloudEnabled, session } = useCloudSession();
+  const { enabled: cloudEnabled } = useCloudSession();
   const location = useLocation();
   // The library comes most recently played first.
   const recent = summaries.filter((summary) => summary.lastPlayedAt).slice(0, RAIL_RECENT_GAMES);
@@ -50,7 +50,7 @@ export function Rail() {
 
   return (
     <nav aria-label="Main" className="panel flex min-h-0 flex-col px-2.5 pt-3 pb-2">
-      <Logo small className="h-9 px-2" signedIn={session !== null} />
+      <Logo small className="h-9 px-2" />
 
       <div className="mt-2 flex flex-col gap-px">
         {PAGES.map(({ to, label, icon: Icon }) => (

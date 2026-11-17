@@ -94,13 +94,6 @@ pub async fn cloud_request(
     .await
 }
 
-/// Shows in the tray and taskbar icon whether this PC is signed in. Runs off
-/// the main thread, as a redraw may wait for it.
-#[tauri::command(async)]
-pub fn set_cloud_signed_in(app: AppHandle, signed_in: bool) {
-    crate::tray::show_cloud_state(&app, signed_in);
-}
-
 /// The newest cloud backup of every other PC of the account.
 #[tauri::command]
 pub async fn list_cloud_pcs(

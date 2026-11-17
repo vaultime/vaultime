@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The window around the page in the look the player picked. The icon of the
-//! tray, the taskbar and the title bar takes the accent, signed in to cloud
-//! backup or not. On Windows the shortcuts of this program show the same,
-//! and the title bar follows dark or light mode. Windows 11 also gives it
+//! The window around the page in the look the player picked. The logo on the
+//! tray, the taskbar and the title bar takes the accent in its frame and
+//! hands, as the logo in the app does. On Windows the shortcuts of this
+//! program show the same, and the title bar follows dark or light mode. Windows 11 also gives it
 //! the ground of the page and the window border the accent. Linux leaves
 //! the title bar to the desktop.
 
@@ -21,11 +21,10 @@ use crate::db::connection::Database;
 use crate::db::repo::settings;
 use crate::error::VaultimeError;
 
-/// The logo as `scripts/build-brand.py` writes it, with a violet pivot.
-const ICON_SVG: &str = include_str!("../../../../assets/vaultime-icon-source.svg");
-/// The logo while signed in to cloud backup, with a violet frame and hands.
-const SIGNED_IN_ICON_SVG: &str = include_str!("../../../../assets/vaultime-icon-signed-in.svg");
-/// The violet of the logo files, which the accent replaces.
+/// The logo as `scripts/build-brand.py` writes it for the icons, with a
+/// violet frame and hands and a light pivot.
+const ICON_SVG: &str = include_str!("../../../../assets/vaultime-icon-accent.svg");
+/// The violet of the logo file, which the accent replaces.
 const LOGO_VIOLET: &str = "#9D7CFF";
 
 /// Dark or light mode of the title bar, or the system's.
@@ -74,21 +73,20 @@ impl WindowLook {
 #[derive(Default)]
 struct Wanted {
     look: Option<WindowLook>,
-    signed_in: bool,
 }
 
 /// What the window shows. Held while it is redrawn, so redraws never overlap.
 #[derive(Default)]
 struct Drawn {
     look: Option<WindowLook>,
-    /// The accent of the icon, none for the bundled one, and the cloud state.
-    icon: Option<(Option<String>, bool)>,
-    /// The logo the shortcuts of this program were last given.
+    /// The accent of the icon, none for the bundled logo.
+    icon: Option<String>,
+    /// The accent the shortcuts of this program were last given.
     #[cfg(windows)]
-    shortcut_logo: Option<crate::shortcut_icon::Logo>,
+    shortcut_accent: Option<String>,
 }
 
-/// The look and whether this PC is signed in, the two things the icon shows.
+/// The look the window should show and the one it shows.
 pub struct WindowLookState {
     wanted: Mutex<Wanted>,
     drawn: Mutex<Drawn>,
@@ -104,10 +102,7 @@ impl WindowLookState {
             .and_then(|stored| serde_json::from_str::<WindowLook>(&stored).ok())
             .filter(|look| look.colors().into_iter().all(|color| rgb(color).is_some()));
         Self {
-            wanted: Mutex::new(Wanted {
-                look,
-                signed_in: false,
-            }),
+            wanted: Mutex::new(Wanted { look }),
             drawn: Mutex::new(Drawn::default()),
         }
     }
@@ -115,16 +110,11 @@ impl WindowLookState {
     fn wanted(&self) -> std::sync::MutexGuard<'_, Wanted> {
         self.wanted.lock().unwrap_or_else(PoisonError::into_inner)
     }
-
-    /// Notes whether this PC is signed in to cloud backup.
-    pub fn set_signed_in(&self, signed_in: bool) {
-        self.wanted().signed_in = signed_in;
-    }
 }
 
 /// Brings the icons and the title bar to what is wanted now. Only what
 /// changed is drawn, and two redraws never overlap, so the last one always
-/// leaves the latest look and cloud state behind. Never call it on the main
+/// leaves the latest look behind. Never call it on the main
 /// thread while another thread may redraw: setting the tray icon waits for
 /// the main thread.
 pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
@@ -132,10 +122,7 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
     let mut drawn = state.drawn.lock().unwrap_or_else(PoisonError::into_inner);
-    let (look, signed_in) = {
-        let wanted = state.wanted();
-        (wanted.look.clone(), wanted.signed_in)
-    };
+    let look = state.wanted().look.clone();
     if let Some(look) = &look
         && drawn.look.as_ref() != Some(look)
     {
@@ -147,24 +134,20 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
     #[cfg(windows)]
     if !cfg!(debug_assertions)
         && let Some(look) = &look
+        && drawn.shortcut_accent.as_ref() != Some(&look.icon_accent)
         && let Some(context) = app.try_state::<crate::AppContext>()
     {
-        let logo = crate::shortcut_icon::Logo {
-            accent: look.icon_accent.clone(),
-            signed_in,
-        };
-        if drawn.shortcut_logo.as_ref() != Some(&logo) {
-            crate::shortcut_icon::follow(
-                context.app_dir.join(crate::constants::APPEARANCE_DIR),
-                logo.clone(),
-            );
-            drawn.shortcut_logo = Some(logo);
-        }
+        crate::shortcut_icon::follow(
+            context.app_dir.join(crate::constants::APPEARANCE_DIR),
+            look.icon_accent.clone(),
+        );
+        drawn.shortcut_accent = Some(look.icon_accent.clone());
     }
-    let icon = (look.map(|look| look.icon_accent), signed_in);
-    if drawn.icon.as_ref() != Some(&icon) {
-        crate::tray::show_icon(app, icon.0.as_deref(), signed_in);
-        drawn.icon = Some(icon);
+    // The bundled logo shows until the page has told the accent, at start.
+    let accent = look.map(|look| look.icon_accent);
+    if accent.is_none() || drawn.icon != accent {
+        crate::tray::show_icon(app, accent.as_deref());
+        drawn.icon = accent;
     }
 }
 
@@ -178,22 +161,17 @@ fn rgb(color: &str) -> Option<[u8; 3]> {
     Some([channel(0)?, channel(2)?, channel(4)?])
 }
 
-/// The logo in an accent, signed in to cloud backup or not.
-pub fn draw_icon(accent: &str, signed_in: bool) -> Option<Image<'static>> {
-    let rgba = draw_logo(accent, signed_in, WINDOW_ICON_PX)?;
+/// The logo in an accent.
+pub fn draw_icon(accent: &str) -> Option<Image<'static>> {
+    let rgba = draw_logo(accent, WINDOW_ICON_PX)?;
     Some(Image::new_owned(rgba, WINDOW_ICON_PX, WINDOW_ICON_PX))
 }
 
 /// The logo in an accent as RGBA, `size` pixels square.
-pub fn draw_logo(accent: &str, signed_in: bool, size: u32) -> Option<Vec<u8>> {
+pub fn draw_logo(accent: &str, size: u32) -> Option<Vec<u8>> {
     // Only a plain color goes into the SVG.
     rgb(accent)?;
-    let svg = if signed_in {
-        SIGNED_IN_ICON_SVG
-    } else {
-        ICON_SVG
-    }
-    .replace(LOGO_VIOLET, accent);
+    let svg = ICON_SVG.replace(LOGO_VIOLET, accent);
     let tree = usvg::Tree::from_str(&svg, &usvg::Options::default())
         .inspect_err(|error| warn!("failed to read the logo: {error}"))
         .ok()?;
@@ -381,18 +359,12 @@ mod tests {
     }
 
     #[test]
-    fn draws_the_pivot_in_the_accent() {
-        let icon = draw_icon("#f08a2c", false).unwrap();
+    fn colors_the_frame_and_hands_and_keeps_the_pivot_light() {
+        let icon = draw_icon("#f08a2c").unwrap();
         assert_eq!(
             (icon.width(), icon.height()),
             (WINDOW_ICON_PX, WINDOW_ICON_PX)
         );
-        assert_eq!(pivot(&icon), [0xf0, 0x8a, 0x2c, 0xff]);
-    }
-
-    #[test]
-    fn signed_in_keeps_the_pivot_light_and_colors_the_frame() {
-        let icon = draw_icon("#f08a2c", true).unwrap();
         assert_eq!(pivot(&icon), [0xf1, 0xeb, 0xfa, 0xff]);
         let rgba = icon.rgba();
         let accent_pixels = rgba
@@ -406,8 +378,8 @@ mod tests {
 
     #[test]
     fn refuses_anything_but_a_color() {
-        assert!(draw_icon("#f08a2c\"/><script/>", false).is_none());
-        assert!(draw_icon("orange", true).is_none());
+        assert!(draw_icon("#f08a2c\"/><script/>").is_none());
+        assert!(draw_icon("orange").is_none());
     }
 
     #[test]
@@ -430,8 +402,6 @@ mod tests {
         .unwrap();
         let state = WindowLookState::load(&db);
         assert_eq!(state.wanted().look.as_ref(), Some(&look));
-        state.set_signed_in(true);
-        assert!(state.wanted().signed_in);
 
         settings::set_setting(&db, WINDOW_LOOK_SETTING, r#"{"iconAccent":"red"}"#).unwrap();
         assert!(WindowLookState::load(&db).wanted().look.is_none());

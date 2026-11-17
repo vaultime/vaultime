@@ -1819,8 +1819,6 @@ mockIPC((cmd, payload) => {
     case "set_window_size":
       mockWindowChoice = args.choice as WindowSizeChoice;
       return mockWindowSize();
-    case "set_cloud_signed_in":
-      return null;
     case "get_auto_backup_folder":
       return "C:/Users/you/AppData/Roaming/com.vaultime.app/backups";
     case "discover_steam_games":

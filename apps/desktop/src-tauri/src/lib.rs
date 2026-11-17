@@ -196,7 +196,6 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::app::tray_status,
         commands::app::get_window_size,
         commands::app::set_window_size,
-        commands::cloud::set_cloud_signed_in,
         commands::discovery::discover_games,
         commands::discovery::discover_steam_games,
         commands::discovery::discover_launcher_games,

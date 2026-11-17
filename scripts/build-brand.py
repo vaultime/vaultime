@@ -19,9 +19,9 @@ The app icons come from vaultime-icon-source.svg. From apps/desktop, run
 32x32.png, 128x128.png, 128x128@2x.png, icon.png, icon.ico and icon.icns into
 src-tauri/icons. The favicon of docs/site is tile_svg(64).
 
-The tray and the taskbar show vaultime-icon-signed-in.svg while the PC is
-signed in to cloud backup, like the logo in the app. Render it at 256 px, the
-size Tauri takes from icon.ico, to src-tauri/icons/signed-in.png.
+The app draws the tray, taskbar, title bar and shortcut icons from
+vaultime-icon-accent.svg, its frame and hands in the accent in use instead of
+violet, like the logo in the app.
 """
 
 import io
@@ -150,7 +150,7 @@ def main():
     ASSETS.mkdir(exist_ok=True)
     (ASSETS / "vaultime-icon-source.svg").write_text(tile_svg(1024), encoding="utf8")
     (ASSETS / "vaultime-avatar.svg").write_text(tile_svg(1024, rounded=False), encoding="utf8")
-    (ASSETS / "vaultime-icon-signed-in.svg").write_text(tile_svg(1024, ink=VIOLET, pivot=LIGHT), encoding="utf8")
+    (ASSETS / "vaultime-icon-accent.svg").write_text(tile_svg(1024, ink=VIOLET, pivot=LIGHT), encoding="utf8")
     (ASSETS / "vaultime-lockup-light.svg").write_text(lockup_svg(LIGHT, VIOLET), encoding="utf8")
     (ASSETS / "vaultime-lockup-dark.svg").write_text(lockup_svg(TILE, VIOLET_ON_LIGHT), encoding="utf8")
     print("wrote", ", ".join(sorted(p.name for p in ASSETS.glob("vaultime-*.svg"))))

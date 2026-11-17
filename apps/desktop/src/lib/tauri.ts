@@ -441,11 +441,6 @@ export async function removeSteamPlaytime(): Promise<number> {
   return invoke<number>("remove_steam_playtime");
 }
 
-/** Turns the tray and taskbar icon violet while signed in to cloud backup. */
-export async function setCloudSignedIn(signedIn: boolean): Promise<void> {
-  return invoke<void>("set_cloud_signed_in", { signedIn });
-}
-
 export async function getAutoBackupFolder(): Promise<string> {
   return invoke<string>("get_auto_backup_folder");
 }
