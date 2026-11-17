@@ -17,12 +17,12 @@ import { chapterTitle, yearStory, type YearChapter } from "@/lib/year-story";
 import { ShareYearDialog } from "./ShareYearDialog";
 import { StoryCard } from "./YearChapters";
 
-/** Year in games: a year told in chapters, one card at a time, made on this PC. */
 /** A click on the story's own buttons leaves focus where it was, so Space moves on after it as the hint says. */
 function keepFocus(event: MouseEvent) {
   event.preventDefault();
 }
 
+/** Year in games: a year told in chapters, one card at a time, made on this PC. */
 export function YearInGamesPage() {
   const { year } = useParams();
   // Another year starts over at its first chapter.

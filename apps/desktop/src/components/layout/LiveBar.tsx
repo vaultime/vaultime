@@ -21,7 +21,6 @@ import { usePageVisible } from "@/lib/use-page-visible";
 import type { AwayTimer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** The panel at the bottom of every page: the running game, like a music player. */
 /** "45s", "5m", "1m 30s": the idle time with the seconds Settings may add to the minutes. */
 function idleTimeText(seconds: number): string {
   const rest = seconds % SECONDS_PER_MINUTE;
@@ -30,6 +29,7 @@ function idleTimeText(seconds: number): string {
   return rest ? `${minutes} ${rest}s` : minutes;
 }
 
+/** The panel at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
   const { games, covers, summaries, idleThresholdSeconds, thisDeviceId } = useLibrary();
   const active = useActiveSessions();

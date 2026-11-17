@@ -112,8 +112,6 @@ const games: Game[] = titles.map((title, index) => ({
   origin_device_id: null,
 }));
 
-// Over a year of weekday evenings and weekend afternoons, weighted towards the
-// first games, with a quiet summer break and one game often left running.
 /** A session as stored, before the core works out what counts of it. */
 type Recorded = Omit<Session, "counted_runtime_ms" | "counted_active_ms" | "counted_idle_ms">;
 
@@ -127,6 +125,8 @@ function counted(session: Recorded): Session {
   };
 }
 
+// Over a year of weekday evenings and weekend afternoons, weighted towards the
+// first games, with a quiet summer break and one game often left running.
 const sessions: Recorded[] = [];
 let seed = 7;
 const random = () => {
@@ -289,9 +289,6 @@ const played = scenario === "empty" || scenario === "unplayed" ? [] : nothingRun
 const allSessions = played.sort((a, b) => b.started_at_wall.localeCompare(a.started_at_wall));
 const allGames = scenario === "empty" ? [] : games;
 
-// ?pcs=1 adds sessions merged from a laptop: some of a game linked to Hades II
-// here, one game that came along on its own, and one that failed its check.
-/** The newest cloud backups of the other PCs: the laptop merged before, the Steam Deck not yet. */
 let syncFolder: string | null = params.has("sync") ? "D:\\Dropbox\\Vaultime" : null;
 let awayTimer: AwayTimer | null = params.has("away")
   ? { game_id: games[1].id, started_at: iso(Date.now() - 42 * MINUTE_MS) }
@@ -330,6 +327,7 @@ let syncPcs: FolderPc[] = [
   },
 ];
 
+/** The newest cloud backups of the other PCs: the laptop merged before, the Steam Deck not yet. */
 let cloudPcs: CloudPc[] = [
   {
     device_id: "laptop",
@@ -363,6 +361,8 @@ const devices: Device[] = [
   },
 ];
 let gameLinks: GameLink[] = [];
+// ?pcs=1 adds sessions merged from a laptop: some of a game linked to Hades II
+// here, one game that came along on its own, and one that failed its check.
 if (params.get("pcs") === "1") {
   devices.push({
     id: "laptop",
