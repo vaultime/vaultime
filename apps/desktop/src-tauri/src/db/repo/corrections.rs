@@ -316,18 +316,27 @@ fn check_free_for_play(
     }
     let same_game = serde_json::to_string(&games::linked_set(conn, game_id)?)
         .map_err(|error| VaultimeError::Invalid(error.to_string()))?;
+    // An open session of this PC runs up to now. One of another PC, left
+    // open in a backup, ends at its last event, as every page shows it.
     let overlaps: bool = conn
         .query_row(
             "SELECT EXISTS(
-                 SELECT 1 FROM sessions
-                 WHERE game_id IN (SELECT value FROM json_each(?1)) AND runtime_ms > 0
-                   AND started_at_wall < ?3
-                   AND COALESCE(ended_at_wall, ?4) > ?2)",
+                 SELECT 1 FROM sessions s
+                 WHERE s.game_id IN (SELECT value FROM json_each(?1)) AND s.runtime_ms > 0
+                   AND s.started_at_wall < ?3
+                   AND COALESCE(
+                       s.ended_at_wall,
+                       CASE WHEN s.device_id = ?5 THEN ?4 ELSE (
+                           SELECT e.event_time_wall FROM session_events e
+                           WHERE e.session_id = s.id ORDER BY e.sequence DESC LIMIT 1)
+                       END,
+                       s.started_at_wall) > ?2)",
             params![
                 same_game,
                 started_at_wall,
                 ended_at_wall,
-                integrity::now_timestamp()
+                integrity::now_timestamp(),
+                device_id
             ],
             |row| row.get(0),
         )
@@ -950,6 +959,45 @@ mod tests {
 
         discard_session(&db, &tracked.id, "The launcher only").unwrap();
         assert!(add_manual_session(&db, &game, DEVICE, &inside, 10 * MINUTE, "", None).is_ok());
+    }
+
+    #[test]
+    fn an_open_session_of_another_pc_blocks_only_up_to_its_last_event() {
+        let (db, game) = setup();
+        devices::ensure_device(&db, "laptop", "windows", "0.1.0").unwrap();
+        let start = integrity::format_timestamp(Utc::now() - chrono::Duration::hours(3));
+        let last = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(150));
+        db.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO sessions
+                    (id, game_id, device_id, started_at_wall, elapsed_monotonic_ms,
+                     active_ms, idle_ms, runtime_ms, integrity_status, closed_cleanly)
+                 VALUES ('elsewhere', ?1, 'laptop', ?2, 0, 0, 0, 0, 'local', 0)",
+                params![game, start],
+            )
+            .map_err(map_db)?;
+            integrity::append_session_event(conn, "elsewhere", "started", &start, Some(0), "{}")?;
+            integrity::append_session_event(
+                conn,
+                "elsewhere",
+                "heartbeat",
+                &last,
+                Some(30 * MINUTE),
+                "{}",
+            )?;
+            conn.execute(
+                "UPDATE sessions SET runtime_ms = ?1 WHERE id = 'elsewhere'",
+                [30 * MINUTE],
+            )
+            .map_err(map_db)?;
+            Ok(())
+        })
+        .unwrap();
+
+        let during = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(170));
+        assert!(add_manual_session(&db, &game, DEVICE, &during, 10 * MINUTE, "", None).is_err());
+        let after = integrity::format_timestamp(Utc::now() - chrono::Duration::minutes(60));
+        assert!(add_manual_session(&db, &game, DEVICE, &after, 10 * MINUTE, "", None).is_ok());
     }
 
     #[test]
