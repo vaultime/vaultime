@@ -104,10 +104,7 @@ export function OtherPcsSection({ onError }: { onError: (message: string | null)
   }
 
   return (
-    <PageSection
-      title="Other PCs"
-      description="Bring in the sessions of another PC from one of its backups. They come in as that PC recorded them, and this PC's ledger vouches only for those that pass their check with the keys it trusts for that PC, or for a trusted PC that brought them. The first time, it takes that PC's ledger at its word, from the cloud only with the keys that PC registered there. Only the PC that recorded a session can correct it."
-    >
+    <PageSection title="Other PCs" description="Bring in play from another PC's backup.">
       {others.map(({ device, sessions: count }) => (
         <PageRow
           key={device.id}
@@ -140,7 +137,7 @@ export function OtherPcsSection({ onError }: { onError: (message: string | null)
       {cloudReady && cloudError && <Notice tone="warning">The cloud backups of other PCs could not be read: {cloudError}</Notice>}
       <PageRow
         label="Merge a backup of another PC"
-        hint="Pick a backup folder of the other PC, saved there under Settings, Local backups. You see what comes in before anything changes."
+        hint="Pick a backup made on the other PC to see what comes in."
       >
         <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void pickBackup()}>
           <Laptop className="size-3.5" />

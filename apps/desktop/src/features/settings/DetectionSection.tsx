@@ -6,28 +6,28 @@ import type { TrackingDiagnostics } from "@/lib/types";
 
 const FOREGROUND: Record<string, { title: string; description: string }> = {
   win32_api: { title: "Windows foreground window", description: "Read straight from Windows." },
-  x11: { title: "X11 active window", description: "The active X11 window is traced back to its process." },
-  macos_system: { title: "macOS frontmost app", description: "Asked from the macOS window server." },
+  x11: { title: "X11 active window", description: "Read straight from X11." },
+  macos_system: { title: "macOS frontmost app", description: "Read straight from macOS." },
 };
 
 const IDLE: Record<string, { title: string; description: string }> = {
   win32_api: { title: "Windows last input", description: "The time since the last key press or mouse move." },
   x11_input: { title: "X11 input events", description: "The time since the last key press, click or mouse move." },
-  x11: { title: "X11 idle timer", description: "The idle time X11 reports for this session." },
+  x11: { title: "X11 idle timer", description: "The idle time X11 reports." },
   gnome_dbus: { title: "GNOME idle monitor", description: "The time since the last input, from GNOME." },
-  macos_ioreg: { title: "macOS input timer", description: "The idle counter of the input devices." },
+  macos_ioreg: { title: "macOS input timer", description: "The time since the last input, from macOS." },
 };
 
 const CONTROLLERS: Record<string, { title: string; description: string }> = {
-  xinput: { title: "XInput", description: "Buttons and sticks of Xbox and other XInput controllers count as input." },
-  evdev: { title: "Controller devices", description: "Buttons and sticks of every connected controller count as input." },
+  xinput: { title: "XInput", description: "Xbox and other XInput controllers count as input." },
+  evdev: { title: "Controller devices", description: "Every connected controller counts as input." },
 };
 
 const NO_CONTROLLERS = { title: "Not read", description: "Only the keyboard and mouse count as input here." };
 
 const FALLBACK = {
-  title: "Process activity",
-  description: "No direct signal here, so Vaultime judges by what the game process does.",
+  title: "Game activity",
+  description: "Not available here, so Vaultime goes by what the game does.",
 };
 
 /** The signals the tracker reads on this PC. */
@@ -45,10 +45,7 @@ export function DetectionSection({
   const pollSeconds = diagnostics?.poll_interval_seconds;
 
   return (
-    <PageSection
-      title="Detection"
-      description="The signals this PC offers. Where a direct signal is missing, Vaultime falls back to process activity."
-    >
+    <PageSection title="Detection" description="How Vaultime tracks play on this PC.">
       <PageRow label="System">{platform}</PageRow>
       <PageRow label="Tracking">
         <span className="flex items-center gap-2">

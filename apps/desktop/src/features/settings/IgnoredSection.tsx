@@ -37,10 +37,7 @@ export function IgnoredSection({ onError }: { onError: (message: string | null) 
 
   if (programs.length === 0) return null;
   return (
-    <PageSection
-      title="Ignored programs"
-      description="Not games. Discover never offers them, and Vaultime never tracks them, also inside a game's folder."
-    >
+    <PageSection title="Ignored programs" description="Never tracked or offered as games.">
       {programs.map((program) => (
         <PageRow
           key={program.path_key}

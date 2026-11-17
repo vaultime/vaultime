@@ -24,7 +24,7 @@ export function UpdatesRow() {
             ? `Version ${version} is ready to install.`
             : status === "current" && checkedAt
               ? `Vaultime is up to date. Checked at ${formatClockTime(checkedAt)}.`
-              : "Vaultime looks for updates when it starts and every few hours.";
+              : "Checked when Vaultime starts and every few hours.";
 
   const busy = status === "checking" || status === "installing";
   return (

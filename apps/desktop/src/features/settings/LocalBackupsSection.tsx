@@ -120,14 +120,11 @@ export function LocalBackupsSection({
     });
 
   return (
-    <PageSection
-      title="Local backups"
-      description="A backup is a folder with the database, the cached artwork and a checksum for every file."
-    >
+    <PageSection title="Local backups" description="Folders with your games, sessions and artwork.">
       <PageRow
         label="Back up automatically"
         htmlFor="auto-backup"
-        hint={`Once a day and when Vaultime quits. The newest ${numberWords(AUTO_BACKUP_KEEP)} are kept, backups you save yourself are never deleted.`}
+        hint={`Once a day and when Vaultime quits. Keeps the newest ${numberWords(AUTO_BACKUP_KEEP)}.`}
       >
         <Switch id="auto-backup" checked={autoBackup} onCheckedChange={(checked) => void changeAutoBackup(checked)} />
       </PageRow>
@@ -138,7 +135,7 @@ export function LocalBackupsSection({
             <span className="mt-1 block font-mono text-xs break-all text-soft">{folder || "Not set"}</span>
           </>
         }
-        hint="A folder on another drive keeps them safe if this drive fails. A sync folder keeps them on your other PCs too."
+        hint="Another drive keeps them safe if this one fails."
       >
         <Button variant="outline" size="sm" onClick={changeFolder} disabled={busy}>
           Change

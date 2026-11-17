@@ -22,7 +22,9 @@ import { numberWords } from "@/lib/words";
 
 /** What the row of a PC in the sync folder says about it. */
 function pcHint(pc: FolderPc, waiting: AutoMerge | undefined): string {
-  if (pc.this_pc) return `Backup of ${formatLongDate(pc.backup_created_at)}. A new one comes in once a day.`;
+  if (pc.this_pc) {
+    return `Backup of ${formatLongDate(pc.backup_created_at)}. Keeps the newest ${numberWords(SYNC_BACKUP_KEEP)}.`;
+  }
   return backupHint(pc, waiting);
 }
 
@@ -126,10 +128,7 @@ export function SyncFolderSection({
     });
 
   return (
-    <PageSection
-      title="Sync folder"
-      description={`Keep backups in a folder that a sync service or a NAS keeps the same on every PC, such as one in Dropbox, Google Drive, OneDrive or Syncthing. Each PC copies its automatic backups there, the newest ${numberWords(SYNC_BACKUP_KEEP)}, and the PCs that share the folder bring in each other's sessions: the first time through you, after that by themselves.`}
-    >
+    <PageSection title="Sync folder" description="Your PCs share backups and play through a folder that syncs.">
       <PageRow
         label={
           <>
@@ -137,7 +136,7 @@ export function SyncFolderSection({
             <span className="mt-1 block font-mono text-xs break-all text-soft">{folder ?? "Not set"}</span>
           </>
         }
-        hint="Vaultime keeps a folder named Vaultime in it, with a folder for each PC. Choose the same folder on every PC."
+        hint="Choose the same folder on every PC."
       >
         <span className="flex gap-2">
           <Button variant="outline" size="sm" onClick={choose} disabled={busy !== null}>

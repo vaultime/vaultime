@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { DEVICE_NAME_MAX_CHARS } from "@/lib/constants";
 import { ledgerSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
-import { formatLongDate } from "@/lib/time";
+import { formatCalendarDay } from "@/lib/time";
 import type { ThisPc } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 
@@ -49,11 +49,8 @@ export function ThisPcSection({ onError }: { onError: (message: string | null) =
   if (!pc) return null;
   const sound = !pc.ledger.broken && pc.ledger.missing_sessions === 0;
   return (
-    <PageSection
-      title="This PC"
-      description="Vaultime keeps a ledger of the sessions played here, signed with a key that never leaves this PC. It shows when a session is changed or removed outside Vaultime, but it cannot prevent it."
-    >
-      <PageRow label="Name" htmlFor="pc-name" hint="Tells the sessions played here apart from those of other PCs.">
+    <PageSection title="This PC" description="Helps you notice sessions changed or removed outside Vaultime.">
+      <PageRow label="Name" htmlFor="pc-name" hint="How this PC shows up on your other PCs.">
         <Input
           id="pc-name"
           className="w-56"
@@ -68,7 +65,7 @@ export function ThisPcSection({ onError }: { onError: (message: string | null) =
       </PageRow>
       <PageRow
         label="Ledger"
-        hint={`${ledgerSentence(pc.ledger)}${pc.ledger.began_at ? ` Kept since ${formatLongDate(pc.ledger.began_at)}.` : ""}`}
+        hint={`${ledgerSentence(pc.ledger)}${pc.ledger.began_at ? ` Kept since ${formatCalendarDay(pc.ledger.began_at)}.` : ""}`}
       >
         <span className="flex items-center gap-2">
           <span className={sound ? "size-2 rounded-full bg-violet" : "size-2 rounded-full bg-amber"} />

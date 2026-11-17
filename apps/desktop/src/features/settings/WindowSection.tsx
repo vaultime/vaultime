@@ -16,7 +16,7 @@ const NAMES: Record<WindowSizeChoice, string> = {
 };
 
 const HINTS: Partial<Record<WindowSizeChoice, string>> = {
-  standard: "The size Vaultime is laid out for.",
+  standard: "The default size.",
   free: "Drag the edges or maximize it, any size goes.",
 };
 
@@ -68,10 +68,7 @@ export function WindowSection() {
     : [];
 
   return (
-    <PageSection
-      title="Window"
-      description="Vaultime opens at one fixed size, the way a game client does. Free lets you resize and maximize it."
-    >
+    <PageSection title="Window" description="Vaultime opens at a fixed size unless you pick Free.">
       {state && (
         <div role="radiogroup" aria-label="Window size">
           {options.map(({ choice, size, fits }) => {

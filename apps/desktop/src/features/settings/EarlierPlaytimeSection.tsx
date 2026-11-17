@@ -76,16 +76,13 @@ export function EarlierPlaytimeSection({ onError }: { onError: (message: string)
   }
 
   return (
-    <PageSection
-      title="Earlier playtime"
-      description="Playtime your games had before Vaultime, from Steam's own count. It counts toward each game's total, while the journal and the stats keep to tracked sessions."
-    >
+    <PageSection title="Earlier playtime" description="Adds Steam's playtime from before Vaultime to game totals.">
       <PageRow
         label="From Steam"
         hint={
           imported.length > 0
             ? `${formatHoursMinutes(importedMs)} for ${numberWords(imported.length)} game${imported.length === 1 ? "" : "s"}${importedAt ? `, read on ${formatCalendarDay(importedAt)}` : ""}.`
-            : "Read once from the Steam client on this PC. Time Vaultime tracked already counts only once."
+            : "Read from Steam on this PC. Nothing counts twice."
         }
       >
         <span className="flex gap-2">

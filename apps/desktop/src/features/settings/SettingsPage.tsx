@@ -47,9 +47,8 @@ import { numberWords } from "@/lib/words";
 
 const TRAY_HINTS: Record<TrayStatus, string> = {
   shown: "Vaultime stays in the tray. Quit it from the tray menu.",
-  hidden:
-    "This desktop shows no tray icons, so closing the window minimizes Vaultime and it keeps counting. On GNOME, an AppIndicator extension adds the icon.",
-  none: "This system has no tray, so closing the window quits Vaultime. On Linux, installing libayatana-appindicator3 adds one.",
+  hidden: "No tray icons here, so closing minimizes Vaultime.",
+  none: "No tray here, so closing quits Vaultime.",
 };
 
 const LINKS = [
@@ -252,18 +251,18 @@ export function SettingsPage() {
           </Notice>
         )}
 
-        <PageSection title="Tracking" description="How Vaultime tells playing apart from leaving a game open.">
+        <PageSection title="Tracking" description="When time counts as active play.">
           <PageRow
             label="Count as idle after"
             htmlFor="idle-minutes"
-            hint="With no key press, mouse move or controller input for this long, time counts as idle instead of active."
+            hint="Time with no input counts as idle after this."
           >
             <IdleStepper id="idle-minutes" seconds={idleSeconds} onChange={changeIdle} />
           </PageRow>
           <PageRow
             label="Count background games as active"
             htmlFor="background-active"
-            hint="Minimized or unfocused games keep earning active time while you use the PC."
+            hint="Games behind other windows count while you use the PC."
           >
             <Switch
               id="background-active"
@@ -295,8 +294,8 @@ export function SettingsPage() {
             htmlFor="autostart"
             hint={
               tray === "shown"
-                ? "Starts quietly in the tray, so the first game of the day counts too."
-                : "Starts quietly without a window, so the first game of the day counts too. Start Vaultime again to open it."
+                ? "Starts in the tray, so your first game counts too."
+                : "Starts without a window. Start Vaultime again to open it."
             }
           >
             <Switch
@@ -310,7 +309,7 @@ export function SettingsPage() {
           <PageRow
             label="Look for new games when Vaultime starts"
             htmlFor="auto-discover"
-            hint="Reads what Steam and your other launchers installed and asks only about games it has not offered before. Discover in the library still lists everything."
+            hint="Asks about games your launchers newly installed."
           >
             <Switch
               id="auto-discover"
@@ -326,11 +325,11 @@ export function SettingsPage() {
 
         <WindowSection />
 
-        <PageSection title="Journal" description="What the journal shows beside your sessions.">
+        <PageSection title="Journal">
           <PageRow
             label="Show Steam screenshots"
             htmlFor="journal-screenshots"
-            hint="Screenshots you take with Steam show under the session they were taken in. Vaultime reads them from Steam's folder and copies nothing."
+            hint="They show under the session you took them in."
           >
             <Switch
               id="journal-screenshots"
@@ -343,10 +342,7 @@ export function SettingsPage() {
         </PageSection>
 
         {hidden.length > 0 && (
-          <PageSection
-            title="Hidden games"
-            description="Still tracked, and their sessions count in the journal and your totals. Only the library leaves them out."
-          >
+          <PageSection title="Hidden games" description="Still tracked and counted, just left out of the library.">
             {hidden.map(({ game }) => (
               <PageRow
                 key={game.id}

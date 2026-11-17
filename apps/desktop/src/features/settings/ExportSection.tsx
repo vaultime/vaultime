@@ -52,10 +52,7 @@ export function ExportSection({ start }: { start?: ExportFormat | null }) {
   }, [start]);
 
   return (
-    <PageSection
-      title="Export"
-      description="Your sessions as a file of your own. CSV opens in any spreadsheet, JSON adds your games with their status and earlier playtime."
-    >
+    <PageSection title="Export" description="Your sessions as CSV for spreadsheets, or JSON with your games.">
       <div className="flex flex-wrap gap-3">
         {FORMATS.map(({ format, label, filter, icon: Icon }) => (
           <Button key={format} variant="outline" onClick={() => void run(format, filter)} disabled={busy !== null}>
