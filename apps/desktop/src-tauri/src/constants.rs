@@ -462,6 +462,9 @@ pub const SYNC_DIR: &str = "Vaultime";
 pub const SYNC_ARTWORK_DIR: &str = "artwork";
 /// File in a PC's part of the sync folder that names the PC.
 pub const SYNC_PC_FILE: &str = "pc.json";
+/// Folder in Vaultime's data folder where backups from the sync folder are
+/// put together for a merge or a restore.
+pub const SYNC_STAGING_DIR: &str = ".sync-staging";
 /// Backups of a PC kept in the sync folder, older ones are deleted. Same as
 /// `SYNC_BACKUP_KEEP` in `lib/constants.ts`.
 pub const SYNC_BACKUP_KEEP: usize = 3;
