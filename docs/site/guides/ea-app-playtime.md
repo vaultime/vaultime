@@ -5,13 +5,13 @@ The EA app shows a total for each game on the game's page in your library, with 
 ## In the EA app
 
 1. Open your **Library** and pick a game.
-2. The game's page shows when you last played it and your time played.
+2. The game's page shows **Last played** and **Time played**.
 
 The EA app also has playtime controls in its settings, where you can look at your playtime and set limits.
 
 ## What the EA app counts
 
-- One total per game, with no history of your days and no split between playing and idling.
+- One total per game on its page, with no split between playing and idling.
 - Players have long reported totals that stop updating or drop back after an update, and hours from Origin that never came over.
 
 ## What Vaultime adds

@@ -8,7 +8,7 @@ Most launchers count only their own games, and not every launcher shows a number
 
 - A launcher counts a game only while it runs from that launcher. A game you own in two launchers usually has two counts that never meet.
 - Most launchers keep a total and the day you last played, not a history of your days.
-- Games you installed yourself, from a folder, a mod pack or an old disc, are counted by no launcher unless you add them to one.
+- Games you installed yourself, from a folder, a mod pack or an old disc, are counted by no launcher, and adding one to Steam as a shortcut puts no hours on your profile.
 
 ## Count every game with Vaultime
 

@@ -12,7 +12,7 @@ Steam shows how long you played each game on the game's page in your library and
 
 Your profile, in the Steam app or on steamcommunity.com, lists your recent activity with the hours of the past two weeks and the hours on record for each game. The Games page of your profile lists the totals of all your games.
 
-Edit Profile, Privacy Settings, Game details decides who sees them. **Always keep my total playtime private** hides your totals even when others can see your games, and **Mark as Private** on a single game hides that game.
+Edit Profile, Privacy Settings, Game details decides who sees them. **Always keep my total playtime private even if users can see my game details** hides your totals even when others can see your games, and **Mark as Private** on a single game hides that game.
 
 ## What Steam counts
 
@@ -22,7 +22,7 @@ Edit Profile, Privacy Settings, Game details decides who sees them. **Always kee
 
 ## Steam Replay
 
-Each December, Steam Replay sums up your year on Steam: the games you played, your top games as a share of your playtime, your months, your longest streak and your achievements. It covers 1 January to the middle of December, comes out a few days later and leaves out play in offline mode. Open it from the banner on the store front page.
+Each December, Steam Replay sums up your year on Steam: the games you played, your top games as a share of your playtime, your months, your longest streak and your achievements. It covers 1 January to the middle of December, comes out a few days later and leaves out play in offline mode. Open it at store.steampowered.com/replay while signed in to Steam.
 
 ## What Vaultime adds
 

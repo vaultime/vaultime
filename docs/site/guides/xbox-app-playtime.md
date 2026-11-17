@@ -1,6 +1,6 @@
 # How to see your playtime in the Xbox app
 
-The Xbox app on Windows does not put your playtime next to your games. Xbox keeps the minutes you played in each game's stats on your Xbox profile, for games that report them.
+In the Xbox app on Windows, select a game in your library to open its hub, which shows when you last played it and your total playtime. Xbox also keeps the time in each game's stats on your Xbox profile, for games that report it.
 
 ## On your Xbox profile
 
@@ -12,9 +12,9 @@ The Xbox app on Windows does not put your playtime next to your games. Xbox keep
 
 - Games that support Xbox, on console and on PC.
 - Not every game reports the stat, so some games show no time at all.
-- Long totals have been shown in days rather than hours.
+- Xbox has shown long totals in days. Since May 2026 it has been moving to total hours, starting with Xbox Insiders on console.
 
-Xbox summed up the years 2023 and 2024 in a Year in Review, and none came out for 2025.
+Xbox summed up the years 2023 and 2024 in a Year in Review, and none came out for 2025. In November 2026 it launched Xbox Playback, a look back at your Xbox history with your total time played, open on console and at xbox.com/XBOXPlayback until 31 December 2026 in 15 countries.
 
 ## What Vaultime adds
 

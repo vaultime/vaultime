@@ -1,6 +1,6 @@
 # How to see your playtime in the Epic Games Launcher
 
-The Epic Games Launcher shows a total for each game in the list view of your library. Epic added it in September 2019, so play from before then is likely missing.
+The Epic Games Launcher shows a total for each game in the list view of your library. Epic added playtime tracking in September 2019, so older play may be missing.
 
 ## In the launcher
 
@@ -8,12 +8,14 @@ The Epic Games Launcher shows a total for each game in the list view of your lib
 2. Switch to the list view with the icon above your games.
 3. The **Time Played** column shows your total for each game.
 
-Epic is rebuilding its launcher, and its preview may not show playtime yet.
+The three dots on a game's tile show the same total as **You've Played**.
+
+Epic is rebuilding its launcher. In the Epic Games Launcher Preview, open **Library**, select a game's tile and look for **Total Play Time** in its **Activity** section.
 
 ## What Epic counts
 
 - The time a game you started from the Epic Games Launcher runs.
-- One total per game, with no history of your days and no split between playing and idling.
+- One total per game, with no split between playing and idling.
 
 ## What Vaultime adds
 
