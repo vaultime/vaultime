@@ -164,6 +164,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::games::set_game_steps_aside,
         commands::games::set_game_favorite,
         commands::discovery::list_ignored_programs,
+        commands::discovery::list_seen_games,
         commands::discovery::ignore_program,
         commands::discovery::allow_program,
         commands::sessions::get_notable_events_for_game,

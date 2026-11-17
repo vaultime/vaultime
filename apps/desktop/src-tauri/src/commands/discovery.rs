@@ -13,7 +13,7 @@ use crate::db::models::Game;
 use crate::db::repo::ignored::{self, IgnoredProgram};
 use crate::db::repo::offered;
 use crate::discovery::auto::{FoundGames, NewGames};
-use crate::discovery::{self, DiscoveredGame};
+use crate::discovery::{self, DiscoveredGame, SeenGame};
 use crate::error::VaultimeError;
 
 #[tauri::command(async)]
@@ -61,6 +61,13 @@ pub fn remember_offered_games(
     paths: Vec<String>,
 ) -> Result<usize, VaultimeError> {
     offered::remember(&db, &paths)
+}
+
+/// Programs from the game folders that ran in front long enough, which
+/// Discover offers to add.
+#[tauri::command(async)]
+pub fn list_seen_games(db: State<'_, Arc<Database>>) -> Result<Vec<SeenGame>, VaultimeError> {
+    discovery::seen_games(&db)
 }
 
 /// Programs the player said are no game, newest first.

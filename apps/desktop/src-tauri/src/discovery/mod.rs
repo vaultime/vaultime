@@ -47,14 +47,72 @@ use serde::{Deserialize, Serialize};
 use crate::assets::{self, AssetManager};
 use crate::constants::{
     EXECUTABLE_SCAN_DEPTH, LAUNCHER_IDS_BACKFILL_SETTING, LAUNCHER_IDS_BACKFILL_VERSION,
-    PROGRAM_LOOKUP_THREADS_MAX, SHIPPING_BONUS_BYTES, STEAM_SOURCE, TITLE_MATCH_BONUS_BYTES,
-    TITLE_WORD_MIN_CHARS, TOP_LEVEL_BONUS_BYTES,
+    PROGRAM_LOOKUP_THREADS_MAX, SEEN_RUNNING_MIN, SHIPPING_BONUS_BYTES, STEAM_SOURCE,
+    TITLE_MATCH_BONUS_BYTES, TITLE_WORD_MIN_CHARS, TOP_LEVEL_BONUS_BYTES,
 };
 use crate::db::connection::Database;
 use crate::db::models::{CreateGame, Game};
-use crate::db::repo::{games, settings};
+use crate::db::repo::{games, seen, settings};
 use crate::error::Result;
 use crate::platform::process::path_key;
+
+/// A program from the game folders that ran in front long enough, as a
+/// candidate Discover offers, with how long it had the foreground.
+#[derive(Debug, Clone, Serialize)]
+pub struct SeenGame {
+    #[serde(flatten)]
+    pub candidate: DiscoveredGame,
+    pub front_seconds: i64,
+}
+
+/// The programs seen running that Discover offers, the last seen first. One
+/// that became a game of the library, or is gone from a game folder that is
+/// there, is forgotten.
+pub fn seen_games(db: &Database) -> Result<Vec<SeenGame>> {
+    seen_games_under(db, &scanner::default_scan_paths())
+}
+
+/// `seen_games` with the game folders that are there now. A program missing
+/// from one of them is gone, one outside them waits for its drive.
+fn seen_games_under(db: &Database, folders: &[String]) -> Result<Vec<SeenGame>> {
+    let folders: Vec<String> = folders.iter().map(|folder| path_key(folder)).collect();
+    let existing = library_executables(db)?;
+    let min = i64::try_from(SEEN_RUNNING_MIN.as_secs()).unwrap_or(i64::MAX);
+    let mut candidates = Vec::new();
+    let mut front = Vec::new();
+    for program in seen::list(db, min)? {
+        let path = Path::new(&program.path);
+        let candidate = DiscoveredGame::new(
+            &existing,
+            program.title,
+            path,
+            path.parent()
+                .map(|parent| parent.to_string_lossy().into_owned()),
+            "folder_scan",
+            None,
+        );
+        if !candidate.already_added && path.is_file() {
+            candidates.push(candidate);
+            front.push(program.front_seconds);
+            continue;
+        }
+        let key = path_key(&program.path);
+        let drive_there = folders
+            .iter()
+            .any(|folder| Path::new(&key).starts_with(folder));
+        if candidate.already_added || drive_there {
+            seen::forget(db, &program.path)?;
+        }
+    }
+    Ok(mark_same_games(db, candidates)?
+        .into_iter()
+        .zip(front)
+        .map(|(candidate, front_seconds)| SeenGame {
+            candidate,
+            front_seconds,
+        })
+        .collect())
+}
 
 /// A game candidate found during discovery. The user picks which ones to import.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -479,6 +537,55 @@ fn is_executable(path: &Path) -> bool {
 mod tests {
     use super::*;
     use crate::db::models::CreateGame;
+
+    #[test]
+    fn offers_the_programs_seen_running_that_are_no_game_yet() {
+        let db = Database::open_in_memory().unwrap();
+        let folder = std::env::temp_dir().join(format!("vaultime-seen-{}", uuid::Uuid::new_v4()));
+        let program = |name: &str| {
+            let path = folder.join(name).join(format!("{name}.exe"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"MZ").unwrap();
+            path.to_string_lossy().into_owned()
+        };
+        let (tunic, added, gone) = (program("Tunic"), program("Hades"), folder.join("Gone.exe"));
+        let gone = gone.to_string_lossy().into_owned();
+        let minutes = i64::try_from(SEEN_RUNNING_MIN.as_secs()).unwrap();
+        for (path, title) in [(&tunic, "Tunic"), (&added, "Hades"), (&gone, "Gone")] {
+            seen::add_front_time(&db, path, title, minutes).unwrap();
+        }
+        games::create_game(
+            &db,
+            &CreateGame {
+                title: "Hades".into(),
+                executable_path: Some(added.clone()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+
+        let root = folder.to_string_lossy().into_owned();
+        let offered = seen_games_under(&db, std::slice::from_ref(&root)).unwrap();
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].candidate.executable_path, tunic);
+        assert_eq!(offered[0].front_seconds, minutes);
+        assert_eq!(
+            seen::list(&db, 0).unwrap().len(),
+            1,
+            "the added and the gone are forgotten"
+        );
+        std::fs::remove_dir_all(folder).ok();
+    }
+
+    #[test]
+    fn a_program_on_a_drive_that_is_away_waits() {
+        let db = Database::open_in_memory().unwrap();
+        let minutes = i64::try_from(SEEN_RUNNING_MIN.as_secs()).unwrap();
+        seen::add_front_time(&db, "X:/Games/Tunic/Tunic.exe", "Tunic", minutes).unwrap();
+        assert!(seen_games_under(&db, &[]).unwrap().is_empty());
+        assert_eq!(seen::list(&db, 0).unwrap().len(), 1, "kept with its time");
+    }
 
     #[test]
     fn games_learn_their_launcher_id_from_a_scan() {
