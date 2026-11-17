@@ -11,8 +11,10 @@ gitignored `PLAN.md`. Read it first when it exists, and never commit it.
 
 Vaultime is a local-first desktop app that tracks PC game playtime across
 launchers and standalone games. It should feel like a polished game library
-with trustworthy session history. Remote backup is an optional invite-only
-service that runs on our own VPS.
+with trustworthy session history. Cloud backup is optional and runs on a
+Vaultime server that players set up themselves, on a rented server or a NAS.
+The project runs no cloud service. Its VPS only hosts the website and the
+downloads.
 
 ## Stack
 
@@ -20,7 +22,7 @@ service that runs on our own VPS.
 - Core: Rust, edition 2024
 - Frontend: React, TypeScript, Tailwind CSS, shadcn/ui on Base UI
 - Local storage: SQLite through rusqlite (bundled)
-- Cloud API: Rust, Axum and PostgreSQL, self-hosted
+- Cloud server: Rust, Axum and PostgreSQL, run by players with Docker Compose
 
 ## Platforms
 
@@ -37,15 +39,15 @@ service that runs on our own VPS.
 
 ```text
 apps/desktop/     Tauri app, React in src/, Rust in src-tauri/
-apps/api/         Self-hosted cloud backup API
-deploy/vps/       Server install script, systemd unit and admin tools
+apps/api/         Cloud backup server that players run, with its Dockerfile
+deploy/server/    Docker Compose setup of that server, for players
+deploy/vps/       Install script of the website and downloads on our VPS
 docs/             Legal pages, landing page and documentation (docs/site)
 packaging/linux/  Linux build image, AppStream metadata and package smoke test
 packaging/aur/    PKGBUILD of the vaultime-bin AUR package, made from the deb
 packaging/winget/ winget manifests of the latest release
-scripts/          Dev helpers: Linux checks, packaging, cloud round trip, API and
-                  site deploy, release upload, logo, UI screenshots, social
-                  preview
+scripts/          Dev helpers: Linux checks, packaging, cloud round trip, site
+                  deploy, release upload, logo, UI screenshots, social preview
 assets/           Brand assets, the README screenshots and the social preview
 ```
 
@@ -81,9 +83,12 @@ From a Windows machine, with Docker:
 - `bash scripts/linux-check.sh` runs the Linux CI checks for both crates.
 - `bash scripts/linux-package.sh` builds the Linux packages on Ubuntu 22.04
   and installs and starts them on Debian, Ubuntu, Fedora, Arch and openSUSE.
-- `bash scripts/cloud-e2e.sh` runs the API with PostgreSQL in Docker and a
-  cloud backup round trip of the desktop core against it. Run it after
-  changes to the backup format or the backup API.
+- `bash scripts/cloud-e2e.sh` builds the server image, runs it with
+  PostgreSQL in Docker and a cloud backup round trip of the desktop core
+  against it. Run it after changes to the backup format or the backup API.
+- `docker build -t vaultime-server apps/api` builds the server image.
+  `.github/workflows/server-image.yml` publishes it to GHCR for x86 and ARM
+  on a release tag, or as `edge` when run by hand.
 - `bash scripts/aur-check.sh` builds the AUR package in Arch Linux, writes
   its `.SRCINFO`, installs it and checks its libraries. The package names
   the AUR in `/usr/lib/vaultime/package-manager`, so the app leaves updates
@@ -110,6 +115,9 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 ## Product rules
 
 - The app stays fully usable offline. Cloud is an extra, never a dependency.
+- Silent in the background. No notifications, toasts, reminders or windows
+  that open by themselves. Vaultime shows things only when the player opens
+  it. Only a database that does not open stops it with a message.
 - Tracking logic lives in Rust. The frontend only presents data.
 - Play history is event-sourced. Never rely on a single mutable total.
 - Track and show runtime, active playtime and idle time separately.
@@ -119,8 +127,13 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   or `Manual` for changes the player made. A correction is an event with the
   old values and a reason, never an overwrite without a trace. Reserve
   `Verified` for server-backed validation.
-- No paywalls, subscriptions, tiers or billing. Cloud access is invite-only
-  and the same for every account. Server limits exist only to stop abuse.
+- No paywalls, subscriptions, tiers or billing. The project runs no cloud
+  service. A server a player runs treats every account the same, and its
+  limits only keep one account from filling it. Its operator opens sign-ups
+  with `VAULTIME_OPEN_SIGNUPS`. There are no invites, roles or admins.
+- The app reaches a cloud server only through the core, over https or over
+  plain http to a server on the same PC, so the window's content security
+  policy names no outside address.
 
 ## Domain
 
@@ -190,8 +203,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   session.
 - Every schema change is a new migration. Never edit a shipped migration.
 - The API migrations 0001 to 0004 carry no SPDX lines and never change,
-  because the live database recorded their checksums. New migrations carry
-  the lines.
+  because databases recorded their checksums. New migrations carry the
+  lines.
 - Keep enough metadata to recalculate totals when tracking rules change.
 
 ## Tracking
@@ -310,8 +323,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   `CHANGELOG.md` entry comes last. Re-create it when fixes come in. Push
   `main` and wait for CI before the tag.
 - Ask the maintainer before every `v*` tag push. A tag publishes the update
-  to every installed app, and a ruleset keeps `v*` tags from being moved or
-  deleted.
+  to every installed app and the server image, and a ruleset keeps `v*` tags
+  from being moved or deleted.
 - Never commit generated files such as `__pycache__`, build output or `.env`.
 - Never commit anything private: passwords, keys, tokens, server IPs or
   personal data. Secrets go into GitHub Actions secrets or local files outside
