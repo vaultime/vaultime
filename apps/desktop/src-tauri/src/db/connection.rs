@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use log::warn;
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::constants::{DATABASE_BUSY_TIMEOUT, WAL_SIZE_LIMIT_BYTES};
 use crate::db::repo::{busy, is_busy};
@@ -88,6 +88,26 @@ impl Database {
     /// The database file, none for a database in memory.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// A read-only connection to the database file, for reads beside the
+    /// app's own connection. None for a database in memory.
+    pub fn reader(&self) -> Result<Option<Connection>> {
+        let Some(path) = &self.path else {
+            return Ok(None);
+        };
+        let failed = |error: rusqlite::Error| {
+            VaultimeError::Database(format!("failed to open a reader: {error}"))
+        };
+        let conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX
+                | OpenFlags::SQLITE_OPEN_URI,
+        )
+        .map_err(failed)?;
+        conn.busy_timeout(DATABASE_BUSY_TIMEOUT).map_err(failed)?;
+        Ok(Some(conn))
     }
 
     pub fn with_conn<F, T>(&self, f: F) -> Result<T>

@@ -3,11 +3,16 @@
 
 //! Queries for the `sessions` table. Every write also appends a session event.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, PoisonError};
+
 use log::warn;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::json;
 
-use crate::constants::CHECKPOINT_PIN_INTERVAL_SECS;
+use crate::constants::{
+    CHAIN_CHECK_THREADS_MAX, CHAIN_CHECKS_PER_THREAD_MIN, CHECKPOINT_PIN_INTERVAL_SECS,
+};
 use crate::db::connection::Database;
 use crate::db::models::Session;
 use crate::db::repo::map_db;
@@ -612,6 +617,27 @@ pub fn list_sessions_for_game(db: &Database, game_id: &str) -> Result<Vec<Sessio
 
 /// Newest first.
 pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
+    Ok(list_sessions_checked(db, Checks::All)?.0)
+}
+
+/// What a listing does with closed sessions whose check it does not remember.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Checks {
+    /// Checks their chains.
+    All,
+    /// Leaves them unchecked, with their stored status, for a quick first look.
+    Remembered,
+}
+
+/// Every session, newest first, with the ids of those whose chain is not
+/// checked yet, which only `Checks::Remembered` leaves. A session whose check
+/// fails shows as Suspicious.
+pub fn list_sessions_checked(db: &Database, checks: Checks) -> Result<(Vec<Session>, Vec<String>)> {
+    // One full listing at a time, so a second one waits for the checks of
+    // the first and takes them as remembered.
+    static FULL_LISTING: Mutex<()> = Mutex::new(());
+    let _full = (checks == Checks::All)
+        .then(|| FULL_LISTING.lock().unwrap_or_else(PoisonError::into_inner));
     let ids: Vec<String> = db.with_conn(|conn| {
         let mut stmt = conn
             .prepare("SELECT id FROM sessions ORDER BY started_at_wall DESC")
@@ -619,33 +645,162 @@ pub fn list_all_sessions(db: &Database) -> Result<Vec<Session>> {
         let rows = stmt.query_map([], |row| row.get(0)).map_err(map_db)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
     })?;
-    // Each session is read and checked under a lock of its own, so the first
-    // listing after a start, which checks every chain, never holds up the
-    // tracker for long, and a write in between never meets a stale row. A
-    // session removed in between is left out.
+    let generation = integrity::check_generation();
+    // Each session is read under a lock of its own, so the first listing
+    // after a start never holds up the tracker for long, and a write in
+    // between never meets a stale row. A session removed in between is left
+    // out. An open session's chain grows with every checkpoint, so it is
+    // checked every time.
     let mut listed = Vec::with_capacity(ids.len());
+    let mut unchecked = Vec::new();
     for id in ids {
-        let checked = db.with_conn(|conn| {
-            let session = stored_session(conn, &id).optional().map_err(map_db)?;
-            session
-                .map(|session| {
-                    integrity::validate_session_history_cached(conn, &session)
-                        .map(|(reason, checked_now)| (session, reason, checked_now))
-                })
-                .transpose()
+        let read = db.with_conn(|conn| {
+            let Some(session) = stored_session(conn, &id).optional().map_err(map_db)? else {
+                return Ok(None);
+            };
+            let reason = if session.ended_at_wall.is_none() {
+                Some(integrity::validate_session_history(conn, &session)?)
+            } else {
+                integrity::remembered_check(conn, &session)?
+            };
+            Ok(Some((session, reason)))
         })?;
-        let Some((mut session, reason, checked_now)) = checked else {
+        let Some((mut session, reason)) = read else {
             continue;
         };
-        if let Some(reason) = reason {
-            if checked_now {
-                warn!("session {} failed validation: {reason}", session.id);
+        match reason {
+            Some(reason) => {
+                let checked_now = session.ended_at_wall.is_none();
+                show_check(&mut session, reason, checked_now);
             }
-            session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+            None => unchecked.push(listed.len()),
         }
         listed.push(session);
     }
-    Ok(listed)
+    if checks == Checks::Remembered || unchecked.is_empty() {
+        let unchecked = unchecked
+            .iter()
+            .map(|&index| listed[index].id.clone())
+            .collect();
+        return Ok((listed, unchecked));
+    }
+
+    let ids: Vec<&str> = unchecked
+        .iter()
+        .map(|&index| listed[index].id.as_str())
+        .collect();
+    let mut checked = check_chains(db, &ids, generation)?;
+    let mut gone = Vec::new();
+    for index in unchecked {
+        match checked.remove(&listed[index].id) {
+            Some(Some((mut session, reason))) => {
+                show_check(&mut session, reason, true);
+                listed[index] = session;
+            }
+            Some(None) => gone.push(index),
+            None => {}
+        }
+    }
+    for index in gone.into_iter().rev() {
+        listed.remove(index);
+    }
+    Ok((listed, Vec::new()))
+}
+
+/// Shows a failed check as Suspicious, and logs why when it was checked just now.
+fn show_check(session: &mut Session, reason: Option<String>, checked_now: bool) {
+    if let Some(reason) = reason {
+        if checked_now {
+            warn!("session {} failed validation: {reason}", session.id);
+        }
+        session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+    }
+}
+
+/// A session as checked, or `None` when it was removed meanwhile.
+type CheckedSession = Option<(Session, Option<String>)>;
+
+/// Checks the chains of the sessions `ids` and remembers the results. On a
+/// database file they are shared out among read-only connections, which
+/// read the history while the app goes on writing, each session with its
+/// chain in one read transaction.
+fn check_chains(
+    db: &Database,
+    ids: &[&str],
+    generation: u64,
+) -> Result<HashMap<String, CheckedSession>> {
+    let check = |conn: &Connection, id: &str| -> Result<CheckedSession> {
+        let Some(session) = stored_session(conn, id).optional().map_err(map_db)? else {
+            return Ok(None);
+        };
+        let reason = integrity::check_and_remember(conn, &session, generation)?;
+        Ok(Some((session, reason)))
+    };
+    let mut checked = HashMap::with_capacity(ids.len());
+    // The first on the app's connection, which works out the state of the
+    // ledgers once for all readers.
+    let Some((first, rest)) = ids.split_first() else {
+        return Ok(checked);
+    };
+    checked.insert(
+        (*first).to_owned(),
+        db.with_conn(|conn| check(conn, first))?,
+    );
+
+    let threads = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .min(CHAIN_CHECK_THREADS_MAX)
+        .min(rest.len().div_ceil(CHAIN_CHECKS_PER_THREAD_MIN));
+    // Without readers, a database in memory or one that fails to open, the
+    // app's connection checks the rest.
+    let readers: Option<Vec<Connection>> = if threads > 1 {
+        (0..threads)
+            .map(|_| {
+                db.reader()
+                    .inspect_err(|error| warn!("chains checked one at a time: {error}"))
+                    .ok()
+                    .flatten()
+            })
+            .collect()
+    } else {
+        None
+    };
+    let Some(readers) = readers else {
+        for id in rest {
+            checked.insert((*id).to_owned(), db.with_conn(|conn| check(conn, id))?);
+        }
+        return Ok(checked);
+    };
+    let parts = std::thread::scope(|scope| {
+        let workers: Vec<_> = readers
+            .into_iter()
+            .enumerate()
+            .map(|(part, conn)| {
+                scope.spawn(move || -> Result<Vec<(String, CheckedSession)>> {
+                    rest.iter()
+                        .skip(part)
+                        .step_by(threads)
+                        .map(|id| {
+                            let read = conn.unchecked_transaction().map_err(map_db)?;
+                            let session = check(&read, id)?;
+                            drop(read);
+                            Ok(((*id).to_owned(), session))
+                        })
+                        .collect()
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| {
+                worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    checked.extend(parts.into_iter().flatten());
+    Ok(checked)
 }
 
 #[cfg(test)]
@@ -964,6 +1119,85 @@ mod tests {
 
         let all = list_all_sessions(&db).unwrap();
         assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn a_quick_listing_leaves_unchecked_chains_and_a_full_one_checks_them_on_readers() {
+        let path =
+            std::env::temp_dir().join(format!("vaultime-checks-{}.db", uuid::Uuid::new_v4()));
+        let db = Database::open(&path).unwrap();
+        devices::ensure_device(&db, DEV_ID, "linux", "0.1.0").unwrap();
+        let (game_id, other) = (seed_game(&db), seed_game(&db));
+        // Enough for readers of their own wherever two threads run.
+        let closed: Vec<String> = (0..=2 * CHAIN_CHECKS_PER_THREAD_MIN)
+            .map(|_| {
+                let session = create_session(&db, &game_id, DEV_ID).unwrap();
+                end_session(&db, &session.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL).unwrap();
+                session.id
+            })
+            .collect();
+        let running = create_session(&db, &game_id, DEV_ID).unwrap();
+        let moved = &closed[CHAIN_CHECKS_PER_THREAD_MIN];
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE sessions SET game_id = ?1 WHERE id = ?2",
+                params![other, moved],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+
+        // Nothing checked these closed sessions yet, the running one is
+        // checked every time.
+        let (quick, unchecked) = list_sessions_checked(&db, Checks::Remembered).unwrap();
+        assert_eq!(quick.len(), closed.len() + 1);
+        assert_eq!(unchecked.len(), closed.len());
+        assert!(!unchecked.contains(&running.id));
+
+        let (full, unchecked) = list_sessions_checked(&db, Checks::All).unwrap();
+        assert!(unchecked.is_empty());
+        assert_eq!(full.len(), closed.len() + 1);
+        let status = |listed: &[Session], id: &str| {
+            listed
+                .iter()
+                .find(|session| session.id == id)
+                .unwrap()
+                .integrity_status
+                .clone()
+        };
+        assert_eq!(status(&full, moved), integrity::STATUS_SUSPICIOUS);
+        assert_eq!(status(&full, &closed[0]), integrity::STATUS_LOCAL);
+        // Other tests forget remembered checks at any time, so a check comes
+        // back remembered or not at all, never with another result.
+        let (again, unchecked) = list_sessions_checked(&db, Checks::Remembered).unwrap();
+        for session in again
+            .iter()
+            .filter(|session| !unchecked.contains(&session.id))
+        {
+            assert_eq!(session.integrity_status, status(&full, &session.id));
+        }
+
+        drop(db);
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
+    }
+
+    #[test]
+    fn a_check_from_before_the_checks_were_forgotten_is_not_remembered() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = create_session(&db, &game_id, DEV_ID).unwrap();
+        let closed =
+            end_session(&db, &session.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL).unwrap();
+        let before = integrity::check_generation();
+        integrity::forget_checks();
+        db.with_conn(|conn| {
+            integrity::check_and_remember(conn, &closed, before)?;
+            assert_eq!(integrity::remembered_check(conn, &closed)?, None);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

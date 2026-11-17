@@ -488,26 +488,73 @@ struct CheckedState {
     row: String,
 }
 
-type CheckCache = Mutex<HashMap<String, (CheckedState, Option<String>)>>;
-
-fn check_cache() -> &'static CheckCache {
-    static CACHE: OnceLock<CheckCache> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+/// The results of checks of closed sessions, by session. Forgetting them
+/// starts a new generation, so a check that read the history before cannot
+/// bring its result back.
+#[derive(Default)]
+struct CheckCache {
+    generation: u64,
+    checks: HashMap<String, (CheckedState, Option<String>)>,
 }
 
-/// Validates a session like `validate_session_history`, but reuses the result
-/// for a closed session whose chain tail and row did not change since it was
-/// last checked. Listing every session then stays fast with long histories.
-/// The cache lives in memory, so every start of the app checks each chain in
-/// full again. Returns the reason and whether it was checked just now.
-pub fn validate_session_history_cached(
-    conn: &Connection,
-    session: &Session,
-) -> Result<(Option<String>, bool)> {
+fn check_cache() -> &'static Mutex<CheckCache> {
+    static CACHE: OnceLock<Mutex<CheckCache>> = OnceLock::new();
+    CACHE.get_or_init(Mutex::default)
+}
+
+/// The generation of remembered checks, to read before a check that
+/// `check_and_remember` then remembers.
+pub fn check_generation() -> u64 {
+    check_cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .generation
+}
+
+/// The remembered result of a closed session's check, the reason it failed
+/// or `None` when it passed, as long as its chain tail and row did not
+/// change since. `None` without one, and always for an open session, whose
+/// chain grows with every checkpoint. The results live in memory, so every
+/// start of the app checks each chain in full again.
+pub fn remembered_check(conn: &Connection, session: &Session) -> Result<Option<Option<String>>> {
     if session.ended_at_wall.is_none() {
-        return Ok((validate_session_history(conn, session)?, true));
+        return Ok(None);
     }
     forget_checks_after_outside_writes(conn)?;
+    let state = checked_state(conn, session)?;
+    Ok(check_cache()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .checks
+        .get(&session.id)
+        .filter(|(checked, _)| *checked == state)
+        .map(|(_, reason)| reason.clone()))
+}
+
+/// Validates a session like `validate_session_history` and remembers the
+/// result of a closed one, unless the remembered checks were forgotten since
+/// `generation`. `conn` has to show the same history throughout, as one
+/// read transaction or the app's own connection does.
+pub fn check_and_remember(
+    conn: &Connection,
+    session: &Session,
+    generation: u64,
+) -> Result<Option<String>> {
+    let reason = validate_session_history(conn, session)?;
+    if session.ended_at_wall.is_some() {
+        let state = checked_state(conn, session)?;
+        let mut cache = check_cache().lock().unwrap_or_else(PoisonError::into_inner);
+        if cache.generation == generation {
+            cache
+                .checks
+                .insert(session.id.clone(), (state, reason.clone()));
+        }
+    }
+    Ok(reason)
+}
+
+/// The chain tail and row values a check of `session` is remembered by.
+fn checked_state(conn: &Connection, session: &Session) -> Result<CheckedState> {
     // The newest event, found through the index. A check passes only when
     // the sequence runs from 1 without gaps, so its number is the count.
     let (events, last_hash) = conn
@@ -525,7 +572,7 @@ pub fn validate_session_history_cached(
             VaultimeError::Integrity(format!("failed to read the event chain: {error}"))
         })?
         .unwrap_or((0, None));
-    let state = CheckedState {
+    Ok(CheckedState {
         events,
         last_hash,
         row: format!(
@@ -538,22 +585,7 @@ pub fn validate_session_history_cached(
             session.integrity_status,
             session.closed_cleanly
         ),
-    };
-    let cache = check_cache();
-    if let Some((checked, reason)) = cache
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(&session.id)
-        && *checked == state
-    {
-        return Ok((reason.clone(), false));
-    }
-    let reason = validate_session_history(conn, session)?;
-    cache
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(session.id.clone(), (state, reason.clone()));
-    Ok((reason, true))
+    })
 }
 
 /// Forgets every remembered check, for when the app itself replaced the
@@ -561,10 +593,11 @@ pub fn validate_session_history_cached(
 /// forgets them all too: its `trusted` and `adopted` entries can change the
 /// result for sessions that were here before.
 pub fn forget_checks() {
-    check_cache()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clear();
+    {
+        let mut cache = check_cache().lock().unwrap_or_else(PoisonError::into_inner);
+        cache.checks.clear();
+        cache.generation += 1;
+    }
     ledger::forget();
 }
 

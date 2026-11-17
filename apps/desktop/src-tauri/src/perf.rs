@@ -601,6 +601,11 @@ fn large_history() {
         let report = db.with_conn(integrity::ledger::report).unwrap();
         format!("{} sessions covered", report.covered_sessions)
     });
+    timed("list sessions, quick, nothing checked", &mut || {
+        let (listed, unchecked) =
+            sessions::list_sessions_checked(&db, sessions::Checks::Remembered).unwrap();
+        format!("{} sessions, {} unchecked", listed.len(), unchecked.len())
+    });
     let mut listed = Vec::new();
     timed("list sessions, cold", &mut || {
         listed = sessions::list_all_sessions(&db).unwrap();
