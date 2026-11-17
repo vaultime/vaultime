@@ -25,6 +25,7 @@ mod protobuf;
 pub mod registry;
 pub mod scanner;
 pub mod steam;
+pub mod steam_screenshots;
 #[cfg(windows)]
 mod ubisoft;
 mod vdf;
