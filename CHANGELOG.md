@@ -9,12 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Interface
 
+- **A calmer look.** The default ground is a quiet violet grey a step above black, so cover art carries the color, and the rail, the page and the live bar sit as panels on a darker window. A ground you picked stays.
+- **Home and All games.** Home leads with the game you play now or played last, your last days in numbers and the games you played lately. All games holds the grid. The rail lists Home, Journal and Stats, your library and the five games you played last, with Cloud and Settings at its foot.
+- **Search at the top.** A bar over every page holds back, forward and the search, which opens the command palette as Ctrl+K does.
+- **Launchers in the library.** The rail lists each launcher with its number of games, and a launcher's page shows its games, how long you played through it and the game with most of that time. A game with copies from two launchers counts on each with the time its copy recorded, and the time Steam counted before Vaultime is said apart. The command palette finds launchers too.
+- **Groups and a new sort.** All games groups its games by launcher, last played, status or PC, and sorts by when games were added too. It remembers both.
+- **Counts on the status filter.** Each status in All games shows how many games have it.
+- **The live bar in the game's colors.** The bar at the bottom takes a wash of the running game's colors.
+- **Type and controls.** Titles are set a little wider and firmer, labels in sentence case and numbers with even figures, and buttons and choices share one size.
 - **Shorter times.** Durations read 4h 05m and 142h everywhere, the tray included.
 
 ### Fixes
 
-- **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Recent order follows. While a game runs, the game list shows when you started it, "Since 20:15".
+- **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Last played order follows. While a game runs, the game list shows when you started it, "Since 20:15".
 - **No lost window on GNOME.** On a desktop that shows no tray icons, like GNOME without an AppIndicator extension, closing the window now minimizes Vaultime instead of hiding it where no icon could bring it back. It keeps counting either way, and Settings says which your desktop does.
+- **Legacy Games and Big Fish by name.** Games found through these two launchers named no launcher and read as added by hand.
 - **Wednesday fits in the journal.** In a window of 1280 pixels and wider, the journal's day names no longer run into the strip of play beside them.
 
 ## [0.6.0] - 2026-10-20
