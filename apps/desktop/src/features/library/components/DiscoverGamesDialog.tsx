@@ -18,31 +18,17 @@ import { seenGamesChanged } from "@/features/library/use-seen-games";
 import { MINUTE_MS, SECOND_MS, SEEN_RUNNING_MIN_MS } from "@/lib/constants";
 import { foundGamesText, offeredPaths } from "@/lib/found-games";
 import { compareTitles } from "@/lib/game-sort";
-import { whereFrom } from "@/lib/links";
+import { FOLDER_SCAN, launcherName, whereFrom } from "@/lib/links";
 import * as api from "@/lib/tauri";
 import { formatHoursMinutes } from "@/lib/time";
 import type { DiscoveredGame, NewGames, SeenGame } from "@/lib/types";
 import { cn, describeError } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
-const SOURCE_LABELS: Record<string, string> = {
-  steam: "Steam",
-  epic: "Epic Games",
-  battlenet: "Battle.net",
-  riot: "Riot",
-  hoyoplay: "HoYoPlay",
-  ubisoft: "Ubisoft Connect",
-  ea: "EA app",
-  rockstar: "Rockstar",
-  xbox: "Xbox",
-  amazon: "Amazon Games",
-  itch: "itch.io",
-  wargaming: "Wargaming Game Center",
-  gog: "GOG",
-  heroic: "Heroic",
-  lutris: "Lutris",
-  folder_scan: "Folder",
-};
+/** Where a found game comes from, by the source the core reports. */
+function sourceName(source: string): string {
+  return source === FOLDER_SCAN ? "Folder" : (launcherName(source) ?? source);
+}
 
 /** Lowercase path with forward slashes and no trailing one, for comparing paths. */
 function pathKey(path: string): string {
@@ -148,7 +134,7 @@ export function DiscoverGamesDialog({
       const byPath = new Map<string, DiscoveredGame>();
       for (const game of [...steamGames, ...launcherGames, ...folderGames]) {
         const insideLauncherFolder =
-          game.source === "folder_scan" &&
+          game.source === FOLDER_SCAN &&
           launcherFolders.some((folder) => pathKey(game.executable_path).startsWith(`${folder}/`));
         // Keyed as paths compare, since Steam may write its folder in other letters.
         const key = pathKey(game.executable_path);
@@ -161,7 +147,7 @@ export function DiscoverGamesDialog({
       setSeen(keptSeen);
       const seenPaths = new Set(keptSeen.map((game) => pathKey(game.executable_path)));
       for (const [path, game] of byPath) {
-        if (game.source === "folder_scan" && seenPaths.has(pathKey(path))) byPath.delete(path);
+        if (game.source === FOLDER_SCAN && seenPaths.has(pathKey(path))) byPath.delete(path);
       }
       const merged = [...byPath.values()].sort((a, b) =>
         a.already_added !== b.already_added ? (a.already_added ? 1 : -1) : compareTitles(a.title, b.title),
@@ -176,7 +162,7 @@ export function DiscoverGamesDialog({
       setSelected(
         new Set(
           merged
-            .filter((game) => !game.already_added && game.source !== "folder_scan")
+            .filter((game) => !game.already_added && game.source !== FOLDER_SCAN)
             .map((game) => game.executable_path),
         ),
       );
@@ -268,163 +254,166 @@ export function DiscoverGamesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      {/* The body scrolls between a fixed header and footer, so Add stays in view in small windows. */}
+      <DialogContent className="flex flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{foundText?.title ?? "Discover games"}</DialogTitle>
           <DialogDescription>
             {foundText?.description ??
-              "Reads what Steam, Xbox, Epic, GOG, EA, Ubisoft, Battle.net, Riot, Rockstar, Amazon, itch.io and other launchers have installed, and looks through the usual install folders on every drive."}
+              "Finds the games your launchers installed and looks through the usual game folders on every drive."}
           </DialogDescription>
         </DialogHeader>
 
-        {error && <Notice tone="warning">{error}</Notice>}
+        <div className="-mx-6 flex min-h-0 flex-col gap-5 overflow-y-auto px-6">
+          {error && <Notice tone="warning">{error}</Notice>}
 
-        {seen.length > 0 && (
-          <section aria-label="Seen running">
-            <h3 className="label-small">Seen running</h3>
-            <p className="mt-1 text-[13px] text-faint">
-              Programs from your game folders that ran in front for at least{" "}
-              {plural(SEEN_RUNNING_MIN_MS / MINUTE_MS, "minute")}. Vaultime notes no other program.
-            </p>
-            <ul className="mt-2 border-y border-rule">
-              {seen.map((game) => (
-                <li key={game.executable_path} className="flex items-center gap-3 border-b border-rule py-2.5 last:border-b-0">
-                  <span className="min-w-0 flex-1 px-1">
-                    <span className="flex items-baseline gap-2">
-                      <span className="truncate text-sm text-text">{game.title}</span>
-                      <span className="label-small shrink-0 tabular-nums">
-                        Ran {formatHoursMinutes(game.front_seconds * SECOND_MS)}
+          {seen.length > 0 && (
+            <section aria-label="Seen running">
+              <h3 className="label-small">Seen running</h3>
+              <p className="mt-1 text-[13px] text-faint">
+                Programs from your game folders that ran in front for at least{" "}
+                {plural(SEEN_RUNNING_MIN_MS / MINUTE_MS, "minute")}. Vaultime notes no other program.
+              </p>
+              <ul className="mt-2 border-y border-rule">
+                {seen.map((game) => (
+                  <li key={game.executable_path} className="flex items-center gap-3 border-b border-rule py-2.5 last:border-b-0">
+                    <span className="min-w-0 flex-1 px-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className="truncate text-sm text-text">{game.title}</span>
+                        <span className="label-small shrink-0 tabular-nums">
+                          Ran {formatHoursMinutes(game.front_seconds * SECOND_MS)}
+                        </span>
                       </span>
+                      <span className="block truncate font-mono text-[11px] text-faint">{game.executable_path}</span>
+                      {game.same_game && (
+                        <span className="block truncate text-[13px] text-soft">
+                          Adds it as another copy of {game.same_game.title} {whereFrom(game.same_game.launcher_source)}
+                        </span>
+                      )}
                     </span>
-                    <span className="block truncate font-mono text-[11px] text-faint">{game.executable_path}</span>
-                    {game.same_game && (
-                      <span className="block truncate text-[13px] text-soft">
-                        Adds it as another copy of {game.same_game.title} {whereFrom(game.same_game.launcher_source)}
-                      </span>
-                    )}
-                  </span>
-                  <Button variant="outline" size="sm" onClick={() => void addSeen(game)}>
-                    Add
-                  </Button>
+                    <Button variant="outline" size="sm" onClick={() => void addSeen(game)}>
+                      Add
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Never suggest it again and never track it."
+                      onClick={() => void ignoreSeen(game)}
+                    >
+                      Not a game
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {!scanned ? (
+            <div className="py-2">
+              <Button onClick={handleScan} disabled={scanning}>
+                {scanning ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                {scanning ? "Scanning" : "Start the scan"}
+              </Button>
+            </div>
+          ) : results.length === 0 ? (
+            <p className="text-sm text-faint">No games found. You can still add any game by hand.</p>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between pb-2">
+                <p className="text-sm text-faint">
+                  {showingFound ? plural(results.length, "new game") : `${plural(results.length, "game")} found`}
+                  {newCount < results.length && `, ${results.length - newCount} already in your library`}
+                </p>
+                <div className="flex gap-1">
                   <Button
                     variant="ghost"
                     size="sm"
-                    title="Never suggest it again and never track it."
-                    onClick={() => void ignoreSeen(game)}
+                    disabled={newCount === 0}
+                    onClick={() =>
+                      setSelected(
+                        new Set(results.filter((game) => !game.already_added).map((game) => game.executable_path)),
+                      )
+                    }
                   >
-                    Not a game
+                    Select all
                   </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {!scanned ? (
-          <div className="py-2">
-            <Button onClick={handleScan} disabled={scanning}>
-              {scanning ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-              {scanning ? "Scanning" : "Start the scan"}
-            </Button>
-          </div>
-        ) : results.length === 0 ? (
-          <p className="text-sm text-faint">No games found. You can still add any game by hand.</p>
-        ) : (
-          <div>
-            <div className="flex items-center justify-between pb-2">
-              <p className="text-sm text-faint">
-                {showingFound ? plural(results.length, "new game") : `${plural(results.length, "game")} found`}
-                {newCount < results.length && `, ${results.length - newCount} already in your library`}
-              </p>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={newCount === 0}
-                  onClick={() =>
-                    setSelected(
-                      new Set(results.filter((game) => !game.already_added).map((game) => game.executable_path)),
-                    )
-                  }
-                >
-                  Select all
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-                  Select none
-                </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                    Select none
+                  </Button>
+                </div>
               </div>
-            </div>
 
-            <ul className="max-h-[min(20rem,calc(100dvh-21rem))] overflow-y-auto border-y border-rule">
-              {results.map((game) => {
-                const isSelected = selected.has(game.executable_path);
-                const added = game.already_added;
-                const same = !added ? game.same_game : null;
-                return (
-                  <li
-                    key={game.executable_path}
-                    className="group flex flex-wrap items-center border-b border-rule transition-colors last:border-b-0 hover:bg-raised/60"
-                  >
-                    <button
-                      type="button"
-                      aria-pressed={added || isSelected}
-                      disabled={added}
-                      onClick={() => toggle(game.executable_path)}
-                      className="flex min-w-0 flex-1 items-center gap-3 px-1 py-2.5 text-left focus-visible:bg-raised focus-visible:outline-none disabled:opacity-50"
+              <ul className="border-y border-rule">
+                {results.map((game) => {
+                  const isSelected = selected.has(game.executable_path);
+                  const added = game.already_added;
+                  const same = !added ? game.same_game : null;
+                  return (
+                    <li
+                      key={game.executable_path}
+                      className="group flex flex-wrap items-center border-b border-rule transition-colors last:border-b-0 hover:bg-raised/60"
                     >
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "flex size-5 shrink-0 items-center justify-center rounded-md border",
-                          added || isSelected ? "border-violet bg-violet text-violet-ink" : "border-hairline",
-                        )}
-                      >
-                        {(added || isSelected) && <Check className="size-3.5" strokeWidth={2.5} />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-baseline gap-2">
-                          <span className="truncate text-sm text-text">{game.title}</span>
-                          <span className="label-small shrink-0">
-                            {added ? "In library" : (SOURCE_LABELS[game.source] ?? game.source)}
-                          </span>
-                        </span>
-                        <span className="block truncate font-mono text-[11px] text-faint">{game.executable_path}</span>
-                      </span>
-                    </button>
-                    {!added && (
                       <button
                         type="button"
-                        onClick={() => void ignore(game)}
-                        title="Not a game. Never suggest it again and never track it."
-                        className="shrink-0 rounded-full px-2.5 py-1 text-xs text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-text focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+                        aria-pressed={added || isSelected}
+                        disabled={added}
+                        onClick={() => toggle(game.executable_path)}
+                        className="flex min-w-0 flex-1 items-center gap-3 px-1 py-2.5 text-left focus-visible:bg-raised focus-visible:outline-none disabled:opacity-50"
                       >
-                        Ignore
-                      </button>
-                    )}
-                    {same && (
-                      <label className="-mt-1.5 flex basis-full cursor-pointer items-center gap-2 pb-2.5 pl-9 text-[13px] text-soft">
-                        <input
-                          type="checkbox"
-                          checked={!apart.has(game.executable_path)}
-                          onChange={() => toggleApart(game.executable_path)}
-                          className="accent-violet"
-                        />
-                        <span className="min-w-0 truncate">
-                          Same game as {same.title} {whereFrom(same.launcher_source)}
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-md border",
+                            added || isSelected ? "border-violet bg-violet text-violet-ink" : "border-hairline",
+                          )}
+                        >
+                          {(added || isSelected) && <Check className="size-3.5" strokeWidth={2.5} />}
                         </span>
-                      </label>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            {showingFound && (
-              <p className="pt-3 text-xs text-faint">
-                Games you leave out are not offered again. Discover in the library still lists everything.
-              </p>
-            )}
-          </div>
-        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline gap-2">
+                            <span className="truncate text-sm text-text">{game.title}</span>
+                            <span className="label-small shrink-0">
+                              {added ? "In library" : sourceName(game.source)}
+                            </span>
+                          </span>
+                          <span className="block truncate font-mono text-[11px] text-faint">{game.executable_path}</span>
+                        </span>
+                      </button>
+                      {!added && (
+                        <button
+                          type="button"
+                          onClick={() => void ignore(game)}
+                          title="Never suggest it again and never track it."
+                          className="shrink-0 rounded-full px-2.5 py-1 text-xs text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-text focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+                        >
+                          Not a game
+                        </button>
+                      )}
+                      {same && (
+                        <label className="-mt-1.5 flex basis-full cursor-pointer items-center gap-2 pb-2.5 pl-9 text-[13px] text-soft">
+                          <input
+                            type="checkbox"
+                            checked={!apart.has(game.executable_path)}
+                            onChange={() => toggleApart(game.executable_path)}
+                            className="accent-violet"
+                          />
+                          <span className="min-w-0 truncate">
+                            Same game as {same.title} {whereFrom(same.launcher_source)}
+                          </span>
+                        </label>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {showingFound && (
+                <p className="pt-3 text-xs text-faint">
+                  Games you leave out are not offered again. Discover in the library still lists everything.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         <DialogFooter>
           <DialogClose render={<Button variant="ghost" />}>{showingFound ? "Not now" : "Cancel"}</DialogClose>

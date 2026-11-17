@@ -85,6 +85,19 @@ describe("programs seen running in Discover", () => {
     expect(screen.getByText("Steam")).toBeTruthy();
   });
 
+  it("names every launcher the core reports and lets a found program go as no game", async () => {
+    const legacy = { ...seen("Hidden Lands"), executable_path: "C:/Legacy Games/Hidden Lands/HiddenLands.exe", source: "legacy" };
+    vi.mocked(api.discoverSteamGames).mockResolvedValue([]);
+    vi.mocked(api.discoverLauncherGames).mockResolvedValue([legacy]);
+    vi.mocked(api.listSeenGames).mockResolvedValue([]);
+    render(<DiscoverGamesDialog open onOpenChange={() => {}} onImported={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start the scan" }));
+    expect(await screen.findByText("Legacy Games")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Not a game" }));
+    await waitFor(() => expect(screen.queryByText("Hidden Lands")).toBeNull());
+    expect(api.ignoreProgram).toHaveBeenCalledWith(legacy.executable_path, "Hidden Lands");
+  });
+
   it("shows nothing of it while none ran", async () => {
     vi.mocked(api.listSeenGames).mockResolvedValue([]);
     render(<DiscoverGamesDialog open onOpenChange={() => {}} onImported={() => {}} />);
