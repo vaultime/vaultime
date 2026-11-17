@@ -186,11 +186,19 @@ export function JournalPage() {
   const [screenshots, setScreenshots] = useState<Map<string, SessionScreenshots>>(() => new Map());
   const startedIds = days.flatMap((day) => day.sessionIds).sort().join(",");
   const showScreenshots = settingValues[SETTING_KEYS.journalScreenshots] !== "false";
+  const [viewing, setViewing] = useState<{ sessionId: string; index: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
     (startedIds && showScreenshots ? api.getSessionScreenshots(startedIds.split(",")) : Promise.resolve([]))
       .then((found) => {
-        if (!cancelled) setScreenshots(new Map(found.map((each) => [each.session_id, each])));
+        if (cancelled) return;
+        setScreenshots(new Map(found.map((each) => [each.session_id, each])));
+        // A viewer whose screenshot went away closes for good, never to open again by itself.
+        setViewing((open) =>
+          open && found.some((each) => each.session_id === open.sessionId && open.index < each.shots.length)
+            ? open
+            : null,
+        );
       })
       .catch(logFailure("loading the week's Steam screenshots"));
     return () => {
@@ -198,7 +206,6 @@ export function JournalPage() {
     };
   }, [startedIds, showScreenshots, stored]);
   const screenshotsOf = useCallback((sessionId: string) => screenshots.get(sessionId), [screenshots]);
-  const [viewing, setViewing] = useState<{ sessionId: string; index: number } | null>(null);
   const openScreenshot = useCallback((sessionId: string, index: number) => setViewing({ sessionId, index }), []);
 
   const earliest = useMemo(
