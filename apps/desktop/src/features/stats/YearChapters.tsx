@@ -188,9 +188,9 @@ function GameChapter({ story, game, animate }: ChapterProps) {
     <>
       <Eyebrow color={summary.tint.ink}>Your game of the year</Eyebrow>
       <Title>{summary.game.title}</Title>
-      <Big value={top.runtimeMs} animate={animate} />
+      <Big value={top.activeMs} animate={animate} />
       <p className="font-prose mt-1 text-[16px] leading-snug text-pretty text-soft">
-        on {countWords(top.days, "day")}, {shareWords(top.share)} of your hours
+        on {countWords(top.days, "day")}, {shareWords(top.share)} of your active play
       </p>
       <Facts
         facts={[
@@ -198,7 +198,7 @@ function GameChapter({ story, game, animate }: ChapterProps) {
           ...(top.longestSessionMs > 0
             ? [["Longest", formatHoursMinutes(top.longestSessionMs)] as [string, string]]
             : []),
-          ["Active", `${Math.round((top.activeMs / top.runtimeMs) * 100)} %`],
+          ["Runtime", formatHoursShort(top.runtimeMs)],
           ["Best month", formatDate(new Date(story.year, top.bestMonth, 1), { month: "long" })],
         ]}
         columns={top.longestSessionMs > 0 ? 3 : 2}
@@ -208,7 +208,7 @@ function GameChapter({ story, game, animate }: ChapterProps) {
 }
 
 function TopChapter({ story, game, cover }: ChapterProps) {
-  const most = story.top[0]?.runtimeMs ?? 1;
+  const most = story.top[0]?.activeMs ?? 1;
   return (
     <>
       <Eyebrow>{chapterTitle("top", story)}</Eyebrow>
@@ -229,13 +229,13 @@ function TopChapter({ story, game, cover }: ChapterProps) {
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="truncate text-[14px] font-medium">{summary.game.title}</span>
                   <span className="shrink-0 text-[13px] text-soft tabular-nums">
-                    {formatHoursShort(entry.runtimeMs)}
+                    {formatHoursShort(entry.activeMs)}
                   </span>
                 </div>
                 <div className="mt-1.5 h-[3px] rounded-full bg-glint/10">
                   <div
                     className="h-full rounded-full"
-                    style={{ width: `${(entry.runtimeMs / most) * 100}%`, background: summary.tint.ink }}
+                    style={{ width: `${(entry.activeMs / most) * 100}%`, background: summary.tint.ink }}
                   />
                 </div>
               </div>
@@ -303,7 +303,7 @@ function WeekChapter({ story, game, cover, animate }: ChapterProps) {
                 className="h-8 w-[22px] rounded-[3px] text-[7px]"
               />
               <span className="min-w-0 flex-1 truncate text-[14px]">{summary.game.title}</span>
-              <span className="shrink-0 text-[13px] text-soft tabular-nums">{formatHoursShort(entry.runtimeMs)}</span>
+              <span className="shrink-0 text-[13px] text-soft tabular-nums">{formatHoursShort(entry.activeMs)}</span>
             </li>
           );
         })}

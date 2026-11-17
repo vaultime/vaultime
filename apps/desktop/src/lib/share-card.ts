@@ -8,6 +8,7 @@
 import { parseOklchList, type Oklch } from "@/lib/color";
 import { DAYS_PER_WEEK, MINUTE_MS, SHARE_CALENDAR_CELL_SHARE, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
 import { markColors, type ArtColor } from "@/lib/game-tint";
+import { mostActiveFirst } from "@/lib/play-totals";
 import type { Phrase } from "@/lib/sentences";
 import { daysSoFar, heatLevel, type YearStats } from "@/lib/stats";
 import type { ThemeMode } from "@/lib/theme";
@@ -93,7 +94,7 @@ export interface ShareChoice {
 
 /** The year's games, the most active first, the order the card names them in. */
 function byActivity(stats: YearStats) {
-  return [...stats.games].sort((a, b) => b.activeMs - a.activeMs || b.runtimeMs - a.runtimeMs);
+  return [...stats.games].sort(mostActiveFirst);
 }
 
 /**

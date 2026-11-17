@@ -50,7 +50,7 @@ export function groupByBucket(totals: PlayTotal[]): Map<string, BucketPlay> {
     buckets.set(total.bucket, bucket);
   }
   for (const bucket of buckets.values()) {
-    bucket.games.sort((a, b) => b.activeMs - a.activeMs || b.runtimeMs - a.runtimeMs);
+    bucket.games.sort(mostActiveFirst);
   }
   return buckets;
 }
@@ -63,6 +63,11 @@ export function runtimeByHour(totals: PlayTotal[]): number[] {
     if (hours[hour] !== undefined) hours[hour] += total.runtime_ms;
   }
   return hours;
+}
+
+/** Orders games the most active first, then by runtime. */
+export function mostActiveFirst(a: { activeMs: number; runtimeMs: number }, b: { activeMs: number; runtimeMs: number }) {
+  return b.activeMs - a.activeMs || b.runtimeMs - a.runtimeMs;
 }
 
 /** Each game's time over all the totals, the most runtime first. */

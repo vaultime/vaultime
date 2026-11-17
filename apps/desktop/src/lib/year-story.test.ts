@@ -62,12 +62,29 @@ describe("yearStory", () => {
     const { game } = storyOf(year, { hidden: ["secret"] });
     expect(game).toMatchObject({
       gameId: "elden",
+      activeMs: 420 * MINUTE_MS,
       runtimeMs: 420 * MINUTE_MS,
       days: 4,
       bestMonth: 2,
       longestSessionMs: 180 * MINUTE_MS,
     });
     expect(game?.share).toBeCloseTo(420 / 1015);
+  });
+
+  it("ranks games by active time, so a game left running idle does not win", () => {
+    const idle = session(at(2026, 4, 1, 12), 600, {
+      id: "idle-4-1",
+      game_id: "idle",
+      active_ms: 60 * MINUTE_MS,
+      idle_ms: 540 * MINUTE_MS,
+    });
+    const story = storyOf([played("hades", 3, 5, 19, 120), idle]);
+    expect(story.game).toMatchObject({ gameId: "hades", activeMs: 120 * MINUTE_MS, runtimeMs: 120 * MINUTE_MS });
+    expect(story.top).toMatchObject([
+      { gameId: "hades", activeMs: 120 * MINUTE_MS },
+      { gameId: "idle", activeMs: 60 * MINUTE_MS },
+    ]);
+    expect(story.game?.share).toBeCloseTo(120 / 180);
   });
 
   it("keeps hidden games out of every list but in the hours", () => {
@@ -91,7 +108,7 @@ describe("yearStory", () => {
     expect(week?.start).toEqual(new Date(2026, 2, 2));
     expect(week?.playedMs).toBe(450 * MINUTE_MS);
     expect(week?.daysPlayed).toBe(4);
-    expect(week?.games.map((game) => [game.gameId, game.runtimeMs / MINUTE_MS])).toEqual([
+    expect(week?.games.map((game) => [game.gameId, game.activeMs / MINUTE_MS])).toEqual([
       ["elden", 360],
       ["hades", 90],
     ]);

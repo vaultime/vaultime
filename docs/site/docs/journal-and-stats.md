@@ -90,7 +90,7 @@ Left running
 
 ### Year in games
 
-**Year in games**, at the top of the stats page or in the command palette, tells a year in chapters, one card at a time: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when in the day you play, the launchers your hours came from and the games you finished. A chapter with nothing to tell is left out. Space or the arrow keys move on, and **Share your year** on the page makes a picture of the year to post.
+**Year in games**, at the top of the stats page or in the command palette, tells a year in chapters, one card at a time: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when in the day you play, the launchers your hours came from and the games you finished. A chapter with nothing to tell is left out. Games are ranked by active time, as on the picture you share, so a game left running while you were away does not win. Space or the arrow keys move on, and **Share your year** on the page makes a picture of the year to post.
 
 Like the stats page, it counts every PC whose sessions you merged, the time each launcher's copy of a game recorded and play while offline. Hidden games count in the hours but never show. Vaultime works it out on your PC from your journal and uploads nothing.
 

@@ -13,6 +13,7 @@ import {
   YEAR_STORY_WEEK_GAMES,
 } from "@/lib/constants";
 import { launcherKey } from "@/lib/launchers";
+import { mostActiveFirst } from "@/lib/play-totals";
 import type { GameYear, YearStats } from "@/lib/stats";
 import { compareTimes, dayPartOf, parseVaultimeDate, startOfWeek, toDayKey } from "@/lib/time";
 import type { GameStatusChange, LauncherPlay, Session } from "@/lib/types";
@@ -21,11 +22,11 @@ import { numberWords } from "@/lib/words";
 export const YEAR_CHAPTERS = ["numbers", "game", "top", "longest", "week", "rhythm", "launchers", "finished"] as const;
 export type YearChapter = (typeof YEAR_CHAPTERS)[number];
 
-/** A game's part of a stretch of play. */
+/** A game's part of a stretch of play, by active time as on the share card. */
 export interface StoryGame {
   gameId: string;
-  runtimeMs: number;
-  /** Share of the stretch's runtime, from 0 to 1. */
+  activeMs: number;
+  /** Share of the stretch's active time, from 0 to 1. */
   share: number;
 }
 
@@ -39,9 +40,9 @@ export interface YearStory {
   longestStreakDays: number;
   firstDay: Date | null;
   lastDay: Date | null;
-  /** The game played most that may be named. */
+  /** The most active game that may be named. */
   game: GameOfYear | null;
-  /** The games played most that may be named, the most first. */
+  /** The most active games that may be named, the most first. */
   top: StoryGame[];
   longest: LongestSession | null;
   /** The week with the most time played. */
@@ -57,7 +58,7 @@ export interface YearStory {
 }
 
 export interface GameOfYear extends StoryGame {
-  activeMs: number;
+  runtimeMs: number;
   /** Days it was played on. */
   days: number;
   /** January is 0. */
@@ -102,9 +103,10 @@ export function yearStory({
   named: (gameId: string) => boolean;
 }): YearStory {
   const { year } = stats;
-  const share = (ms: number) => (stats.runtimeMs > 0 ? ms / stats.runtimeMs : 0);
-  const shown = stats.games.filter((game) => game.runtimeMs >= MINUTE_MS && named(game.gameId));
-  const top = shown.slice(0, YEAR_STORY_TOP_GAMES).map((game) => storyGame(game, share(game.runtimeMs)));
+  const share = (ms: number) => (stats.activeMs > 0 ? ms / stats.activeMs : 0);
+  // A game left running while the player was away does not win.
+  const shown = stats.games.filter((game) => game.activeMs >= MINUTE_MS && named(game.gameId)).sort(mostActiveFirst);
+  const top = shown.slice(0, YEAR_STORY_TOP_GAMES).map((game) => storyGame(game, share(game.activeMs)));
   const days = [...stats.played]
     .filter(([, ms]) => ms > 0)
     .map(([day]) => day)
@@ -116,7 +118,7 @@ export function yearStory({
   );
   const byLauncher = storyLaunchers(launchers);
   const finished = finishedIn(year, statusChanges, named);
-  const game = shown[0] ? gameOfYear(stats, sessions, shown[0], share(shown[0].runtimeMs)) : null;
+  const game = shown[0] ? gameOfYear(stats, sessions, shown[0], share(shown[0].activeMs)) : null;
   const tells: Record<YearChapter, boolean> = {
     numbers: stats.playedMs >= MINUTE_MS,
     game: game !== null,
@@ -170,18 +172,18 @@ export function chapterTitle(chapter: YearChapter, story: YearStory): string {
   }
 }
 
-function storyGame(game: { gameId: string; runtimeMs: number }, share: number): StoryGame {
-  return { gameId: game.gameId, runtimeMs: game.runtimeMs, share };
+function storyGame(game: { gameId: string; activeMs: number }, share: number): StoryGame {
+  return { gameId: game.gameId, activeMs: game.activeMs, share };
 }
 
 function gameOfYear(stats: YearStats, sessions: Session[], first: GameYear, share: number): GameOfYear {
   const months = Array<number>(MONTHS_PER_YEAR).fill(0);
   let days = 0;
   for (const [day, play] of stats.days) {
-    const ms = play.games.find((game) => game.gameId === first.gameId)?.runtimeMs ?? 0;
-    if (ms <= 0) continue;
+    const time = play.games.find((game) => game.gameId === first.gameId);
+    if (!time || time.runtimeMs <= 0) continue;
     days += 1;
-    months[Number(day.slice(5, 7)) - 1] += ms;
+    months[Number(day.slice(5, 7)) - 1] += time.activeMs;
   }
   const longestSessionMs = sessions
     .filter(
@@ -191,7 +193,7 @@ function gameOfYear(stats: YearStats, sessions: Session[], first: GameYear, shar
     .reduce((most, session) => Math.max(most, session.runtime_ms), 0);
   return {
     ...storyGame(first, share),
-    activeMs: first.activeMs,
+    runtimeMs: first.runtimeMs,
     days,
     bestMonth: months.indexOf(Math.max(...months)),
     longestSessionMs,
@@ -226,18 +228,18 @@ function busiestWeek(stats: YearStats, named: (gameId: string) => boolean): Year
   const best = [...weeks.values()].sort((a, b) => b.playedMs - a.playedMs || a.start.getTime() - b.start.getTime())[0];
   if (!best) return null;
   const byGame = new Map<string, number>();
-  let runtimeMs = 0;
+  let activeMs = 0;
   for (const day of best.days) {
     for (const game of stats.days.get(day)?.games ?? []) {
-      byGame.set(game.gameId, (byGame.get(game.gameId) ?? 0) + game.runtimeMs);
-      runtimeMs += game.runtimeMs;
+      byGame.set(game.gameId, (byGame.get(game.gameId) ?? 0) + game.activeMs);
+      activeMs += game.activeMs;
     }
   }
   const games = [...byGame]
     .filter(([gameId, ms]) => ms >= MINUTE_MS && named(gameId))
     .sort((a, b) => b[1] - a[1])
     .slice(0, YEAR_STORY_WEEK_GAMES)
-    .map(([gameId, ms]) => storyGame({ gameId, runtimeMs: ms }, runtimeMs > 0 ? ms / runtimeMs : 0));
+    .map(([gameId, ms]) => storyGame({ gameId, activeMs: ms }, activeMs > 0 ? ms / activeMs : 0));
   return { start: best.start, playedMs: best.playedMs, daysPlayed: best.days.length, games };
 }
 
