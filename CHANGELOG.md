@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Adding play beside a session left running elsewhere.** A session another PC left running in a backup blocked adding play by hand for its game from its start until now. It now blocks only up to its last moment, where every page shows it ending.
 - **One number of sessions everywhere.** Home and the journal counted a session whose time a launcher set aside for another game, while Stats and the library left it out. All of them leave it out now.
 - **Games named Steam something.** Discover took every Steam game whose name starts with Steam, like Steam Marines, for a tool of Steam and left it out. Only Steam's own tools stay out now.
+- **A login item you turned off stays off on Linux.** On XFCE, Cinnamon and MATE, turning off Vaultime in the desktop's startup settings came undone at the next start, which wrote the login item anew. Vaultime now leaves an item the desktop switched off alone.
 
 ## [0.6.0] - 2026-10-20
 

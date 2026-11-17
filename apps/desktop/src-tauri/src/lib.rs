@@ -442,12 +442,6 @@ fn back_up_on_quit(app: &tauri::AppHandle) {
 fn enable_autostart(app: &tauri::AppHandle) {
     use tauri_plugin_autostart::ManagerExt;
 
-    // The autostart library creates ~/.config/autostart but not ~/.config.
-    #[cfg(target_os = "linux")]
-    if let Some(home) = dirs::home_dir() {
-        let _ = fs::create_dir_all(home.join(".config").join("autostart"));
-    }
-
     match app.autolaunch().enable() {
         Ok(()) => info!("new install, starts with the system from now on"),
         Err(error) => log::warn!("could not turn on starting with the system: {error}"),
@@ -460,12 +454,48 @@ fn refresh_autostart(app: &tauri::AppHandle) {
     use tauri_plugin_autostart::ManagerExt;
 
     let autolaunch = app.autolaunch();
-    if !autolaunch.is_enabled().unwrap_or(false) {
+    if !autolaunch.is_enabled().unwrap_or(false) || turned_off_by_desktop(app) {
         return;
     }
     if let Err(error) = autolaunch.enable() {
         log::warn!("could not update the login item: {error}");
     }
+}
+
+/// Whether the desktop turned the login item off inside its file, which a
+/// rewrite would undo. On Linux the item counts as on while its file exists.
+#[cfg(target_os = "linux")]
+fn turned_off_by_desktop(app: &tauri::AppHandle) -> bool {
+    let Some(home) = dirs::home_dir() else {
+        return false;
+    };
+    let entry = home
+        .join(".config")
+        .join("autostart")
+        .join(format!("{}.desktop", app.package_info().name));
+    fs::read_to_string(entry).is_ok_and(|entry| desktop_entry_off(&entry))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn turned_off_by_desktop(_app: &tauri::AppHandle) -> bool {
+    false
+}
+
+/// Whether a desktop entry is switched off: with `Hidden`, as XFCE and KDE
+/// do, or with a desktop's own `X-...-Autostart-enabled`, as GNOME,
+/// Cinnamon and MATE do.
+#[cfg(any(target_os = "linux", test))]
+fn desktop_entry_off(entry: &str) -> bool {
+    entry.lines().any(|line| {
+        let Some((key, value)) = line.split_once('=') else {
+            return false;
+        };
+        let (key, value) = (key.trim(), value.trim());
+        (key == "Hidden" && value.eq_ignore_ascii_case("true"))
+            || (key.starts_with("X-")
+                && key.ends_with("-Autostart-enabled")
+                && value.eq_ignore_ascii_case("false"))
+    })
 }
 
 /// Identifier for this PC, kept in a file next to the database. A backup
@@ -511,5 +541,21 @@ mod tests {
         let existing = device_id(&dir, true);
         assert_eq!(existing, hostname::get().unwrap().to_string_lossy());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn tells_a_login_item_the_desktop_turned_off() {
+        let entry = "[Desktop Entry]\nType=Application\nName=Vaultime\nExec=/usr/bin/vaultime --minimized\n";
+        assert!(!desktop_entry_off(entry));
+        for off in [
+            "Hidden=true",
+            "X-GNOME-Autostart-enabled=false",
+            "X-MATE-Autostart-enabled = False",
+        ] {
+            assert!(desktop_entry_off(&format!("{entry}{off}\n")), "{off}");
+        }
+        assert!(!desktop_entry_off(&format!(
+            "{entry}X-GNOME-Autostart-enabled=true\nHidden=false\n"
+        )));
     }
 }
