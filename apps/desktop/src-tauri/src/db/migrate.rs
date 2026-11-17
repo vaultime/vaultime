@@ -75,6 +75,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0015_seen_programs",
         include_str!("../../migrations/0015_seen_programs.sql"),
     ),
+    (
+        "0016_drop_unread_settings",
+        include_str!("../../migrations/0016_drop_unread_settings.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.
@@ -190,5 +194,18 @@ mod tests {
         let refused = apply_pending(&conn).err().unwrap().to_string();
         assert!(refused.contains("newer version of Vaultime"), "{refused}");
         assert!(refused.contains("9999_from_a_newer_version"), "{refused}");
+    }
+    #[test]
+    fn keeps_no_seeded_setting_nothing_reads() {
+        let conn = Connection::open_in_memory().unwrap();
+        apply_pending(&conn).unwrap();
+        let left: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key IN ('theme', 'preferred_image_mode')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(left, 0);
     }
 }
