@@ -383,7 +383,7 @@ pub const CROP_BACKDROP_DARK_PLAIN_LUMA: f64 = 0.12;
 pub const CROP_BACKDROP_LIGHT_PLAIN_LUMA: f64 = 0.82;
 /// Plain behind art without a single opaque pixel. Same as the default
 /// `--surface` in `index.css`.
-pub const CROP_BACKDROP_FALLBACK_RGB: [u8; 3] = [22, 18, 30];
+pub const CROP_BACKDROP_FALLBACK_RGB: [u8; 3] = [0x17, 0x18, 0x19];
 
 // Backups
 
