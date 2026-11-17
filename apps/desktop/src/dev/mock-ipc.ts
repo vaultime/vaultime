@@ -89,7 +89,7 @@ const games: Game[] = titles.map((title, index) => ({
   title,
   executable_path: `C:\\Games\\${title}\\${title.replace(/\s/g, "")}.exe`,
   install_folder: `C:\\Games\\${title}`,
-  launcher_source: index < 4 ? "steam" : "folder_scan",
+  launcher_source: index < 4 ? "steam" : index === 4 ? "epic" : "folder_scan",
   metadata_json: "{}",
   is_hidden: params.get("hidden") === "1" && title === "Celeste",
   created_at: iso(now - 90 * DAY_MS),

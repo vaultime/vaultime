@@ -30,7 +30,7 @@ const LAUNCHER_NAMES: Record<string, string> = {
 };
 
 /** Found by the folder scan rather than read from a launcher. */
-const FOLDER_SCAN = "folder_scan";
+export const FOLDER_SCAN = "folder_scan";
 
 /** "Steam", or null for a game found in a folder or added by hand. */
 export function launcherName(source: string | null | undefined): string | null {

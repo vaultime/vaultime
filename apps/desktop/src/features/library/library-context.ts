@@ -10,6 +10,8 @@ export interface GameSummary {
   game: Game;
   /** Other titles of the game, those of installs and games of other PCs that count as it, for search. */
   otherTitles: string[];
+  /** Where the game and the games that count as it came from (`lib/launchers.ts`). */
+  launchers: string[];
   cover: string | null;
   /** From the cover art when there is some, otherwise from the title. */
   tint: GameTint;

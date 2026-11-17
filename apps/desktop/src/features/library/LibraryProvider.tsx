@@ -14,6 +14,7 @@ import {
 import { useSettings } from "@/features/settings/settings-context";
 import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
 import { compareTitles } from "@/lib/game-sort";
+import { launchersOfGame } from "@/lib/launchers";
 import { compareTimes, toDayKey } from "@/lib/time";
 import type {
   Device,
@@ -187,6 +188,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       byGame.set(game.id, {
         game,
         otherTitles: [],
+        launchers: launchersOfGame(game, links),
         cover: covers[game.id] ?? null,
         tint: artTints[game.id] ?? tintForTitle(game.title),
         runtimeMs: total?.runtime_ms ?? 0,

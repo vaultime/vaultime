@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ArrowDownUp, Check, ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { LauncherMark } from "@/components/brand/LauncherMark";
 import { Cover } from "@/components/media/Cover";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import { SETTING_KEYS, TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { onFind } from "@/lib/find";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
+import { launcherTitle } from "@/lib/launchers";
 import { matchesGame } from "@/lib/search";
 import type { Game, GameStatus } from "@/lib/types";
 import { formatHoursShort } from "@/lib/time";
@@ -28,9 +30,10 @@ import { scrollMotion } from "@/lib/anchors";
 import { cn, logFailure } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
-/** Every game as a cover, with sorting and the ways to add more. */
+/** Every game, or those of one launcher, as covers, with sorting and the ways to add more. */
 export function GameGrid({
   summaries,
+  launcher,
   playing,
   onDiscover,
   onAdd,
@@ -38,6 +41,8 @@ export function GameGrid({
   onDelete,
 }: {
   summaries: GameSummary[];
+  /** The launcher whose games these are, null for all games. */
+  launcher: string | null;
   playing: ReadonlySet<string>;
   onDiscover: () => void;
   onAdd: () => void;
@@ -91,8 +96,9 @@ export function GameGrid({
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-baseline gap-3">
+          {launcher && <LauncherMark launcher={launcher} className="size-[22px] shrink-0 self-center text-soft" />}
           <h1 id="all-games-title" className="font-display text-[28px] leading-[1.1]">
-            All games
+            {launcher ? launcherTitle(launcher) : "All games"}
           </h1>
           <span className="text-sm text-faint tabular-nums">{sorted.length}</span>
         </div>

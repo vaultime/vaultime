@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import type { Game } from "@/lib/types";
 import { AddGameDialog } from "./components/AddGameDialog";
@@ -26,11 +26,23 @@ export function LibraryPage() {
   const dialog: LibraryDialog | null =
     searchParams.get("add") === "1" ? "add" : searchParams.get("discover") === "1" ? "discover" : null;
   const setDialog = (next: LibraryDialog | null) =>
-    setSearchParams(next ? { [next]: "1" } : {}, { replace: true });
+    setSearchParams(
+      (params) => {
+        params.delete("add");
+        params.delete("discover");
+        if (next) params.set(next, "1");
+        return params;
+      },
+      { replace: true },
+    );
+  const launcher = searchParams.get("launcher");
+  const shown = launcher ? visible.filter((summary) => summary.launchers.includes(launcher)) : visible;
   const openAdd = () => setDialog("add");
   const openDiscover = () => setDialog("discover");
 
   if (!loaded) return null;
+  // A launcher whose last game went away.
+  if (launcher && shown.length === 0) return <Navigate to="/library" replace />;
 
   // Nothing came in, which says nothing about whether there are games.
   if (error && summaries.length === 0) {
@@ -56,7 +68,8 @@ export function LibraryPage() {
       )}
 
       <GameGrid
-        summaries={visible}
+        summaries={shown}
+        launcher={launcher}
         playing={playing}
         onDiscover={openDiscover}
         onAdd={openAdd}
