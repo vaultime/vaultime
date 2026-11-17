@@ -44,6 +44,8 @@ export function Shelf({
               to={`/library/${summary.game.id}`}
               className="group flex w-full min-w-0 flex-col gap-2.5 rounded-md focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:ring-offset-4 focus-visible:ring-offset-ink focus-visible:outline-none"
             >
+              {/* The cover shows the title only as a picture. */}
+              <span className="sr-only">{summary.game.title}</span>
               <Cover
                 title={summary.game.title}
                 src={summary.cover}

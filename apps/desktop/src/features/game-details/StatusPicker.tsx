@@ -19,13 +19,13 @@ export function FavoriteButton({
   favorite: boolean;
   onChange: (favorite: boolean) => void;
 }) {
-  const label = favorite ? "Remove from favorites" : "Add to favorites";
   return (
+    // A toggle keeps one name, its pressed state tells whether the game is a favorite.
     <button
       type="button"
       aria-pressed={favorite}
-      aria-label={label}
-      title={label}
+      aria-label="Favorite"
+      title={favorite ? "Remove from favorites" : "Add to favorites"}
       onClick={() => onChange(!favorite)}
       className="inline-flex size-[34px] items-center justify-center rounded-lg border transition-colors hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
       style={{ borderColor: tint.edge, color: favorite ? tint.ink : tint.muted }}
