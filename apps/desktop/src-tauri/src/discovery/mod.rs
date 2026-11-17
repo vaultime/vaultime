@@ -1006,6 +1006,37 @@ mod tests {
         assert_eq!(picked(&zenless, "Zenless Zone Zero"), "ZenlessZoneZero.exe");
     }
 
+    /// Linux builds mark their program with the execute bit, as their
+    /// shared libraries often are too, and some start through a script.
+    #[cfg(unix)]
+    #[test]
+    fn picks_the_linux_program_over_libraries_and_data() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("vaultime-exe-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let write = |name: &str, size: u64, mode: u32| {
+            let path = root.join(name);
+            std::fs::File::create(&path).unwrap().set_len(size).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            path
+        };
+        let program = write("Celeste", 1_000_000, 0o755);
+        let library = write("libengine.so", 90_000_000, 0o755);
+        let versioned = write("libsteam_api.so.1", 80_000_000, 0o755);
+        let data = write("content.pak", 70_000_000, 0o644);
+        assert!(is_executable(&program));
+        for not_a_program in [&library, &versioned, &data] {
+            assert!(!is_executable(not_a_program), "{}", not_a_program.display());
+        }
+        assert_eq!(find_main_executable(&root, "Celeste"), Some(program));
+
+        // Scripts and Unity builds start without the execute bit.
+        assert!(is_executable(&write("start.sh", 100, 0o644)));
+        assert!(is_executable(&write("Game.x86_64", 100, 0o644)));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn title_words_skip_short_and_filler_words() {
         assert_eq!(significant_words("Slay the Spire 2"), ["slay", "spire"]);
