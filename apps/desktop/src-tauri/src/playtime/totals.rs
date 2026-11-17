@@ -167,6 +167,43 @@ struct RangePlay {
     spans: Vec<(String, Span)>,
 }
 
+/// A read of `table`, the slices or the stretches, in `range` from `?1` up
+/// to `?2`. The read of a game, `?3` with the games linked to it, starts
+/// from their sessions, as the range alone would read the rows of every game.
+fn range_sql(table: &str, columns: &str, range: &str, of_game: bool) -> String {
+    if of_game {
+        format!(
+            "SELECT sessions.game_id, {columns}
+             FROM sessions CROSS JOIN {table} ON {table}.session_id = sessions.id
+             WHERE (sessions.game_id = ?3 OR sessions.game_id IN
+                    (SELECT game_id FROM game_links WHERE linked_game_id = ?3))
+               AND {range}"
+        )
+    } else {
+        format!(
+            "SELECT sessions.game_id, {columns}
+             FROM {table} JOIN sessions ON sessions.id = {table}.session_id
+             WHERE {range}"
+        )
+    }
+}
+
+/// The rows of a `range_sql` read, of every game or of `game_id`.
+fn range_rows<T>(
+    stmt: &mut rusqlite::Statement<'_>,
+    (from_ms, to_ms): (i64, i64),
+    game_id: Option<&str>,
+    row: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+) -> Result<Vec<T>> {
+    let rows = match game_id {
+        Some(game) => stmt.query_map(params![from_ms, to_ms, game], row),
+        None => stmt.query_map(params![from_ms, to_ms], row),
+    };
+    rows.map_err(map_db)?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(map_db)
+}
+
 /// The slices of the quarter hours from `from_ms` up to `to_ms`, and with
 /// `with_spans` the stretches with time in them, of every game or of
 /// `game_id` and the games linked to it. One snapshot for all reads, so a
@@ -184,17 +221,16 @@ fn range_play(
 ) -> Result<RangePlay> {
     db.with_transaction(|conn| {
         let mut stmt = conn
-            .prepare_cached(
-                "SELECT sessions.game_id, play_slices.slice_start, play_slices.runtime_ms,
-                        play_slices.active_ms, play_slices.idle_ms
-                 FROM play_slices JOIN sessions ON sessions.id = play_slices.session_id
-                 WHERE play_slices.slice_start >= ?1 AND play_slices.slice_start < ?2
-                   AND (?3 IS NULL OR sessions.game_id = ?3 OR sessions.game_id IN
-                        (SELECT game_id FROM game_links WHERE linked_game_id = ?3))",
-            )
+            .prepare_cached(&range_sql(
+                "play_slices",
+                "play_slices.slice_start, play_slices.runtime_ms, play_slices.active_ms,
+                 play_slices.idle_ms",
+                "play_slices.slice_start >= ?1 AND play_slices.slice_start < ?2",
+                game_id.is_some(),
+            ))
             .map_err(map_db)?;
-        let rows = stmt
-            .query_map(params![from_ms, to_ms, game_id], |row| {
+        let mut slices: Vec<(String, Slice)> =
+            range_rows(&mut stmt, (from_ms, to_ms), game_id, |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     Slice {
@@ -204,41 +240,32 @@ fn range_play(
                         idle_ms: row.get(4)?,
                     },
                 ))
-            })
-            .map_err(map_db)?;
-        let mut slices: Vec<(String, Slice)> =
-            rows.collect::<rusqlite::Result<_>>().map_err(map_db)?;
+            })?;
         let shown = |game: String| links.get(&game).cloned().unwrap_or(game);
         let mut spans = Vec::new();
         if with_spans {
             let mut stmt = conn
-                .prepare_cached(
-                    "SELECT sessions.game_id, play_spans.span_start, play_spans.span_end,
-                            play_spans.runtime_ms, play_spans.active_ms, play_spans.idle_ms
-                     FROM play_spans JOIN sessions ON sessions.id = play_spans.session_id
-                     WHERE play_spans.span_end >= ?1 AND play_spans.span_start < ?2
-                       AND (?3 IS NULL OR sessions.game_id = ?3 OR sessions.game_id IN
-                            (SELECT game_id FROM game_links WHERE linked_game_id = ?3))",
-                )
+                .prepare_cached(&range_sql(
+                    "play_spans",
+                    "play_spans.span_start, play_spans.span_end, play_spans.runtime_ms,
+                     play_spans.active_ms, play_spans.idle_ms",
+                    "play_spans.span_end >= ?1 AND play_spans.span_start < ?2",
+                    game_id.is_some(),
+                ))
                 .map_err(map_db)?;
-            let rows = stmt
-                .query_map(params![from_ms, to_ms, game_id], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        Span {
-                            start_ms: row.get(1)?,
-                            end_ms: row.get(2)?,
-                            runtime_ms: row.get(3)?,
-                            active_ms: row.get(4)?,
-                            idle_ms: row.get(5)?,
-                        },
-                    ))
-                })
-                .map_err(map_db)?;
-            for row in rows {
-                let (game, span) = row.map_err(map_db)?;
-                spans.push((shown(game), span));
-            }
+            let rows = range_rows(&mut stmt, (from_ms, to_ms), game_id, |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    Span {
+                        start_ms: row.get(1)?,
+                        end_ms: row.get(2)?,
+                        runtime_ms: row.get(3)?,
+                        active_ms: row.get(4)?,
+                        idle_ms: row.get(5)?,
+                    },
+                ))
+            })?;
+            spans.extend(rows.into_iter().map(|(game, span)| (shown(game), span)));
         }
         for session in open_sessions(conn, game_id)? {
             if placed_until(conn, live, &session, now_ms)?.is_none_or(|until| until < from_ms) {
