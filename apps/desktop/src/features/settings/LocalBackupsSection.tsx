@@ -3,21 +3,20 @@
 
 import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { ArchiveRestore, Download, Loader2, Upload } from "lucide-react";
+import { Download, Loader2, Upload } from "lucide-react";
 import { Notice, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLibrary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
-import { TakeoverChoice } from "@/features/settings/TakeoverChoice";
+import { RestorePreview } from "@/features/settings/RestorePreview";
 import { useFinishRestore } from "@/features/settings/use-finish-restore";
 import { AUTO_BACKUP_KEEP, SETTING_KEYS } from "@/lib/constants";
-import { continuesAs } from "@/lib/devices";
 import * as api from "@/lib/tauri";
-import { formatLongDate, formatSessionStart } from "@/lib/time";
+import { formatSessionStart } from "@/lib/time";
 import type { BackupSnapshot, LocalBackupSummary } from "@/lib/types";
 import { describeError } from "@/lib/utils";
-import { capitalize, numberWords, plural, whichPc } from "@/lib/words";
+import { capitalize, numberWords, whichPc } from "@/lib/words";
 
 async function chooseFolder(title: string): Promise<string | null> {
   const selected = await openFileDialog({ multiple: false, directory: true, title });
@@ -159,53 +158,16 @@ export function LocalBackupsSection({
       {message && <Notice className="mt-5">{message}</Notice>}
 
       {restorePreview && (
-        <div className="mt-6 border-l-2 border-amber py-1 pl-5">
-          <p className="text-[15px]">
-            Backup from {formatLongDate(restorePreview.created_at)}
-            {whichPc(restorePreview.source_device_id, thisDeviceId) &&
-              `, made on ${whichPc(restorePreview.source_device_id, thisDeviceId)}`}
-            .
-          </p>
-          <p className="mt-2 text-sm text-soft tabular-nums">
-            {plural(restorePreview.games_count, "game")}, {plural(restorePreview.sessions_count, "session")},{" "}
-            {plural(restorePreview.asset_file_count, "image")}
-          </p>
-          {restorePreview.continues_as && (
-            <div className="mt-3">
-              <TakeoverChoice
-                id="take-over"
-                takeover={restorePreview.continues_as}
-                checked={takeOver}
-                disabled={busy}
-                onCheckedChange={setTakeOver}
-              >
-                <p className="text-[15px] leading-relaxed">
-                  {continuesAs(restorePreview.continues_as)}{" "}
-                  <span className="text-[13px] text-faint">
-                    This PC has no history of its own yet, so it takes over the backup&apos;s PC: its sessions count
-                    as this PC&apos;s own, and so do sessions it played after the backup that come in by merge, as
-                    long as that PC checked them only with this PC&apos;s keys.
-                  </span>
-                </p>
-              </TakeoverChoice>
-            </div>
-          )}
-          <p className="mt-3 max-w-[560px] text-[13px] leading-relaxed text-faint">
-            Restoring replaces the library, sessions, event logs and covers on this PC. Close running games first.
-            Vaultime asks for a restart afterwards so tracking picks up cleanly.
-          </p>
-          <div className="mt-4 flex items-center gap-4">
-            <Button variant="destructive" onClick={restore} disabled={busy}>
-              <ArchiveRestore className="size-4" />
-              Replace with this backup
-            </Button>
-            <Button variant="ghost" onClick={() => setRestorePreview(null)} disabled={busy}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+        <RestorePreview
+          id="take-over"
+          summary={restorePreview}
+          takeOver={takeOver}
+          busy={busy}
+          onTakeOverChange={setTakeOver}
+          onRestore={restore}
+          onCancel={() => setRestorePreview(null)}
+        />
       )}
-
       <h3 className="label-small mt-8 mb-1">History</h3>
       {snapshots.length === 0 ? (
         <p className="py-3 text-sm text-faint">No backups saved or restored yet.</p>
