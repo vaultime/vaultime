@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import type { ArtTint } from "@/lib/game-tint";
+
 /** Mirrors the Rust `Game` struct. */
 export interface Game {
   id: string;
@@ -665,6 +667,8 @@ export interface GameAssetView {
   hash: string | null;
   created_at: string;
   preview_data_url: string | null;
+  /** The colors of the image, worked out for the covers of the library. */
+  tint: ArtTint | null;
   is_preferred: boolean;
 }
 

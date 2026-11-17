@@ -109,8 +109,9 @@ pub fn list_game_assets(
 #[tauri::command(async)]
 pub fn list_preferred_game_assets(
     db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
 ) -> Result<Vec<GameAssetView>, VaultimeError> {
-    assets::list_preferred_game_assets(&db)
+    assets::list_preferred_game_assets(&db, &asset_manager)
 }
 
 #[tauri::command(async)]

@@ -3,7 +3,9 @@
 
 //! Artwork scanning, thumbnail caching and cover selection.
 
+mod art;
 pub mod crop;
+pub mod tint;
 
 use std::collections::HashSet;
 use std::fs;
@@ -19,12 +21,13 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use crate::constants::{
-    ARTWORK_BACKFILL_SETTING, ARTWORK_BACKFILL_VERSION, ARTWORK_PENALTY_SCREENSHOT_PATH,
-    ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO, ARTWORK_SCORE_POSTER,
-    ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER, ARTWORK_SWEEP_MIN_AGE, ASSET_SCAN_DEPTH,
-    BANNER_HEIGHT_PX, BANNER_WIDTH_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX,
-    ICON_MAX_SIZE_PX, MAX_ARTWORK_SOURCE_BYTES, MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS,
-    PLAYER_ARTWORK_SOURCE, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX, STEAM_SOURCE,
+    ART_THREADS_MAX, ARTWORK_BACKFILL_SETTING, ARTWORK_BACKFILL_VERSION,
+    ARTWORK_PENALTY_SCREENSHOT_PATH, ARTWORK_SCORE_COVER, ARTWORK_SCORE_HERO, ARTWORK_SCORE_LOGO,
+    ARTWORK_SCORE_POSTER, ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER,
+    ARTWORK_SWEEP_MIN_AGE, ASSET_SCAN_DEPTH, BANNER_HEIGHT_PX, BANNER_WIDTH_PX,
+    CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX, ICON_MAX_SIZE_PX,
+    MAX_ARTWORK_SOURCE_BYTES, MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS, PLAYER_ARTWORK_SOURCE,
+    SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX, STEAM_SOURCE,
 };
 use crate::db::connection::Database;
 use crate::db::models::{CropRect, Game, GameAsset, GameMetadata};
@@ -32,6 +35,7 @@ use crate::db::repo::{game_assets, games, settings};
 use crate::discovery::steam;
 use crate::error::{Result, VaultimeError};
 use crop::{ArtworkSource, decode_artwork, fill_crop, render_cover};
+use tint::ArtTint;
 
 const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "ico"];
 
@@ -61,6 +65,8 @@ pub struct GameAssetView {
     pub hash: Option<String>,
     pub created_at: String,
     pub preview_data_url: Option<String>,
+    /// The colors of the image, worked out for the covers of the library.
+    pub tint: Option<ArtTint>,
     pub is_preferred: bool,
 }
 
@@ -71,9 +77,12 @@ pub fn list_game_assets(db: &Database, game_id: &str) -> Result<Vec<GameAssetVie
     Ok(build_asset_views(&assets, preferred_asset_id.as_deref()))
 }
 
-/// One cover per game with a preview. When the preferred cover cannot be read,
-/// the next readable asset stands in.
-pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
+/// One cover per game with a preview and its colors. When the preferred
+/// cover cannot be read, the next readable asset stands in.
+pub fn list_preferred_game_assets(
+    db: &Database,
+    asset_manager: &AssetManager,
+) -> Result<Vec<GameAssetView>> {
     let mut views = Vec::new();
     let mut by_game = game_assets::list_assets_by_game(db)?;
 
@@ -92,7 +101,59 @@ pub fn list_preferred_game_assets(db: &Database) -> Result<Vec<GameAssetView>> {
         views.extend(cover);
     }
 
+    let cache_dir = asset_manager.cache_dir();
+    let mut unread = Vec::new();
+    for (index, view) in views.iter_mut().enumerate() {
+        let Some(cache_path) = view.cache_path.as_deref() else {
+            continue;
+        };
+        match art::known_tint(cache_dir, cache_path) {
+            art::Known::Tint(tint) => view.tint = Some(tint),
+            art::Known::Unread => unread.push(index),
+            art::Known::Missing => {}
+        }
+    }
+    let paths: Vec<&str> = unread
+        .iter()
+        .filter_map(|&index| views[index].cache_path.as_deref())
+        .collect();
+    let tints = work_out_tints(cache_dir, &paths);
+    for (index, tint) in unread.into_iter().zip(tints) {
+        views[index].tint = tint;
+    }
     Ok(views)
+}
+
+/// Works out the colors of covers on a few threads, as each opens an image.
+/// A cover whose colors cannot be read keeps the color of its title.
+fn work_out_tints(cache_dir: &Path, cache_paths: &[&str]) -> Vec<Option<ArtTint>> {
+    let tint = |cache_path: &&str| {
+        art::cover_tint(cache_dir, cache_path)
+            .inspect_err(|error| log::debug!("colors of {cache_path} not read: {error}"))
+            .ok()
+    };
+    let threads = std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .min(ART_THREADS_MAX)
+        .min(cache_paths.len());
+    if threads <= 1 {
+        return cache_paths.iter().map(tint).collect();
+    }
+    std::thread::scope(|scope| {
+        let parts: Vec<_> = cache_paths
+            .chunks(cache_paths.len().div_ceil(threads))
+            .map(|part| {
+                (
+                    part.len(),
+                    scope.spawn(move || part.iter().map(tint).collect()),
+                )
+            })
+            .collect();
+        parts
+            .into_iter()
+            .flat_map(|(count, part)| part.join().unwrap_or_else(|_| vec![None; count]))
+            .collect()
+    })
 }
 
 /// Deletes a game with the games linked to it, and their cached artwork.
@@ -629,6 +690,7 @@ fn asset_view(
         hash: asset.hash.clone(),
         created_at: asset.created_at.clone(),
         preview_data_url,
+        tint: None,
         is_preferred,
     }
 }
@@ -937,6 +999,9 @@ fn cleanup_assets(asset_manager: &AssetManager, assets: &[GameAsset]) {
                 .any(|component| matches!(component, Component::ParentDir))
         {
             let _ = fs::remove_file(cache_path);
+            for derived in art::derived_files(cache_path) {
+                let _ = fs::remove_file(derived);
+            }
         }
     }
 }
@@ -1134,10 +1199,94 @@ mod tests {
         let fallback = add_asset(&readable);
         set_preferred_game_asset(&db, &game.id, &missing.id).unwrap();
 
-        let covers = list_preferred_game_assets(&db).unwrap();
+        let covers = list_preferred_game_assets(&db, &asset_manager).unwrap();
         assert_eq!(covers.len(), 1);
         assert_eq!(covers[0].id, fallback.id);
         assert!(covers[0].preview_data_url.is_some());
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn covers_come_with_their_colors_worked_out_once() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let game = create_game(&db);
+        let plain = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Plain".into(),
+                executable_path: None,
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        let red = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            60,
+            80,
+            image::Rgb([220, 30, 30]),
+        ));
+        let cache_path = write_cached_image(&asset_manager, &game, &red, true).unwrap();
+        let red_cover = game_assets::create_asset(
+            &db,
+            &game.id,
+            "cover",
+            "scanned_local",
+            "/games/cover.png",
+            Some(&cache_path.to_string_lossy()),
+            None,
+        )
+        .unwrap();
+        // A cached file that is no image keeps the color of its title.
+        let broken = asset_manager
+            .cache_dir()
+            .join(&plain.id)
+            .join(format!("{}.jpg", uuid::Uuid::new_v4()));
+        fs::create_dir_all(broken.parent().unwrap()).unwrap();
+        fs::write(&broken, b"no image").unwrap();
+        game_assets::create_asset(
+            &db,
+            &plain.id,
+            "cover",
+            "scanned_local",
+            "/games/plain.png",
+            Some(&broken.to_string_lossy()),
+            None,
+        )
+        .unwrap();
+
+        let tint_of = |game_id: &str| {
+            list_preferred_game_assets(&db, &asset_manager)
+                .unwrap()
+                .into_iter()
+                .find(|view| view.game_id == game_id)
+                .unwrap()
+                .tint
+        };
+        let tint = tint_of(&game.id).unwrap();
+        assert_eq!(tint.colors.len(), 1);
+        assert_eq!(tint_of(&plain.id), None);
+
+        // The next listing reads what was kept instead of the image.
+        let kept = art::derived_files(&cache_path).remove(0);
+        let mut changed = tint.clone();
+        changed.strength = 0.5;
+        fs::write(
+            &kept,
+            serde_json::to_vec(&serde_json::json!({
+                "rules": crate::constants::ART_TINT_RULES_VERSION,
+                "tint": changed,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(tint_of(&game.id), Some(changed));
+
+        // The colors go with the image.
+        delete_game_asset(&db, &asset_manager, &game.id, &red_cover.id).unwrap();
+        assert!(!cache_path.exists());
+        assert!(!kept.exists());
 
         fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
     }

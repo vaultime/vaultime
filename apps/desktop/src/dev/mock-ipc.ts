@@ -749,6 +749,7 @@ function coverAssets() {
       hash: null,
       created_at: iso(now),
       preview_data_url: `/covers/${file}`,
+      tint: null,
       is_preferred: true,
     };
   });
@@ -1175,6 +1176,7 @@ function saveCover(gameId: string, art: MockArt, crop: CropRect) {
       hash: null,
       created_at: iso(now),
       preview_data_url: drawCover(art, crop),
+      tint: null,
       is_preferred: true,
     },
   });
@@ -1462,6 +1464,7 @@ function posterAsset(gameId: string): GameAssetView[] {
       hash: null,
       created_at: iso(now),
       preview_data_url: drawPoster(allGames[index].title, index),
+      tint: null,
       is_preferred: true,
     };
     posterAssets.set(gameId, asset);
@@ -1483,6 +1486,7 @@ function sampleCovers(gameId: string): GameAssetView[] {
       hash: null,
       created_at: iso(now),
       preview_data_url: drawCover(art, toCrop(fillView(art), art)),
+      tint: null,
       is_preferred: false,
     });
     const added = [

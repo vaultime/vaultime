@@ -347,6 +347,50 @@ pub const CACHED_JPEG_QUALITY: u8 = 85;
 pub const COVER_WIDTH_PX: u32 = 720;
 /// Height of a cached cover.
 pub const COVER_HEIGHT_PX: u32 = 960;
+/// Scheme the window loads cached artwork from. The content security policy
+/// in `tauri.conf.json` names it.
+pub const ART_SCHEME: &str = "vaultime-art";
+/// Largest width of the thumbnail that tiles and lists show of a cached
+/// image. The game page shows the image itself.
+pub const THUMBNAIL_WIDTH_PX: u32 = 360;
+/// Largest height of that thumbnail.
+pub const THUMBNAIL_HEIGHT_PX: u32 = 480;
+/// Version of the rule that works out the colors of art. Raising it works
+/// them out again for every cover.
+pub const ART_TINT_RULES_VERSION: u32 = 1;
+/// Most threads that write thumbnails and work out colors of covers at once.
+pub const ART_THREADS_MAX: usize = 8;
+
+// Colors of art. Each is the same as the constant of its name in
+// `lib/constants.ts`, where the sample data of the preview reads them.
+
+/// Art is scaled down to this many pixels square before reading colors.
+pub const TINT_SAMPLE_PX: u32 = 32;
+/// Pixels more transparent than this alpha byte are skipped.
+pub const TINT_MIN_ALPHA: u8 = 128;
+/// Pixels darker than this Oklab lightness are skipped as black.
+pub const TINT_MIN_LIGHTNESS: f64 = 0.12;
+/// Pixels lighter than this Oklab lightness are skipped as white.
+pub const TINT_MAX_LIGHTNESS: f64 = 0.96;
+/// Pixels with less Oklab chroma than this count as grey.
+pub const TINT_COLORFUL_MIN_CHROMA: f64 = 0.04;
+/// Art with a smaller share of colorful pixels is black, white or grey.
+pub const TINT_COLORFUL_MIN_SHARE: f64 = 0.05;
+/// A second main color of art is at least this far from the first around
+/// the color wheel, in degrees.
+pub const TINT_SECOND_MIN_GAP_DEG: f64 = 60.0;
+/// A second main color of art counts when it has at least this share of the
+/// colorfulness of the first.
+pub const TINT_SECOND_MIN_SHARE: f64 = 0.4;
+/// Bands the color wheel is cut into when looking for the main color of art.
+pub const TINT_HUE_BINS: usize = 24;
+/// Mean Oklab chroma of a typical colorful cover, it maps to full strength.
+pub const TINT_TYPICAL_CHROMA: f64 = 0.09;
+/// How far the tint of colorful art may fade towards grey. Black, white and
+/// grey art goes all the way.
+pub const TINT_MIN_STRENGTH: f64 = 0.2;
+/// How far a tint may go past the default colorfulness.
+pub const TINT_MAX_STRENGTH: f64 = 1.2;
 
 // Artwork crop
 

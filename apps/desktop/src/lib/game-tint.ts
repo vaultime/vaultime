@@ -34,6 +34,16 @@ export interface ArtColor {
   chroma: number;
 }
 
+/** The colors the core read from a cover, see `assets/tint.rs`. */
+export interface ArtTint {
+  /** The main colors, the strongest first and at most two. Empty for black, white and grey art. */
+  colors: ArtColor[];
+  /** How colorful the tint is, 1 for typical art and 0 for grey. */
+  strength: number;
+  /** The average lightness, from 0 to 1. Null when no pixel is opaque. */
+  lightness: number | null;
+}
+
 // Tints are CSS colors whose lightness is a token, so they follow dark and
 // light mode without being worked out again. The theme in lib/theme.ts sets
 // the tokens. Marks are worked out for the mode.
