@@ -3,6 +3,7 @@
 
 import { memo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CARD_WIDTH_PX, cardPosition } from "@/components/charts/play-card";
+import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
 import type { GameSummary } from "@/features/library/library-context";
@@ -96,6 +97,13 @@ function SessionCard({
         <div className="mt-1.5 text-xs text-soft">{sessionAmounts(session)}</div>
       )}
     </div>
+  );
+}
+
+/** A game's cover in the column between an entry's time and its sentence. */
+function EntryCover({ summary, title }: { summary: GameSummary | undefined; title: string }) {
+  return (
+    <Cover title={title} src={summary?.cover} variant="tile" className="aspect-[2/3] w-9 self-start text-[15px]" />
   );
 }
 
@@ -355,6 +363,7 @@ export const DaySection = memo(function DaySection({
               >
                 {formatSpanOnDay(started, ended, day.start)}
               </span>
+              <EntryCover summary={byGame.get(session.game_id)} title={titleOf(session.game_id)} />
               <div className="min-w-0 flex-1">
                 <p className="font-prose text-[19px] leading-snug text-pretty text-soft">
                   <PhraseText phrase={{ before: phrase.before, em: phrase.em }} emColor={mark} emFill={fillFor(session.game_id)} />
@@ -394,11 +403,11 @@ export const DaySection = memo(function DaySection({
                   <span className="w-[20ch] shrink-0 font-mono text-[13px] text-faint">
                     {formatClockTime(parseVaultimeDate(change.changed_at))}
                   </span>
-                  <p className="font-prose flex min-w-0 flex-1 items-baseline gap-2.5 text-[20px] leading-snug">
-                    <GameStatusIcon status={change.status} className="size-4 shrink-0 translate-y-0.5 text-violet" />
-                    <span>
-                      <PhraseText phrase={statusSentence(change.status, title, change.played_before_ms)} />
-                    </span>
+                  <span className="flex w-9 shrink-0 justify-center">
+                    <GameStatusIcon status={change.status} className="size-4 translate-y-0.5 text-violet" />
+                  </span>
+                  <p className="font-prose min-w-0 flex-1 text-[20px] leading-snug">
+                    <PhraseText phrase={statusSentence(change.status, title, change.played_before_ms)} />
                   </p>
                 </article>
               );
@@ -425,6 +434,7 @@ export const DaySection = memo(function DaySection({
                   gameSessions={sessionsByGame.get(session.game_id)}
                   earlierMs={byGame.get(session.game_id)?.earlier?.earlier_ms}
                   when={formatSpanOnDay(parseVaultimeDate(session.started_at_wall), ended, day.start)}
+                  cover={<EntryCover summary={byGame.get(session.game_id)} title={titleOf(session.game_id)} />}
                   highlighted={linked === session.id}
                   amountsNote={
                     later.length > 0 && (

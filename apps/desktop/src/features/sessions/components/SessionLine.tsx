@@ -27,6 +27,7 @@ export function SessionLine({
   gameSessions,
   earlierMs,
   when,
+  cover,
   highlighted = false,
   amountsNote,
   bordered = true,
@@ -49,6 +50,8 @@ export function SessionLine({
   earlierMs?: number;
   /** Replaces the start day and time in the left column. */
   when?: string;
+  /** The game's cover beside the sentence, for a list that mixes games. */
+  cover?: ReactNode;
   /** Marks the line, its time in the title color, while another part of the page points at it. */
   highlighted?: boolean;
   /** Said after the amounts, like how much of the session counts on a later day. */
@@ -107,6 +110,7 @@ export function SessionLine({
       >
         {when ?? formatSessionStart(session.started_at_wall)}
       </span>
+      {cover}
       <div className="min-w-0 flex-1">
         <div className={cn("font-prose text-[22px] leading-snug text-pretty", live && "text-violet")}>
           <PhraseText phrase={line} emColor={titleColor} emFill={titleFill} />
