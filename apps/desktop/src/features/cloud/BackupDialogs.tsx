@@ -52,7 +52,7 @@ export function BackupRow({
             .join(", ")}
         </div>
       </div>
-      {backup.status !== "complete" && <Badge variant="amber">{backup.status}</Badge>}
+      {backup.status !== "complete" && <Badge variant="amber">Not finished</Badge>}
       <div className="flex gap-1">
         <Button
           variant="ghost"

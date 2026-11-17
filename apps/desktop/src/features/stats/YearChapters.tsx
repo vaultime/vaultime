@@ -8,7 +8,14 @@ import { Figures } from "@/components/layout/StatTiles";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
 import type { GameSummary } from "@/features/library/library-context";
-import { DAYS_PER_WEEK, YEAR_STORY_COUNT_UP_MS, YEAR_STORY_FINISHED_COVERS } from "@/lib/constants";
+import {
+  CHART_MIN_BAR_PERCENT,
+  DAYS_PER_WEEK,
+  HOURS_PER_DAY,
+  JOURNAL_TICK_HOURS,
+  YEAR_STORY_COUNT_UP_MS,
+  YEAR_STORY_FINISHED_COVERS,
+} from "@/lib/constants";
 import { launcherTitle, launcherWhere } from "@/lib/launchers";
 import type { YearStats } from "@/lib/stats";
 import {
@@ -329,13 +336,13 @@ function RhythmChapter({ story, stats }: ChapterProps) {
           <div
             key={hour}
             className={cn("flex-1 rounded-t-[2px]", hour === peak ? "bg-violet" : "bg-glint/22")}
-            style={{ height: `${Math.max(2, (ms / most) * 100)}%` }}
+            style={{ height: `${Math.max(CHART_MIN_BAR_PERCENT, (ms / most) * 100)}%` }}
           />
         ))}
       </div>
       <div aria-hidden="true" className="mt-1.5 flex justify-between font-mono text-[10.5px] text-faint">
-        {["00", "06", "12", "18", "24"].map((hour) => (
-          <span key={hour}>{hour}</span>
+        {Array.from({ length: HOURS_PER_DAY / JOURNAL_TICK_HOURS + 1 }, (_, tick) => (
+          <span key={tick}>{String(tick * JOURNAL_TICK_HOURS).padStart(2, "0")}</span>
         ))}
       </div>
       <p className="mt-3 text-[13px] text-soft">
