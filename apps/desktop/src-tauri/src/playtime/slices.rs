@@ -820,10 +820,13 @@ fn aside_sessions_around(
     to: &str,
     device: &str,
 ) -> Result<Vec<String>> {
+    // Read from the games that step aside, which are few, through the index
+    // of their sessions, so neither the PC nor the times pick a read of every
+    // session there.
     let mut stmt = conn
         .prepare_cached(&format!(
-            "SELECT sessions.id FROM sessions JOIN games ON games.id = sessions.game_id
-             WHERE sessions.device_id = ?3 AND {STEPS_ASIDE}
+            "SELECT sessions.id FROM games CROSS JOIN sessions ON sessions.game_id = games.id
+             WHERE {STEPS_ASIDE} AND +sessions.device_id = ?3
                AND sessions.ended_at_wall IS NOT NULL
                AND sessions.started_at_wall < ?2 AND sessions.ended_at_wall > ?1"
         ))
