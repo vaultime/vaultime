@@ -127,7 +127,7 @@ export function GameGrid({
             }}
             placeholder="Find a game"
             aria-label="Find a game"
-            className="h-9 w-[180px] rounded-full border border-hairline bg-transparent pr-8 pl-8 text-[13px] text-text transition-colors outline-none placeholder:text-faint focus-visible:border-violet focus-visible:ring-2 focus-visible:ring-violet/30 [&::-webkit-search-cancel-button]:hidden"
+            className="h-[34px] w-[200px] rounded-lg border border-hairline bg-transparent pr-8 pl-8 text-[13px] text-text transition-colors outline-none placeholder:text-faint focus-visible:border-violet focus-visible:ring-2 focus-visible:ring-violet/30 [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
             <button
@@ -145,21 +145,14 @@ export function GameGrid({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {statuses.length > 0 && (
-            <div
-              role="group"
-              aria-label="Show games by status"
-              className="flex gap-0.5 rounded-[9px] bg-glint/4 p-[3px] ring-1 ring-rule ring-inset"
-            >
+            <div role="group" aria-label="Show games by status" className="segmented">
               {(["all", ...statuses] as const).map((key) => (
                 <button
                   key={key}
                   type="button"
                   aria-pressed={shownFilter === key}
                   onClick={() => setFilter(key)}
-                  className={cn(
-                    "flex h-[26px] items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                    shownFilter === key ? "bg-glint/10 text-text shadow-sm shadow-scrim/40" : "text-soft hover:text-text",
-                  )}
+                  className="segment"
                 >
                   {key !== "all" && <GameStatusIcon status={key} className="size-3" />}
                   {key === "all" ? "All" : GAME_STATUS_LABELS[key]}
@@ -178,7 +171,7 @@ export function GameGrid({
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label={`Sort games, now ${GAME_SORTS[sort]}`}
-              className="flex h-[30px] items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] text-soft ring-1 ring-hairline transition-colors ring-inset hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none data-popup-open:bg-glint/5"
+              className="flex h-[34px] items-center gap-1.5 rounded-lg px-3 text-[12.5px] text-soft ring-1 ring-hairline transition-colors ring-inset hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none data-popup-open:bg-glint/5"
             >
               <ArrowDownUp className="size-3.5 text-faint" strokeWidth={1.8} />
               <span className="font-medium text-text">{GAME_SORTS[sort]}</span>

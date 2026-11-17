@@ -93,6 +93,47 @@
   }
 }
 
+/* A row of choices on a faint field, as tall as a button. */
+@utility segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--glint) 4%, transparent);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+/* One choice in a segmented row, raised while picked. */
+@utility segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--soft);
+  transition:
+    color 150ms,
+    background-color 150ms;
+
+  &:hover {
+    color: var(--text);
+  }
+  &[aria-pressed="true"],
+  &[aria-checked="true"] {
+    color: var(--text);
+    background: color-mix(in oklab, var(--glint) 10%, transparent);
+    box-shadow: 0 1px 2px color-mix(in oklab, var(--scrim) 40%, transparent);
+  }
+  &:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--violet) 60%, transparent);
+    outline-offset: 1px;
+  }
+}
+
 /* Small labels in sentence case above values and sections. */
 @utility label-small {
   font-size: 0.75rem;

@@ -14,7 +14,7 @@ import * as api from "@/lib/tauri";
 import { parseVaultimeDate, startOfDay, toDayKey, UI_LOCALE } from "@/lib/time";
 import type { PlayBucket, PlayTotal, Session } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
-import { cn, describeError } from "@/lib/utils";
+import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
 
 type Range = "days" | "months" | "years" | "calendar";
@@ -142,17 +142,14 @@ export function GameHistory({
         </h2>
         <div className="flex items-center gap-4">
           {range !== "calendar" && <ActiveIdleLegend />}
-          <div role="group" aria-label="Show history by" className="flex rounded-full border border-hairline p-0.5">
+          <div role="group" aria-label="Show history by" className="segmented">
             {(Object.keys(RANGES) as Range[]).map((key) => (
               <button
                 key={key}
                 type="button"
                 aria-pressed={range === key}
                 onClick={() => setRange(key)}
-                className={cn(
-                  "h-7 rounded-full px-3 text-[12px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                  range === key ? "bg-raised text-text" : "text-faint hover:text-soft",
-                )}
+                className="segment"
               >
                 {RANGES[key]}
               </button>

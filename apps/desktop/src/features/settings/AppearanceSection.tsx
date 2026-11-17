@@ -113,7 +113,7 @@ export function AppearanceSection() {
           role="radiogroup"
           aria-label="Mode"
           onKeyDown={onRadioKeys}
-          className="inline-flex rounded-full border border-hairline p-0.5"
+          className="segmented"
         >
           {MODES.map((option, index) => (
             <button
@@ -123,10 +123,7 @@ export function AppearanceSection() {
               aria-checked={appearance.mode === option.value}
               tabIndex={radioTabIndex(appearance.mode === option.value, index, true)}
               onClick={() => change({ mode: option.value })}
-              className={cn(
-                "h-8 rounded-full px-4 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                appearance.mode === option.value ? "bg-raised text-text" : "text-faint hover:text-soft",
-              )}
+              className="segment"
             >
               {option.label}
             </button>

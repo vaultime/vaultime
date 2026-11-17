@@ -97,7 +97,7 @@ export function PageRow({
   );
 }
 
-/** A round button that steps through weeks or years in a page header, or a value up and down. */
+/** A square button that steps through weeks or years in a page header, or a value up and down. */
 export function StepButton({
   label,
   disabled,
@@ -119,7 +119,7 @@ export function StepButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-full border border-hairline text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:border-rule disabled:text-faint/50 disabled:hover:bg-transparent",
+        "flex size-[34px] shrink-0 items-center justify-center rounded-lg bg-glint/7 text-soft ring-1 ring-glint/8 transition-colors ring-inset hover:bg-glint/11 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none disabled:bg-transparent disabled:text-faint/50",
         className,
       )}
     >

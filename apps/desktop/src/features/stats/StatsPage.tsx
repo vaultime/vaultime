@@ -52,7 +52,7 @@ import {
   toDayKey,
 } from "@/lib/time";
 import type { YearPlay } from "@/lib/types";
-import { cn, describeError } from "@/lib/utils";
+import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
 import {
   allTimeSentence,
@@ -224,17 +224,14 @@ export function StatsPage() {
         title={all ? "All time" : current ? "This year" : offset === -1 ? "Last year" : String(year)}
         aside={
           <>
-            <div role="group" aria-label="Show stats for" className="mr-1 flex rounded-full border border-hairline p-0.5">
+            <div role="group" aria-label="Show stats for" className="segmented mr-1">
               {(Object.keys(VIEWS) as View[]).map((each) => (
                 <button
                   key={each}
                   type="button"
                   aria-pressed={view === each}
                   onClick={() => setView(each)}
-                  className={cn(
-                    "h-9 rounded-full px-4 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                    view === each ? "bg-raised text-text" : "text-faint hover:text-soft",
-                  )}
+                  className="segment"
                 >
                   {VIEWS[each]}
                 </button>

@@ -420,7 +420,7 @@ function SidePanel({
             role="radiogroup"
             aria-label="Look of the card"
             onKeyDown={onRadioKeys}
-            className="mt-2.5 inline-flex rounded-full border border-hairline p-0.5"
+            className="segmented mt-2.5"
           >
             {MODES.map((option, index) => (
               <button
@@ -430,10 +430,7 @@ function SidePanel({
                 aria-checked={cardMode === option.value}
                 tabIndex={radioTabIndex(cardMode === option.value, index, true)}
                 onClick={() => setCardMode(option.value)}
-                className={cn(
-                  "h-8 rounded-full px-4 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none",
-                  cardMode === option.value ? "bg-raised text-text" : "text-faint hover:text-soft",
-                )}
+                className="segment"
               >
                 {option.label}
               </button>
