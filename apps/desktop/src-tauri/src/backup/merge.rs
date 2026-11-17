@@ -981,8 +981,14 @@ fn copy_in(
         }
     }
     // Until the merged sessions have their quarter hours, the next start
-    // builds every slice again.
-    slices::mark_stale(conn)?;
+    // builds every slice again. Sessions only vouched for keep theirs.
+    if plan
+        .sessions
+        .iter()
+        .any(|planned| !matches!(planned.take, Take::Vouch))
+    {
+        slices::mark_stale(conn)?;
+    }
     // This PC is never merged into itself, also when its own sessions come
     // back after it was set up again.
     let this = ledger::this_device()?;
@@ -1285,6 +1291,7 @@ mod tests {
         BACKUP_MANIFEST_FILE, collect_backup_files, compute_overall_checksum, import_local_backup,
         write_manifest,
     };
+    use crate::constants::{PLAY_SLICES_VERSION, PLAY_SLICES_VERSION_SETTING};
     use crate::db::models::CreateGame;
     use crate::db::repo::sessions::Checkpoint;
     use crate::db::repo::{annotations, corrections, devices, sessions};
@@ -2574,6 +2581,9 @@ mod tests {
         desktop.act();
         let preview = preview(&desktop.db, &desktop.context, &backup, true).unwrap();
         assert_eq!((preview.new_sessions, preview.vouched_now), (0, 1));
+        // The quarter hours were built, and vouching changes no time.
+        let built = PLAY_SLICES_VERSION.to_string();
+        settings::set_setting(&desktop.db, PLAY_SLICES_VERSION_SETTING, &built).unwrap();
         let summary = apply(
             &desktop.db,
             &desktop.assets,
@@ -2585,6 +2595,10 @@ mod tests {
         .unwrap();
         assert_eq!(summary.sessions_vouched, 1);
         assert_eq!(desktop.status(&later.id), STATUS_LOCAL);
+        assert_eq!(
+            settings::get_setting(&desktop.db, PLAY_SLICES_VERSION_SETTING).unwrap(),
+            Some(built)
+        );
     }
 
     #[test]
