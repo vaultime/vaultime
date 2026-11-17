@@ -18,7 +18,7 @@ The number is your account total, not the Deck's share. Steam Replay at the end 
 
 ## Bringing Deck play into Vaultime
 
-[Vaultime](/) counts the games on your Windows or Linux PC. For play on the Deck, open the game's page in Vaultime and pick **Add a session**. Give the start, the length and where you played, and for a Steam game mark it as **Played through Steam**. The session counts as active time and is labeled Manual, and it is never counted a second time when you import your Steam totals. See [The journal and stats](journal-and-stats.md).
+[Vaultime](/) counts the games on your Windows or Linux PC. For play on the Deck, open the game's page in Vaultime and pick **Add a session**. Give the start, the length and where you played, and for a Steam game mark it as **Played through Steam**. The session counts as active time and is labeled Manual, and it is never counted a second time when you import your Steam totals. See [The journal and stats](../docs/journal-and-stats.md).
 
 See also [How to see your playtime on Steam](steam-playtime.md).
 

@@ -21,7 +21,7 @@ Vaultime is a free app for Windows and Linux that watches which game runs and co
 
 ## What you see
 
-- Every game in one library with its runtime, its active time and its idle time. Active time is the time you actually played, idle time is the rest. See [How playtime is counted](counting.md).
+- Every game in one library with its runtime, its active time and its idle time. Active time is the time you actually played, idle time is the rest. See [How playtime is counted](../docs/counting.md).
 - A journal of your days, with every session written as a sentence and a 24 hour strip for each day.
 - A page for each launcher with its own hours, so you still see what came from Steam and what from GOG.
 - A game you own in two launchers can count as one game, while each launcher keeps the time played through its copy.
@@ -50,4 +50,4 @@ How each launcher shows your playtime and what it counts:
 
 ## Your data stays on your PC
 
-Vaultime keeps everything in one folder on your PC. It goes online only to look for updates and, if you use it, for cloud backup. See [Your data and privacy](data-and-privacy.md).
+Vaultime keeps everything in one folder on your PC. It goes online only to look for updates and, if you use it, for cloud backup. See [Your data and privacy](../docs/data-and-privacy.md).

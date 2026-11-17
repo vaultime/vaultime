@@ -27,7 +27,7 @@ Steam on Linux counts as it does on Windows, Proton games included: one total fo
 [Vaultime](/) runs on Linux as a `.deb`, an `.rpm` and an AppImage. It finds the games of Steam, Heroic and Lutris, Flatpak installs included, and counts the game that runs, whichever launcher started it.
 
 - Active time and idle time apart, with controller input counting as activity.
-- It works on X11, and on Wayland for games that run through XWayland, which most games do, Proton games included. [Platforms and Linux](platforms.md) has the details for each desktop.
+- It works on X11, and on Wayland for games that run through XWayland, which most games do, Proton games included. [Platforms and Linux](../docs/platforms.md) has the details for each desktop.
 - One library and one journal of your days for every launcher.
 
 See also [How to see all your playtime in one place](all-your-playtime.md).
