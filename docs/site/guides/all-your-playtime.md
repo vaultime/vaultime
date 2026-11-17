@@ -1,14 +1,14 @@
 # How to see all your playtime in one place
 
-Every launcher counts only its own games, and not every launcher shows a number at all. To see your hours across all of them, you need one app on your PC that notices every game you start, whichever launcher started it.
+Most launchers count only their own games, and not every launcher shows a number at all. To see your hours across all of them, you need one app on your PC that notices every game you start, whichever launcher started it.
 
 ![A desk at night with a game on the monitor, a controller and a notebook](../art/desk.jpg "One place for every game you play on your PC.")
 
 ## Why your hours are spread out
 
-- A launcher counts a game only while it runs from that launcher. A game you own in two launchers has two counts that never meet.
+- A launcher counts a game only while it runs from that launcher. A game you own in two launchers usually has two counts that never meet.
 - Most launchers keep a total and the day you last played, not a history of your days.
-- Games you installed yourself, from a folder, a mod pack or an old disc, are counted nowhere.
+- Games you installed yourself, from a folder, a mod pack or an old disc, are counted by no launcher unless you add them to one.
 
 ## Count every game with Vaultime
 
