@@ -803,6 +803,22 @@ export interface AutoMerge {
   sessions_grown: number;
 }
 
+/** The newest backup of a PC in the sync folder. */
+export interface FolderPc {
+  device_id: string;
+  /** Its name from its folder, or as this PC knows it. */
+  name: string | null;
+  backup_id: string;
+  backup_created_at: string;
+  sessions_count: number;
+  /** Whether the folder is this PC's own. */
+  this_pc: boolean;
+  /** Whether this PC merged it before, so its newer backups come in by themselves. */
+  merged_before: boolean;
+  /** Whether the backup is newer than the last one merged here. */
+  newer: boolean;
+}
+
 export interface CloudCreateAdminInviteInput {
   prefix?: string | null;
   max_redemptions?: number | null;

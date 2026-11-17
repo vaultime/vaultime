@@ -10,6 +10,7 @@ import type {
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
   CloudPc,
+  FolderPc,
   CreateGameInput,
   CropRect,
   Device,
@@ -451,6 +452,21 @@ export async function importLocalBackup(
   takeOver: boolean,
 ): Promise<LocalBackupSummary> {
   return invoke<LocalBackupSummary>("import_local_backup", { path, takeOver });
+}
+
+/** Where backups sync, if anywhere. */
+export async function getSyncFolder(): Promise<string | null> {
+  return invoke<string | null>("get_sync_folder");
+}
+
+/** Keeps backups in sync in `path`, or stops with null. A new folder gets a backup of this PC right away. */
+export async function setSyncFolder(path: string | null): Promise<string | null> {
+  return invoke<string | null>("set_sync_folder", { path });
+}
+
+/** The newest backup of every PC in the sync folder, this one's too. */
+export async function listSyncFolderPcs(): Promise<FolderPc[]> {
+  return invoke<FolderPc[]>("list_sync_folder_pcs");
 }
 
 export async function uploadRemoteBackup(

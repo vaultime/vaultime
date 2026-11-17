@@ -53,6 +53,7 @@ import type {
   CloudAuthSession,
   CloudBackupRecord,
   CloudPc,
+  FolderPc,
   CloudDevice,
   CropRect,
   Device,
@@ -283,6 +284,40 @@ const allGames = scenario === "empty" ? [] : games;
 // ?pcs=1 adds sessions merged from a laptop: some of a game linked to Hades II
 // here, one game that came along on its own, and one that failed its check.
 /** The newest cloud backups of the other PCs: the laptop merged before, the Steam Deck not yet. */
+let syncFolder: string | null = params.has("sync") ? "D:\\Dropbox\\Vaultime" : null;
+const syncPcs: FolderPc[] = [
+  {
+    device_id: "preview",
+    name: "Desktop",
+    backup_id: "0b6f6c2e-7a1d-4d43-8e0f-3b1f2a9c4d10",
+    backup_created_at: iso(now - 2 * 60 * 60 * 1000),
+    sessions_count: 1204,
+    this_pc: true,
+    merged_before: false,
+    newer: true,
+  },
+  {
+    device_id: "laptop",
+    name: "Laptop",
+    backup_id: "5b2f1d7e-3c4a-4e8b-9d6f-1a2b3c4d5e6f",
+    backup_created_at: iso(now - 9 * 60 * 60 * 1000),
+    sessions_count: 214,
+    this_pc: false,
+    merged_before: true,
+    newer: false,
+  },
+  {
+    device_id: "deck",
+    name: "Steam Deck",
+    backup_id: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    backup_created_at: iso(now - 26 * 60 * 60 * 1000),
+    sessions_count: 63,
+    this_pc: false,
+    merged_before: false,
+    newer: true,
+  },
+];
+
 let cloudPcs: CloudPc[] = [
   {
     device_id: "laptop",
@@ -1545,6 +1580,14 @@ mockIPC((cmd, payload) => {
       }
       return null;
     }
+    // ?sync=1: a sync folder with this PC, the laptop merged before and the Steam Deck not yet.
+    case "get_sync_folder":
+      return syncFolder;
+    case "set_sync_folder":
+      syncFolder = args.path ? `${String(args.path)}\\Vaultime` : null;
+      return syncFolder;
+    case "list_sync_folder_pcs":
+      return syncFolder ? syncPcs : [];
     case "inspect_local_backup":
       return laptopBackup(true, false);
     case "import_local_backup":

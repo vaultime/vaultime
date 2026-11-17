@@ -27,6 +27,7 @@ import { LocalBackupsSection } from "@/features/settings/LocalBackupsSection";
 import { NoticesDialog } from "@/features/settings/NoticesDialog";
 import { UpdatesRow } from "@/features/settings/UpdatesRow";
 import { OtherPcsSection } from "@/features/settings/OtherPcsSection";
+import { SyncFolderSection } from "@/features/settings/SyncFolderSection";
 import { ThisPcSection } from "@/features/settings/ThisPcSection";
 import { WindowSection } from "@/features/settings/WindowSection";
 import {
@@ -361,6 +362,8 @@ export function SettingsPage() {
           onError={setError}
           onRestartRequired={() => setRestartRequired(true)}
         />
+
+        <SyncFolderSection onError={setError} />
 
         <CloudBackupSection onError={setError} />
 

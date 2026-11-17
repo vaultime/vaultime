@@ -10,7 +10,8 @@ import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
 import * as api from "@/lib/tauri";
 import { formatLongDate } from "@/lib/time";
-import type { AutoMerge, CloudPc, GameChoice, MergePreview, MergeSummary } from "@/lib/types";
+import type { CloudPc, GameChoice, MergePreview, MergeSummary } from "@/lib/types";
+import { backupHint } from "@/lib/merge";
 import { describeError } from "@/lib/utils";
 import { plural } from "@/lib/words";
 import { MergeDialog } from "./MergeDialog";
@@ -23,20 +24,6 @@ interface PendingMerge {
   /** What to do when the dialog closes without a merge. */
   dismiss?: () => void;
   fromCloud?: boolean;
-}
-
-const WAITING: Record<Exclude<AutoMerge["outcome"], "merged">, string> = {
-  new_key: "Its newest backup brings a key this PC does not know yet, so it waits for you.",
-  failing: "Its newest backup has sessions that fail their check, so it waits for you.",
-};
-
-/** What the cloud row of a PC says about it. */
-function cloudHint(pc: CloudPc, waiting: AutoMerge | undefined): string {
-  const backup = `Backup of ${formatLongDate(pc.backup_created_at)}, ${plural(pc.sessions_count, "session")}.`;
-  if (waiting && waiting.outcome !== "merged") return `${backup} ${WAITING[waiting.outcome]}`;
-  if (!pc.merged_before) return `${backup} After the first merge, newer backups come in by themselves.`;
-  if (pc.newer) return `${backup} It comes in by itself within the hour.`;
-  return `${backup} Merged.`;
 }
 
 /** Other PCs whose sessions are here, and merging in another one's backup, from a folder or the cloud. */
@@ -135,7 +122,7 @@ export function OtherPcsSection({ onError }: { onError: (message: string | null)
           const waiting = cloud.waitingMerges.find((merge) => merge.device_id === pc.device_id);
           const offer = !pc.merged_before || waiting !== undefined || pc.newer;
           return (
-            <PageRow key={pc.device_id} label={`${pc.name ?? "Another PC"} in the cloud`} hint={cloudHint(pc, waiting)}>
+            <PageRow key={pc.device_id} label={`${pc.name ?? "Another PC"} in the cloud`} hint={backupHint(pc, waiting)}>
               {offer && (
                 <Button
                   variant="outline"

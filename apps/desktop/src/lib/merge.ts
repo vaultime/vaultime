@@ -2,8 +2,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { formatLongDate } from "@/lib/time";
-import type { MergePreview, MergeSummary } from "@/lib/types";
+import type { AutoMerge, CloudPc, MergePreview, MergeSummary } from "@/lib/types";
 import { capitalize, plural } from "@/lib/words";
+
+/** Why an automatic merge left a PC's newest backup for the player. */
+const WAITING: Record<Exclude<AutoMerge["outcome"], "merged">, string> = {
+  new_key: "Its newest backup brings a key this PC does not know yet, so it waits for you.",
+  failing: "Its newest backup has sessions that fail their check, so it waits for you.",
+};
+
+/** What the row of another PC's newest backup, in the cloud or the sync folder, says about it. */
+export function backupHint(
+  pc: Pick<CloudPc, "backup_created_at" | "sessions_count" | "merged_before" | "newer">,
+  waiting?: AutoMerge,
+): string {
+  const backup = `Backup of ${formatLongDate(pc.backup_created_at)}, ${plural(pc.sessions_count, "session")}.`;
+  if (waiting && waiting.outcome !== "merged") return `${backup} ${WAITING[waiting.outcome]}`;
+  if (!pc.merged_before) return `${backup} After the first merge, newer backups come in by themselves.`;
+  if (pc.newer) return `${backup} It comes in by itself within the hour.`;
+  return `${backup} Merged.`;
+}
 
 /** The PC a backup comes from, by the name it gave itself. */
 export function sourceName(preview: Pick<MergePreview, "device_name" | "device_id">): string {
