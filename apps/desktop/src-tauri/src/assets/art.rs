@@ -104,6 +104,20 @@ pub fn derived_files(cache_path: &Path) -> Vec<PathBuf> {
     vec![cache_path.with_file_name(format!("{stem}.{TINT_FILE}"))]
 }
 
+/// The UUID of the cached image a file in a game folder was made for, for
+/// files that are not cached images themselves.
+pub fn derived_from(file: &str) -> Option<&str> {
+    let (stem, rest) = file.split_once('.')?;
+    (is_uuid(stem) && (rest == TINT_FILE || is_passing(file))).then_some(stem)
+}
+
+/// A file written under a passing name, which a crash may leave behind.
+pub fn is_passing(file: &str) -> bool {
+    Path::new(file)
+        .extension()
+        .is_some_and(|extension| extension == "tmp")
+}
+
 fn read_tint(path: &Path) -> Option<ArtTint> {
     let file: TintFile = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
     (file.rules == ART_TINT_RULES_VERSION).then_some(file.tint)
@@ -216,6 +230,16 @@ mod tests {
             );
             assert!(cover_tint(&dir, &stored).is_err(), "{stored}");
         }
+        assert_eq!(
+            derived_from(&format!("{id}.tint.json")),
+            Some(id.to_string().as_str())
+        );
+        assert_eq!(
+            derived_from(&format!("{id}.tint.0f3a.tmp")),
+            Some(id.to_string().as_str())
+        );
+        assert_eq!(derived_from(&format!("{id}.jpg")), None);
+        assert_eq!(derived_from("notes.tint.json"), None);
         fs::remove_dir_all(dir).unwrap();
     }
 }

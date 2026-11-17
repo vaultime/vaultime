@@ -363,6 +363,10 @@ pub fn sweep_cache(db: &Database, asset_manager: &AssetManager) -> Result<usize>
         .iter()
         .filter_map(|path| cache_key(Path::new(path)))
         .collect();
+    let used_stems: HashSet<(String, String)> = used
+        .iter()
+        .filter_map(|(folder, file)| Some((folder.clone(), file.split_once('.')?.0.to_owned())))
+        .collect();
     let Ok(folders) = fs::read_dir(asset_manager.cache_dir()) else {
         return Ok(0);
     };
@@ -378,9 +382,11 @@ pub fn sweep_cache(db: &Database, asset_manager: &AssetManager) -> Result<usize>
         let Ok(files) = fs::read_dir(folder.path()) else {
             continue;
         };
+        let folder_name = folder.file_name().to_string_lossy().into_owned();
         for file in files.flatten() {
             let path = file.path();
-            let cached_image = file.file_type().is_ok_and(|kind| kind.is_file())
+            let is_file = file.file_type().is_ok_and(|kind| kind.is_file());
+            let cached_image = is_file
                 && path
                     .file_stem()
                     .and_then(|stem| stem.to_str())
@@ -398,9 +404,17 @@ pub fn sweep_cache(db: &Database, asset_manager: &AssetManager) -> Result<usize>
                 .ok()
                 .and_then(|modified| modified.elapsed().ok())
                 .is_some_and(|age| age >= ARTWORK_SWEEP_MIN_AGE);
+            let name = file.file_name().to_string_lossy().into_owned();
+            // Colors and passing files go with their image, and a passing
+            // file left by a crash goes too.
+            let derived = is_file
+                && art::derived_from(&name).is_some_and(|stem| {
+                    art::is_passing(&name)
+                        || !used_stems.contains(&(folder_name.clone(), stem.to_owned()))
+                });
             let unused = cache_key(&path).is_some_and(|key| !used.contains(&key));
-            if cached_image && old && unused && fs::remove_file(&path).is_ok() {
-                removed += 1;
+            if old && ((cached_image && unused) || derived) && fs::remove_file(&path).is_ok() {
+                removed += usize::from(cached_image);
             }
         }
     }
@@ -1754,8 +1768,13 @@ mod tests {
             path
         };
         let id = || uuid::Uuid::new_v4().to_string();
-        let used = file(&format!("{}.jpg", id()), 2);
-        let orphan = file(&format!("{}.png", id()), 2);
+        let used_id = id();
+        let orphan_id = id();
+        let used = file(&format!("{used_id}.jpg"), 2);
+        let used_tint = file(&format!("{used_id}.tint.json"), 2);
+        let orphan = file(&format!("{orphan_id}.png"), 2);
+        let orphan_tint = file(&format!("{orphan_id}.tint.json"), 2);
+        let passing = file(&format!("{used_id}.tint.5e1f.tmp"), 2);
         let young = file(&format!("{}.jpg", id()), 0);
         let foreign = file("notes.txt", 2);
         let named = file("cover.jpg", 2);
@@ -1770,9 +1789,13 @@ mod tests {
         )
         .unwrap();
 
+        // The colors of an image go with it, a passing file left by a crash
+        // goes too, and only images count.
         assert_eq!(sweep_cache(&db, &asset_manager).unwrap(), 1);
-        assert!(!orphan.exists());
-        for kept in [&used, &young, &foreign, &named] {
+        for gone in [&orphan, &orphan_tint, &passing] {
+            assert!(!gone.exists(), "{}", gone.display());
+        }
+        for kept in [&used, &used_tint, &young, &foreign, &named] {
             assert!(kept.exists(), "{}", kept.display());
         }
 
