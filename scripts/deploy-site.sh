@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Builds the API for Ubuntu 24.04 in Docker and installs it on the server
-# together with the website.
+# Builds the website and installs it on the server, next to the folder the
+# release workflow uploads installers to.
 #
-#   VAULTIME_DEPLOY_HOST=root@server scripts/deploy-api.sh [domain]
+#   VAULTIME_DEPLOY_HOST=root@server scripts/deploy-site.sh [domain]
 #
 # domain defaults to vaultime.codfishcloud.de. On Windows, set SSH and SCP to the
 # Windows OpenSSH binaries when the key lives in the Windows ssh-agent. When
@@ -19,12 +19,12 @@ ssh_cmd=${SSH:-ssh}
 scp_cmd=${SCP:-scp}
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-stage="$repo/dist-api"
-bash "$repo/scripts/build-api.sh"
+stage="$repo/dist-deploy"
+rm -rf "$stage"
+mkdir -p "$stage"
 
-payload=(install-api.sh vaultime-api.service vaultime-db-backup.service vaultime-db-backup.timer
-  bootstrap-admin-account.py generate-cloud-invite.py)
-for file in "${payload[@]}"; do cp "$repo/deploy/vps/$file" "$stage/"; done
+payload=(install-site.sh)
+cp "$repo/deploy/vps/install-site.sh" "$stage/"
 
 python=$(command -v python3 || command -v python)
 "$python" "$repo/scripts/build-site.py" >/dev/null
@@ -41,7 +41,7 @@ fi
 remote_dir=$("$ssh_cmd" "$host" 'mktemp -d /tmp/vaultime-deploy.XXXXXXXX')
 # Windows OpenSSH wants Windows paths.
 local_path() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
-files=("$(local_path "$stage/vaultime-api")")
+files=()
 for file in "${payload[@]}"; do files+=("$(local_path "$stage/$file")"); done
 "$scp_cmd" -q "${files[@]}" "$host:$remote_dir/"
-"$ssh_cmd" "$host" "bash '$remote_dir/install-api.sh' '$domain'; status=\$?; rm -rf '$remote_dir'; exit \$status"
+"$ssh_cmd" "$host" "bash '$remote_dir/install-site.sh' '$domain'; status=\$?; rm -rf '$remote_dir'; exit \$status"

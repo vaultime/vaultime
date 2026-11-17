@@ -33,9 +33,10 @@ PLAN.md
 __pycache__/
 *.pyc
 
-# Output of scripts/linux-package.sh, scripts/deploy-api.sh and scripts/build-site.py
+# Output of scripts/linux-package.sh, scripts/build-api.sh, scripts/deploy-site.sh and scripts/build-site.py
 dist-linux/
 dist-api/
+dist-deploy/
 dist-site/
 
 # Local Claude Code settings and agent worktrees
