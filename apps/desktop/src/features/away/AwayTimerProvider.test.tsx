@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LibraryContext } from "@/features/library/library-context";
 import { MINUTE_MS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
-import type { AwayTimer } from "@/lib/types";
+import type { AwayTimer, GameLink } from "@/lib/types";
 import { useAwayTimer } from "./away-timer-context";
 import { AwayTimerProvider } from "./AwayTimerProvider";
 
@@ -36,13 +36,13 @@ function Controls() {
   );
 }
 
-function renderWith(timer: AwayTimer | null) {
+function renderWith(timer: AwayTimer | null, links: Partial<GameLink>[] = []) {
   vi.mocked(api.getAwayTimer).mockResolvedValue(timer);
   const library = {
     loaded: true,
     games: [{ id: "hades", title: "Hades", launcher_source: null }],
     summaries: [],
-    links: [],
+    links,
     thisDeviceId: "desktop",
     refresh,
   } as unknown as NonNullable<ContextType<typeof LibraryContext>>;
@@ -94,6 +94,25 @@ describe("the timer for play away from this PC", () => {
     renderWith(null);
     await waitFor(() => expect(api.getAwayTimer).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("No timer")).toBeTruthy();
+  });
+
+  it("times the game a game linked since counts as", async () => {
+    renderWith({ ...running(), game_id: "hades-gog" }, [
+      { game_id: "hades-gog", linked_game_id: "hades", origin_device_id: null, launcher_source: "gog" },
+    ]);
+    await screen.findByText("Timing hades");
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save session" }));
+    await waitFor(() => expect(api.clearAwayTimer).toHaveBeenCalled());
+    expect(api.addManualSession).toHaveBeenCalledWith("hades", expect.any(String), 95 * MINUTE_MS, "", null);
+    expect(api.getAwayTimer).toHaveBeenCalledOnce();
+  });
+
+  it("asks about a timer it cannot show only once", async () => {
+    renderWith({ game_id: "kept", started_at: new Date().toISOString() });
+    await waitFor(() => expect(api.getAwayTimer).toHaveBeenCalledTimes(2));
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(api.getAwayTimer).toHaveBeenCalledTimes(2);
   });
 
   it("sets the timed play aside without a session", async () => {

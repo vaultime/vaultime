@@ -5,7 +5,10 @@ import { createContext, useContext } from "react";
 import type { AwayTimer } from "@/lib/types";
 
 export interface AwayTimerState {
-  /** The timer running for play away from this PC, null while none runs. */
+  /**
+   * The timer running for play away from this PC, null while none runs. A
+   * game linked since it started names the game it counts as.
+   */
   timer: AwayTimer | null;
   /** Starts timing a game. */
   start: (gameId: string) => Promise<void>;
