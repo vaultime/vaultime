@@ -25,12 +25,14 @@ pub const ACCESS_TOKEN_TTL_MINUTES: i64 = 15;
 pub const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
 /// Random bytes in a refresh token, before base64url encoding.
 pub const REFRESH_TOKEN_BYTES: usize = 32;
-/// Shortest accepted password, in characters. Same as `MIN_PASSWORD_CHARS` in
-/// `deploy/vps/bootstrap-admin-account.py` and `MIN_CLOUD_PASSWORD_CHARS` in
-/// `apps/desktop/src/lib/constants.ts`.
+/// Shortest accepted password, in characters. Same as
+/// `MIN_CLOUD_PASSWORD_CHARS` in `apps/desktop/src/lib/constants.ts`.
 pub const MIN_PASSWORD_CHARS: usize = 10;
 /// Longest email address an account takes, the limit of the address format.
 pub const EMAIL_MAX_CHARS: usize = 254;
+/// Whether the server takes new accounts when `VAULTIME_OPEN_SIGNUPS` is
+/// unset. Closed, so a server only opens on purpose.
+pub const DEFAULT_OPEN_SIGNUPS: bool = false;
 
 // Abuse limits
 //
@@ -47,7 +49,7 @@ pub const LOGIN_FAILURES_PER_WINDOW_PER_EMAIL: u32 = 30;
 pub const LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT: u32 = 10;
 /// Keys a rate limiter tracks at most, so a flood of addresses cannot fill the memory.
 pub const RATE_LIMIT_MAX_KEYS: usize = 100_000;
-/// Password and invite hashes computed at the same time.
+/// Password hashes computed at the same time.
 pub const MAX_CONCURRENT_PASSWORD_HASHES: usize = 4;
 /// Longest wait for a free hashing slot before a sign-in is turned away, in seconds.
 pub const HASH_QUEUE_WAIT_SECS: u64 = 10;
@@ -79,37 +81,6 @@ pub const MAX_LEDGER_KEYS_PER_PC: i64 = 64;
 /// How often the server removes stale uploads, unused artwork and expired
 /// sessions, in seconds.
 pub const MAINTENANCE_INTERVAL_SECS: u64 = 60 * 60;
-
-// Invites
-
-/// Redemptions of an admin invite when the request sets none.
-pub const DEFAULT_INVITE_MAX_REDEMPTIONS: i32 = 1;
-
-// Invite codes. `deploy/vps/generate-cloud-invite.py` uses the same values.
-// Changing the scrypt settings breaks every stored invite hash.
-
-/// Prefix of invite codes when the request sets none. Also in
-/// `lib/cloud-api.ts` of the desktop app and in `scripts/cloud-e2e.sh`.
-pub const INVITE_PREFIX: &str = "VTLINV";
-
-/// scrypt cost as log2 of N.
-pub const INVITE_SCRYPT_LOG_N: u8 = 14;
-/// scrypt block size.
-pub const INVITE_SCRYPT_R: u32 = 8;
-/// scrypt parallelism.
-pub const INVITE_SCRYPT_P: u32 = 1;
-/// Length of an invite hash in bytes, before hex encoding.
-pub const INVITE_HASH_BYTES: usize = 64;
-/// Random bytes in an invite salt, before hex encoding.
-pub const INVITE_SALT_BYTES: usize = 16;
-/// Random bytes drawn for an invite code body, before base64url encoding.
-pub const INVITE_BODY_RANDOM_BYTES: usize = 18;
-/// Characters in an invite code body, without the prefix and dashes.
-pub const INVITE_BODY_CHARS: usize = 24;
-/// Leading body characters stored in plain text to look an invite up.
-pub const INVITE_LOOKUP_KEY_CHARS: usize = 12;
-/// Characters per dash separated group in an invite code.
-pub const INVITE_CODE_GROUP_CHARS: usize = 4;
 
 // Backup limits
 //

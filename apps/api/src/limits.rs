@@ -5,7 +5,7 @@
 //! never written anywhere, client addresses included.
 
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -29,8 +29,7 @@ pub struct Limits {
     /// Failed sign-ins per email address from one client address. Tighter
     /// than the limit per email, so one guesser cannot lock a user out alone.
     pub failures_by_email_and_client: RateLimiter,
-    /// Password and invite hashes running at the same time. A password hash
-    /// takes about 19 MiB.
+    /// Password hashes running at the same time. One takes about 19 MiB.
     pub hashing: Semaphore,
     pub uploads: AccountLocks,
 }
@@ -211,23 +210,38 @@ impl AccountLocks {
     }
 }
 
-/// The client address as Caddy saw it. The API only listens on localhost
-/// behind Caddy, which puts the peer address last in `X-Forwarded-For`. IPv6
-/// clients count per /56, the block a home connection usually gets.
-pub fn client_key(headers: &HeaderMap) -> String {
+/// The client address a request counts against. A reverse proxy on this
+/// machine or in a private network puts the client's address last in
+/// `X-Forwarded-For`. Anyone else could make that header up, so their own
+/// address counts. IPv6 clients count per /56, the block a home connection
+/// usually gets.
+pub fn client_key(peer: SocketAddr, headers: &HeaderMap) -> String {
+    // A proxy that adds a line of its own instead of extending the one it got
+    // leaves a made up line first, so the last line counts.
     let address = headers
-        .get("x-forwarded-for")
+        .get_all("x-forwarded-for")
+        .iter()
+        .next_back()
+        .filter(|_| is_local(peer.ip()))
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.rsplit(',').next())
-        .and_then(|value| value.trim().parse::<IpAddr>().ok());
-    match address {
-        Some(IpAddr::V6(address)) => {
+        .and_then(|value| value.trim().parse::<IpAddr>().ok())
+        .unwrap_or(peer.ip());
+    match address.to_canonical() {
+        IpAddr::V6(address) => {
             let [a, b, c, d, ..] = address.segments();
             // The low byte of the fourth group lies beyond the /56.
             format!("{a:x}:{b:x}:{c:x}:{:x}::/56", d & 0xff00)
         }
-        Some(address) => address.to_string(),
-        None => "unknown".into(),
+        address => address.to_string(),
+    }
+}
+
+/// Loopback or a private network, where a proxy in front of the server sits.
+fn is_local(address: IpAddr) -> bool {
+    match address.to_canonical() {
+        IpAddr::V4(address) => address.is_loopback() || address.is_private(),
+        IpAddr::V6(address) => address.is_loopback() || address.is_unique_local(),
     }
 }
 
@@ -269,19 +283,54 @@ mod tests {
     }
 
     #[test]
-    fn takes_the_address_caddy_added_last() {
+    fn trusts_the_forwarded_address_only_from_a_local_proxy() {
+        let public: SocketAddr = "198.51.100.7:4000".parse().unwrap();
+        let proxy: SocketAddr = "172.18.0.5:4000".parse().unwrap();
         let mut headers = HeaderMap::new();
-        assert_eq!(client_key(&headers), "unknown");
+        assert_eq!(client_key(proxy, &headers), "172.18.0.5");
         headers.insert(
             "x-forwarded-for",
             HeaderValue::from_static("6.6.6.6, 203.0.113.9"),
         );
-        assert_eq!(client_key(&headers), "203.0.113.9");
+        assert_eq!(client_key(public, &headers), "198.51.100.7");
+        assert_eq!(client_key(proxy, &headers), "203.0.113.9");
         headers.insert(
             "x-forwarded-for",
             HeaderValue::from_static("2001:db8:1:2ab:3:4:5:6"),
         );
-        assert_eq!(client_key(&headers), "2001:db8:1:200::/56");
+        let mapped_loopback: SocketAddr = "[::ffff:127.0.0.1]:4000".parse().unwrap();
+        assert_eq!(client_key(mapped_loopback, &headers), "2001:db8:1:200::/56");
+
+        let mut lines = HeaderMap::new();
+        lines.append("x-forwarded-for", HeaderValue::from_static("6.6.6.6"));
+        lines.append("x-forwarded-for", HeaderValue::from_static("203.0.113.9"));
+        assert_eq!(client_key(proxy, &lines), "203.0.113.9");
+    }
+
+    #[test]
+    fn knows_the_addresses_a_proxy_sits_at() {
+        let local = [
+            "127.0.0.1",
+            "10.0.0.1",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.1.2",
+            "::1",
+            "fd00::1",
+            "::ffff:10.0.0.1",
+        ];
+        for address in local {
+            assert!(is_local(address.parse().unwrap()), "{address}");
+        }
+        let public = [
+            "172.32.0.1",
+            "100.64.0.1",
+            "2001:db8::1",
+            "::ffff:203.0.113.9",
+        ];
+        for address in public {
+            assert!(!is_local(address.parse().unwrap()), "{address}");
+        }
     }
 
     #[tokio::test]

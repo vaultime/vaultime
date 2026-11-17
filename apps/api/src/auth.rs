@@ -20,64 +20,24 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::config::Config;
 use crate::constants::{
-    ACCESS_TOKEN_TTL_MINUTES, EMAIL_MAX_CHARS, HASH_QUEUE_WAIT_SECS, INVITE_CODE_GROUP_CHARS,
-    INVITE_HASH_BYTES, INVITE_LOOKUP_KEY_CHARS, INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_P,
-    INVITE_SCRYPT_R, MIN_PASSWORD_CHARS, REFRESH_TOKEN_BYTES, REFRESH_TOKEN_TTL_DAYS,
+    ACCESS_TOKEN_TTL_MINUTES, EMAIL_MAX_CHARS, HASH_QUEUE_WAIT_SECS, MIN_PASSWORD_CHARS,
+    REFRESH_TOKEN_BYTES, REFRESH_TOKEN_TTL_DAYS,
 };
 use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedAccount {
     pub account_id: Uuid,
-    pub role: String,
 }
 
+/// Tokens signed while accounts still had a role carry one more claim, which
+/// decoding ignores.
 #[derive(Debug, Serialize, Deserialize)]
 struct AccessClaims {
     sub: String,
     email: String,
-    role: String,
     exp: usize,
     iat: usize,
-}
-
-pub struct ParsedInviteCode {
-    pub normalized_code: String,
-    pub lookup_key: String,
-}
-
-impl ParsedInviteCode {
-    pub fn parse(raw: &str) -> AppResult<Self> {
-        let mut parts = raw.trim().split('-').filter(|part| !part.is_empty());
-        let prefix = parts
-            .next()
-            .ok_or_else(|| AppError::bad_request("invite code is missing a prefix"))?
-            .to_ascii_uppercase();
-
-        let body = parts
-            .flat_map(str::chars)
-            .filter(char::is_ascii_alphanumeric)
-            .map(|ch| ch.to_ascii_uppercase())
-            .collect::<String>();
-
-        if body.len() < INVITE_LOOKUP_KEY_CHARS {
-            return Err(AppError::bad_request("invite code is too short"));
-        }
-
-        Ok(Self {
-            normalized_code: format!("{prefix}-{}", chunk_code(&body)),
-            lookup_key: body[..INVITE_LOOKUP_KEY_CHARS].to_string(),
-        })
-    }
-}
-
-/// Splits an ASCII code body into dash separated groups.
-pub fn chunk_code(body: &str) -> String {
-    body.as_bytes()
-        .chunks(INVITE_CODE_GROUP_CHARS)
-        .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
-        .collect::<Vec<_>>()
-        .join("-")
 }
 
 pub fn normalize_email(raw: &str) -> AppResult<String> {
@@ -105,7 +65,7 @@ pub fn hash_password(password: &str) -> AppResult<String> {
         .to_string())
 }
 
-/// Runs a password or invite hash on the blocking pool, a few at a time, so
+/// Runs a password hash on the blocking pool, a few at a time, so
 /// a burst of sign-ins cannot stall the other requests or the memory.
 pub async fn run_hash<T: Send + 'static>(
     state: &AppState,
@@ -173,14 +133,12 @@ pub fn create_access_token(
     config: &Config,
     account_id: Uuid,
     email: &str,
-    role: &str,
 ) -> AppResult<(String, DateTime<Utc>)> {
     let issued_at = Utc::now();
     let expires_at = issued_at + Duration::minutes(ACCESS_TOKEN_TTL_MINUTES);
     let claims = AccessClaims {
         sub: account_id.to_string(),
         email: email.to_string(),
-        role: role.to_string(),
         exp: unix_seconds(expires_at),
         iat: unix_seconds(issued_at),
     };
@@ -216,36 +174,12 @@ pub fn refresh_token_expiry() -> DateTime<Utc> {
     Utc::now() + Duration::days(REFRESH_TOKEN_TTL_DAYS)
 }
 
-pub fn hash_invite_code(normalized_code: &str, salt: &str) -> AppResult<String> {
-    let params = scrypt::Params::new(INVITE_SCRYPT_LOG_N, INVITE_SCRYPT_R, INVITE_SCRYPT_P)
-        .map_err(|error| AppError::internal(format!("invalid scrypt params: {error}")))?;
-
-    let mut out = [0_u8; INVITE_HASH_BYTES];
-    scrypt::scrypt(
-        normalized_code.as_bytes(),
-        salt.as_bytes(),
-        &params,
-        &mut out,
-    )
-    .map_err(|error| AppError::internal(format!("failed to hash invite: {error}")))?;
-
-    Ok(hex::encode(out))
-}
-
-pub fn verify_invite_hash(
-    normalized_code: &str,
-    salt: &str,
-    expected_hash: &str,
-) -> AppResult<bool> {
-    Ok(hash_invite_code(normalized_code, salt)? == expected_hash)
-}
-
 fn unix_seconds(value: DateTime<Utc>) -> usize {
     usize::try_from(value.timestamp()).unwrap_or_default()
 }
 
 /// A valid token is not enough. The account must still exist and be active, so revoking access
-/// takes effect before the token expires. The role is read from the database for the same reason.
+/// takes effect before the token expires.
 impl FromRequestParts<AppState> for AuthenticatedAccount {
     type Rejection = AppError;
 
@@ -263,8 +197,8 @@ impl FromRequestParts<AppState> for AuthenticatedAccount {
 
         let account_id = decode_access_token(&state.config, token)?;
 
-        let (role, access_state) = sqlx::query_as::<_, (String, String)>(
-            "SELECT role, access_state FROM cloud_accounts WHERE id = $1",
+        let access_state = sqlx::query_scalar::<_, String>(
+            "SELECT access_state FROM cloud_accounts WHERE id = $1",
         )
         .bind(account_id)
         .fetch_optional(&state.db)
@@ -275,7 +209,7 @@ impl FromRequestParts<AppState> for AuthenticatedAccount {
             return Err(AppError::forbidden("account does not have cloud access"));
         }
 
-        Ok(Self { account_id, role })
+        Ok(Self { account_id })
     }
 }
 
@@ -283,12 +217,9 @@ impl FromRequestParts<AppState> for AuthenticatedAccount {
 mod tests {
     use super::*;
 
-    // Known answers computed with argon2 0.5, scrypt 0.11, sha2 0.10 and jsonwebtoken 9, so a
-    // dependency update that changes how stored hashes and tokens verify fails here. The invite
-    // and refresh vectors also match Python hashlib.
-    const INVITE_CODE: &str = "VTLINV-A3Q1-S5F8-S1DT-R1DJ-2RIC-NXAO";
-    const INVITE_SALT: &str = "00112233445566778899aabbccddeeff";
-    const INVITE_HASH: &str = "68f6d364d82e0da5f6a1015d7b2a1c350d5cbe76a4d44b19822bf1e2888a22d4e3d65e7dac381a8c4e56bd4cda419578f8ec7ad87802c369bbdd8ff7b765dae5";
+    // Known answers computed with argon2 0.5, sha2 0.10 and jsonwebtoken 9, so a dependency
+    // update that changes how stored hashes and tokens verify fails here. The refresh vector also
+    // matches Python hashlib, and ACCESS_TOKEN comes from Python hmac.
     const REFRESH_HASH: &str = "a7cd44fe97cd3560610062a1b4f308a6c24e4e7fe06c7ec0d42421475929140d";
     const PASSWORD: &str = "correct horse battery";
     const PASSWORD_HASHES: [&str; 2] = [
@@ -297,23 +228,14 @@ mod tests {
     ];
     const ACCESS_SECRET: &str = "test-access-secret";
     const PINNED_ACCOUNT_ID: &str = "7f1c1f5e-3c1a-4f7e-9d3b-2a4c5e6f7a8b";
-    const ACCESS_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3ZjFjMWY1ZS0zYzFhLTRmN2UtOWQzYi0yYTRjNWU2ZjdhOGIiLCJlbWFpbCI6InBsYXllckBleGFtcGxlLmNvbSIsInJvbGUiOiJ1c2VyIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NjcyMjU2MDB9.5lxWbB-mcBDjNSvhnlPg_YmiovXxYfa4B_YbjS-anJg";
+    const ACCESS_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3ZjFjMWY1ZS0zYzFhLTRmN2UtOWQzYi0yYTRjNWU2ZjdhOGIiLCJlbWFpbCI6InBsYXllckBleGFtcGxlLmNvbSIsImV4cCI6NDEwMjQ0NDgwMCwiaWF0IjoxNzY3MjI1NjAwfQ.HWeMqSOstH2WqjkUHuAmhC3GLFUs_S2pAOPCQr-tm5E";
+    /// Signed while accounts still had a role. Such tokens keep working until they expire.
+    const ROLE_ACCESS_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3ZjFjMWY1ZS0zYzFhLTRmN2UtOWQzYi0yYTRjNWU2ZjdhOGIiLCJlbWFpbCI6InBsYXllckBleGFtcGxlLmNvbSIsInJvbGUiOiJ1c2VyIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NjcyMjU2MDB9.5lxWbB-mcBDjNSvhnlPg_YmiovXxYfa4B_YbjS-anJg";
 
     fn test_config() -> Config {
         Config {
-            bind: "127.0.0.1:0".parse().unwrap(),
-            public_base_url: "http://localhost".into(),
-            database_url: "postgres://localhost/vaultime".into(),
-            backup_root: std::env::temp_dir(),
             access_token_secret: ACCESS_SECRET.into(),
-            refresh_token_pepper: "test-pepper".into(),
-            max_backup_bytes: 1024,
-            max_account_bytes: 4096,
-            max_pending_backups_per_account: 1,
-            max_complete_backups_per_account: 30,
-            min_backup_interval_secs: 900,
-            stale_pending_backup_secs: 3600,
-            refresh_reuse_grace_secs: 0,
+            ..Config::for_tests()
         }
     }
 
@@ -321,34 +243,9 @@ mod tests {
         AccessClaims {
             sub: PINNED_ACCOUNT_ID.into(),
             email: "player@example.com".into(),
-            role: "user".into(),
             exp: 4_102_444_800,
             iat: 1_767_225_600,
         }
-    }
-
-    #[test]
-    fn parses_invite_codes_case_insensitively() {
-        let parsed = ParsedInviteCode::parse("vtlinv-a3q1-s5f8-s1dt-r1dj-2ric-nxao").unwrap();
-        assert_eq!(parsed.lookup_key, "A3Q1S5F8S1DT");
-        assert_eq!(parsed.normalized_code, INVITE_CODE);
-    }
-
-    #[test]
-    fn invite_hash_matches_pinned_vector() {
-        assert_eq!(
-            hash_invite_code(INVITE_CODE, INVITE_SALT).unwrap(),
-            INVITE_HASH
-        );
-        assert!(verify_invite_hash(INVITE_CODE, INVITE_SALT, INVITE_HASH).unwrap());
-        assert!(
-            !verify_invite_hash(
-                "VTLINV-A3Q1-S5F8-S1DT-R1DJ-2RIC-NXAP",
-                INVITE_SALT,
-                INVITE_HASH
-            )
-            .unwrap()
-        );
     }
 
     #[test]
@@ -383,9 +280,11 @@ mod tests {
     }
 
     #[test]
-    fn decodes_pinned_access_token() {
-        let account_id = decode_access_token(&test_config(), ACCESS_TOKEN).unwrap();
-        assert_eq!(account_id.to_string(), PINNED_ACCOUNT_ID);
+    fn decodes_pinned_access_tokens() {
+        for token in [ACCESS_TOKEN, ROLE_ACCESS_TOKEN] {
+            let account_id = decode_access_token(&test_config(), token).unwrap();
+            assert_eq!(account_id.to_string(), PINNED_ACCOUNT_ID);
+        }
 
         let decoded = decode::<AccessClaims>(
             ACCESS_TOKEN,
@@ -396,7 +295,6 @@ mod tests {
         let expected = pinned_claims();
         assert_eq!(decoded.header.alg, jsonwebtoken::Algorithm::HS256);
         assert_eq!(decoded.claims.email, expected.email);
-        assert_eq!(decoded.claims.role, expected.role);
         assert_eq!(decoded.claims.exp, expected.exp);
         assert_eq!(decoded.claims.iat, expected.iat);
     }
@@ -416,8 +314,7 @@ mod tests {
     fn issued_access_tokens_use_hs256() {
         let config = test_config();
         let account_id = Uuid::new_v4();
-        let (token, _) =
-            create_access_token(&config, account_id, "player@example.com", "admin").unwrap();
+        let (token, _) = create_access_token(&config, account_id, "player@example.com").unwrap();
         let header = jsonwebtoken::decode_header(&token).unwrap();
         assert_eq!(header.alg, jsonwebtoken::Algorithm::HS256);
         assert_eq!(decode_access_token(&config, &token).unwrap(), account_id);

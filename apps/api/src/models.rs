@@ -11,7 +11,6 @@ use uuid::Uuid;
 pub struct SignUpRequest {
     pub email: String,
     pub password: String,
-    pub invite_code: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,7 +48,6 @@ pub struct AuthResponse {
 pub struct AuthUserResponse {
     pub id: Uuid,
     pub email: String,
-    pub role: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,25 +131,13 @@ pub struct BackupRecordResponse {
 pub struct HealthResponse {
     pub status: &'static str,
     pub service: &'static str,
-    pub public_base_url: String,
-}
-
-#[derive(Debug, FromRow)]
-pub struct InviteRow {
-    pub id: Uuid,
-    pub salt: String,
-    pub code_hash: String,
-    pub max_redemptions: i32,
-    pub redeemed_count: i32,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub revoked_at: Option<DateTime<Utc>>,
+    pub signups_open: bool,
 }
 
 #[derive(Debug, FromRow)]
 pub struct AccountPasswordRow {
     pub id: Uuid,
     pub email: String,
-    pub role: String,
     pub access_state: String,
     pub password_hash: String,
 }
@@ -164,7 +150,6 @@ pub struct RefreshTokenAccountRow {
     pub replaced_at: Option<DateTime<Utc>>,
     pub account_id: Uuid,
     pub email: String,
-    pub role: String,
     pub access_state: String,
 }
 
@@ -176,24 +161,4 @@ pub struct DownloadQuery {
 #[derive(Debug, Serialize)]
 pub struct LogoutResponse {
     pub success: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateAdminInviteRequest {
-    pub prefix: Option<String>,
-    pub max_redemptions: Option<i32>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub note: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AdminInviteResponse {
-    pub code: String,
-    pub lookup_key: String,
-    pub salt: String,
-    pub code_hash: String,
-    pub max_redemptions: i32,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub note: Option<String>,
-    pub created_at: DateTime<Utc>,
 }

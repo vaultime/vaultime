@@ -5,7 +5,6 @@ mod auth;
 mod config;
 mod constants;
 mod error;
-mod invites;
 mod limits;
 mod models;
 mod routes;
@@ -14,9 +13,11 @@ use std::sync::Arc;
 
 use config::Config;
 use constants::DB_MAX_CONNECTIONS;
+use error::AppError;
 use limits::Limits;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -28,7 +29,7 @@ pub struct AppState {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), error::AppError> {
+async fn main() -> Result<(), AppError> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
@@ -37,6 +38,36 @@ async fn main() -> Result<(), error::AppError> {
         .init();
 
     let config = Arc::new(Config::from_env()?);
+
+    // Signals count from the start. As PID 1 in a container the server
+    // would ignore them otherwise while it waits for its database.
+    let mut shutdown = Box::pin(shutdown_signal());
+    let (state, listener) = tokio::select! {
+        started = start(config) => started?,
+        () = &mut shutdown => return Ok(()),
+    };
+    limits::spawn_pruning(Arc::clone(&state.limits));
+    routes::spawn_maintenance(state.clone());
+
+    info!(
+        "vaultime-api listening on {}, sign-ups {}",
+        listener.local_addr()?,
+        if state.config.open_signups {
+            "open"
+        } else {
+            "closed"
+        }
+    );
+
+    axum::serve(listener, routes::service(state))
+        .with_graceful_shutdown(shutdown)
+        .await?;
+
+    Ok(())
+}
+
+/// Connects to the database, brings its schema up to date and takes the port.
+async fn start(config: Arc<Config>) -> Result<(AppState, TcpListener), AppError> {
     tokio::fs::create_dir_all(&config.backup_root).await?;
 
     let db = PgPoolOptions::new()
@@ -45,33 +76,19 @@ async fn main() -> Result<(), error::AppError> {
         .await?;
 
     // A release rolled back after a newer one ran keeps working, since
-    // migrations only ever add.
+    // migrations only add. The one exception is 0008, which removed what
+    // the hosted beta needed.
     let mut migrator = sqlx::migrate!();
     migrator.set_ignore_missing(true);
     migrator.run(&db).await?;
 
+    let listener = TcpListener::bind(config.bind).await?;
     let state = AppState {
-        config: Arc::clone(&config),
+        config,
         db,
         limits: Arc::new(Limits::new()),
     };
-    limits::spawn_pruning(Arc::clone(&state.limits));
-    routes::spawn_maintenance(state.clone());
-
-    let app = routes::router(state);
-    let listener = tokio::net::TcpListener::bind(config.bind).await?;
-
-    info!(
-        "vaultime-api listening on {} ({})",
-        listener.local_addr()?,
-        config.public_base_url
-    );
-
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
-
-    Ok(())
+    Ok((state, listener))
 }
 
 async fn shutdown_signal() {
@@ -94,6 +111,20 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {}
         _ = terminate => {}
+    }
+}
+
+#[cfg(test)]
+impl AppState {
+    /// The pool connects only once a request uses it.
+    pub fn for_tests(config: Config) -> Self {
+        Self {
+            db: PgPoolOptions::new()
+                .connect_lazy(&config.database_url)
+                .expect("the test database address parses"),
+            config: Arc::new(config),
+            limits: Arc::new(Limits::new()),
+        }
     }
 }
 
@@ -125,6 +156,10 @@ mod tests {
         (
             6,
             "ef36b8b07c2fe5d257df7f8e5d26ec58b72ef092710f2705879457402069d05768100781b02ad1676fc9056e8b848092",
+        ),
+        (
+            7,
+            "71b69b8279874626c131101c87ffb17e0e54090a3277f213fe0f24a834892e61789e6e3280fe817ac329a013dffb0757",
         ),
     ];
 

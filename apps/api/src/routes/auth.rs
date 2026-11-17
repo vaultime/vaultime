@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::net::SocketAddr;
+
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use chrono::{DateTime, Duration, Utc};
 use sqlx::PgExecutor;
@@ -10,53 +12,34 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::{
-    AuthenticatedAccount, ParsedInviteCode, check_password_length, create_access_token,
-    generate_refresh_token, hash_password, hash_refresh_token, normalize_email,
-    refresh_token_expiry, run_hash, verify_against_dummy, verify_invite_hash, verify_password,
+    AuthenticatedAccount, check_password_length, create_access_token, generate_refresh_token,
+    hash_password, hash_refresh_token, normalize_email, refresh_token_expiry, run_hash,
+    verify_against_dummy, verify_password,
 };
 use crate::error::{AppError, AppResult};
 use crate::limits::client_key;
 use crate::models::{
-    AccountPasswordRow, AuthResponse, AuthUserResponse, ChangePasswordRequest, InviteRow,
-    LoginRequest, LogoutRequest, LogoutResponse, RefreshRequest, RefreshTokenAccountRow,
-    SignUpRequest,
+    AccountPasswordRow, AuthResponse, AuthUserResponse, ChangePasswordRequest, LoginRequest,
+    LogoutRequest, LogoutResponse, RefreshRequest, RefreshTokenAccountRow, SignUpRequest,
 };
 
 pub async fn sign_up(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<SignUpRequest>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
-    if !state.limits.auth_by_client.allow(&client_key(&headers)) {
+    let client = client_key(peer, &headers);
+    if !state.limits.auth_by_client.allow(&client) {
         return Err(AppError::too_many_requests());
+    }
+    // Before any lookup or hash, so a closed server tells nothing about its
+    // accounts and spends no work.
+    if !state.config.open_signups {
+        return Err(AppError::forbidden("this server takes no new accounts"));
     }
     let email = normalize_email(&payload.email)?;
     check_password_length(&payload.password)?;
-    let parsed_invite = ParsedInviteCode::parse(&payload.invite_code)?;
-
-    // The invite is checked before anything else, so a stranger learns nothing
-    // about which addresses have accounts and cannot make the server hash.
-    let invite = sqlx::query_as::<_, InviteRow>(
-        r#"
-        SELECT id, salt, code_hash, max_redemptions, redeemed_count, expires_at, revoked_at
-        FROM cloud_invites
-        WHERE lookup_key = $1
-        "#,
-    )
-    .bind(&parsed_invite.lookup_key)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::bad_request("invite code is invalid"))?;
-
-    let (code, salt, code_hash) = (
-        parsed_invite.normalized_code.clone(),
-        invite.salt.clone(),
-        invite.code_hash.clone(),
-    );
-    if !run_hash(&state, move || verify_invite_hash(&code, &salt, &code_hash)).await? {
-        return Err(AppError::bad_request("invite code is invalid"));
-    }
-    check_invite(&invite)?;
 
     let email_taken = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM cloud_accounts WHERE email = $1)",
@@ -73,33 +56,12 @@ pub async fn sign_up(
     let password = payload.password;
     let password_hash = run_hash(&state, move || hash_password(&password)).await?;
 
-    // The hashes ran before, so the transaction holds its connection and the
-    // invite's lock only briefly. The lock lets one sign-up at a time count a
-    // redemption, so the invite is checked again under it.
+    // The hash ran before, so the transaction holds its connection only briefly.
     let mut tx = state.db.begin().await?;
-    let invite = sqlx::query_as::<_, InviteRow>(
-        r#"
-        SELECT id, salt, code_hash, max_redemptions, redeemed_count, expires_at, revoked_at
-        FROM cloud_invites
-        WHERE id = $1
-        FOR UPDATE
-        "#,
-    )
-    .bind(invite.id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| AppError::bad_request("invite code is invalid"))?;
-    check_invite(&invite)?;
-
-    let (account_id, account_email, account_role) = sqlx::query_as::<_, (Uuid, String, String)>(
-        r#"
-        INSERT INTO cloud_accounts (email, invited_by_invite_id, access_granted_at, last_login_at)
-        VALUES ($1, $2, NOW(), NOW())
-        RETURNING id, email, role
-        "#,
+    let account_id = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO cloud_accounts (email, last_login_at) VALUES ($1, NOW()) RETURNING id",
     )
     .bind(&email)
-    .bind(invite.id)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -109,38 +71,21 @@ pub async fn sign_up(
         .execute(&mut *tx)
         .await?;
 
-    sqlx::query("INSERT INTO cloud_invite_redemptions (invite_id, account_id) VALUES ($1, $2)")
-        .bind(invite.id)
-        .bind(account_id)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query("UPDATE cloud_invites SET redeemed_count = redeemed_count + 1 WHERE id = $1")
-        .bind(invite.id)
-        .execute(&mut *tx)
-        .await?;
-
     tx.commit().await?;
 
-    let session = issue_session(
-        &state,
-        account_id,
-        &account_email,
-        &account_role,
-        user_agent(&headers),
-    )
-    .await?;
+    let session = issue_session(&state, account_id, &email, user_agent(&headers)).await?;
 
     Ok((StatusCode::CREATED, Json(session)))
 }
 
 pub async fn login(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> AppResult<Json<AuthResponse>> {
     let email = normalize_email(&payload.email)?;
-    let client = client_key(&headers);
+    let client = client_key(peer, &headers);
     let email_and_client = format!("{email} {client}");
     let limits = &state.limits;
     if !limits.auth_by_client.allow(&client)
@@ -162,7 +107,7 @@ pub async fn login(
 
     let row = sqlx::query_as::<_, AccountPasswordRow>(
         r#"
-        SELECT a.id, a.email, a.role, a.access_state, p.password_hash
+        SELECT a.id, a.email, a.access_state, p.password_hash
         FROM cloud_accounts a
         JOIN cloud_account_passwords p ON p.account_id = a.id
         WHERE a.email = $1
@@ -191,18 +136,19 @@ pub async fn login(
         .execute(&state.db)
         .await?;
 
-    let session =
-        issue_session(&state, row.id, &row.email, &row.role, user_agent(&headers)).await?;
+    let session = issue_session(&state, row.id, &row.email, user_agent(&headers)).await?;
 
     Ok(Json(session))
 }
 
 pub async fn refresh(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<RefreshRequest>,
 ) -> AppResult<Json<AuthResponse>> {
-    if !state.limits.auth_by_client.allow(&client_key(&headers)) {
+    let client = client_key(peer, &headers);
+    if !state.limits.auth_by_client.allow(&client) {
         return Err(AppError::too_many_requests());
     }
     let pepper = &state.config.refresh_token_pepper;
@@ -215,7 +161,7 @@ pub async fn refresh(
     let row = sqlx::query_as::<_, RefreshTokenAccountRow>(
         r#"
         SELECT t.id, t.family_id, t.revoked_at, t.replaced_at, t.account_id,
-               a.email, a.role, a.access_state
+               a.email, a.access_state
         FROM cloud_refresh_tokens t
         JOIN cloud_accounts a ON a.id = t.account_id
         WHERE t.token_hash = $1
@@ -317,7 +263,6 @@ pub async fn refresh(
         &state,
         row.account_id,
         &row.email,
-        &row.role,
         refresh_token,
         refresh_expires_at,
     )?))
@@ -348,16 +293,18 @@ pub async fn logout(
 pub async fn change_password(
     State(state): State<AppState>,
     account: AuthenticatedAccount,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<ChangePasswordRequest>,
 ) -> AppResult<Json<AuthResponse>> {
-    if !state.limits.auth_by_client.allow(&client_key(&headers)) {
+    let client = client_key(peer, &headers);
+    if !state.limits.auth_by_client.allow(&client) {
         return Err(AppError::too_many_requests());
     }
     check_password_length(&payload.new_password)?;
     let row = sqlx::query_as::<_, AccountPasswordRow>(
         r#"
-        SELECT a.id, a.email, a.role, a.access_state, p.password_hash
+        SELECT a.id, a.email, a.access_state, p.password_hash
         FROM cloud_accounts a
         JOIN cloud_account_passwords p ON p.account_id = a.id
         WHERE a.id = $1
@@ -418,34 +365,15 @@ pub async fn change_password(
         &state,
         row.id,
         &row.email,
-        &row.role,
         refresh_token,
         refresh_expires_at,
     )?))
-}
-
-/// Whether the invite can still be redeemed.
-fn check_invite(invite: &InviteRow) -> AppResult<()> {
-    if invite.revoked_at.is_some() {
-        return Err(AppError::forbidden("invite has been revoked"));
-    }
-    if invite
-        .expires_at
-        .is_some_and(|expires_at| expires_at < Utc::now())
-    {
-        return Err(AppError::forbidden("invite has expired"));
-    }
-    if invite.redeemed_count >= invite.max_redemptions {
-        return Err(AppError::forbidden("this invite code has been used up"));
-    }
-    Ok(())
 }
 
 async fn issue_session(
     state: &AppState,
     account_id: Uuid,
     email: &str,
-    role: &str,
     user_agent: Option<&str>,
 ) -> AppResult<AuthResponse> {
     let refresh_token = generate_refresh_token()?;
@@ -461,14 +389,7 @@ async fn issue_session(
     )
     .await?;
 
-    auth_response(
-        state,
-        account_id,
-        email,
-        role,
-        refresh_token,
-        refresh_expires_at,
-    )
+    auth_response(state, account_id, email, refresh_token, refresh_expires_at)
 }
 
 /// Pairs a stored refresh token with a new access token.
@@ -476,11 +397,10 @@ fn auth_response(
     state: &AppState,
     account_id: Uuid,
     email: &str,
-    role: &str,
     refresh_token: String,
     refresh_expires_at: DateTime<Utc>,
 ) -> AppResult<AuthResponse> {
-    let (access_token, expires_at) = create_access_token(&state.config, account_id, email, role)?;
+    let (access_token, expires_at) = create_access_token(&state.config, account_id, email)?;
 
     Ok(AuthResponse {
         access_token,
@@ -490,7 +410,6 @@ fn auth_response(
         user: AuthUserResponse {
             id: account_id,
             email: email.to_string(),
-            role: role.to_string(),
         },
     })
 }

@@ -3,7 +3,7 @@ name = "vaultime-api"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
-description = "Self-hosted invite-only API for Vaultime cloud backup"
+description = "Self-hosted API for Vaultime cloud backup"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
@@ -15,7 +15,6 @@ futures-util = "0.3"
 getrandom = "0.4"
 hex = "0.4"
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
-scrypt = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = { version = "0.11", default-features = false }

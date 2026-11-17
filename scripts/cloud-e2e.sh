@@ -25,6 +25,9 @@ small_account_bytes=3145728
 small_backup_bytes=4194304
 # Its grace for a retried refresh, short so the test can wait it out.
 small_grace_secs=2
+# A third API that leaves sign-ups closed, as they are by default.
+closed_api=vaultime-e2e-api-closed
+closed_port=19007
 # The port the API listens on inside its container, as in install-api.sh.
 api_port=9005
 # Random bytes in each test secret, as install-api.sh makes them.
@@ -37,7 +40,7 @@ url="http://127.0.0.1:$port"
 python=$(command -v python3 || command -v python)
 
 cleanup() {
-  docker rm -f "$api" "$small_api" "$db" >/dev/null 2>&1 || true
+  docker rm -f "$api" "$small_api" "$closed_api" "$db" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -55,6 +58,7 @@ docker run -d --name "$db" --network "$network" \
 until docker exec "$db" pg_isready -h 127.0.0.1 -U vaultime -q; do sleep 1; done
 
 secret() { "$python" -c "import secrets; print(secrets.token_hex($secret_bytes))"; }
+field() { "$python" -c "import json, sys; print(json.load(sys.stdin)['$1'])"; }
 
 # Starts an API container on a host port and waits for its health check.
 # Further arguments go to docker run. Every API takes backups without a pause
@@ -66,7 +70,6 @@ start_api() {
     -p "127.0.0.1:$host_port:$api_port" \
     --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
     -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
-    -e VAULTIME_PUBLIC_BASE_URL="http://127.0.0.1:$host_port" \
     -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
     -e VAULTIME_BACKUP_ROOT=/tmp/backups \
     -e VAULTIME_ACCESS_TOKEN_SECRET="$(secret)" \
@@ -83,43 +86,24 @@ start_api() {
   return 1
 }
 
-# Prints the code of a new single use invite, stored with the server's own
-# invite tool.
-make_invite() {
-  "$python" - "$repo/deploy/vps/generate-cloud-invite.py" "$db" <<'EOF'
-import importlib.util
-import subprocess
-import sys
-
-spec = importlib.util.spec_from_file_location("invite", sys.argv[1])
-invite = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(invite)
-run = subprocess.run
-
-
-def psql_in_container(command, *args, **kwargs):
-    if command[0] == "psql":
-        command = ["docker", "exec", "-i", sys.argv[2], "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
-    return run(command, *args, **kwargs)
-
-
-invite.subprocess.run = psql_in_container
-created = invite.generate_invite(invite.INVITE_PREFIX, 1, None, "e2e")
-invite.insert_invite("", created)
-print(created["code"])
-EOF
-}
+echo "== sign-ups closed by default"
+start_api "$closed_api" "$closed_port"
+closed_url="http://127.0.0.1:$closed_port"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$closed_url/v1/auth/signup" -H "content-type: application/json" \
+  -d '{"email":"closed@example.com","password":"e2e-password-1234"}')" = 403 ] \
+  || { echo "an API with sign-ups closed took a new account"; exit 1; }
+[ "$(curl -fsS "$closed_url/healthz" | field signups_open)" = False ] \
+  || { echo "the health check of a closed API said sign-ups were open"; exit 1; }
+docker rm -f "$closed_api" >/dev/null
 
 # The round trip needs two kept backups. A reused refresh token ends its
 # session at once here, the grace for a retry has its own check further down.
-start_api "$api" "$port" -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=2 \
-  -e VAULTIME_REFRESH_REUSE_GRACE_SECONDS=0
+start_api "$api" "$port" -e VAULTIME_OPEN_SIGNUPS=true \
+  -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=2 -e VAULTIME_REFRESH_REUSE_GRACE_SECONDS=0
 
 echo "== creating a test account"
-code=$(make_invite)
 session=$(curl -fsS -X POST "$url/v1/auth/signup" -H "content-type: application/json" \
-  -d "{\"email\":\"e2e@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}")
-field() { "$python" -c "import json, sys; print(json.load(sys.stdin)['$1'])"; }
+  -d '{"email":"e2e@example.com","password":"e2e-password-1234"}')
 token=$(field access_token <<<"$session")
 
 echo "== refresh token reuse"
@@ -158,47 +142,15 @@ register_keys() { curl -s -o /dev/null -w '%{http_code}' -X POST "$url/v1/ledger
 [ "$(register_keys '{"ledger_device_id":"","public_keys":[]}')" = 400 ] \
   || { echo "ledger keys without a PC were taken"; exit 1; }
 
-echo "== admin account"
-"$python" - "$repo/deploy/vps/bootstrap-admin-account.py" "$db" "$url" <<'EOF'
-import importlib.util
-import subprocess
-import sys
-
-tool, container, url = sys.argv[1:]
-spec = importlib.util.spec_from_file_location("bootstrap", tool)
-bootstrap = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bootstrap)
-run = subprocess.run
-
-
-def psql_in_container(command, *args, **kwargs):
-    if command[0] == "psql":
-        command = ["docker", "exec", "-i", container, "psql", "-U", "vaultime", "-d", "vaultime"] + command[2:]
-    return run(command, *args, **kwargs)
-
-
-subprocess.run = psql_in_container
-sys.argv = ["bootstrap", "--email", "admin@example.com", "--password", "e2e-admin-password",
-            "--api-base-url", url, "--db-url", "postgres://vaultime@db/vaultime"]
-sys.exit(bootstrap.main())
-EOF
-admin_token=$(curl -fsS -X POST "$url/v1/auth/login" -H "content-type: application/json" \
-  -d '{"email":"admin@example.com","password":"e2e-admin-password"}' | field access_token)
-[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $admin_token" \
-  -H "content-type: application/json" -d '{"note":"e2e"}' "$url/v1/admin/invites")" = 201 ] \
-  || { echo "the admin could not create an invite"; exit 1; }
-
 echo "== old backups make room"
 small_url="http://127.0.0.1:$small_port"
-start_api "$small_api" "$small_port" \
+start_api "$small_api" "$small_port" -e VAULTIME_OPEN_SIGNUPS=true \
   -e VAULTIME_MAX_ACCOUNT_BYTES="$small_account_bytes" \
   -e VAULTIME_MAX_BACKUP_BYTES="$small_backup_bytes" \
   -e VAULTIME_MAX_COMPLETE_BACKUPS_PER_ACCOUNT=3 \
   -e VAULTIME_REFRESH_REUSE_GRACE_SECONDS="$small_grace_secs"
-code=$(make_invite)
 small_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \
-  -d "{\"email\":\"rotation@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
-  | field access_token)
+  -d '{"email":"rotation@example.com","password":"e2e-password-1234"}' | field access_token)
 "$python" - "$small_url" "$small_token" "$small_account_bytes" <<'EOF'
 import hashlib
 import json
@@ -297,10 +249,8 @@ remove() { curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "authorization: B
 [ "$keep" != "$gone" ] || { echo "two devices got one id"; exit 1; }
 
 echo "== each PC keeps its newest backup"
-code=$(make_invite)
 pcs_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \
-  -d "{\"email\":\"pcs@example.com\",\"password\":\"e2e-password-1234\",\"invite_code\":\"$code\"}" \
-  | field access_token)
+  -d '{"email":"pcs@example.com","password":"e2e-password-1234"}' | field access_token)
 "$python" - "$small_url" "$pcs_token" <<'EOF'
 import hashlib
 import json
