@@ -9,11 +9,11 @@ import { PhraseText } from "@/components/media/PhraseText";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useActiveSessions, useLibrary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
-import { DAYS_PER_WEEK, JOURNAL_LINK_FLASH_MS, LIVE_TOTALS_REFRESH_MS, SETTING_KEYS } from "@/lib/constants";
+import { JOURNAL_LINK_FLASH_MS, LIVE_TOTALS_REFRESH_MS, SETTING_KEYS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
 import { weekSentence } from "@/lib/sentences";
 import * as api from "@/lib/tauri";
-import { formatDate, isoWeekNumber, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
+import { formatDate, isoWeekNumber, isoWeekYear, parseVaultimeDate, startOfWeek, toDayKey } from "@/lib/time";
 import type { DayShare, JournalWeekPlay, Session, SessionEvent, SessionScreenshots } from "@/lib/types";
 import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { scrollMotion } from "@/lib/anchors";
@@ -234,7 +234,6 @@ export function JournalPage() {
   };
   const canGoBack = earliest !== null && startOfWeek(earliest) < start;
   const now = new Date();
-  const weekEnd = startOfDay(start, DAYS_PER_WEEK);
   const [top] = play.game_times;
   const gamesMs = play.game_times.reduce((sum, game) => sum + game.runtime_ms, 0);
   const title =
@@ -255,7 +254,8 @@ export function JournalPage() {
     carriedOver: play.carried_over,
     current: shownOffset === 0,
   });
-  const weekYear = weekEnd.getFullYear() === now.getFullYear() ? "" : `, ${start.getFullYear()}`;
+  // The year the week number counts in, named when it is not this one.
+  const weekYear = isoWeekYear(start) === isoWeekYear(now) ? "" : `, ${isoWeekYear(start)}`;
   const longestDay =
     play.longest_day && play.days_played > 1
       ? {

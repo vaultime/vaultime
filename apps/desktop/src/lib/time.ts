@@ -198,12 +198,22 @@ export function startOfWeek(date: Date): Date {
   return startOfDay(date, -weekdayOf(date));
 }
 
+/** The Thursday of the week that holds `date`, which decides the year the week belongs to. */
+function thursdayOf(date: Date): Date {
+  const THURSDAY_AFTER_MONDAY = 3;
+  return startOfDay(startOfWeek(date), THURSDAY_AFTER_MONDAY);
+}
+
 /** ISO 8601 week number. A week belongs to the year that holds its Thursday. */
 export function isoWeekNumber(date: Date): number {
-  const THURSDAY_AFTER_MONDAY = 3;
-  const thursday = startOfDay(startOfWeek(date), THURSDAY_AFTER_MONDAY);
+  const thursday = thursdayOf(date);
   const firstOfYear = new Date(thursday.getFullYear(), 0, 1);
   return Math.floor(calendarDaysAgo(firstOfYear, thursday) / DAYS_PER_WEEK) + 1;
+}
+
+/** The year whose week `isoWeekNumber` counts. */
+export function isoWeekYear(date: Date): number {
+  return thursdayOf(date).getFullYear();
 }
 
 /** A local time as the value of a datetime-local input, "2026-09-30T20:15". */

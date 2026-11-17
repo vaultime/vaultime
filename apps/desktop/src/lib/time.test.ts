@@ -21,6 +21,7 @@ import {
   formatSpanOnDay,
   fromLocalInput,
   isoWeekNumber,
+  isoWeekYear,
   parseVaultimeDate,
   startOfDay,
   startOfWeek,
@@ -138,6 +139,13 @@ describe("weeks", () => {
     // 1 January 2027 is a Friday, so it still belongs to the last week of 2026.
     expect(isoWeekNumber(new Date(2027, 0, 1))).toBe(53);
     expect(isoWeekNumber(new Date(2027, 0, 4))).toBe(1);
+  });
+
+  it("names the year a week number belongs to", () => {
+    expect(isoWeekYear(new Date(2027, 0, 1))).toBe(2026);
+    expect(isoWeekYear(new Date(2028, 11, 31))).toBe(2028);
+    // Monday 30 December 2024 starts the first week of 2025.
+    expect(isoWeekYear(new Date(2024, 11, 30))).toBe(2025);
   });
 });
 
