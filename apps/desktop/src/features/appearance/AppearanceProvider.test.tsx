@@ -7,7 +7,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSettings } from "@/features/settings/settings-context";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
 import { hexToOklch } from "@/lib/color";
-import { APPEARANCE_CACHE_KEY, APPEARANCE_GAME_CACHE_KEY, SETTING_KEYS, WINDOW_LOOK_INTERVAL_MS } from "@/lib/constants";
+import {
+  APPEARANCE_CACHE_KEY,
+  APPEARANCE_GAME_CACHE_KEY,
+  BACKGROUND_BLUR_PX,
+  BACKGROUND_DIM_PERCENT,
+  SETTING_KEYS,
+  WINDOW_LOOK_INTERVAL_MS,
+} from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { useAppearance, type GamesInFront } from "./appearance-context";
 import { AppearanceProvider } from "./AppearanceProvider";
@@ -89,9 +96,16 @@ describe("the backdrop", () => {
   });
 });
 
+/** Dim and blur a player set for a background picture before the update. */
+const EARLIER_DIM_AND_BLUR = [
+  { key: SETTING_KEYS.backgroundDim, value: "82", updated_at: "2026-10-20T08:00:00.000Z" },
+  { key: SETTING_KEYS.backgroundBlur, value: "8", updated_at: "2026-10-20T08:00:00.000Z" },
+];
+
 describe("an update", () => {
   it("keeps a background picture chosen before the background could follow the game", async () => {
-    vi.mocked(api.listSettings).mockResolvedValueOnce([]);
+    vi.mocked(api.listSettings).mockResolvedValueOnce(EARLIER_DIM_AND_BLUR);
+    vi.mocked(api.setSetting).mockClear();
     vi.mocked(api.getBackgroundImage).mockResolvedValueOnce("data:image/png;base64,cGljdHVyZQ==");
     render(
       <SettingsProvider>
@@ -103,6 +117,42 @@ describe("an update", () => {
     const backdrop = await screen.findByLabelText("Backdrop");
     await waitFor(() => expect(backdrop.textContent).toBe("data:image/png;base64,cGljdHVyZQ=="));
     expect(api.setSetting).toHaveBeenCalledWith(SETTING_KEYS.backgroundSource, "picture");
+    expect(api.setSetting).not.toHaveBeenCalledWith(SETTING_KEYS.backgroundDim, expect.anything());
+    expect(api.setSetting).not.toHaveBeenCalledWith(SETTING_KEYS.backgroundBlur, expect.anything());
+  });
+
+  it("starts the art at the default dim and blur without a picture", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce(EARLIER_DIM_AND_BLUR);
+    vi.mocked(api.setSetting).mockClear();
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/teal.jpg" lightness={0.4} />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    const dim = await screen.findByLabelText("Dim");
+    await waitFor(() => expect(dim.textContent).toBe(String(BACKGROUND_DIM_PERCENT.default)));
+    expect(api.setSetting).toHaveBeenCalledWith(SETTING_KEYS.backgroundSource, "game");
+    expect(api.setSetting).toHaveBeenCalledWith(SETTING_KEYS.backgroundBlur, String(BACKGROUND_BLUR_PX.default));
+  });
+
+  it("leaves dim and blur alone once a background was chosen", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce([
+      ...EARLIER_DIM_AND_BLUR,
+      { key: SETTING_KEYS.backgroundSource, value: "game", updated_at: "2026-11-17T08:00:00.000Z" },
+    ]);
+    vi.mocked(api.setSetting).mockClear();
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/teal.jpg" lightness={0.4} />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    expect((await screen.findByLabelText("Dim")).textContent).toBe("82");
+    await waitFor(() => expect(api.getBackgroundImage).toHaveBeenCalled());
+    expect(api.setSetting).not.toHaveBeenCalled();
   });
 });
 

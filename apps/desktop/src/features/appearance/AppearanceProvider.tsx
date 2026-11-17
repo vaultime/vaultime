@@ -22,6 +22,7 @@ import {
   APPEARANCE_CACHE_KEY,
   APPEARANCE_GAME_CACHE_KEY,
   APPEARANCE_SAVE_DELAY_MS,
+  BACKGROUND_BLUR_PX,
   BACKGROUND_CONTRAST_DIM_PER_LIGHTNESS,
   BACKGROUND_CONTRAST_LIGHTNESS,
   BACKGROUND_DIM_PERCENT,
@@ -270,9 +271,13 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     [save],
   );
 
-  // A picture chosen before the background could follow the game stays.
-  const keepEarlierPicture = useEffectEvent((picture: string | null) => {
-    if (picture && values[SETTING_KEYS.backgroundSource] === undefined) change({ source: "picture" });
+  // A picture chosen before the background could follow the game stays, with
+  // its dim and blur. Without one the art starts at the defaults, as a dim and
+  // blur set for a picture leave the art too sharp behind the panels.
+  const settleEarlierBackground = useEffectEvent((picture: string | null) => {
+    if (values[SETTING_KEYS.backgroundSource] !== undefined) return;
+    if (picture) change({ source: "picture" });
+    else change({ source: "game", dim: BACKGROUND_DIM_PERCENT.default, blur: BACKGROUND_BLUR_PX.default });
   });
 
   useEffect(() => {
@@ -282,7 +287,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       .then((picture) => {
         if (cancelled) return;
         setBackground(picture);
-        keepEarlierPicture(picture);
+        settleEarlierBackground(picture);
       })
       .catch(logFailure("loading the background picture"));
     return () => {
