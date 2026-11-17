@@ -249,7 +249,7 @@ export function SettingsPage() {
     <div className="pb-16">
       <PageHeader overline={appVersion ? `Vaultime ${appVersion}` : "Vaultime"} title="Settings">
         {diagnostics?.running
-          ? `Tracking runs on ${platform}${pollSeconds ? `, checking every ${numberWords(pollSeconds)} seconds` : ""}. Everything stays on this PC.`
+          ? `Tracking runs on ${platform}${pollSeconds ? `, checking every ${numberWords(pollSeconds)} seconds` : ""}. Your play leaves this PC only in the backups you make.`
           : "Tracking is stopped. Restart Vaultime to start it again."}
       </PageHeader>
 
