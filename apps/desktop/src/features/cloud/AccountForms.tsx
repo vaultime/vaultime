@@ -16,11 +16,9 @@ import {
   backupPassphraseProblem,
   emailProblem,
   enteredPasswordProblem,
-  inviteCodeProblem,
   newPasswordProblem,
   repeatProblem,
 } from "@/features/cloud/credentials";
-import { INVITE_CODE_PREFIX } from "@/lib/constants";
 
 const FORM_CLASS = "grid max-w-[520px] gap-4";
 
@@ -69,13 +67,11 @@ export function SignUpForm({ onDone }: { onDone: (message: string) => void }) {
   const { signUp } = useCloudSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [passphraseAgain, setPassphraseAgain] = useState("");
   const form = useCheckedForm({
     "cloud-signup-email": emailProblem(email),
     "cloud-signup-password": newPasswordProblem(password),
-    "cloud-signup-invite": inviteCodeProblem(inviteCode),
     "cloud-signup-backup-passphrase": backupPassphraseProblem(passphrase),
     "cloud-signup-backup-passphrase-confirm": repeatProblem(passphrase, passphraseAgain, "backup passphrase"),
   });
@@ -85,7 +81,7 @@ export function SignUpForm({ onDone }: { onDone: (message: string) => void }) {
       className={FORM_CLASS}
       onSubmit={(event) =>
         form.submit(event, async () => {
-          const session = await signUp(email, password, inviteCode, passphrase);
+          const session = await signUp(email, password, passphrase);
           onDone(`Cloud account created for ${session.user.email}.`);
         })
       }
@@ -99,16 +95,6 @@ export function SignUpForm({ onDone }: { onDone: (message: string) => void }) {
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-        />
-      </Field>
-      <Field id="cloud-signup-invite" label="Invite code" problem={form.problem("cloud-signup-invite")}>
-        <Input
-          id="cloud-signup-invite"
-          // Six groups of four, INVITE_BODY_CHARS in the API's constants.rs.
-          placeholder={`${INVITE_CODE_PREFIX}-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`}
-          value={inviteCode}
-          onChange={(event) => setInviteCode(event.target.value)}
-          className="font-mono"
         />
       </Field>
       <Field

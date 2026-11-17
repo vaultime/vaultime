@@ -7,7 +7,6 @@ import {
   emailProblem,
   enteredPasswordProblem,
   firstProblem,
-  inviteCodeProblem,
   newPasswordProblem,
   repeatProblem,
 } from "@/features/cloud/credentials";
@@ -60,8 +59,6 @@ describe("single checks", () => {
     expect(enteredPasswordProblem("")).toBe("Enter your password.");
     expect(enteredPasswordProblem("", "current password")).toBe("Enter your current password.");
     expect(enteredPasswordProblem("x")).toBeNull();
-    expect(inviteCodeProblem(" ")).toBe("Enter the invite code you received.");
-    expect(inviteCodeProblem("VTLINV-ABCD")).toBeNull();
   });
 });
 

@@ -129,8 +129,6 @@ export const VAULTIME_URL = "https://vaultime.codfishcloud.de";
 
 /** Copyright notice in the rail and in Settings, the holder of the SPDX headers. */
 export const COPYRIGHT_NOTICE = "© 2026 Dominik Schwimmbeck";
-/** Prefix of invite codes. Same as INVITE_PREFIX in apps/api/src/constants.rs. */
-export const INVITE_CODE_PREFIX = "VTLINV";
 
 /** Refresh the access token when it expires within this window. */
 export const TOKEN_REFRESH_MARGIN_MS = MINUTE_MS;

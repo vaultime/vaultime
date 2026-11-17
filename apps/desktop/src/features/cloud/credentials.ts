@@ -51,10 +51,6 @@ export function backupPassphraseProblem(passphrase: string): string | null {
   return null;
 }
 
-export function inviteCodeProblem(code: string): string | null {
-  return code.trim() ? null : "Enter the invite code you received.";
-}
-
 /** For the second entry of a password or passphrase, `what` names the first. */
 export function repeatProblem(first: string, again: string, what: string): string | null {
   if (!again) {

@@ -20,7 +20,7 @@ const SESSION = {
   refresh_token: "refresh",
   expires_at: "2099-01-01T00:00:00.000Z",
   refresh_expires_at: "2099-01-01T00:00:00.000Z",
-  user: { id: "account-1", email: "player@example.com", role: "user" },
+  user: { id: "account-1", email: "player@example.com" },
 } as unknown as CloudAuthSession;
 
 /** A backup on the server, made on `source` or on a PC it does not name. */
@@ -73,7 +73,6 @@ function renderPage(backup: CloudBackupRecord, result: CloudBackupRestoreResult)
     backupKeyReady: true,
     autoBackup: true,
     autoBackupError: null,
-    isAdmin: false,
     setAutoBackup: vi.fn(),
     listBackups: vi.fn(async () => [backup]),
     listDevices: vi.fn(async () => []),

@@ -669,7 +669,6 @@ export interface GameAssetView {
 interface CloudAuthUser {
   id: string;
   email: string;
-  role: string;
 }
 
 export interface CloudAuthSession {
@@ -761,16 +760,6 @@ export interface SteamPlaytimePreview {
   games: EarlierCandidate[];
 }
 
-/** An application for cloud beta access from the website. */
-export interface BetaApplication {
-  id: string;
-  email: string;
-  /** "windows", "linux" or "both". */
-  platform: string;
-  note: string | null;
-  created_at: string;
-}
-
 /** Cloud space of the signed in account. */
 export interface CloudStorage {
   backup_bytes: number;
@@ -829,24 +818,6 @@ export interface FolderPc {
   merged_before: boolean;
   /** Whether the backup is newer than the last one merged here. */
   newer: boolean;
-}
-
-export interface CloudCreateAdminInviteInput {
-  prefix?: string | null;
-  max_redemptions?: number | null;
-  expires_at?: string | null;
-  note?: string | null;
-}
-
-export interface CloudAdminInvite {
-  code: string;
-  lookup_key: string;
-  salt: string;
-  code_hash: string;
-  max_redemptions: number;
-  expires_at: string | null;
-  note: string | null;
-  created_at: string;
 }
 
 export interface CloudBackupUploadResult {

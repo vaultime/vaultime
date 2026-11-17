@@ -41,11 +41,8 @@ import {
 } from "@/lib/tauri";
 import type {
   AutoMerge,
-  BetaApplication,
-  CloudAdminInvite,
   CloudAuthSession,
   CloudBackupRecord,
-  CloudCreateAdminInviteInput,
   CloudDevice,
   CloudStorage,
   GameChoice,
@@ -291,14 +288,9 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
   async function signUp(
     email: string,
     password: string,
-    inviteCode: string,
     backupPassphrase: string,
   ) {
-    const next = await cloudPostJson<CloudAuthSession>("/v1/auth/signup", {
-      email,
-      password,
-      invite_code: inviteCode,
-    });
+    const next = await cloudPostJson<CloudAuthSession>("/v1/auth/signup", { email, password });
     await persistCloudSession(next);
     await persistBackupPassphrase(next, backupPassphrase, []);
     setBackupKeyReady(true);
@@ -427,18 +419,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  async function listBetaApplications() {
-    return withAuthenticatedSession((current) =>
-      cloudGetJson<BetaApplication[]>("/v1/admin/beta-applications", current.access_token),
-    );
-  }
-
-  async function deleteBetaApplication(applicationId: string) {
-    await withAuthenticatedSession((current) =>
-      cloudDelete(`/v1/admin/beta-applications/${encodeURIComponent(applicationId)}`, current.access_token),
-    );
-  }
-
   async function getStorage() {
     return withAuthenticatedSession((current) =>
       cloudGetJson<CloudStorage>("/v1/storage", current.access_token),
@@ -511,26 +491,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
       cloudDelete(
         `/v1/backups/${encodeURIComponent(backupId)}`,
         current.access_token,
-      ),
-    );
-  }
-
-  async function createAdminInvite(input: CloudCreateAdminInviteInput) {
-    const current = await ensureAuthenticatedSession();
-    if (current.user.role !== "admin") {
-      throw new Error("Admin access is required to generate invites.");
-    }
-
-    return withAuthenticatedSession((activeSession) =>
-      cloudPostJson<CloudAdminInvite>(
-        "/v1/admin/invites",
-        {
-          prefix: input.prefix,
-          max_redemptions: input.max_redemptions,
-          expires_at: input.expires_at,
-          note: input.note,
-        },
-        activeSession.access_token,
       ),
     );
   }
@@ -684,7 +644,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     autoBackup,
     autoBackupError,
     setAutoBackup,
-    isAdmin: session?.user.role === "admin",
     login,
     signUp,
     setBackupPassphrase,
@@ -697,8 +656,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     removeDevice,
     listBackups,
     getStorage,
-    listBetaApplications,
-    deleteBetaApplication,
     uploadRemoteBackup,
     restoreRemoteBackup,
     deleteBackup,
@@ -707,7 +664,6 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     mergeCloudBackup,
     discardCloudMerge,
     waitingMerges,
-    createAdminInvite,
   };
 
   return (

@@ -5,11 +5,9 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { HardDriveUpload, KeyRound, Loader2, LogOut, RefreshCw, RotateCcw } from "lucide-react";
 import { Notice, PageHeader, PageRow, PageSection } from "@/components/layout/Page";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { SignInForm, SignUpForm, UnlockBackupsForm } from "@/features/cloud/AccountForms";
-import { BetaApplications } from "@/features/cloud/BetaApplications";
 import { ChangePasswordDialog } from "@/features/cloud/ChangePasswordDialog";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { useLibrary } from "@/features/library/library-context";
@@ -27,7 +25,6 @@ import {
   loadCachedBackups,
   persistCachedBackups,
 } from "./backups";
-import { CreateInviteDialog } from "./CreateInviteDialog";
 import { RegisteredPcsSection } from "./RegisteredPcsSection";
 
 export function CloudPage() {
@@ -42,7 +39,6 @@ export function CloudPage() {
     deviceError,
     forgetBackupPassphrase,
     initializing,
-    isAdmin,
     listBackups,
     getStorage,
     logout,
@@ -62,7 +58,6 @@ export function CloudPage() {
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [storage, setStorage] = useState<CloudStorage | null>(null);
   const [remoteBackupBusy, setRemoteBackupBusy] = useState(false);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [remoteBackups, setRemoteBackups] = useState<CloudBackupRecord[]>([]);
@@ -307,9 +302,8 @@ export function CloudPage() {
   return (
     <div className="pb-16">
       <PageHeader
-        overline={session ? `Signed in as ${session.user.email}` : "Invite only"}
+        overline={session ? `Signed in as ${session.user.email}` : "Optional"}
         title="Cloud"
-        aside={isAdmin ? <Badge variant="amber">Admin</Badge> : undefined}
       >
         {initializing
           ? "Looking for a saved session."
@@ -317,7 +311,7 @@ export function CloudPage() {
             ? backupKeyReady
               ? "Backups are encrypted on this PC before they leave it. The server never sees your passphrase."
               : "Unlock backups on this PC with your backup passphrase to start."
-            : "Encrypted backups of your library on a small server, for invited accounts. Vaultime works fully without it."}
+            : "Encrypted backups of your library on a small server. Vaultime works fully without it."}
       </PageHeader>
 
       <div className="px-8 xl:px-14">
@@ -350,7 +344,7 @@ export function CloudPage() {
 
             <PageSection
               title="Create an account"
-              description="You need an invite code. The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
+              description="The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
             >
               <SignUpForm onDone={showDone} />
             </PageSection>
@@ -486,7 +480,6 @@ export function CloudPage() {
 
             <PageSection title="Account">
               <PageRow label="Email">{session.user.email}</PageRow>
-              <PageRow label="Role">{capitalize(session.user.role)}</PageRow>
               <PageRow label="Signed in until">{formatTimestamp(session.refresh_expires_at)}</PageRow>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleRefreshSession} disabled={authBusy}>
@@ -504,18 +497,6 @@ export function CloudPage() {
               </div>
             </PageSection>
 
-            {isAdmin && (
-              <PageSection
-                title="Invites"
-                description="Only admins see this. A new code is shown once. The server keeps only a hash of it."
-              >
-                <Button onClick={() => setInviteDialogOpen(true)}>
-                  <KeyRound className="size-4" />
-                  Create an invite
-                </Button>
-              </PageSection>
-            )}
-            {isAdmin && <BetaApplications onError={setErrorMessage} />}
           </>
         )}
 
@@ -539,13 +520,6 @@ export function CloudPage() {
           setErrorMessage(null);
           setStatusMessage("Password changed. Your other PCs are signed out.");
         }}
-      />
-
-      <CreateInviteDialog
-        open={inviteDialogOpen}
-        onOpenChange={setInviteDialogOpen}
-        onStatus={setStatusMessage}
-        onError={setErrorMessage}
       />
 
       <RestoreBackupDialog

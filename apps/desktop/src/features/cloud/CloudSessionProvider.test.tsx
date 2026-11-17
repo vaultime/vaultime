@@ -29,7 +29,7 @@ const SESSION = JSON.stringify({
   refresh_token: "refresh",
   expires_at: "2099-01-01T00:00:00.000Z",
   refresh_expires_at: "2099-01-01T00:00:00.000Z",
-  user: { id: "account-1", email: "player@example.com", role: "user" },
+  user: { id: "account-1", email: "player@example.com" },
 });
 
 /** The provider on a PC from before the cloud switch, whose settings hold none. */

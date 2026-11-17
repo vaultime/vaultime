@@ -14,7 +14,7 @@
 // library. ?cloud=1 signs in to a fake cloud
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
 // password dialog on the cloud page. Signed out, ?signin=empty|wrong|ok and
-// ?signup=empty|short|invite|ok fill and send the forms of the cloud page.
+// ?signup=empty|short|closed|ok fill and send the forms of the cloud page.
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
 // fills the three days before today with games that ran side by side.
 // ?midnight=1 fills the week with sessions that run past midnight.
@@ -745,7 +745,6 @@ let ignoredPrograms: IgnoredProgram[] =
     : [];
 
 const MOCK_CLOUD_PASSWORD = "correct horse battery";
-const MOCK_INVITE_CODE = "VTLINV-PREV-IEWA-BCDE-FGHJ-KLMN-PQRS";
 
 function cloudSession(): CloudAuthSession {
   return {
@@ -753,7 +752,7 @@ function cloudSession(): CloudAuthSession {
     refresh_token: "preview",
     expires_at: iso(now + 15 * MINUTE_MS),
     refresh_expires_at: iso(now + 30 * DAY_MS),
-    user: { id: "account-1", email: "player@example.com", role: params.get("admin") === "1" ? "admin" : "user" },
+    user: { id: "account-1", email: "player@example.com" },
   };
 }
 
@@ -827,8 +826,8 @@ window.fetch = async (input, init) => {
       }
       return cloudReply(200, cloudSession());
     case "/v1/auth/signup":
-      if (body.invite_code !== MOCK_INVITE_CODE) {
-        return cloudReply(400, { error: { code: "bad_request", message: "invite code is invalid" } });
+      if (params.get("signup") === "closed") {
+        return cloudReply(403, { error: { code: "forbidden", message: "this server takes no new accounts" } });
       }
       return cloudReply(201, cloudSession());
     case "/v1/auth/password":
@@ -845,11 +844,6 @@ window.fetch = async (input, init) => {
       return cloudReply(200, mockDevices);
     case "/v1/backups":
       return cloudReply(200, [cloudBackup("backup-2", "Before the reinstall", 2, 7, 38), cloudBackup("backup-1", "Backup", 16, 6, 24)]);
-    case "/v1/admin/beta-applications":
-      return cloudReply(200, [
-        { id: "application-1", email: "sam@example.com", platform: "linux", note: "I play mostly through Heroic and Lutris.", created_at: iso(now - 2 * DAY_MS) },
-        { id: "application-2", email: "robin@example.org", platform: "windows", note: null, created_at: iso(now - 5 * HOUR_MS) },
-      ]);
     case "/v1/storage":
       return cloudReply(200, { backup_bytes: 480_000, artwork_bytes: 8_700_000, limit_bytes: 2048 * 1024 * 1024 });
     default:
@@ -908,7 +902,6 @@ if (signUpStep) {
     if (signUpStep !== "empty") {
       typeInto("cloud-signup-email", "player@example.com");
       typeInto("cloud-signup-password", signUpStep === "short" ? "short" : MOCK_CLOUD_PASSWORD);
-      typeInto("cloud-signup-invite", signUpStep === "invite" ? "VTLINV-WRONG" : MOCK_INVITE_CODE);
       typeInto("cloud-signup-backup-passphrase", "a long backup passphrase");
       typeInto("cloud-signup-backup-passphrase-confirm", signUpStep === "short" ? "a long backup" : "a long backup passphrase");
     }

@@ -4,13 +4,10 @@
 import { createContext, useContext } from "react";
 import type {
   AutoMerge,
-  BetaApplication,
-  CloudAdminInvite,
   CloudAuthSession,
   CloudBackupRecord,
   CloudBackupRestoreResult,
   CloudBackupUploadResult,
-  CloudCreateAdminInviteInput,
   CloudDevice,
   CloudPc,
   CloudStorage,
@@ -35,7 +32,6 @@ export interface CloudSessionContextValue {
   /** Why the last automatic backup failed, until one succeeds. */
   autoBackupError: string | null;
   setAutoBackup: (enabled: boolean) => Promise<void>;
-  isAdmin: boolean;
   login: (
     email: string,
     password: string,
@@ -44,7 +40,6 @@ export interface CloudSessionContextValue {
   signUp: (
     email: string,
     password: string,
-    inviteCode: string,
     backupPassphrase: string,
   ) => Promise<CloudAuthSession>;
   setBackupPassphrase: (passphrase: string) => Promise<void>;
@@ -58,8 +53,6 @@ export interface CloudSessionContextValue {
   removeDevice: (deviceId: string) => Promise<void>;
   listBackups: () => Promise<CloudBackupRecord[]>;
   getStorage: () => Promise<CloudStorage>;
-  listBetaApplications: () => Promise<BetaApplication[]>;
-  deleteBetaApplication: (applicationId: string) => Promise<void>;
   uploadRemoteBackup: (label?: string | null) => Promise<CloudBackupUploadResult>;
   /** With `takeOver`, a fresh install continues as the PC that made the backup. */
   restoreRemoteBackup: (backupId: string, takeOver: boolean) => Promise<CloudBackupRestoreResult>;
@@ -71,9 +64,6 @@ export interface CloudSessionContextValue {
   discardCloudMerge: (backupId: string) => Promise<void>;
   /** Newer backups of PCs merged before that did not come in by themselves, as they need the player. */
   waitingMerges: AutoMerge[];
-  createAdminInvite: (
-    input: CloudCreateAdminInviteInput,
-  ) => Promise<CloudAdminInvite>;
 }
 
 export const CloudSessionContext = createContext<CloudSessionContextValue | null>(null);
