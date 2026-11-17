@@ -27,7 +27,7 @@ A sync folder is a folder that a sync service or a NAS keeps the same on every P
 Folder
 : **Choose** picks the folder. Vaultime keeps a folder named Vaultime in it, with a folder for each PC, and copies a backup of this PC there right away. Choose the same folder on each of your PCs. A PC that played nothing yet copies nothing, so a new install can restore first. **Stop** leaves the backups in the folder and keeps new ones on this PC.
 
-Each PC copies every automatic backup there and keeps its newest three. The database goes as it is, and every image is stored once, so your sync service uploads an unchanged cover only once. A PC only ever writes its own folder. A folder that is away, like a NAS that is off, gets the newest backup once it is back. While automatic backups are off, no new backup of this PC reaches the folder.
+Each PC copies every automatic backup there and keeps its newest three. The database goes as it is, and every image is stored once, so your sync service uploads an unchanged cover only once. A PC only ever writes its own folder. The backup made when Vaultime quits goes there at the next start, so a folder that is away never holds up quitting. A folder that is away, like a NAS that is off, gets the newest backup once it is back. While automatic backups are off, no new backup of this PC reaches the folder.
 
 Below the folder, every PC with a backup there has a row:
 

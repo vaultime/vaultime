@@ -651,7 +651,7 @@ mod tests {
     use super::*;
     use crate::backup::auto;
     use crate::backup::testing::Pc;
-    use crate::constants::ASSET_CACHE_DIR;
+    use crate::constants::{ASSET_CACHE_DIR, AUTO_BACKUP_INTERVAL};
     use crate::db::repo::sessions;
 
     /// Points `pc` at a sync folder and returns the folder backups go in.
@@ -752,6 +752,25 @@ mod tests {
             !root.join(SYNC_DIR).exists(),
             "a picked Vaultime folder is used as it is"
         );
+    }
+
+    #[test]
+    fn the_backup_on_quit_reaches_the_folder_at_the_next_start() {
+        let laptop = Pc::new("laptop");
+        let root = sync_folder(&laptop, &laptop.context.app_dir.join("Vaultime"));
+        played(&laptop);
+        auto::back_up_on_quit(&laptop.db, &laptop.assets, &laptop.context)
+            .unwrap()
+            .unwrap();
+        assert!(backups_in(&root.join("laptop")).is_empty());
+        let start = auto::back_up_if_due(
+            &laptop.db,
+            &laptop.assets,
+            &laptop.context,
+            AUTO_BACKUP_INTERVAL,
+        );
+        assert!(start.unwrap().is_none(), "no second backup at the start");
+        assert_eq!(backups_in(&root.join("laptop")).len(), 1);
     }
 
     fn link(game: &str) -> GameChoice {

@@ -45,8 +45,7 @@ use appearance::BackgroundStore;
 use assets::AssetManager;
 use constants::{
     APPEARANCE_DIR, ASSET_CACHE_DIR, AUTO_BACKUP_CHECK_INTERVAL, AUTO_BACKUP_INTERVAL,
-    AUTO_BACKUP_ON_QUIT_MIN_AGE, DATABASE_FILE, DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT,
-    LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
+    DATABASE_FILE, DEVICE_ID_FILE, LIBRARY_CHANGED_EVENT, LOG_FILES_KEPT, LOG_MAX_FILE_BYTES,
 };
 use db::connection::Database;
 use db::repo::devices;
@@ -419,8 +418,7 @@ fn start_automatic_backups(database: Arc<Database>, assets: AssetManager, contex
     }
 }
 
-/// Quitting saves the day's play, unless the last backup is younger than
-/// `AUTO_BACKUP_ON_QUIT_MIN_AGE`.
+/// Quitting saves the day's play, unless the last backup is recent.
 fn back_up_on_quit(app: &tauri::AppHandle) {
     let (Some(database), Some(assets), Some(context)) = (
         app.try_state::<Arc<Database>>(),
@@ -429,9 +427,7 @@ fn back_up_on_quit(app: &tauri::AppHandle) {
     ) else {
         return;
     };
-    if let Err(error) =
-        backup::auto::back_up_if_due(&database, &assets, &context, AUTO_BACKUP_ON_QUIT_MIN_AGE)
-    {
+    if let Err(error) = backup::auto::back_up_on_quit(&database, &assets, &context) {
         log::warn!("automatic backup on quit failed: {error}");
     }
 }

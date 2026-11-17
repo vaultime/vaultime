@@ -19,7 +19,7 @@ use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::constants::{
     AUTO_BACKUP_DIR, AUTO_BACKUP_ENABLED_SETTING, AUTO_BACKUP_FOLDER_SETTING, AUTO_BACKUP_KEEP,
-    AUTO_BACKUP_PREFIX, AUTO_BACKUP_UNFINISHED_AGE,
+    AUTO_BACKUP_ON_QUIT_MIN_AGE, AUTO_BACKUP_PREFIX, AUTO_BACKUP_UNFINISHED_AGE,
 };
 use crate::db::connection::Database;
 use crate::db::repo::{backup_snapshots, settings};
@@ -53,12 +53,40 @@ pub fn enabled(db: &Database) -> bool {
 static RUNNING: Mutex<()> = Mutex::new(());
 
 /// Makes an automatic backup when the newest one is at least `min_age` old,
-/// then deletes all but the newest few. Returns the new backup, if any.
+/// then deletes all but the newest few, and copies it into the sync folder.
+/// Returns the new backup, if any.
 pub fn back_up_if_due(
     db: &Database,
     asset_manager: &AssetManager,
     app_context: &AppContext,
     min_age: Duration,
+) -> Result<Option<LocalBackupSummary>> {
+    back_up(db, asset_manager, app_context, min_age, true)
+}
+
+/// The backup on quit. It leaves the sync folder to the check at the next
+/// start, so a folder that is away, like a NAS that is off, cannot hold up
+/// quitting.
+pub fn back_up_on_quit(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+) -> Result<Option<LocalBackupSummary>> {
+    back_up(
+        db,
+        asset_manager,
+        app_context,
+        AUTO_BACKUP_ON_QUIT_MIN_AGE,
+        false,
+    )
+}
+
+fn back_up(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    min_age: Duration,
+    to_sync_folder: bool,
 ) -> Result<Option<LocalBackupSummary>> {
     let _running = RUNNING.lock().unwrap_or_else(PoisonError::into_inner);
 
@@ -69,13 +97,15 @@ pub fn back_up_if_due(
     let device = this_pc(app_context);
     if newest_age(&folder, &device).is_some_and(|age| age < min_age) {
         // A sync folder that was away gets the newest backup once it is back.
-        if let Some(newest) = newest_complete(&folder, &device) {
+        if to_sync_folder && let Some(newest) = newest_complete(&folder, &device) {
             copy_to_sync_folder(db, &newest);
         }
         return Ok(None);
     }
     let summary = write_backup(db, asset_manager, app_context, &folder)?;
-    copy_to_sync_folder(db, Path::new(&summary.backup_path));
+    if to_sync_folder {
+        copy_to_sync_folder(db, Path::new(&summary.backup_path));
+    }
     Ok(Some(summary))
 }
 

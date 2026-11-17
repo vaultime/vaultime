@@ -22,7 +22,7 @@ import { numberWords } from "@/lib/words";
 
 /** What the row of a PC in the sync folder says about it. */
 function pcHint(pc: FolderPc, waiting: AutoMerge | undefined): string {
-  if (pc.this_pc) return `Backup of ${formatLongDate(pc.backup_created_at)}. A new one comes in once a day and when Vaultime quits.`;
+  if (pc.this_pc) return `Backup of ${formatLongDate(pc.backup_created_at)}. A new one comes in once a day.`;
   return backupHint(pc, waiting);
 }
 
