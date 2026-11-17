@@ -243,7 +243,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   behind see-through panels, dimmed more where it would hide the text, and
   the accent, the color of active time, takes the strongest color of that
   art, a light grey for art without one. The window around the page and its
-  icons take the game playing or played last, not the page. The ground is
+  icons match the page while it is seen, and show the game playing or played
+  last while the window waits in the tray. The ground is
   graphite, a step above black, so the art carries the color. Players can
   pick light mode, another ground tone, a fixed accent, a picture of their
   own or no background. Every color derives from these choices in
@@ -276,7 +277,7 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   outlines it for the logo files. The lockups keep the proportions of the
   logo in the app, the mark a little taller than the letters. The app draws
   the tray, taskbar, title bar and shortcut icons from those files in the
-  accent of the game playing or played last, or the one picked.
+  accent of the window, or the one picked.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope

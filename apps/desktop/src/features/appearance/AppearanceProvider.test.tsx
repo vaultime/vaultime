@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSettings } from "@/features/settings/settings-context";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
 import { hexToOklch } from "@/lib/color";
-import { APPEARANCE_GAME_CACHE_KEY, SETTING_KEYS } from "@/lib/constants";
+import { APPEARANCE_CACHE_KEY, APPEARANCE_GAME_CACHE_KEY, SETTING_KEYS, WINDOW_LOOK_INTERVAL_MS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { useAppearance, type GamesInFront } from "./appearance-context";
 import { AppearanceProvider } from "./AppearanceProvider";
@@ -129,8 +129,20 @@ function GamesProbe({ games }: { games: GamesInFront | null }) {
   return <p>Probe</p>;
 }
 
+/** Shows or hides the page, as the window does when it goes to the tray. */
+function setPageVisible(visible: boolean) {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (visible ? "visible" : "hidden") });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+/** The hue of the accent the window look last sent. */
+function sentHue() {
+  return hexToOklch(vi.mocked(api.setWindowLook).mock.lastCall![0].iconAccent)!.hue;
+}
+
 describe("the window look", () => {
-  it("waits for the games in front and takes the one played last, not the page's", async () => {
+  it("waits for the games in front, matches the page while seen and shows the game played last in the tray", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(api.listSettings).mockResolvedValueOnce([]);
     vi.mocked(api.setWindowLook).mockClear();
     const tree = (games: GamesInFront | null) => (
@@ -140,16 +152,26 @@ describe("the window look", () => {
         </AppearanceProvider>
       </SettingsProvider>
     );
-    const { rerender } = render(tree(null));
-    await screen.findByText("Probe");
-    expect(api.setWindowLook).not.toHaveBeenCalled();
+    try {
+      const { rerender } = render(tree(null));
+      await screen.findByText("Probe");
+      expect(api.setWindowLook).not.toHaveBeenCalled();
 
-    rerender(tree({ page: TEAL, home: ORANGE }));
-    await waitFor(() => expect(api.setWindowLook).toHaveBeenCalledOnce());
-    const { iconAccent } = vi.mocked(api.setWindowLook).mock.lastCall![0];
-    expect(Math.abs(hexToOklch(iconAccent)!.hue - ORANGE.colors[0].hue)).toBeLessThan(5);
-    // Only the game played last is kept for the next start.
-    expect(JSON.parse(localStorage.getItem(APPEARANCE_GAME_CACHE_KEY)!)).toEqual(ORANGE);
+      rerender(tree({ page: TEAL, home: ORANGE }));
+      await waitFor(() => expect(api.setWindowLook).toHaveBeenCalledOnce());
+      expect(Math.abs(sentHue() - TEAL.colors[0].hue)).toBeLessThan(5);
+
+      act(() => setPageVisible(false));
+      await vi.advanceTimersByTimeAsync(WINDOW_LOOK_INTERVAL_MS);
+      await waitFor(() => expect(Math.abs(sentHue() - ORANGE.colors[0].hue)).toBeLessThan(5));
+      // The next start opens Home, so only the game played last is kept for it.
+      expect(JSON.parse(localStorage.getItem(APPEARANCE_GAME_CACHE_KEY)!)).toEqual(ORANGE);
+      const cached = JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY)!);
+      expect(cached.tokens.dark["--violet"]).toMatch(/ 5\d(\.\d+)?\)$/);
+    } finally {
+      setPageVisible(true);
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -44,6 +44,7 @@ import {
   type Appearance,
   type ThemeMode,
 } from "@/lib/theme";
+import { usePageVisible } from "@/lib/use-page-visible";
 import { logFailure } from "@/lib/utils";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
@@ -149,14 +150,16 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     };
   }, [save]);
 
+  const seen = usePageVisible();
   const mode = resolveMode(appearance.mode, systemDark);
   const gameAccent = accentInUse(GAME_ACCENT, games.page?.colors ?? []);
   const accent = appearance.accent === GAME_ACCENT ? gameAccent : appearance.accent;
-  // The window, its icons and the next start, which opens Home, take the game
-  // playing or played last, so the tray and the shortcuts keep their color
-  // while you browse.
-  const windowAccent =
+  // The next start opens Home, lit by the game playing or played last.
+  const homeAccent =
     appearance.accent === GAME_ACCENT ? accentInUse(GAME_ACCENT, games.home?.colors ?? []) : appearance.accent;
+  // The window and its icons match the page while it is seen. In the tray
+  // they show the game playing or played last.
+  const windowAccent = seen ? accent : homeAccent;
   const tokens = useMemo(() => themeTokens(mode, appearance.ground, accent), [mode, appearance.ground, accent]);
 
   useLayoutEffect(() => {
@@ -165,15 +168,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       const cached: CachedLook = {
         appearance,
         tokens: {
-          dark: themeTokens("dark", appearance.ground, windowAccent),
-          light: themeTokens("light", appearance.ground, windowAccent),
+          dark: themeTokens("dark", appearance.ground, homeAccent),
+          light: themeTokens("light", appearance.ground, homeAccent),
         },
       };
       localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify(cached));
     } catch {
       // Without storage the next start shows the default look for a moment.
     }
-  }, [appearance, windowAccent, mode, tokens]);
+  }, [appearance, homeAccent, mode, tokens]);
 
   // Written only when the game changes, as its cover is a long data URL.
   useEffect(() => {
