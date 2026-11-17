@@ -363,7 +363,7 @@ export function SettingsPage() {
           onRestartRequired={() => setRestartRequired(true)}
         />
 
-        <SyncFolderSection onError={setError} />
+        <SyncFolderSection onError={setError} onRestartRequired={() => setRestartRequired(true)} />
 
         <CloudBackupSection onError={setError} />
 

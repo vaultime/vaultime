@@ -285,7 +285,7 @@ const allGames = scenario === "empty" ? [] : games;
 // here, one game that came along on its own, and one that failed its check.
 /** The newest cloud backups of the other PCs: the laptop merged before, the Steam Deck not yet. */
 let syncFolder: string | null = params.has("sync") ? "D:\\Dropbox\\Vaultime" : null;
-const syncPcs: FolderPc[] = [
+let syncPcs: FolderPc[] = [
   {
     device_id: "preview",
     name: "Desktop",
@@ -1588,6 +1588,27 @@ mockIPC((cmd, payload) => {
       return syncFolder;
     case "list_sync_folder_pcs":
       return syncFolder ? syncPcs : [];
+    case "preview_sync_merge":
+      return { ...mergePreview, device_id: String(args.deviceId), device_name: "Steam Deck", first_merge: true };
+    case "merge_sync_backup":
+      syncPcs = syncPcs.map((pc) => (pc.device_id === args.deviceId ? { ...pc, merged_before: true, newer: false } : pc));
+      return {
+        device_id: String(args.deviceId),
+        device_name: "Steam Deck",
+        sessions_added: 9,
+        sessions_grown: 0,
+        sessions_vouched: 0,
+        failing: 0,
+        games_added: 1,
+        games_linked: 1,
+        safety_backup_path: null,
+      };
+    case "discard_sync_merge":
+      return null;
+    case "inspect_sync_backup":
+      return laptopBackup(true, false);
+    case "restore_sync_backup":
+      return laptopBackup(Boolean(args.takeOver), true);
     case "inspect_local_backup":
       return laptopBackup(true, false);
     case "import_local_backup":

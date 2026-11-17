@@ -469,6 +469,33 @@ export async function listSyncFolderPcs(): Promise<FolderPc[]> {
   return invoke<FolderPc[]>("list_sync_folder_pcs");
 }
 
+/** What merging a PC's newest sync folder backup would bring in. It stays put together until merged or let go. */
+export async function previewSyncMerge(deviceId: string, trustNewKeys = false): Promise<MergePreview> {
+  return invoke<MergePreview>("preview_sync_merge", { deviceId, trustNewKeys });
+}
+
+export async function mergeSyncBackup(
+  deviceId: string,
+  choices: GameChoice[],
+  trustNewKeys = false,
+): Promise<MergeSummary> {
+  return invoke<MergeSummary>("merge_sync_backup", { deviceId, choices, trustNewKeys });
+}
+
+export async function discardSyncMerge(deviceId: string): Promise<void> {
+  return invoke<void>("discard_sync_merge", { deviceId });
+}
+
+/** A PC's newest sync folder backup as a restore would see it. */
+export async function inspectSyncBackup(deviceId: string): Promise<LocalBackupSummary> {
+  return invoke<LocalBackupSummary>("inspect_sync_backup", { deviceId });
+}
+
+/** Restores the sync folder backup the inspection showed. With `takeOver`, a fresh install continues as its PC. */
+export async function restoreSyncBackup(deviceId: string, takeOver: boolean): Promise<LocalBackupSummary> {
+  return invoke<LocalBackupSummary>("restore_sync_backup", { deviceId, takeOver });
+}
+
 export async function uploadRemoteBackup(
   apiBaseUrl: string,
   accessToken: string,

@@ -3,16 +3,19 @@
 
 import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { FolderSync } from "lucide-react";
+import { ArchiveRestore, FolderSync, GitMerge } from "lucide-react";
 import { Notice, PageRow, PageSection } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
 import { useLibrary } from "@/features/library/library-context";
+import { MergeDialog } from "@/features/settings/MergeDialog";
+import { RestorePreview } from "@/features/settings/RestorePreview";
 import { useSettings } from "@/features/settings/settings-context";
+import { useFinishRestore } from "@/features/settings/use-finish-restore";
 import { SETTING_KEYS, SYNC_BACKUP_KEEP } from "@/lib/constants";
 import { backupHint } from "@/lib/merge";
 import * as api from "@/lib/tauri";
 import { formatLongDate } from "@/lib/time";
-import type { FolderPc } from "@/lib/types";
+import type { FolderPc, LocalBackupSummary, MergePreview } from "@/lib/types";
 import { describeError } from "@/lib/utils";
 import { numberWords } from "@/lib/words";
 
@@ -22,15 +25,27 @@ function pcHint(pc: FolderPc): string {
   return backupHint(pc);
 }
 
-/** The sync folder: where it is, and the backups of this PC and the others in it. */
-export function SyncFolderSection({ onError }: { onError: (message: string | null) => void }) {
-  const { sessions } = useLibrary();
+/** The sync folder: where it is, the backups of this PC and the others in it, their merges and restores. */
+export function SyncFolderSection({
+  onError,
+  onRestartRequired,
+}: {
+  onError: (message: string | null) => void;
+  onRestartRequired: () => void;
+}) {
+  const { sessions, refresh } = useLibrary();
   const { values } = useSettings();
+  const finishRestore = useFinishRestore();
   const autoBackup = values[SETTING_KEYS.autoBackup] !== "false";
   const [folder, setFolder] = useState<string | null>(null);
   const [pcs, setPcs] = useState<FolderPc[]>([]);
-  const [busy, setBusy] = useState(false);
+  // What is being read or changed: the folder, or a PC's merge or restore.
+  const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ deviceId: string; preview: MergePreview } | null>(null);
+  const [restoring, setRestoring] = useState<{ deviceId: string; summary: LocalBackupSummary } | null>(null);
+  // Taking over the backup's PC is right when this PC is that one set up again.
+  const [takeOver, setTakeOver] = useState(true);
 
   // Read again whenever the sessions change, as a merge changes what is due.
   useEffect(() => {
@@ -49,21 +64,21 @@ export function SyncFolderSection({ onError }: { onError: (message: string | nul
     };
   }, [sessions, onError]);
 
-  async function run(task: () => Promise<void>) {
+  async function run(key: string, task: () => Promise<void>) {
     try {
-      setBusy(true);
+      setBusy(key);
       onError(null);
       setMessage(null);
       await task();
     } catch (error) {
       onError(describeError(error));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   const choose = () =>
-    run(async () => {
+    run("folder", async () => {
       const picked = await openFileDialog({ multiple: false, directory: true, title: "Choose the sync folder" });
       if (typeof picked !== "string") return;
       setFolder(await api.setSyncFolder(picked));
@@ -72,11 +87,34 @@ export function SyncFolderSection({ onError }: { onError: (message: string | nul
     });
 
   const stop = () =>
-    run(async () => {
+    run("folder", async () => {
       await api.setSyncFolder(null);
       setFolder(null);
       setPcs([]);
       setMessage("The backups stay in the folder. New ones stay on this PC.");
+    });
+
+  const merge = (pc: FolderPc) =>
+    run(`merge:${pc.device_id}`, async () => {
+      setRestoring(null);
+      setPending({ deviceId: pc.device_id, preview: await api.previewSyncMerge(pc.device_id) });
+    });
+
+  const inspect = (pc: FolderPc) =>
+    run(`restore:${pc.device_id}`, async () => {
+      setRestoring({ deviceId: pc.device_id, summary: await api.inspectSyncBackup(pc.device_id) });
+      setTakeOver(true);
+    });
+
+  const restore = () =>
+    run("restore", async () => {
+      if (!restoring) return;
+      // Only a takeover the preview offered, as in the other restores.
+      const offered = Boolean(restoring.summary.continues_as);
+      const summary = await api.restoreSyncBackup(restoring.deviceId, takeOver && offered);
+      setRestoring(null);
+      if (summary.restart_required) onRestartRequired();
+      setMessage(await finishRestore("Backup", summary));
     });
 
   return (
@@ -94,12 +132,12 @@ export function SyncFolderSection({ onError }: { onError: (message: string | nul
         hint="Vaultime keeps a folder named Vaultime in it, with a folder for each PC. Choose the same folder on every PC."
       >
         <span className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={choose} disabled={busy}>
+          <Button variant="outline" size="sm" onClick={choose} disabled={busy !== null}>
             <FolderSync className="size-3.5" />
             {folder ? "Change" : "Choose"}
           </Button>
           {folder && (
-            <Button variant="ghost" size="sm" onClick={stop} disabled={busy}>
+            <Button variant="ghost" size="sm" onClick={stop} disabled={busy !== null}>
               Stop
             </Button>
           )}
@@ -111,10 +149,54 @@ export function SyncFolderSection({ onError }: { onError: (message: string | nul
         </Notice>
       )}
       {pcs.map((pc) => (
-        <PageRow key={pc.device_id} label={pc.this_pc ? `${pc.name ?? "This PC"}, this PC` : (pc.name ?? "Another PC")} hint={pcHint(pc)} />
+        <PageRow
+          key={pc.device_id}
+          label={pc.this_pc ? `${pc.name ?? "This PC"}, this PC` : (pc.name ?? "Another PC")}
+          hint={pcHint(pc)}
+        >
+          <span className="flex gap-2">
+            {!pc.this_pc && !pc.merged_before && (
+              <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void merge(pc)}>
+                <GitMerge className="size-3.5" />
+                {busy === `merge:${pc.device_id}` ? "Reading…" : "Merge"}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => void inspect(pc)}>
+              <ArchiveRestore className="size-3.5" />
+              {busy === `restore:${pc.device_id}` ? "Reading…" : "Restore"}
+            </Button>
+          </span>
+        </PageRow>
       ))}
       {folder && pcs.length === 0 && <p className="py-3 text-sm text-faint">No backups in the folder yet.</p>}
       {message && <Notice className="mt-5">{message}</Notice>}
+      {restoring && (
+        <RestorePreview
+          id="sync-take-over"
+          summary={restoring.summary}
+          takeOver={takeOver}
+          busy={busy !== null}
+          onTakeOverChange={setTakeOver}
+          onRestore={restore}
+          onCancel={() => setRestoring(null)}
+        />
+      )}
+      {pending && (
+        <MergeDialog
+          preview={pending.preview}
+          readAgain={(trustNewKeys) => api.previewSyncMerge(pending.deviceId, trustNewKeys)}
+          mergeWith={(choices, trustNewKeys) => api.mergeSyncBackup(pending.deviceId, choices, trustNewKeys)}
+          onClose={() => {
+            void api.discardSyncMerge(pending.deviceId).catch(() => {});
+            setPending(null);
+          }}
+          onMerged={(done) => {
+            setPending(null);
+            setMessage(done);
+            refresh().catch(() => {});
+          }}
+        />
+      )}
     </PageSection>
   );
 }
