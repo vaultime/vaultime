@@ -73,7 +73,8 @@ function YearStory() {
         return summary !== undefined && !summary.game.is_hidden;
       },
     });
-    return { stats, story };
+    // The share card counts "so far" up to when the story was told.
+    return { stats, story, now: new Date() };
   }, [play, year, sessions, statusChanges, byGame]);
 
   const chapters = useMemo(() => told?.story.chapters ?? [], [told]);
@@ -194,7 +195,7 @@ function YearStory() {
           </div>
         )}
       </div>
-      {told && <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={told.stats} now={new Date()} />}
+      {told && <ShareYearDialog open={sharing} onOpenChange={setSharing} stats={told.stats} now={told.now} />}
     </div>
   );
 }
