@@ -168,6 +168,10 @@ mod tests {
             8,
             "ebbf3ed6c2f84a78cffc846674c0b5f84b2ef808f0238b61f4a132f6f7939008685923cbd22b351e524ba04155294b3b",
         ),
+        (
+            9,
+            "1dfec64b1c5dece7b5f05b3c52e04a1cad86fce6b8da401b00da6d293993c42ab65131fe2de809d21859319c07d8456b",
+        ),
     ];
 
     #[test]

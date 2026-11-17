@@ -248,6 +248,17 @@ remove() { curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "authorization: B
 [ "$(remove "$gone")" = 404 ] || { echo "a removed device was removed again"; exit 1; }
 [ "$(count)" = 1 ] || { echo "expected one device after the removal"; exit 1; }
 [ "$keep" != "$gone" ] || { echo "two devices got one id"; exit 1; }
+# A PC registers its name sealed, which the server keeps as it came.
+register_sealed() { curl -s -o /dev/null -w '%{http_code}' -X POST "$small_url/v1/devices/register" \
+  -H "authorization: Bearer $small_token" -H "content-type: application/json" \
+  -d "{\"client_device_id\":\"kept-pc\",\"device_name\":\"PC\",\"platform\":\"windows\",\"app_version\":\"0.7.0\"$1}"; }
+sealed_name() { curl -fsS -H "authorization: Bearer $small_token" "$small_url/v1/devices" \
+  | "$python" -c "import json, sys; print(json.load(sys.stdin)[0]['sealed_name'])"; }
+[ "$(register_sealed ',"sealed_name":"00ff"')" = 200 ] || { echo "a sealed name was refused"; exit 1; }
+[ "$(sealed_name)" = 00ff ] || { echo "the sealed name did not come back"; exit 1; }
+[ "$(register_sealed ',"sealed_name":"Laptop"')" = 400 ] || { echo "a plain name was taken as sealed"; exit 1; }
+[ "$(register_sealed '')" = 200 ] || { echo "a PC without a sealed name was refused"; exit 1; }
+[ "$(sealed_name)" = None ] || { echo "a registration without a sealed name kept the old one"; exit 1; }
 
 echo "== each PC keeps its newest backup"
 pcs_token=$(curl -fsS -X POST "$small_url/v1/auth/signup" -H "content-type: application/json" \

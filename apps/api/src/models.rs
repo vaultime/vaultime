@@ -56,6 +56,10 @@ pub struct RegisterDeviceRequest {
     pub device_name: String,
     pub platform: String,
     pub app_version: String,
+    /// The PC's name sealed with the backup key, as hex. Apps before 0.7
+    /// send none.
+    #[serde(default)]
+    pub sealed_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -65,6 +69,7 @@ pub struct DeviceResponse {
     pub device_name: String,
     pub platform: String,
     pub app_version: String,
+    pub sealed_name: Option<String>,
     pub registered_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
 }

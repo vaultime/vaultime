@@ -74,6 +74,9 @@ pub const DEFAULT_REFRESH_REUSE_GRACE_SECS: i64 = 30;
 pub const MAX_DEVICES_PER_ACCOUNT: i64 = 50;
 /// Longest device id, name, platform or app version, in characters.
 pub const MAX_DEVICE_FIELD_CHARS: usize = 200;
+/// Longest sealed PC name, in hex characters. A nonce, a tag and a name of
+/// 40 characters of four bytes each come to 400.
+pub const MAX_SEALED_NAME_CHARS: usize = 512;
 /// An Ed25519 public key as hex, how ledgers name their keys.
 pub const LEDGER_KEY_HEX_CHARS: usize = 64;
 /// Ledger keys one PC may register. A PC gets a new key when it is set up

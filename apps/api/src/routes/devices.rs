@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
-use crate::constants::{MAX_DEVICE_FIELD_CHARS, MAX_DEVICES_PER_ACCOUNT};
+use crate::constants::{MAX_DEVICE_FIELD_CHARS, MAX_DEVICES_PER_ACCOUNT, MAX_SEALED_NAME_CHARS};
 use crate::error::{AppError, AppResult};
 use crate::models::{DeviceResponse, RegisterDeviceRequest};
 
@@ -22,6 +22,7 @@ pub async fn register(
     let device_name = trim_required(&payload.device_name, "device_name")?;
     let platform = trim_required(&payload.platform, "platform")?;
     let app_version = trim_required(&payload.app_version, "app_version")?;
+    let sealed_name = sealed_hex(payload.sealed_name.as_deref(), "sealed_name")?;
 
     // One registration at a time per account, so two at once cannot both
     // take the last free place.
@@ -49,14 +50,16 @@ pub async fn register(
             client_device_id,
             device_name,
             platform,
-            app_version
+            app_version,
+            sealed_name
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (account_id, client_device_id)
         DO UPDATE
         SET device_name = EXCLUDED.device_name,
             platform = EXCLUDED.platform,
             app_version = EXCLUDED.app_version,
+            sealed_name = EXCLUDED.sealed_name,
             last_seen_at = NOW()
         RETURNING
             id,
@@ -64,6 +67,7 @@ pub async fn register(
             device_name,
             platform,
             app_version,
+            sealed_name,
             registered_at,
             last_seen_at
         "#,
@@ -73,6 +77,7 @@ pub async fn register(
     .bind(device_name)
     .bind(platform)
     .bind(app_version)
+    .bind(sealed_name)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -86,7 +91,8 @@ pub async fn list(
     State(state): State<AppState>,
 ) -> AppResult<Json<Vec<DeviceResponse>>> {
     let rows = sqlx::query_as::<_, DeviceResponse>(
-        "SELECT id, client_device_id, device_name, platform, app_version, registered_at, last_seen_at
+        "SELECT id, client_device_id, device_name, platform, app_version, sealed_name,
+             registered_at, last_seen_at
          FROM cloud_devices
          WHERE account_id = $1
          ORDER BY last_seen_at DESC, id",
@@ -140,4 +146,39 @@ fn trim_required(value: &str, field_name: &str) -> AppResult<String> {
     }
 
     Ok(trimmed.to_string())
+}
+
+/// A text the PC sealed with its backup key, which the server keeps without
+/// reading: hex digits only. None when the PC sent none.
+fn sealed_hex(value: Option<&str>, field_name: &str) -> AppResult<Option<String>> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    if value.len() > MAX_SEALED_NAME_CHARS || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(AppError::bad_request(format!(
+            "{field_name} is not sealed text"
+        )));
+    }
+    Ok(Some(value.to_owned()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sealed_name_is_hex_of_a_bounded_length() {
+        assert_eq!(sealed_hex(None, "sealed_name").unwrap(), None);
+        assert_eq!(sealed_hex(Some("  "), "sealed_name").unwrap(), None);
+        assert_eq!(
+            sealed_hex(Some(" 0aF9 "), "sealed_name")
+                .unwrap()
+                .as_deref(),
+            Some("0aF9")
+        );
+        let longest = "a".repeat(MAX_SEALED_NAME_CHARS);
+        assert!(sealed_hex(Some(&longest), "sealed_name").is_ok());
+        assert!(sealed_hex(Some(&format!("{longest}a")), "sealed_name").is_err());
+        assert!(sealed_hex(Some("Laptop"), "sealed_name").is_err());
+    }
 }
