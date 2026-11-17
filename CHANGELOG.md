@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Type and controls.** Titles are set a little wider and firmer, labels in sentence case and numbers with even figures, and buttons and choices share one size.
 - **Leave a game off your year.** Share your year lists the games its card names, and each can be left off. The next one moves up, and the hours still count it.
 - **Shorter times.** Durations read 4h 05m and 142h everywhere, the tray included.
+- **The past week in the tray.** The tray menu shows how long you played in the past seven days, under today, counted as Home counts it.
 
 ### Fixes
 

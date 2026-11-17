@@ -47,7 +47,7 @@ Ignored programs never count, and games that came from [another PC](several-pcs.
 
 ## Several games at once
 
-Each game that runs gets a session of its own. Time played counts clock time once, so two games side by side for an hour add one hour to the day: in the journal's day and week totals, the hours played on the stats page, the library's last seven days and today's time in the live bar and the tray. Each game's own totals still count all of its time.
+Each game that runs gets a session of its own. Time played counts clock time once, so two games side by side for an hour add one hour to the day: in the journal's day and week totals, the hours played on the stats page, the last seven days on Home and in the tray, and today's time in the live bar and the tray. Each game's own totals still count all of its time.
 
 ### One game, two installs
 

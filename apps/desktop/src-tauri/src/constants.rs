@@ -451,10 +451,14 @@ pub const ENCRYPTION_CHUNK_BYTES: usize = 256 * 1024;
 pub const CLOUD_TRANSFER_TIMEOUT: Duration = Duration::from_mins(30);
 /// Cloud backup key length, as `XChaCha20Poly1305` requires.
 pub const BACKUP_KEY_BYTES: usize = 32;
-/// How often the tray menu updates the running game and today's play.
+/// How often the tray menu updates the running game and the recent play.
 pub const TRAY_STATUS_INTERVAL: Duration = Duration::from_secs(20);
-/// Less play today than this reads "Nothing played today" in the tray menu.
-pub const TRAY_TODAY_MIN_PLAYED_MS: i64 = 60_000;
+/// Less play than this reads as none in the tray menu, today or in the
+/// recent days.
+pub const TRAY_MIN_PLAYED_MS: i64 = 60_000;
+/// Days the recent line of the tray menu covers, today included. Same as
+/// `RECENT_DAYS` in `lib/constants.ts`, so it matches Home.
+pub const TRAY_RECENT_DAYS: u32 = 7;
 /// Name of the JSON session export, so tools can tell it apart.
 pub const EXPORT_FORMAT_NAME: &str = "vaultime-sessions";
 /// Version of the JSON session export, raised when its fields change.

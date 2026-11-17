@@ -402,7 +402,7 @@ pub fn recent_play<Tz: TimeZone>(
     today: NaiveDate,
     now_ms: i64,
 ) -> Result<RecentPlay> {
-    let from = today - TimeDelta::days(i64::from(days.max(1)) - 1);
+    let from = recent_start(today, days);
     let totals = day_totals(db, live, tz, from, today + TimeDelta::days(1), now_ms)?;
     let started = started_sessions(db, live, tz, from, None, now_ms)?;
     let longest = longest_of(&started);
@@ -428,6 +428,25 @@ pub fn played_on<Tz: TimeZone>(
     now_ms: i64,
 ) -> Result<i64> {
     Ok(day_totals(db, live, tz, today, today + TimeDelta::days(1), now_ms)?.played_ms())
+}
+
+/// Clock time with a game running in the last `days` local days, today
+/// included, as `recent_play` counts it.
+pub fn played_in_last<Tz: TimeZone>(
+    db: &Database,
+    live: &LiveSessions,
+    tz: &Tz,
+    days: u32,
+    today: NaiveDate,
+    now_ms: i64,
+) -> Result<i64> {
+    let from = recent_start(today, days);
+    Ok(day_totals(db, live, tz, from, today + TimeDelta::days(1), now_ms)?.played_ms())
+}
+
+/// The first of the last `days` local days up to `today`.
+fn recent_start(today: NaiveDate, days: u32) -> NaiveDate {
+    today - TimeDelta::days(i64::from(days.max(1)) - 1)
 }
 
 /// The local day `now_ms` falls in.
@@ -496,6 +515,28 @@ mod tests {
         let recent = recent(&db);
         assert_eq!(recent.runtime_ms, 440 * MINUTE);
         assert_eq!(recent.played_ms, 340 * MINUTE);
+    }
+
+    #[test]
+    fn the_tray_counts_the_recent_days_as_home_does() {
+        let db = database();
+        let (a, b) = (game(&db, "A"), game(&db, "B"));
+        played(&db, &a, "2026-09-29T12:00:00Z", 250);
+        played(&db, &b, "2026-09-29T14:30:00Z", 190);
+        // Half of it on the day before the seven.
+        played(&db, &b, "2026-09-22T21:30:00Z", 60);
+        let now = utc("2026-09-29T19:30:00Z").timestamp_millis();
+        let tray = played_in_last(
+            &db,
+            &LiveSessions::default(),
+            &Berlin,
+            7,
+            date("2026-09-29"),
+            now,
+        )
+        .unwrap();
+        assert_eq!(tray, recent(&db).played_ms);
+        assert_eq!(tray, 370 * MINUTE);
     }
 
     #[test]

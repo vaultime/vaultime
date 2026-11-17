@@ -149,7 +149,7 @@ export const FALLBACK_DEVICE_ID_CHARS = 10;
 
 // Library and charts
 
-/** Calendar days that count as recent on the library home, today included. */
+/** Calendar days that count as recent on the library home, today included. Same as TRAY_RECENT_DAYS in constants.rs. */
 export const RECENT_DAYS = 7;
 
 /** The library grid marks a game Suspicious or Recovered only for sessions this many days old or newer. The game page counts all of them. */

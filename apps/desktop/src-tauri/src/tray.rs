@@ -12,7 +12,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime, Webview};
 
-use crate::constants::{CLOSE_TO_TRAY_SETTING, TRAY_STATUS_INTERVAL, TRAY_TODAY_MIN_PLAYED_MS};
+use crate::constants::{
+    CLOSE_TO_TRAY_SETTING, TRAY_MIN_PLAYED_MS, TRAY_RECENT_DAYS, TRAY_STATUS_INTERVAL,
+};
 use crate::db::connection::Database;
 use crate::db::repo::sessions::{self, SessionSpan};
 use crate::db::repo::{map_db, settings};
@@ -74,14 +76,14 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> TrayState {
         return missing;
     }
     match build(app) {
-        Ok((playing, today)) => {
+        Ok(items) => {
             let shown = desktop_shows_tray();
             if shown {
                 info!("tray icon created");
             } else {
                 warn!("tray icon created, but this desktop shows none, so closing minimizes");
             }
-            start_status_updates(app.clone(), playing, today);
+            start_status_updates(app.clone(), items);
             TrayState {
                 available: true,
                 shown,
@@ -94,14 +96,37 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> TrayState {
     }
 }
 
-/// Builds the tray icon and returns the two status lines of its menu.
-fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(MenuItem<R>, MenuItem<R>)> {
-    let playing = MenuItem::with_id(app, "playing", NOTHING_RUNNING, false, None::<&str>)?;
-    let today = MenuItem::with_id(app, "today", NOTHING_TODAY, false, None::<&str>)?;
+/// The status lines of the tray menu and their menu items.
+struct StatusItems<R: Runtime> {
+    playing: MenuItem<R>,
+    today: MenuItem<R>,
+    recent: MenuItem<R>,
+}
+
+/// What the status lines of the tray menu say.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StatusLines {
+    playing: String,
+    today: String,
+    recent: String,
+}
+
+impl Default for StatusLines {
+    fn default() -> Self {
+        describe_status(&[], 0, 0)
+    }
+}
+
+/// Builds the tray icon and returns the status lines of its menu.
+fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<StatusItems<R>> {
+    let lines = StatusLines::default();
+    let playing = MenuItem::with_id(app, "playing", &lines.playing, false, None::<&str>)?;
+    let today = MenuItem::with_id(app, "today", &lines.today, false, None::<&str>)?;
+    let recent = MenuItem::with_id(app, "recent", &lines.recent, false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Vaultime", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vaultime", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&playing, &today, &separator, &open, &quit])?;
+    let menu = Menu::with_items(app, &[&playing, &today, &recent, &separator, &open, &quit])?;
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip(TOOLTIP)
@@ -126,7 +151,11 @@ fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(MenuItem<R>, MenuItem
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
-    Ok((playing, today))
+    Ok(StatusItems {
+        playing,
+        today,
+        recent,
+    })
 }
 
 const NOTHING_RUNNING: &str = "No game running";
@@ -134,19 +163,20 @@ const NOTHING_TODAY: &str = "Nothing played today";
 
 /// Keeps the status lines of the tray menu current. They change at most once
 /// a minute, so the menu is only touched when their text does.
-fn start_status_updates<R: Runtime>(app: AppHandle<R>, playing: MenuItem<R>, today: MenuItem<R>) {
+fn start_status_updates<R: Runtime>(app: AppHandle<R>, items: StatusItems<R>) {
     let db = Arc::clone(&app.state::<Arc<Database>>());
     let live = Arc::clone(&app.state::<Arc<LiveSessions>>());
     let device_id = app.state::<crate::AppContext>().device_id.clone();
     let spawned = std::thread::Builder::new()
         .name("vaultime-tray".into())
         .spawn(move || {
-            let mut shown = (NOTHING_RUNNING.to_string(), NOTHING_TODAY.to_string());
+            let mut shown = StatusLines::default();
             loop {
                 match status_lines(&db, &live, &device_id, Utc::now()) {
                     Ok(lines) if lines != shown => {
-                        let _ = playing.set_text(&lines.0);
-                        let _ = today.set_text(&lines.1);
+                        let _ = items.playing.set_text(&lines.playing);
+                        let _ = items.today.set_text(&lines.today);
+                        let _ = items.recent.set_text(&lines.recent);
                         shown = lines;
                     }
                     Ok(_) => {}
@@ -165,7 +195,7 @@ fn status_lines(
     live: &LiveSessions,
     device_id: &str,
     now: DateTime<Utc>,
-) -> Result<(String, String)> {
+) -> Result<StatusLines> {
     let since = integrity::format_timestamp(local_day_start(now));
     let mut spans = sessions::spans_since(db, &since, device_id)?;
     spans.retain(|span| span.ended_at_wall.is_none());
@@ -184,14 +214,10 @@ fn status_lines(
     for (span, session) in spans.iter_mut().zip(&running) {
         span.runtime_ms = session.runtime_ms;
     }
-    let played = summaries::played_on(
-        db,
-        live,
-        &Local,
-        summaries::today_of(&Local, now_ms),
-        now_ms,
-    )?;
-    Ok(describe_status(&spans, played))
+    let today = summaries::today_of(&Local, now_ms);
+    let played = summaries::played_on(db, live, &Local, today, now_ms)?;
+    let recent = summaries::played_in_last(db, live, &Local, TRAY_RECENT_DAYS, today, now_ms)?;
+    Ok(describe_status(&spans, played, recent))
 }
 
 /// The first moment of the local day `now` falls in. Where the clocks jump
@@ -204,9 +230,14 @@ fn local_day_start(now: DateTime<Utc>) -> DateTime<Utc> {
         .map_or(now, |start| start.with_timezone(&Utc))
 }
 
-/// "Playing Elden Ring, 1h 24m" and "2h 40m played today", from the
-/// running sessions and today's play as the journal counts it.
-fn describe_status(running: &[SessionSpan], played_today_ms: i64) -> (String, String) {
+/// "Playing Elden Ring, 1h 24m", "2h 40m played today" and "17h 06m in the
+/// past 7 days", from the running sessions and the play of today and the
+/// recent days as the journal and Home count it.
+fn describe_status(
+    running: &[SessionSpan],
+    played_today_ms: i64,
+    played_recent_ms: i64,
+) -> StatusLines {
     // Two linked installs of one game running at once show as one game.
     let mut shown: Vec<&SessionSpan> = Vec::new();
     for span in running {
@@ -229,12 +260,24 @@ fn describe_status(running: &[SessionSpan], played_today_ms: i64) -> (String, St
             format!("Playing {} and {}", names.join(", "), last.game_title)
         }
     };
-    let today = if played_today_ms < TRAY_TODAY_MIN_PLAYED_MS {
+    let today = if played_today_ms < TRAY_MIN_PLAYED_MS {
         NOTHING_TODAY.to_string()
     } else {
         format!("{} played today", format_hours_minutes(played_today_ms))
     };
-    (playing, today)
+    let recent = if played_recent_ms < TRAY_MIN_PLAYED_MS {
+        format!("Nothing played in the past {TRAY_RECENT_DAYS} days")
+    } else {
+        format!(
+            "{} in the past {TRAY_RECENT_DAYS} days",
+            format_hours_minutes(played_recent_ms)
+        )
+    };
+    StatusLines {
+        playing,
+        today,
+        recent,
+    }
 }
 
 /// "1h 24m" or "40m". Same as `formatHoursMinutes` in `lib/time.ts`.
@@ -423,13 +466,22 @@ mod tests {
     }
 
     #[test]
-    fn names_the_running_game_and_the_day() {
-        let (playing, today) = describe_status(&[running("Elden Ring", 84)], 144 * MINUTE_MS);
-        assert_eq!(playing, "Playing Elden Ring, 1h 24m");
-        assert_eq!(today, "2h 24m played today");
+    fn names_the_running_game_the_day_and_the_week() {
+        let lines = describe_status(
+            &[running("Elden Ring", 84)],
+            144 * MINUTE_MS,
+            1026 * MINUTE_MS,
+        );
+        assert_eq!(lines.playing, "Playing Elden Ring, 1h 24m");
+        assert_eq!(lines.today, "2h 24m played today");
+        assert_eq!(lines.recent, "17h 06m in the past 7 days");
+        let quiet = describe_status(&[], 0, 30 * MINUTE_MS);
+        assert_eq!(quiet.playing, NOTHING_RUNNING);
+        assert_eq!(quiet.today, NOTHING_TODAY);
+        assert_eq!(quiet.recent, "30m in the past 7 days");
         assert_eq!(
-            describe_status(&[], 0),
-            (NOTHING_RUNNING.into(), NOTHING_TODAY.into())
+            StatusLines::default().recent,
+            "Nothing played in the past 7 days"
         );
     }
 
@@ -440,15 +492,15 @@ mod tests {
             running("Balatro", 30),
             running("Celeste", 10),
         ];
-        let (playing, _) = describe_status(&spans, 60 * MINUTE_MS);
-        assert_eq!(playing, "Playing Elden Ring, Balatro and Celeste");
+        let lines = describe_status(&spans, 60 * MINUTE_MS, 60 * MINUTE_MS);
+        assert_eq!(lines.playing, "Playing Elden Ring, Balatro and Celeste");
     }
 
     #[test]
     fn two_installs_of_one_game_show_once() {
         let spans = [running("Cyberpunk 2077", 60), running("Cyberpunk 2077", 30)];
-        let (playing, _) = describe_status(&spans, 60 * MINUTE_MS);
-        assert_eq!(playing, "Playing Cyberpunk 2077, 1h 00m");
+        let lines = describe_status(&spans, 60 * MINUTE_MS, 60 * MINUTE_MS);
+        assert_eq!(lines.playing, "Playing Cyberpunk 2077, 1h 00m");
     }
 
     #[test]
@@ -482,9 +534,8 @@ mod tests {
                 idle_ms: 0,
             },
         );
-        let (playing, _) =
-            status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
-        assert_eq!(playing, "Playing Client, 2h 00m");
+        let lines = status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
+        assert_eq!(lines.playing, "Playing Client, 2h 00m");
     }
 
     #[test]
