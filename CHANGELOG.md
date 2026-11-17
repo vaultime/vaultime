@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Home and All games.** Home leads with the game you play now or played last, your last days in numbers and the games you played lately. All games holds the grid. The rail lists Home, Journal and Stats, your library and the five games you played last, with Cloud and Settings at its foot.
 - **Search at the top.** A bar over every page holds back, forward and the search, which opens the command palette as Ctrl+K does.
 - **Launchers in the library.** The rail lists each launcher with its number of games, and a launcher's page shows its games, how long you played through it and the game with most of that time. A game with copies from two launchers counts on each with the time its copy recorded, and the time Steam counted before Vaultime is said apart. The command palette finds launchers too.
+- **Favorites.** The heart on a game's page, in the menu of its cover or in the command palette makes it a favorite. Favorites have their own row in the rail and travel with your backups.
 - **Groups and a new sort.** All games groups its games by launcher, last played, status or PC, and sorts by when games were added too. It remembers both.
 - **Counts on the status filter.** Each status in All games shows how many games have it.
 - **The live bar in the game's colors.** The bar at the bottom takes a wash of the running game's colors.

@@ -36,13 +36,16 @@ export function LibraryPage() {
       },
       { replace: true },
     );
-  const launcher = searchParams.get("launcher");
+  const favorites = searchParams.get("favorites") === "1";
+  const launcher = favorites ? null : searchParams.get("launcher");
   // On a launcher's view a game shows and sorts by its time there.
-  const shown = launcher
-    ? visible
-        .filter((summary) => summary.launchers.includes(launcher))
-        .map((summary) => ({ ...summary, totalMs: timeOnLauncher(summary, launcher) }))
-    : visible;
+  const shown = favorites
+    ? visible.filter((summary) => summary.favorite)
+    : launcher
+      ? visible
+          .filter((summary) => summary.launchers.includes(launcher))
+          .map((summary) => ({ ...summary, totalMs: timeOnLauncher(summary, launcher) }))
+      : visible;
   const openAdd = () => setDialog("add");
   const openDiscover = () => setDialog("discover");
 
@@ -76,6 +79,7 @@ export function LibraryPage() {
       <GameGrid
         summaries={shown}
         launcher={launcher}
+        favorites={favorites}
         playing={playing}
         onDiscover={openDiscover}
         onAdd={openAdd}

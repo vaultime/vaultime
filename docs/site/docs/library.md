@@ -13,6 +13,7 @@ With no games yet, Home says **Start your library** and offers **Discover games*
 The rail on the left lists Home, the journal and the stats, then your library:
 
 - **All games**, with how many games you have.
+- **Favorites**, the games you marked with a heart.
 - A row for each launcher with its number of games, the launchers with the most games first. Games found in a folder and games you added by hand come last, under **Found in folders** and **Added by hand**.
 - **Recently played**, the five games you played last, with the one running now marked **Playing now**.
 
@@ -27,6 +28,10 @@ A launcher's row opens its games: the ones with a copy from that launcher. Above
 - Playtime imported from Steam counts on the Steam page, and its sentence says it apart: *Steam counted ninety hours before Vaultime.*
 
 The command palette finds launchers too. Type a launcher's name after ++Ctrl+K++.
+
+## Favorites
+
+The heart beside the status on a game's page makes it a favorite, and so do **Add to favorites** in the menu of its cover and the command palette on its page. A favorite shows a small heart under its cover, and the **Favorites** row in the rail opens just those games. Favorites travel with your backups.
 
 ## All games
 

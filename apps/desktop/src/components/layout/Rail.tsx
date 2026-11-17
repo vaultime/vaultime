@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
-import { BookOpen, ChartNoAxesColumn, Cloud, House, Layers, Plus, Settings2 } from "lucide-react";
+import { BookOpen, ChartNoAxesColumn, Cloud, Heart, House, Layers, Plus, Settings2 } from "lucide-react";
 import { LauncherMark } from "@/components/brand/LauncherMark";
 import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
@@ -41,7 +41,9 @@ export function Rail() {
   const recent = summaries.filter((summary) => summary.lastPlayedAt).slice(0, RAIL_RECENT_GAMES);
   const launchers = launcherCounts(summaries);
   const inLibrary = location.pathname === "/library";
-  const shownLauncher = inLibrary ? new URLSearchParams(location.search).get("launcher") : null;
+  const query = new URLSearchParams(location.search);
+  const showingFavorites = inLibrary && query.get("favorites") === "1";
+  const shownLauncher = inLibrary && !showingFavorites ? query.get("launcher") : null;
 
   return (
     <nav aria-label="Main" className="panel flex min-h-0 flex-col px-2.5 pt-3 pb-2">
@@ -82,9 +84,17 @@ export function Rail() {
             to="/library"
             icon={<Layers className={PAGE_ICON} strokeWidth={1.75} />}
             count={summaries.length}
-            active={inLibrary && !shownLauncher}
+            active={inLibrary && !shownLauncher && !showingFavorites}
           >
             All games
+          </RailLink>
+          <RailLink
+            to="/library?favorites=1"
+            icon={<Heart className={PAGE_ICON} strokeWidth={1.75} />}
+            count={summaries.filter((summary) => summary.favorite).length}
+            active={showingFavorites}
+          >
+            Favorites
           </RailLink>
           {launchers.map(({ launcher, count }) => (
             <RailLink

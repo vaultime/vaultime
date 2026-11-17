@@ -46,10 +46,11 @@ import { scrollMotion } from "@/lib/anchors";
 import { cn, logFailure } from "@/lib/utils";
 import { plural } from "@/lib/words";
 
-/** Every game, or those of one launcher, as covers, with sorting and the ways to add more. */
+/** Every game, the favorites or the games of one launcher, as covers, with sorting and the ways to add more. */
 export function GameGrid({
   summaries,
   launcher,
+  favorites,
   playing,
   onDiscover,
   onAdd,
@@ -59,6 +60,8 @@ export function GameGrid({
   summaries: GameSummary[];
   /** The launcher whose games these are, null for all games. */
   launcher: string | null;
+  /** Whether these are the favorites. */
+  favorites: boolean;
   playing: ReadonlySet<string>;
   onDiscover: () => void;
   onAdd: () => void;
@@ -133,8 +136,9 @@ export function GameGrid({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-baseline gap-3">
           {launcher && <LauncherMark launcher={launcher} className="size-[22px] shrink-0 self-center text-soft" />}
+          {favorites && <Heart className="size-[22px] shrink-0 self-center text-soft" fill="currentColor" strokeWidth={0} />}
           <h1 id="all-games-title" className="font-display text-[28px] leading-[1.1]">
-            {launcher ? launcherTitle(launcher) : "All games"}
+            {favorites ? "Favorites" : launcher ? launcherTitle(launcher) : "All games"}
           </h1>
           <span className="text-sm text-faint tabular-nums">{sorted.length}</span>
         </div>
@@ -257,7 +261,9 @@ export function GameGrid({
       </div>
       {summaries.length === 0 && (
         <p className="mt-6 max-w-[56ch] text-sm text-faint">
-          No games yet. Discover the games your launchers installed, or add any game by hand.
+          {favorites
+            ? "No favorites yet. The heart on a game's page or in the menu of its cover makes it one."
+            : "No games yet. Discover the games your launchers installed, or add any game by hand."}
         </p>
       )}
       {sorted.length === 0 && query && (
