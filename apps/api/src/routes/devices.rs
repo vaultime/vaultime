@@ -9,9 +9,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::AuthenticatedAccount;
-use crate::constants::{
-    MAX_DEVICE_FIELD_CHARS, MAX_DEVICE_PUBLIC_KEY_CHARS, MAX_DEVICES_PER_ACCOUNT,
-};
+use crate::constants::{MAX_DEVICE_FIELD_CHARS, MAX_DEVICES_PER_ACCOUNT};
 use crate::error::{AppError, AppResult};
 use crate::models::{DeviceResponse, RegisterDeviceRequest};
 
@@ -24,13 +22,6 @@ pub async fn register(
     let device_name = trim_required(&payload.device_name, "device_name")?;
     let platform = trim_required(&payload.platform, "platform")?;
     let app_version = trim_required(&payload.app_version, "app_version")?;
-    if payload
-        .device_public_key
-        .as_deref()
-        .is_some_and(|key| key.chars().count() > MAX_DEVICE_PUBLIC_KEY_CHARS)
-    {
-        return Err(AppError::bad_request("device_public_key is too long"));
-    }
 
     // One registration at a time per account, so two at once cannot both
     // take the last free place.
@@ -58,16 +49,14 @@ pub async fn register(
             client_device_id,
             device_name,
             platform,
-            app_version,
-            device_public_key
+            app_version
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (account_id, client_device_id)
         DO UPDATE
         SET device_name = EXCLUDED.device_name,
             platform = EXCLUDED.platform,
             app_version = EXCLUDED.app_version,
-            device_public_key = EXCLUDED.device_public_key,
             last_seen_at = NOW()
         RETURNING
             id,
@@ -84,7 +73,6 @@ pub async fn register(
     .bind(device_name)
     .bind(platform)
     .bind(app_version)
-    .bind(payload.device_public_key)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;

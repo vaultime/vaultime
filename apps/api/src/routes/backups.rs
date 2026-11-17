@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use axum::Json;
 use axum::body::Body;
-use axum::extract::{Path as AxumPath, Query, Request, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
+use axum::extract::{Path as AxumPath, Request, State};
+use axum::http::header::{CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use chrono::{DateTime, Duration, Utc};
@@ -30,7 +30,7 @@ use crate::constants::{
     UPLOAD_WRITE_BUFFER_BYTES,
 };
 use crate::error::{AppError, AppResult};
-use crate::models::{BackupRecordResponse, CreateBackupRequest, DownloadQuery};
+use crate::models::{BackupRecordResponse, CreateBackupRequest};
 
 /// The field of a backup's metadata that names the PC it is of.
 const SOURCE_PC_FIELD: &str = "source_device_id";
@@ -267,7 +267,6 @@ pub async fn download_backup(
     auth: AuthenticatedAccount,
     State(state): State<AppState>,
     AxumPath(backup_id): AxumPath<Uuid>,
-    Query(query): Query<DownloadQuery>,
 ) -> AppResult<Response> {
     let backup = find_backup(&state, auth.account_id, backup_id).await?;
     if backup.status != "complete" {
@@ -276,23 +275,12 @@ pub async fn download_backup(
         ));
     }
 
-    let mut response = stored_file_response(
+    stored_file_response(
         &backup_path(&state.config.backup_root, &backup.storage_key),
         backup.size_bytes,
         "backup file is missing on disk",
     )
-    .await?;
-
-    if query.attachment.unwrap_or(true) {
-        let disposition = format!("attachment; filename=\"vaultime-backup-{}.enc\"", backup.id);
-        response.headers_mut().insert(
-            CONTENT_DISPOSITION,
-            HeaderValue::from_str(&disposition)
-                .map_err(|error| AppError::internal(format!("invalid filename header: {error}")))?,
-        );
-    }
-
-    Ok(response)
+    .await
 }
 
 /// Streams a stored backup or blob of `size_bytes` to the client.

@@ -56,7 +56,6 @@ pub struct RegisterDeviceRequest {
     pub device_name: String,
     pub platform: String,
     pub app_version: String,
-    pub device_public_key: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -151,11 +150,6 @@ pub struct RefreshTokenAccountRow {
     pub account_id: Uuid,
     pub email: String,
     pub access_state: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DownloadQuery {
-    pub attachment: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
