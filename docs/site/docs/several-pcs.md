@@ -13,7 +13,11 @@ Play on more than one PC and bring it together in one history. Each PC keeps rec
 Vaultime saves a backup of this PC before each merge, so restoring that backup undoes it. It is one of the automatic backups, so it is deleted once seven newer ones are there. Merge again later and only what is new comes in. Sessions you removed here never come back.
 
 > [!NOTE]
-> A merge is not a sync. The other PC never changes, and a merge from a folder happens only when you start it.
+> A merge is not a sync. The other PC never changes. A backup you pick merges only when you start it, and from a sync folder or the cloud only the first merge of a PC waits for you.
+
+### From a sync folder
+
+With the same [sync folder](backups.md#sync-folder) on both PCs, Settings, Sync folder lists the newest backup of each PC in it. Pick **Merge** and the same dialog shows what would come in. After that first merge, newer backups of that PC come in by themselves within the hour, under the same rules as from the cloud.
 
 ### From the cloud
 

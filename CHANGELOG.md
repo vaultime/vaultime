@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Backups
+
+- **Sync folder.** Keep backups in a folder that Dropbox, Google Drive, OneDrive, Syncthing or a NAS keeps the same on every PC. Each PC copies its automatic backups there with every image stored once, and the PCs that share the folder find each other: merge another PC once and its newer sessions come in by themselves within the hour. A new PC can restore from the folder.
+
 ### Interface
 
 - **Year in games.** Your year told in chapters, one card at a time, from the stats page or the command palette: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when you play, where your hours came from and the games you finished. It counts every launcher and play while offline, and Vaultime works it out on your PC.
@@ -31,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Last played when you stopped.** The game list and the library now count a game as last played when you last stopped playing it, so a game you just quit reads "Just now" instead of the hour you started it, and the Last played order follows. While a game runs, the game list shows when you started it, "Since 20:15".
 - **No lost window on GNOME.** On a desktop that shows no tray icons, like GNOME without an AppIndicator extension, closing the window now minimizes Vaultime instead of hiding it where no icon could bring it back, and starting with your computer opens it minimized. It keeps counting either way, and Settings says which your desktop does.
 - **Updates through your package manager.** When a package manager installed Vaultime and its package says so, the app leaves updates to it and never replaces files it does not own. Settings says where its updates come from.
+- **Automatic backups of several PCs in one folder.** PCs whose automatic backups went to one synced folder deleted each other's backups, and a database that would not open could start over from another PC's backup. Each PC now keeps, deletes and restores only its own.
 - **Publisher in Windows.** Apps and features and the program's properties now name the publisher Vaultime instead of vaultime.
 - **Legacy Games and Big Fish by name.** Games found through these two launchers named no launcher and read as added by hand. They now name their launcher.
 - **Wednesday fits in the journal.** In a window of 1280 pixels and wider, the journal's day names no longer run into the strip of play beside them.

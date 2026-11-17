@@ -1,6 +1,6 @@
 # Backups
 
-Vaultime backs up your library and history to a folder by itself every day. Cloud backup is an optional extra for invited accounts, encrypted on your PC before anything leaves it.
+Vaultime backs up your library and history to a folder by itself every day. A sync folder keeps those backups on your other PCs too. Cloud backup is an optional extra for invited accounts, encrypted on your PC before anything leaves it.
 
 ## Local backups
 
@@ -10,7 +10,7 @@ Back up automatically
 : On from the start. Vaultime makes a backup once a day and when it quits, unless the last one is less than an hour old, and keeps the newest seven. Backups you save by hand are never deleted.
 
 Automatic backups go to
-: The `backups` folder inside the data folder to begin with. **Change** picks another one. A folder on another drive, or one that syncs to another device, keeps your history safe when the drive fails.
+: The `backups` folder inside the data folder to begin with. **Change** picks another one. A folder on another drive keeps your history safe when the drive fails. Several PCs may share one folder, each keeps and deletes only its own backups. To keep your backups on your other PCs, use a [sync folder](#sync-folder).
 
 Save a backup
 : Makes a backup right now, into a folder you pick.
@@ -20,13 +20,32 @@ Restore from a backup
 
 **History** lists the latest backups with their time.
 
+## Sync folder
+
+A sync folder is a folder that a sync service or a NAS keeps the same on every PC, such as one in Dropbox, Google Drive, OneDrive or Syncthing. Settings, Sync folder holds it.
+
+Folder
+: **Choose** picks the folder. Vaultime keeps a folder named Vaultime in it, with a folder for each PC, and copies a backup of this PC there right away. Choose the same folder on each of your PCs. A PC that played nothing yet copies nothing, so a new install can restore first. **Stop** leaves the backups in the folder and keeps new ones on this PC.
+
+Each PC copies every automatic backup there and keeps its newest three. The database goes as it is, and every image is stored once, so your sync service uploads an unchanged cover only once. A PC only ever writes its own folder. A folder that is away, like a NAS that is off, gets the newest backup once it is back. While automatic backups are off, no new backup of this PC reaches the folder.
+
+Below the folder, every PC with a backup there has a row:
+
+- **Merge** brings in another PC's sessions the first time, with the same dialog as any [merge](several-pcs.md#merge-another-pc). After that its newer backups come in by themselves within the hour, as from the cloud.
+- **Restore** replaces this PC's history with that backup, after the same preview as a local restore. On a new install it sets the PC up again, see [Several PCs](several-pcs.md#setting-a-pc-up-again).
+
+A backup the sync service is still bringing in fails its check and waits for the next look.
+
+> [!NOTE]
+> The sync folder holds your play history unencrypted, like a local backup. Anyone who can open the folder can read it.
+
 ## What a backup holds
 
 A backup holds your games, every session with its full log, the ledger, your settings and the cached artwork.
 
 Some things belong to the PC they were set on:
 
-- The look, the window size and the folder automatic backups go to are in the backup, but a restore keeps this PC's own. On a PC where nobody ever changed the look, like a new one, the restore brings the look of the backup: mode, ground tone, accent, and the dim and blur for a background picture.
+- The look, the window size, the folder automatic backups go to and the sync folder are in the backup, but a restore keeps this PC's own. On a PC where nobody ever changed the look, like a new one, the restore brings the look of the backup: mode, ground tone, accent, and the dim and blur for a background picture.
 - The background picture and the key that signs the PC's ledger are left out of backups.
 
 The ledger notes every restore.
