@@ -19,7 +19,8 @@ describe("shareWords", () => {
   it("says most, nearly all or a small part at the ends", () => {
     expect(shareWords(0.6)).toBe("most");
     expect(shareWords(0.95)).toBe("nearly all");
-    expect(shareWords(1)).toBe("nearly all");
+    expect(shareWords(0.99)).toBe("nearly all");
+    expect(shareWords(1)).toBe("all");
     expect(shareWords(0.03)).toBe("a small part");
   });
 });

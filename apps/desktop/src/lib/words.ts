@@ -57,6 +57,7 @@ const FRACTIONS: [share: number, words: string][] = [
 
 /** A share from 0 to 1 in words for "… of your hours": "almost a third", "about half", "most". */
 export function shareWords(share: number): string {
+  if (share >= 1) return "all";
   if (share >= SHARE_WORDS_NEARLY_ALL) return "nearly all";
   if (share >= SHARE_WORDS_MOST) return "most";
   if (share < SHARE_WORDS_SMALL) return "a small part";

@@ -16,6 +16,7 @@ import { launcherKey } from "@/lib/launchers";
 import type { GameYear, YearStats } from "@/lib/stats";
 import { compareTimes, dayPartOf, parseVaultimeDate, startOfWeek, toDayKey } from "@/lib/time";
 import type { GameStatusChange, LauncherPlay, Session } from "@/lib/types";
+import { numberWords } from "@/lib/words";
 
 export const YEAR_CHAPTERS = ["numbers", "game", "top", "longest", "week", "rhythm", "launchers", "finished"] as const;
 export type YearChapter = (typeof YEAR_CHAPTERS)[number];
@@ -145,6 +146,28 @@ export function yearStory({
     // Without play there is nothing to tell at all.
     chapters: tells.numbers ? YEAR_CHAPTERS.filter((chapter) => tells[chapter]) : [],
   };
+}
+
+/** How the chapter list and the card name a chapter. */
+export function chapterTitle(chapter: YearChapter, story: YearStory): string {
+  switch (chapter) {
+    case "numbers":
+      return "Your year in numbers";
+    case "game":
+      return "Game of the year";
+    case "top":
+      return `Your top ${numberWords(story.top.length)}`;
+    case "longest":
+      return story.longest?.night ? "The longest night" : "The longest day";
+    case "week":
+      return "The week you could not stop";
+    case "rhythm":
+      return "When you play";
+    case "launchers":
+      return "Where your hours came from";
+    case "finished":
+      return "Finished this year";
+  }
 }
 
 function storyGame(game: { gameId: string; runtimeMs: number }, share: number): StoryGame {

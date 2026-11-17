@@ -7,7 +7,7 @@ import { yearStats } from "@/lib/stats";
 import { estimateYearPlay } from "@/test/play-estimates";
 import { at, session } from "@/test/sessions";
 import type { GameStatusChange, LauncherPlay, Session } from "@/lib/types";
-import { yearStory } from "./year-story";
+import { chapterTitle, yearStory } from "./year-story";
 
 const now = new Date(2026, 11, 20, 12, 0);
 
@@ -137,6 +137,13 @@ describe("yearStory", () => {
       hidden: ["secret"],
     });
     expect(finished).toEqual([{ gameId: "elden", at: new Date(2026, 3, 1, 12) }]);
+  });
+
+  it("names the top chapter by its count and the longest by when it was", () => {
+    const story = storyOf(year);
+    expect(chapterTitle("top", story)).toBe("Your top four");
+    expect(chapterTitle("longest", story)).toBe("The longest day");
+    expect(chapterTitle("longest", storyOf([played("elden", 3, 2, 22, 60)]))).toBe("The longest night");
   });
 
   it("has nothing to tell for a year without play", () => {

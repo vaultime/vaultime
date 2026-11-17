@@ -20,7 +20,7 @@ const CELL_BORDERS = [
 ];
 
 /** "17h 06m" with the units smaller than the figures, so the number reads first. */
-function Figures({ text }: { text: string }) {
+export function Figures({ text }: { text: string }) {
   return text.split(/(\d[\d.,]*)/).map((part, index) => {
     const unit = part.trim();
     if (/^\d/.test(part) || !unit) return part.trim() ? <span key={index}>{part}</span> : null;

@@ -386,6 +386,10 @@ export const YEAR_STORY_TOP_GAMES = 5;
 export const YEAR_STORY_WEEK_GAMES = 3;
 /** Launchers in the chapter on where the hours came from. */
 export const YEAR_STORY_LAUNCHERS = 5;
+/** Covers in the chapter on games finished in the year. */
+export const YEAR_STORY_FINISHED_COVERS = 6;
+/** How long a chapter's big number counts up the first time it shows. */
+export const YEAR_STORY_COUNT_UP_MS = 900;
 /** From this share on, prose calls a part of the hours nearly all of them. */
 export const SHARE_WORDS_NEARLY_ALL = 0.9;
 /** From this share on, prose calls a part of the hours most of them. */
