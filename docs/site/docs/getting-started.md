@@ -60,6 +60,12 @@ Each time Vaultime starts, it reads what Steam and your other launchers installe
 
 Each game is offered only once on a PC. A game you leave out, or one you already saw in a full scan, stays quiet from then on, and **Discover** still lists everything. When Vaultime starts in the tray at login, the dialog waits until you open the window. The switch **Look for new games when Vaultime starts** under Settings, In the background turns it off.
 
+### Games you ran from a game folder
+
+When a program from one of the usual game folders, the ones the folder scan reads, runs in front for at least ten minutes, over one run or several, **Discover games** lists it under **Seen running** with how long it ran, and a dot on the **+** next to Library says one is waiting. **Add** makes it a game of your library, and **Not a game** ignores it.
+
+Vaultime notes no program outside those folders and nothing while a game of your library is in front, and the list stays on this PC. Steam libraries are left out, as Steam discovery finds their games. On Linux a Windows game that Wine runs is not noted, because the program in front is Wine.
+
 ### The same game from two launchers
 
 When a scan finds a game from one launcher that is in your library from another, like Cyberpunk 2077 on GOG next to your Steam copy, the list says **Same game as Cyberpunk 2077 on Steam**. Adding it links it to that game, see [One game, two installs](game-pages.md#one-game-two-installs). Untick the line to add it as a game of its own. Titles are compared by their letters and digits alone, so case, spaces and punctuation do not matter. Vaultime only suggests this when the title matches exactly one game from another launcher, and not when a game from the same launcher has that title too.

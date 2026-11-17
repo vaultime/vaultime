@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Sync folder.** Keep backups in a folder that Dropbox, Google Drive, OneDrive, Syncthing or a NAS keeps the same on every PC. Each PC copies its automatic backups there with every image stored once, and the PCs that share the folder find each other: merge another PC once and its newer sessions come in by themselves within the hour. A new PC can restore from the folder.
 
+### Library
+
+- **Seen running.** A program from your game folders that runs in front for ten minutes without being in your library shows in Discover, ready to add or to set aside as not a game, and a dot on the + next to Library says so. Vaultime notes no program outside those folders.
+
 ### Interface
 
 - **Year in games.** Your year told in chapters, one card at a time, from the stats page or the command palette: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when you play, where your hours came from and the games you finished. It counts every launcher and play while offline, and Vaultime works it out on your PC.
