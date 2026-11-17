@@ -72,7 +72,7 @@ export function StoryCard({
   return (
     <article
       aria-label={`${chapterTitle(chapter, props.story)}, chapter ${position + 1} of ${count}`}
-      className="relative isolate flex aspect-[9/16] h-[clamp(380px,calc(100dvh-250px),640px)] shrink-0 flex-col overflow-hidden rounded-[18px] bg-surface shadow-2xl ring-1 shadow-scrim/40 ring-glint/8"
+      className="@container relative isolate flex aspect-[9/16] h-[clamp(380px,calc(100dvh-250px),640px)] shrink-0 flex-col overflow-hidden rounded-[18px] bg-surface shadow-2xl ring-1 shadow-scrim/40 ring-glint/8"
     >
       {art ? (
         <img
@@ -442,7 +442,8 @@ function Facts({ facts, columns }: { facts: [label: string, value: string][]; co
     <dl
       className={cn(
         "mt-5 grid gap-x-4 gap-y-3 border-t border-glint/10 pt-4",
-        columns === 2 ? "grid-cols-2" : "grid-cols-3",
+        // A card made small by a low window keeps three facts readable on two rows.
+        columns === 2 ? "grid-cols-2" : "grid-cols-2 @xs:grid-cols-3",
       )}
     >
       {facts.map(([label, value]) => (
