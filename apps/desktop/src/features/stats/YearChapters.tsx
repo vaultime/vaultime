@@ -2,16 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useState, type ReactNode } from "react";
+import { LauncherMark } from "@/components/brand/LauncherMark";
 import { LogoMark } from "@/components/brand/Logo";
 import { Figures } from "@/components/layout/StatTiles";
 import { Cover } from "@/components/media/Cover";
+import { PhraseText } from "@/components/media/PhraseText";
 import type { GameSummary } from "@/features/library/library-context";
-import { YEAR_STORY_COUNT_UP_MS } from "@/lib/constants";
+import { DAYS_PER_WEEK, YEAR_STORY_COUNT_UP_MS, YEAR_STORY_FINISHED_COVERS } from "@/lib/constants";
+import { launcherTitle, launcherWhere } from "@/lib/launchers";
 import type { YearStats } from "@/lib/stats";
-import { formatClockTime, formatDate, formatHoursMinutes, formatHoursShort } from "@/lib/time";
+import { formatClockTime, formatDate, formatDayAndMonth, formatHoursMinutes, formatHoursShort } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { rhythmSentence } from "@/lib/year-sentences";
 import { chapterTitle, type YearChapter, type YearStory } from "@/lib/year-story";
-import { countWords, plural, shareWords } from "@/lib/words";
+import { capitalize, countWords, plural, shareWords } from "@/lib/words";
 
 interface ChapterProps {
   story: YearStory;
@@ -138,8 +142,14 @@ function Chapter({ chapter, ...props }: ChapterProps & { chapter: YearChapter })
       return <TopChapter {...props} />;
     case "longest":
       return <LongestChapter {...props} />;
-    default:
-      return null;
+    case "week":
+      return <WeekChapter {...props} />;
+    case "rhythm":
+      return <RhythmChapter {...props} />;
+    case "launchers":
+      return <LaunchersChapter {...props} />;
+    case "finished":
+      return <FinishedChapter {...props} />;
   }
 }
 
@@ -245,6 +255,134 @@ function LongestChapter({ story, game, animate }: ChapterProps) {
           {Math.round((longest.activeMs / longest.runtimeMs) * 100)} % of it active
         </p>
       )}
+    </>
+  );
+}
+
+function WeekChapter({ story, game, cover, animate }: ChapterProps) {
+  const week = story.week;
+  if (!week) return null;
+  return (
+    <>
+      <Eyebrow>The week you could not stop</Eyebrow>
+      <Title>Week of {formatDayAndMonth(week.start)}</Title>
+      <Big value={week.playedMs} animate={animate} />
+      <p className="font-prose mt-1 text-[16px] text-soft">
+        {week.daysPlayed >= DAYS_PER_WEEK ? "on every day of it" : `on ${countWords(week.daysPlayed, "day")}`}
+      </p>
+      <ul className="mt-4 flex flex-col gap-2.5 border-t border-glint/10 pt-4">
+        {week.games.map((entry) => {
+          const summary = game(entry.gameId);
+          if (!summary) return null;
+          return (
+            <li key={entry.gameId} className="flex items-center gap-2.5">
+              <Cover
+                title={summary.game.title}
+                src={cover(entry.gameId)}
+                variant="tile"
+                className="h-8 w-[22px] rounded-[3px] text-[7px]"
+              />
+              <span className="min-w-0 flex-1 truncate text-[14px]">{summary.game.title}</span>
+              <span className="shrink-0 text-[13px] text-soft tabular-nums">{formatHoursShort(entry.runtimeMs)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+function RhythmChapter({ story, stats }: ChapterProps) {
+  const rhythm = rhythmSentence(stats.weekClock);
+  const most = Math.max(...story.hours);
+  const peak = story.hours.indexOf(most);
+  return (
+    <>
+      <Eyebrow>When you play</Eyebrow>
+      {rhythm && (
+        <p className="font-prose mt-1.5 text-[21px] leading-snug text-pretty">
+          <PhraseText phrase={rhythm} />
+        </p>
+      )}
+      <div aria-hidden="true" className="mt-5 flex h-24 items-end gap-[2px]">
+        {story.hours.map((ms, hour) => (
+          <div
+            key={hour}
+            className={cn("flex-1 rounded-t-[2px]", hour === peak ? "bg-violet" : "bg-glint/22")}
+            style={{ height: `${Math.max(2, (ms / most) * 100)}%` }}
+          />
+        ))}
+      </div>
+      <div aria-hidden="true" className="mt-1.5 flex justify-between font-mono text-[10.5px] text-faint">
+        {["00", "06", "12", "18", "24"].map((hour) => (
+          <span key={hour}>{hour}</span>
+        ))}
+      </div>
+      <p className="mt-3 text-[13px] text-soft">
+        Most often around <span className="font-mono">{formatClockTime(new Date(story.year, 0, 1, peak))}</span>
+      </p>
+    </>
+  );
+}
+
+function LaunchersChapter({ story }: ChapterProps) {
+  const [first] = story.launchers;
+  if (!first) return null;
+  const lead =
+    story.launchers.length === 1
+      ? `All of it ${launcherWhere(first.launcher)}.`
+      : `${capitalize(shareWords(first.share))} of it ${launcherWhere(first.launcher)}.`;
+  return (
+    <>
+      <Eyebrow>Where your hours came from</Eyebrow>
+      <p className="font-prose mt-1.5 text-[21px] leading-snug text-pretty">{lead}</p>
+      <ul className="mt-5 flex flex-col gap-3">
+        {story.launchers.map((entry) => (
+          <li key={entry.launcher}>
+            <div className="flex items-center gap-2.5 text-[14px]">
+              <LauncherMark launcher={entry.launcher} className="size-[15px] shrink-0 text-soft" />
+              <span className="min-w-0 flex-1 truncate">{launcherTitle(entry.launcher)}</span>
+              <span className="shrink-0 text-[13px] text-soft tabular-nums">{Math.round(entry.share * 100)} %</span>
+            </div>
+            <div className="mt-1.5 h-[3px] rounded-full bg-glint/10">
+              <div className="h-full rounded-full bg-violet" style={{ width: `${entry.share * 100}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function FinishedChapter({ story, game, cover }: ChapterProps) {
+  const shown = story.finished.slice(0, YEAR_STORY_FINISHED_COVERS);
+  const more = story.finished.length - shown.length;
+  return (
+    <>
+      <Eyebrow>Finished this year</Eyebrow>
+      <p className="font-prose mt-1.5 text-[21px] leading-snug">
+        {capitalize(countWords(story.finished.length, "game"))} seen through to the end.
+      </p>
+      <ul className="mt-4 grid grid-cols-3 gap-2.5">
+        {shown.map((entry) => {
+          const summary = game(entry.gameId);
+          if (!summary) return null;
+          return (
+            <li key={entry.gameId} className="min-w-0">
+              <Cover
+                title={summary.game.title}
+                src={cover(entry.gameId)}
+                variant="tile"
+                className="aspect-[2/3] w-full rounded-[5px] text-[9px]"
+              />
+              <div className="mt-1 truncate text-[11.5px] text-faint">
+                {formatDate(entry.at, { day: "numeric", month: "short" })}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {more > 0 && <p className="mt-2 text-[12.5px] text-faint">and {countWords(more, "more game")}</p>}
     </>
   );
 }
