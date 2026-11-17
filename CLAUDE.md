@@ -195,24 +195,36 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 
 ## UX
 
-- Premium and image-rich, not a background utility. Never ship stock
-  component styling.
-- Editorial look: Mona Sans at full width for titles (`font-display`) and at
-  normal width for sentences about play (`font-prose`), Geist for interface
-  text, Geist Mono for stats, clocks, times and paths. Small counts inside
-  lists use Geist with tabular figures. Hairline rules instead of boxes and
-  shadows, small uppercase labels, generous space. Colors come from the tokens
-  in `index.css`, which `lib/theme.ts` derives for the chosen look, never
-  loose hex values in components. The website in `docs/site` uses the same
-  fonts and classes of the same names.
-- The default look is a dark violet ink ground with violet `#9D7CFF` as the
-  brand color and the color of active time. Players can pick light mode,
-  another ground tone, another accent and a background picture. Every color
-  derives from these choices in `lib/theme.ts`, so components use tokens
-  only, and the `--violet` tokens mean the accent. Game pages take a tint
-  from the cover art.
-- Shell like a music player: library rail on the left with search, a Ctrl+K
-  command palette, and a live session bar at the bottom.
+- Premium and image-rich while open, quiet while it runs in the
+  background. Never ship stock component styling.
+- Type: Mona Sans a little wide and firm for titles (`font-display`, 110 %
+  width, 600), with page titles at 28px, the hero titles of Home and game
+  pages at 46px and section titles at 18px. Mona Sans at normal width for
+  sentences about play (`font-prose`). Geist for interface text, with
+  tabular figures for durations, counts and stats, and the units smaller in
+  big numbers. Geist Mono only for running clocks, times of day, chart hours,
+  codes and paths. Durations read "4h 05m", "142h" and "40m". Labels are
+  small and in sentence case (`label-small`), never spaced capitals.
+- Surfaces: panels (`panel`) and cards with a faint 1px inner line, hairline
+  rules inside them, no glows. Controls share one system: buttons 34px high
+  with 8px corners and a faint fill, segmented choices (`segmented`,
+  `segment`) and square step buttons. Colors come from the tokens in
+  `index.css`, which `lib/theme.ts` derives for the chosen look, never loose
+  hex values in components. The website in `docs/site` uses the same fonts
+  and classes of the same names.
+- The default look is a violet grey a step above black, the vault ground at
+  less than half its color, so cover art carries the color, with violet
+  `#9D7CFF` as the brand color and the color of active time. Players can
+  pick light mode, another ground tone, another accent and a background
+  picture. Every color derives from these choices in `lib/theme.ts`, so
+  components use tokens only, and the `--violet` tokens mean the accent.
+  Game pages take a tint from the cover art.
+- Shell like a music player: the rail, the page and the live bar are panels
+  on the darker window tone. The rail lists Home, Journal and Stats, the
+  library with All games, and the games played last, with Cloud and Settings
+  in its foot. A bar over the top of the page holds back, forward and the
+  search that opens the Ctrl+K command palette. The live bar at the bottom
+  takes a wash of the running game's colors.
 - The window opens at a fixed preset size unless the player picks Free, so
   pages are laid out for those sizes, down to 1024x640, and still work in a
   free window down to 900x600.
