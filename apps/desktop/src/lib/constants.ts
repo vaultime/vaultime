@@ -58,6 +58,8 @@ export const SETTING_KEYS = {
    * them. Same as LIBRARY_SORT_SETTING in constants.rs.
    */
   librarySort: "rail_sort",
+  /** How All games groups the games. Same as LIBRARY_GROUP_SETTING in constants.rs. */
+  libraryGroup: "library_group",
   /** Looking for new games at start, on unless `false`. Same as AUTO_DISCOVER_SETTING in constants.rs. */
   autoDiscover: "auto_discover_on_start",
   /** Dark, light or the system's mode. Same as APPEARANCE_MODE_SETTING in constants.rs. */
@@ -315,6 +317,13 @@ export const SESSION_PAST_MIDNIGHT_MIN_MS = 30 * MINUTE_MS;
 export const SESSION_WORDS_MINUTE_STEP_MS = 5 * MINUTE_MS;
 /** Share of a week's playtime one game needs to be named in the week sentence. */
 export const WEEK_TOP_GAME_MIN_SHARE = 0.6;
+
+/** Days back the first "Last played" group of All games reaches. */
+export const PLAYED_GROUP_WEEK_DAYS = 7;
+/** Days back the second "Last played" group reaches. */
+export const PLAYED_GROUP_MONTH_DAYS = 30;
+/** Days back the third "Last played" group reaches. Older play comes after it. */
+export const PLAYED_GROUP_YEAR_DAYS = 365;
 
 /** Share of a launcher's tracked time one game needs to be named in its sentence, "most of it in Elden Ring". */
 export const LAUNCHER_TOP_GAME_MIN_SHARE = 0.5;

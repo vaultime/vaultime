@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ArrowDownUp, Check, ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowDownUp, Check, ChevronDown, MoreHorizontal, Pencil, Plus, Rows3, Search, Trash2, X } from "lucide-react";
 import { LauncherMark } from "@/components/brand/LauncherMark";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
@@ -17,10 +17,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LastPlayed } from "@/features/library/components/LastPlayed";
-import type { GameSummary } from "@/features/library/library-context";
+import { useLibrary, useMinute, type GameSummary } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
-import { SETTING_KEYS, TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
+import { MINUTE_MS, SETTING_KEYS, TRUST_BADGE_RECENT_DAYS } from "@/lib/constants";
 import { onFind } from "@/lib/find";
+import { GAME_GROUPS, groupGames, isGameGroup, type GameGroup } from "@/lib/game-groups";
 import { GAME_SORTS, isGameSort, sortGames, type GameSort } from "@/lib/game-sort";
 import { GAME_STATUS_LABELS, GAME_STATUSES } from "@/lib/game-status";
 import { launcherTitle, launcherWhere } from "@/lib/launchers";
@@ -56,6 +57,12 @@ export function GameGrid({
     const saved = values[SETTING_KEYS.librarySort];
     return isGameSort(saved) ? saved : "recent";
   });
+  const [group, setGroup] = useState<GameGroup>(() => {
+    const saved = values[SETTING_KEYS.libraryGroup];
+    return isGameGroup(saved) ? saved : "none";
+  });
+  const { links, devices, thisDeviceId } = useLibrary();
+  const minute = useMinute();
   const [filter, setFilter] = useState<GameStatus | "all">("all");
   const [query, setQuery] = useState("");
   const section = useRef<HTMLElement>(null);
@@ -73,10 +80,24 @@ export function GameGrid({
     );
     return sortGames(filtered, sort);
   }, [summaries, sort, shownFilter, query]);
+  // One launcher's games all fall under it, and with one PC all games are this PC's.
+  const groupings = (Object.keys(GAME_GROUPS) as GameGroup[]).filter(
+    (option) => (option !== "launcher" || !launcher) && (option !== "pc" || devices.length > 1),
+  );
+  const shownGroup = groupings.includes(group) ? group : "none";
+  const groups = useMemo(
+    () => groupGames(sorted, shownGroup, { now: minute * MINUTE_MS, links, devices, thisDeviceId }),
+    [sorted, shownGroup, minute, links, devices, thisDeviceId],
+  );
 
   function changeSort(next: GameSort) {
     setSort(next);
     save(SETTING_KEYS.librarySort, next).catch(logFailure("saving the sort of All games"));
+  }
+
+  function changeGroup(next: GameGroup) {
+    setGroup(next);
+    save(SETTING_KEYS.libraryGroup, next).catch(logFailure("saving the groups of All games"));
   }
 
   useEffect(
@@ -105,6 +126,41 @@ export function GameGrid({
           <span className="text-sm text-faint tabular-nums">{sorted.length}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-faint"
+              strokeWidth={1.8}
+            />
+            <input
+              ref={search}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && query) {
+                  event.stopPropagation();
+                  setQuery("");
+                }
+              }}
+              placeholder="Find a game"
+              aria-label="Find a game"
+              className="h-[34px] w-[200px] rounded-lg border border-hairline bg-transparent pr-8 pl-8 text-[13px] text-text transition-colors outline-none placeholder:text-faint focus-visible:border-violet focus-visible:ring-2 focus-visible:ring-violet/30 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  search.current?.focus();
+                }}
+                aria-label="Clear"
+                className="absolute top-1/2 right-2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-faint hover:text-text"
+              >
+                <X className="size-3.5" strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
           <Button variant="outline" onClick={onDiscover}>
             <Search className="size-4" strokeWidth={1.8} />
             Discover
@@ -121,66 +177,51 @@ export function GameGrid({
         </p>
       )}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-faint"
-            strokeWidth={1.8}
-          />
-          <input
-            ref={search}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && query) {
-                event.stopPropagation();
-                setQuery("");
-              }
-            }}
-            placeholder="Find a game"
-            aria-label="Find a game"
-            className="h-[34px] w-[200px] rounded-lg border border-hairline bg-transparent pr-8 pl-8 text-[13px] text-text transition-colors outline-none placeholder:text-faint focus-visible:border-violet focus-visible:ring-2 focus-visible:ring-violet/30 [&::-webkit-search-cancel-button]:hidden"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => {
-                setQuery("");
-                search.current?.focus();
-              }}
-              aria-label="Clear"
-              className="absolute top-1/2 right-2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-faint hover:text-text"
-            >
-              <X className="size-3.5" strokeWidth={1.8} />
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {statuses.length > 0 && (
-            <div role="group" aria-label="Show games by status" className="segmented">
-              {(["all", ...statuses] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={shownFilter === key}
-                  onClick={() => setFilter(key)}
-                  className="segment"
+        {statuses.length > 0 && (
+          <div role="group" aria-label="Show games by status" className="segmented">
+            {(["all", ...statuses] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={shownFilter === key}
+                onClick={() => setFilter(key)}
+                className="segment"
+              >
+                {key !== "all" && <GameStatusIcon status={key} className="size-3" />}
+                {key === "all" ? "All" : GAME_STATUS_LABELS[key]}
+                <span
+                  className={cn(
+                    "text-[11.5px] font-normal tabular-nums",
+                    shownFilter === key ? "text-soft" : "text-faint",
+                  )}
                 >
-                  {key !== "all" && <GameStatusIcon status={key} className="size-3" />}
-                  {key === "all" ? "All" : GAME_STATUS_LABELS[key]}
-                  <span
-                    className={cn(
-                      "text-[11.5px] font-normal tabular-nums",
-                      shownFilter === key ? "text-soft" : "text-faint",
-                    )}
-                  >
-                    {countOf(key)}
-                  </span>
-                </button>
+                  {countOf(key)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={`Group games, now ${shownGroup === "none" ? "not grouped" : `by ${GAME_GROUPS[shownGroup].toLowerCase()}`}`}
+              className="flex h-[34px] items-center gap-1.5 rounded-lg px-3 text-[12.5px] text-soft ring-1 ring-hairline transition-colors ring-inset hover:bg-glint/5 focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none data-popup-open:bg-glint/5"
+            >
+              <Rows3 className="size-3.5 text-faint" strokeWidth={1.8} />
+              <span className={cn("font-medium", shownGroup === "none" ? "text-soft" : "text-text")}>
+                {shownGroup === "none" ? "Group" : GAME_GROUPS[shownGroup]}
+              </span>
+              <ChevronDown className="size-3.5 text-faint" strokeWidth={1.8} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-auto min-w-40">
+              {groupings.map((option) => (
+                <DropdownMenuItem key={option} onClick={() => changeGroup(option)}>
+                  {option === "none" ? "No groups" : GAME_GROUPS[option]}
+                  {option === shownGroup && <Check className="ml-auto size-4 text-violet" />}
+                </DropdownMenuItem>
               ))}
-            </div>
-          )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label={`Sort games, now ${GAME_SORTS[sort]}`}
@@ -209,17 +250,30 @@ export function GameGrid({
       {sorted.length === 0 && query && (
         <p className="mt-6 text-sm text-faint">No game matches "{query.trim()}".</p>
       )}
-      <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-5 gap-y-7">
-        {sorted.map((summary) => (
-          <GameTile
-            key={summary.game.id}
-            summary={summary}
-            playing={playing.has(summary.game.id)}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-      </ul>
+      {groups.map(({ key, title, games }, index) => (
+        <div key={key} className={title ? (index === 0 ? "mt-7" : "mt-10") : undefined}>
+          {title && (
+            <h2 className="flex items-baseline gap-2.5 font-display text-lg">
+              {shownGroup === "launcher" && (
+                <LauncherMark launcher={key} className="size-4 shrink-0 self-center text-soft" />
+              )}
+              {title}
+              <span className="font-sans text-[13px] font-normal text-faint tabular-nums">{games.length}</span>
+            </h2>
+          )}
+          <ul className={cn("grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-5 gap-y-7", title ? "mt-4" : "mt-6")}>
+            {games.map((summary) => (
+              <GameTile
+                key={summary.game.id}
+                summary={summary}
+                playing={playing.has(summary.game.id)}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
     </section>
   );
 }
