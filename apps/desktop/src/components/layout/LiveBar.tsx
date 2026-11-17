@@ -3,8 +3,10 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { ArrowUpRight, Gamepad2 } from "lucide-react";
+import { ArrowUpRight, Gamepad2, Square, Timer } from "lucide-react";
 import { Cover } from "@/components/media/Cover";
+import { Button } from "@/components/ui/button";
+import { useAwayTimer } from "@/features/away/away-timer-context";
 import {
   useActiveSessions,
   useCurrentSession,
@@ -14,8 +16,9 @@ import {
 } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
 import { LIVE_TICK_MS, SECOND_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
-import { formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
+import { formatCalendarDay, formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
 import { usePageVisible } from "@/lib/use-page-visible";
+import type { AwayTimer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** The panel at the bottom of every page: the running game, like a music player. */
@@ -32,10 +35,12 @@ export function LiveBar() {
   const active = useActiveSessions();
   const activePolledAt = useLastPoll();
   const current = useCurrentSession();
+  const { timer, stop } = useAwayTimer();
 
   // Counted by the core at each poll, as the journal counts the day.
   const todayMs = usePlayedToday();
 
+  if (!current && timer) return <TimedBar timer={timer} onStop={stop} />;
   if (!current) {
     // Games that came with another PC's sessions are not watched here.
     const watched = games.filter(
@@ -76,8 +81,7 @@ export function LiveBar() {
     <footer
       aria-label="Live session"
       className={BAR}
-      // The colors of the game being played wash in from its cover.
-      style={tint ? { backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tint.fill} 70%, transparent), transparent 40%)` } : undefined}
+      style={tint ? wash(tint.fill) : undefined}
     >
       <div className={SIDE}>
         <Cover title={title} src={covers[current.game_id]} variant="tile" className="h-12 w-[34px] rounded-[5px] text-lg" />
@@ -111,11 +115,25 @@ export function LiveBar() {
       </div>
 
       <div className={cn(SIDE, "justify-end gap-2.5 text-xs text-faint")}>
-        <span className="hidden truncate xl:inline">
-          Idle after{" "}
-          {idleTimeText(idleThresholdSeconds)}{" "}
-          away
-        </span>
+        {timer ? (
+          <button
+            type="button"
+            onClick={stop}
+            title={`Stop the timer for ${games.find((g) => g.id === timer.game_id)?.title ?? "a game"}`}
+            className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-soft transition-colors hover:bg-raised hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+          >
+            <Timer className="size-3.5 shrink-0 text-violet" />
+            <span className="hidden truncate xl:inline">{games.find((g) => g.id === timer.game_id)?.title}</span>
+            <RunningClock small runtimeMs={0} polledAt={parseVaultimeDate(timer.started_at).getTime()} />
+            <Square className="size-2.5 shrink-0" fill="currentColor" />
+          </button>
+        ) : (
+          <span className="hidden truncate xl:inline">
+            Idle after{" "}
+            {idleTimeText(idleThresholdSeconds)}{" "}
+            away
+          </span>
+        )}
         <Link
           to={`/library/${current.game_id}`}
           aria-label={`Open ${title}`}
@@ -129,6 +147,48 @@ export function LiveBar() {
   );
 }
 
+/** The colors of the game being played, washing in from its cover. */
+function wash(fill: string) {
+  return { backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${fill} 70%, transparent), transparent 40%)` };
+}
+
+/** The bar while only the timer for play away from this PC runs. */
+function TimedBar({ timer, onStop }: { timer: AwayTimer; onStop: () => void }) {
+  const { games, covers, summaries } = useLibrary();
+  const title = games.find((game) => game.id === timer.game_id)?.title ?? "Unknown game";
+  const started = parseVaultimeDate(timer.started_at);
+  // A timer left running overnight names its day too.
+  const since =
+    started.toDateString() === new Date().toDateString()
+      ? formatClockTime(started)
+      : `${formatCalendarDay(timer.started_at)}, ${formatClockTime(started)}`;
+  const tint = summaries.find((summary) => summary.game.id === timer.game_id)?.tint;
+  return (
+    <footer aria-label="Live session" className={BAR} style={tint ? wash(tint.fill) : undefined}>
+      <div className={SIDE}>
+        <Cover title={title} src={covers[timer.game_id]} variant="tile" className="h-12 w-[34px] rounded-[5px] text-lg" />
+        <div className="flex min-w-0 flex-col leading-[1.35]">
+          <span className="truncate text-[13.5px] font-medium">{title}</span>
+          <span className="flex items-center gap-2 text-xs text-faint">
+            <Timer className="size-3 shrink-0 text-violet" strokeWidth={2} />
+            <span className="truncate">Away from this PC since {since}</span>
+          </span>
+        </div>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+        <RunningClock runtimeMs={0} polledAt={started.getTime()} />
+        <span className="text-[11.5px] text-faint">Timed by you, saved as Manual</span>
+      </div>
+      <div className={cn(SIDE, "justify-end")}>
+        <Button variant="outline" size="sm" onClick={onStop}>
+          <Square className="size-3" fill="currentColor" />
+          Stop the timer
+        </Button>
+      </div>
+    </footer>
+  );
+}
+
 const BAR = "panel col-span-2 flex h-[72px] items-center gap-[18px] pr-3.5 pl-3";
 /** The two ends of the bar, of equal width so the clock sits in the middle. */
 const SIDE = "flex w-[230px] min-w-0 shrink-0 items-center gap-3 xl:w-[290px]";
@@ -137,7 +197,7 @@ const SIDE = "flex w-[230px] min-w-0 shrink-0 items-center gap-3 xl:w-[290px]";
  * The running time, ticking every second from the last poll while the window
  * is seen, so it does not jump every poll. Only the clock draws each second.
  */
-function RunningClock({ runtimeMs, polledAt }: { runtimeMs: number; polledAt: number }) {
+function RunningClock({ runtimeMs, polledAt, small }: { runtimeMs: number; polledAt: number; small?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   const visible = usePageVisible();
   useEffect(() => {
@@ -147,7 +207,14 @@ function RunningClock({ runtimeMs, polledAt }: { runtimeMs: number; polledAt: nu
   }, [visible]);
   const shownMs = runtimeMs + Math.max(0, now - polledAt);
   return (
-    <span className="font-mono text-[19px] leading-none font-medium tracking-wide tabular-nums" role="timer" aria-label={`Running for ${formatHoursMinutes(shownMs)}`}>
+    <span
+      className={cn(
+        "font-mono leading-none tabular-nums",
+        small ? "text-xs" : "text-[19px] font-medium tracking-wide",
+      )}
+      role="timer"
+      aria-label={`Running for ${formatHoursMinutes(shownMs)}`}
+    >
       {formatClock(shownMs)}
     </span>
   );
