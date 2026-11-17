@@ -18,7 +18,7 @@ The wording changes from session to session but always stays the same for the sa
 
 ### Game colors
 
-Every game gets a mark in the main color of its artwork, and its title takes that color in the sentences. Black, white or grey art gives a grey mark, and art with two strong colors shows both. When a game's color looks too much like another game of the same week or like your accent, it takes its second color, and only shifts when neither fits.
+Every game gets a mark in the main color of its artwork, and its title takes that color in the sentences. Black, white or grey art gives a grey mark, and art with two strong colors shows both. When a game's color looks too much like another game of the same week, or like an accent you picked, it takes its second color, and only shifts when neither fits. The accent from your game is that game's own color, so its mark keeps it.
 
 ### Games side by side
 

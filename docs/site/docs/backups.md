@@ -45,7 +45,7 @@ A backup holds your games, every session with its full log, the ledger, your set
 
 Some things belong to the PC they were set on:
 
-- The look, the window size, the folder automatic backups go to and the sync folder are in the backup, but a restore keeps this PC's own. On a PC where nobody ever changed the look, like a new one, the restore brings the look of the backup: mode, ground tone, accent, and the dim and blur for a background picture.
+- The look, the window size, the folder automatic backups go to and the sync folder are in the backup, but a restore keeps this PC's own. On a PC where nobody ever changed the look, like a new one, the restore brings the look of the backup: mode, ground tone, accent, where the background comes from, and its dim and blur. A picture of your own stays out of backups.
 - The background picture and the key that signs the PC's ledger are left out of backups.
 
 The ledger notes every restore.

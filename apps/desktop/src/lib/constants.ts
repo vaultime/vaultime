@@ -623,7 +623,7 @@ export const APPEARANCE_SAVE_DELAY_MS = 400;
 export const BACKGROUND_BLUR_BLEED = 2;
 /** Hues around the wheel on the swatch that opens the color picker. */
 export const ACCENT_WHEEL_STEPS = 6;
-/** The look of a new install, Vaultime as it started. */
+/** The look of a new install, lit by the game in front on a graphite ground. */
 export const DEFAULT_LOOK = { mode: "dark", ground: "graphite", accent: "game" } as const;
 /** The accent setting that takes the color of the art of the game in front. */
 export const GAME_ACCENT = "game";

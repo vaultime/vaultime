@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Puts the look of the last run on the page before the first paint, so a
-// light or recolored Vaultime does not flash the default dark violet first.
+// light or recolored Vaultime does not flash the default look first.
 // The copy holds the tokens of both modes, and System mode takes the one the
 // system asks for now. The AppearanceProvider writes the copy. The key is
 // APPEARANCE_CACHE_KEY in src/lib/constants.ts.

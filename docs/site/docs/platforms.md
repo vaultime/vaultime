@@ -41,6 +41,7 @@ Steam, Heroic, Lutris and itch.io installed through Flatpak are found by discove
 ## Tray and keyring
 
 - The tray icon needs `libayatana-appindicator3`. GNOME shows tray icons only with an AppIndicator extension, which Ubuntu ships. Without one, closing the window minimizes Vaultime instead of hiding it.
+- Installed from a package, Vaultime puts its logo in the accent into your own icon folder, `~/.local/share/icons/hicolor`, under the name of the installed icon, so the app menu and the dock show it. Uninstalling leaves those files. Delete the `vaultime.png` files there to go back to the installed icon. An AppImage installs no desktop entry and keeps the logo it ships with.
 - Signing in to cloud backup keeps your sign-in and the backup key in the system keyring, so it needs a keyring service such as GNOME Keyring or KWallet. Most desktops ship one.
 
 ## macOS
