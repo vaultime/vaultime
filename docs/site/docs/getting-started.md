@@ -89,7 +89,7 @@ Without a program, Vaultime cannot notice the game running, but you can still ad
 
 ## Not a game? Ignore it
 
-Discovery sometimes finds a benchmark, a launcher or a tool. Point at it in the discover list and pick **Ignore**, and Vaultime never suggests it again and never tracks it. Deleting a game offers the same with the box *It is not a game*.
+Discovery sometimes finds a benchmark, a launcher or a tool. Point at it in the discover list and pick **Not a game**, and Vaultime never suggests it again and never tracks it. Deleting a game offers the same with the box *It is not a game*.
 
 Ignored programs are listed under Settings, Ignored programs, where **Allow again** takes one back.
 
