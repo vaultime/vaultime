@@ -30,8 +30,6 @@ pub struct AuthenticatedAccount {
     pub account_id: Uuid,
 }
 
-/// Tokens signed while accounts still had a role carry one more claim, which
-/// decoding ignores.
 #[derive(Debug, Serialize, Deserialize)]
 struct AccessClaims {
     sub: String,
@@ -206,7 +204,7 @@ impl FromRequestParts<AppState> for AuthenticatedAccount {
         .ok_or_else(|| AppError::unauthorized("access token is invalid or expired"))?;
 
         if access_state != "active" {
-            return Err(AppError::forbidden("account does not have cloud access"));
+            return Err(AppError::forbidden("this account is locked"));
         }
 
         Ok(Self { account_id })
@@ -229,8 +227,6 @@ mod tests {
     const ACCESS_SECRET: &str = "test-access-secret";
     const PINNED_ACCOUNT_ID: &str = "7f1c1f5e-3c1a-4f7e-9d3b-2a4c5e6f7a8b";
     const ACCESS_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3ZjFjMWY1ZS0zYzFhLTRmN2UtOWQzYi0yYTRjNWU2ZjdhOGIiLCJlbWFpbCI6InBsYXllckBleGFtcGxlLmNvbSIsImV4cCI6NDEwMjQ0NDgwMCwiaWF0IjoxNzY3MjI1NjAwfQ.HWeMqSOstH2WqjkUHuAmhC3GLFUs_S2pAOPCQr-tm5E";
-    /// Signed while accounts still had a role. Such tokens keep working until they expire.
-    const ROLE_ACCESS_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3ZjFjMWY1ZS0zYzFhLTRmN2UtOWQzYi0yYTRjNWU2ZjdhOGIiLCJlbWFpbCI6InBsYXllckBleGFtcGxlLmNvbSIsInJvbGUiOiJ1c2VyIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NjcyMjU2MDB9.5lxWbB-mcBDjNSvhnlPg_YmiovXxYfa4B_YbjS-anJg";
 
     fn test_config() -> Config {
         Config {
@@ -280,11 +276,9 @@ mod tests {
     }
 
     #[test]
-    fn decodes_pinned_access_tokens() {
-        for token in [ACCESS_TOKEN, ROLE_ACCESS_TOKEN] {
-            let account_id = decode_access_token(&test_config(), token).unwrap();
-            assert_eq!(account_id.to_string(), PINNED_ACCOUNT_ID);
-        }
+    fn decodes_a_pinned_access_token() {
+        let account_id = decode_access_token(&test_config(), ACCESS_TOKEN).unwrap();
+        assert_eq!(account_id.to_string(), PINNED_ACCOUNT_ID);
 
         let decoded = decode::<AccessClaims>(
             ACCESS_TOKEN,

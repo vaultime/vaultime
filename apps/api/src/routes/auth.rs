@@ -128,7 +128,7 @@ pub async fn login(
         return Err(invalid_credentials());
     }
     if row.access_state != "active" {
-        return Err(AppError::forbidden("account does not have cloud access"));
+        return Err(AppError::forbidden("this account is locked"));
     }
 
     sqlx::query("UPDATE cloud_accounts SET last_login_at = NOW() WHERE id = $1")
@@ -232,7 +232,7 @@ pub async fn refresh(
         ));
     }
     if row.access_state != "active" {
-        return Err(AppError::forbidden("account does not have cloud access"));
+        return Err(AppError::forbidden("this account is locked"));
     }
 
     // A retried token keeps when it was first replaced, so the grace never

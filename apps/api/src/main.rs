@@ -133,8 +133,8 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    /// Checksums the live database recorded for each migration. sqlx refuses
-    /// to start once a shipped migration changes, line endings included.
+    /// Checksums that databases recorded for each shipped migration. sqlx
+    /// refuses to start once one changes, line endings included.
     const APPLIED: &[(i64, &str)] = &[
         (
             1,
@@ -177,7 +177,7 @@ mod tests {
             assert_eq!(
                 hex::encode(&migration.checksum),
                 *checksum,
-                "migration {version} changed, the live database would refuse it"
+                "migration {version} changed, databases that ran it would refuse it"
             );
         }
     }
