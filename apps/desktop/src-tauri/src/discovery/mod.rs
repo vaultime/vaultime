@@ -107,6 +107,7 @@ fn seen_games_under(db: &Database, folders: &[String]) -> Result<Vec<SeenGame>> 
     Ok(mark_same_games(db, candidates)?
         .into_iter()
         .zip(front)
+        .filter(|(candidate, _)| !candidate.already_added)
         .map(|(candidate, front_seconds)| SeenGame {
             candidate,
             front_seconds,
@@ -172,13 +173,28 @@ pub struct SameGame {
 /// from another launcher as another install of it. Kept conservative: a
 /// title that a game from the candidate's own launcher has too, that fits
 /// two games, or a candidate inside the matched game's install folder, marks
-/// nothing.
+/// nothing. A candidate whose install folder is a library game's counts as
+/// added, like a game whose launcher put in a new program, as at start.
 pub fn mark_same_games(
     db: &Database,
     mut found: Vec<DiscoveredGame>,
 ) -> Result<Vec<DiscoveredGame>> {
     let library = games::list_local_games(db)?;
     let links = games::links(db)?;
+    let folders: HashSet<String> = library
+        .iter()
+        .filter_map(|game| game.install_folder.as_deref())
+        .map(path_key)
+        .collect();
+    for candidate in &mut found {
+        if candidate
+            .install_folder
+            .as_deref()
+            .is_some_and(|folder| folders.contains(&path_key(folder)))
+        {
+            candidate.already_added = true;
+        }
+    }
     let mut by_title: HashMap<String, Vec<&Game>> = HashMap::new();
     for game in &library {
         let key = normalize(&game.title);
@@ -640,6 +656,32 @@ mod tests {
         assert_eq!(id_of(&by_folder).as_deref(), Some("b-id"));
         assert_eq!(id_of(&other_launcher), None);
         assert_eq!(id_of(&known).as_deref(), Some("kept"));
+    }
+
+    #[test]
+    fn a_launcher_game_with_a_new_program_is_in_the_library() {
+        let db = Database::open_in_memory().unwrap();
+        games::create_game(
+            &db,
+            &CreateGame {
+                title: "Hades".into(),
+                executable_path: Some("/epic/hades/old.exe".into()),
+                install_folder: Some("/epic/hades".into()),
+                launcher_source: Some("epic".into()),
+            },
+        )
+        .unwrap();
+        let candidate = DiscoveredGame {
+            title: "Hades".into(),
+            executable_path: "/epic/hades/new.exe".into(),
+            install_folder: Some("/epic/hades".into()),
+            source: "epic".into(),
+            source_id: None,
+            already_added: false,
+            same_game: None,
+        };
+        let marked = mark_same_games(&db, vec![candidate]).unwrap();
+        assert!(marked[0].already_added);
     }
 
     #[test]
