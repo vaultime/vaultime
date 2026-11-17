@@ -13,12 +13,20 @@ import {
   usePlayedToday,
 } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
-import { LIVE_TICK_MS, SECOND_MS } from "@/lib/constants";
+import { LIVE_TICK_MS, SECOND_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { cn } from "@/lib/utils";
 
 /** The panel at the bottom of every page: the running game, like a music player. */
+/** "45s", "5m", "1m 30s": the idle time with the seconds Settings may add to the minutes. */
+function idleTimeText(seconds: number): string {
+  const rest = seconds % SECONDS_PER_MINUTE;
+  if (seconds < SECONDS_PER_MINUTE) return `${rest}s`;
+  const minutes = formatHoursMinutes((seconds - rest) * SECOND_MS);
+  return rest ? `${minutes} ${rest}s` : minutes;
+}
+
 export function LiveBar() {
   const { games, covers, summaries, idleThresholdSeconds, thisDeviceId } = useLibrary();
   const active = useActiveSessions();
@@ -104,7 +112,9 @@ export function LiveBar() {
 
       <div className={cn(SIDE, "justify-end gap-2.5 text-xs text-faint")}>
         <span className="hidden truncate xl:inline">
-          Idle after {formatHoursMinutes(idleThresholdSeconds * SECOND_MS)} away
+          Idle after{" "}
+          {idleTimeText(idleThresholdSeconds)}{" "}
+          away
         </span>
         <Link
           to={`/library/${current.game_id}`}
