@@ -8,8 +8,8 @@ checks to run before a pull request.
 Vaultime is free software. The app is licensed under the GNU General Public
 License and the cloud server under the GNU Affero General Public License, both
 version 3 or later. The maintainer also keeps the option to offer Vaultime
-under other terms, for example to help pay for the server. For that, every
-contribution comes with this agreement.
+under other terms, for example to help cover the project's costs. For that,
+every contribution comes with this agreement.
 
 By submitting a contribution to this repository, such as code, text or
 artwork, you agree that:

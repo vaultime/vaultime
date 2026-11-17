@@ -15,8 +15,8 @@ ShortDescription: Game library and playtime tracker that keeps active and idle t
 Description: |-
   Vaultime notices when a game starts, from any launcher, and keeps the time it was open, the time you
   actually played and the time it sat idle apart. Your play reads like a journal, your library looks
-  like a library, and everything stays on your PC. Backups are optional, locally or to an invite-only
-  server.
+  like a library, and everything stays on your PC. Backups are optional, locally, through a sync folder
+  or to a server you run.
 Moniker: vaultime
 Tags:
   - games

@@ -17,7 +17,7 @@
       <li>Finds games from Steam, Xbox, Epic, GOG, EA and other launchers, and scans common game folders</li>
       <li>Shows your library with artwork from your game folders, framed the way you like</li>
       <li>Dark and light looks with ground tones, accent colors and a background picture</li>
-      <li>Local backups, plus optional encrypted backup to an invite-only server</li>
+      <li>Local backups, a sync folder for your other PCs and optional encrypted backup to a server you run</li>
     </ul>
   </description>
   <launchable type="desktop-id">Vaultime.desktop</launchable>

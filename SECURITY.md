@@ -1,8 +1,7 @@
 # Security
 
-Vaultime is a free project with an invite-only cloud beta. Reports about
-security problems are welcome and get an answer as soon as possible,
-usually within a week.
+Vaultime is a free project. Reports about security problems are welcome and
+get an answer as soon as possible, usually within a week.
 
 ## Report a problem privately
 
@@ -21,9 +20,9 @@ named for finding it.
 
 - The desktop app on Windows and Linux, including its updates, which are
   signed and come from `https://vaultime.codfishcloud.de/downloads/`.
-- The cloud backup API at `https://vaultime.codfishcloud.de` and the server
-  setup in `deploy/`.
-- The website.
+- The cloud server in `apps/api` and its setup in `deploy/server`, as
+  anyone runs it.
+- The website and its setup in `deploy/vps`.
 
 Only the latest release gets fixes.
 
@@ -32,6 +31,7 @@ Only the latest release gets fixes.
 - The trust labels in the app, such as Suspicious and Recovered, are integrity
   scoring, not protection. Editing your own history on your own PC is not a
   vulnerability.
-- The cloud service runs on a single small server. Please do not run load
-  tests or automated scans against it, and never touch other people's
-  accounts or backups. If you need an account to test with, ask by email.
+- There is no hosted cloud service. Test against a server you run yourself,
+  as the documentation on running your own server describes, and never touch
+  other people's servers, accounts or backups. Please do not run load tests
+  or automated scans against the website.

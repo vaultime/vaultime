@@ -38,7 +38,7 @@ Vaultime notices when a game starts, from any launcher, and keeps the time it wa
 - **Your artwork, your look.** Covers from your own game folders, framed the way you like, and any accent color.
 - **Honest trust labels.** Clock jumps, crashes and edits made outside Vaultime show up instead of hiding in a total.
 - **Several PCs, one history.** Merge another PC's sessions from its backup.
-- **Backups.** Daily local backups and optional encrypted cloud backup.
+- **Backups.** Daily local backups, a sync folder for your other PCs and optional encrypted cloud backup to a server you run.
 
 ## Download
 
@@ -59,7 +59,7 @@ Vaultime has no analytics and no telemetry. See the [privacy policy](docs/legal/
 
 ## License
 
-Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its install tools are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
+Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its setup files are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
 
 The interface components from shadcn/ui are under the [MIT license](LICENSES/MIT.txt), and the fonts Mona Sans, Geist and Geist Mono under the SIL Open Font License 1.1.
 
