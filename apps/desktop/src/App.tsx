@@ -23,7 +23,6 @@ export function App() {
         <Route path="library" element={<LibraryPage />} />
         <Route path="library/:gameId" element={<GameDetailsPage />} />
         <Route path="journal" element={<JournalPage />} />
-        <Route path="sessions" element={<Navigate to="/journal" replace />} />
         <Route path="stats" element={<StatsPage />} />
         <Route path="stats/year/:year?" element={<YearInGamesPage />} />
         <Route path="settings" element={<SettingsPage />} />

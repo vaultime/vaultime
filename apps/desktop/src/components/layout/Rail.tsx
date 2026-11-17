@@ -50,7 +50,7 @@ export function Rail() {
 
   return (
     <nav aria-label="Main" className="panel flex min-h-0 flex-col px-2.5 pt-3 pb-2">
-      <Logo small className="h-9 px-2" />
+      <Logo className="h-9 px-2" />
 
       <div className="mt-2 flex flex-col gap-px">
         {PAGES.map(({ to, label, icon: Icon }) => (

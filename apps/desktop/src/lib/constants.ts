@@ -432,8 +432,6 @@ export const SHARE_WORDS_MOST = 0.6;
 export const SHARE_WORDS_SMALL = 0.07;
 /** How far a share may be from a half, a third or a quarter and still read as about that much. */
 export const SHARE_WORDS_ABOUT = 0.06;
-/** Largest card the core saves, in bytes. Same as SHARE_IMAGE_MAX_BYTES in constants.rs. */
-export const SHARE_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
 /** Share of a day's pitch in the calendar of the year card that its square covers, the rest is the gap. */
 export const SHARE_CALENDAR_CELL_SHARE = 0.8;
 /** Covers on the card are blurred by drawing them this many times smaller and back up. */

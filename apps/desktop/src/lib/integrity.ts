@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { SECOND_MS } from "@/lib/constants";
 import { formatHoursMinutes } from "@/lib/time";
 import type { SessionEvent } from "@/lib/types";
 import { capitalize } from "@/lib/words";
@@ -75,8 +74,6 @@ export function formatIntegrityEventType(eventType: string): string {
   switch (eventType) {
     case "started":
       return "Tracking started";
-    case "heartbeat":
-      return "Times saved";
     case "integrity_flagged":
       return "Flagged";
     case "recovered":
@@ -156,18 +153,6 @@ export function getIntegrityEventDetail(event: SessionEvent): string {
       return gapMs === null
         ? "Time while the PC slept or tracking paused was not counted"
         : `${formatHoursMinutes(gapMs)} not counted while the PC slept or tracking paused`;
-    }
-    case "heartbeat": {
-      const driftMs =
-        typeof payload?.drift_ms === "number" ? payload.drift_ms : null;
-      if (driftMs === null) {
-        return "Times saved";
-      }
-
-      const driftSeconds = Math.round(Math.abs(driftMs) / SECOND_MS);
-      return driftSeconds > 0
-        ? `Times saved, the system clock was ${driftSeconds}s off`
-        : "Times saved";
     }
     default:
       return "Recorded";

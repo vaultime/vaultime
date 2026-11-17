@@ -6,11 +6,10 @@ import { formatIntegrityEventType, getIntegrityEventDetail } from "@/lib/integri
 import { compareTimes, formatSessionStart } from "@/lib/time";
 import type { SessionEvent } from "@/lib/types";
 
-/** The notable local events, for anyone who wants to check the record. */
+/** The notable local events, which the core picks, for anyone who wants to check the record. */
 export function EventLog({ events }: { events: SessionEvent[] }) {
-  const notable = events.filter((event) => event.event_type !== "heartbeat");
-  if (notable.length === 0) return null;
-  const shown = [...notable]
+  if (events.length === 0) return null;
+  const shown = [...events]
     .sort((a, b) => compareTimes(b.event_time_wall, a.event_time_wall))
     .slice(0, EVENT_LOG_LIMIT);
 
@@ -18,7 +17,7 @@ export function EventLog({ events }: { events: SessionEvent[] }) {
     <details className="group border-t border-rule pt-4">
       <summary className="flex cursor-pointer list-none items-baseline justify-between text-sm text-faint hover:text-soft">
         <span>
-          Event log, {notable.length} entr{notable.length === 1 ? "y" : "ies"}
+          Event log, {events.length} entr{events.length === 1 ? "y" : "ies"}
         </span>
         <span className="text-xs group-open:hidden">Show</span>
         <span className="hidden text-xs group-open:inline">Hide</span>

@@ -99,11 +99,6 @@ describe("session log", () => {
     expect(getIntegrityEventDetail(event("tracking_gap"))).toBe(
       "Time while the PC slept or tracking paused was not counted",
     );
-    expect(getIntegrityEventDetail(event("heartbeat", { drift_ms: -3_400 }))).toBe(
-      "Times saved, the system clock was 3s off",
-    );
-    expect(getIntegrityEventDetail(event("heartbeat", { drift_ms: 400 }))).toBe("Times saved");
-    expect(getIntegrityEventDetail(event("heartbeat"))).toBe("Times saved");
     expect(getIntegrityEventDetail(event("started"))).toBe("First entry in the session's record");
     expect(getIntegrityEventDetail(event("ended"))).toBe("Session closed cleanly");
     expect(getIntegrityEventDetail(event("anything_else"))).toBe("Recorded");

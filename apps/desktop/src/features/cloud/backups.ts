@@ -37,20 +37,6 @@ export function backupSource(backup: CloudBackupRecord): string | null {
   return backup.metadata_json?.source_device_id ?? null;
 }
 
-/** A local date and time field as an ISO timestamp, null when empty or unreadable. */
-export function toIsoTimestamp(value: string) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed.toISOString();
-}
-
 /** A server address without its scheme, as the player would type it. */
 export function formatServerAddress(value: string) {
   try {

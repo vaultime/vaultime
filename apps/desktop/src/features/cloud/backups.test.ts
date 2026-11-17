@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { CloudBackupRecord } from "@/lib/types";
-import { backupSize, backupSource, formatByteSize, formatServerAddress, formatTimestamp, toIsoTimestamp } from "./backups";
+import { backupSize, backupSource, formatByteSize, formatServerAddress, formatTimestamp } from "./backups";
 
 function record(overrides: Partial<CloudBackupRecord> = {}): CloudBackupRecord {
   return {
@@ -42,14 +42,6 @@ describe("backups", () => {
     expect(backupSource(record())).toBeNull();
     const named = record({ metadata_json: { source_device_id: "desktop" } as CloudBackupRecord["metadata_json"] });
     expect(backupSource(named)).toBe("desktop");
-  });
-});
-
-describe("toIsoTimestamp", () => {
-  it("reads a local date and time and leaves empty or broken values out", () => {
-    expect(toIsoTimestamp("")).toBeNull();
-    expect(toIsoTimestamp("soon")).toBeNull();
-    expect(toIsoTimestamp("2026-10-01T12:30")).toBe(new Date(2026, 9, 1, 12, 30).toISOString());
   });
 });
 

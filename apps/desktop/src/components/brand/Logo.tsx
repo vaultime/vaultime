@@ -28,20 +28,12 @@ export function LogoMark({
   );
 }
 
-/** In the accent, with the pivot in the text color, as the icons of the window show it. Small keeps the proportions. */
-export function Logo({ className, small = false }: { className?: string; small?: boolean }) {
+/** In the accent, with the pivot in the text color, as the icons of the window show it. */
+export function Logo({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center text-violet transition-colors duration-500",
-        small ? "gap-2" : "gap-2.5",
-        className,
-      )}
-    >
-      <LogoMark className={cn("shrink-0", small ? "size-[22px]" : "size-[28px]")} pivotClassName="fill-text" />
-      <span className={cn("font-wordmark leading-none", small ? "text-[19.5px]" : "text-[25px]")}>
-        Vaultime
-      </span>
+    <span className={cn("inline-flex items-center gap-2 text-violet transition-colors duration-500", className)}>
+      <LogoMark className="size-[22px] shrink-0" pivotClassName="fill-text" />
+      <span className="font-wordmark text-[19.5px] leading-none">Vaultime</span>
     </span>
   );
 }
