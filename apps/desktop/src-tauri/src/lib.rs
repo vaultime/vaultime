@@ -155,6 +155,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::games::delete_game,
         commands::games::list_game_assets,
         commands::games::list_preferred_game_assets,
+        commands::games::get_cover_data_urls,
         commands::games::scan_game_assets,
         commands::games::open_artwork_file,
         commands::games::open_game_asset_source,

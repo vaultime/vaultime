@@ -1950,6 +1950,13 @@ mockIPC((cmd, payload) => {
       return (args.paths as string[]).length;
     case "list_game_assets":
       return gameAssets(String(args.gameId));
+    case "get_cover_data_urls": {
+      // Sample covers are files of the preview or data URLs, which a canvas can save.
+      const wanted = new Set(args.gameIds as string[]);
+      return Object.fromEntries(
+        preferredAssets().flatMap((asset) => (wanted.has(asset.game_id) && asset.preview_data_url ? [[asset.game_id, asset.preview_data_url]] : [])),
+      );
+    }
     case "list_preferred_game_assets":
       // The core sends each cover with its colors.
       return Promise.all(

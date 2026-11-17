@@ -7,7 +7,7 @@ mod art;
 pub mod crop;
 pub mod tint;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
@@ -154,6 +154,20 @@ fn work_out_tints(cache_dir: &Path, cache_paths: &[&str]) -> Vec<Option<ArtTint>
             .flat_map(|(count, part)| part.join().unwrap_or_else(|_| vec![None; count]))
             .collect()
     })
+}
+
+/// The covers of some games as data URLs, for pictures the page draws and
+/// saves.
+pub fn cover_data_urls(
+    db: &Database,
+    asset_manager: &AssetManager,
+    game_ids: &[String],
+) -> Result<HashMap<String, String>> {
+    Ok(list_preferred_game_assets(db, asset_manager)?
+        .into_iter()
+        .filter(|cover| game_ids.contains(&cover.game_id))
+        .filter_map(|cover| Some((cover.game_id, cover.preview_data_url?)))
+        .collect())
 }
 
 /// Deletes a game with the games linked to it, and their cached artwork.
@@ -1217,6 +1231,43 @@ mod tests {
         assert_eq!(covers.len(), 1);
         assert_eq!(covers[0].id, fallback.id);
         assert!(covers[0].preview_data_url.is_some());
+
+        fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn data_urls_hold_the_covers_of_the_games_asked_for() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let game = create_game(&db);
+        let other = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Other".into(),
+                executable_path: None,
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        let image = image::DynamicImage::ImageRgb8(image::RgbImage::new(60, 80));
+        for owner in [&game, &other] {
+            let cache_path = write_cached_image(&asset_manager, owner, &image, true).unwrap();
+            game_assets::create_asset(
+                &db,
+                &owner.id,
+                "cover",
+                "scanned_local",
+                "/games/cover.jpg",
+                Some(&cache_path.to_string_lossy()),
+                None,
+            )
+            .unwrap();
+        }
+
+        let urls = cover_data_urls(&db, &asset_manager, std::slice::from_ref(&game.id)).unwrap();
+        assert_eq!(urls.len(), 1);
+        assert!(urls[&game.id].starts_with("data:image/jpeg;base64,"));
 
         fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
     }

@@ -243,6 +243,11 @@ export async function listPreferredGameAssets(): Promise<GameAssetView[]> {
   return invoke<GameAssetView[]>("list_preferred_game_assets");
 }
 
+/** The covers of some games as data URLs, for a picture the page draws and saves. */
+export async function getCoverDataUrls(gameIds: string[]): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("get_cover_data_urls", { gameIds });
+}
+
 export async function scanGameAssets(gameId: string): Promise<GameAssetView[]> {
   return invoke<GameAssetView[]>("scan_game_assets", { gameId });
 }

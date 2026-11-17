@@ -100,10 +100,13 @@ export function ShareYearDialog({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [canCopy, setCanCopy] = useState(clipboardTakesImages);
+  // The covers of games a saved card showed, read once each while the dialog is open.
+  const exportCovers = useRef(new Map<string, string | null>());
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    exportCovers.current.clear();
     api.getThisPc().then(
       (pc) => !cancelled && setPcName(pc.name),
       () => {},
@@ -162,11 +165,22 @@ export function ShareYearDialog({
     });
   }
 
-  /** The card for the options set now. The preview may still show the one before a change. */
+  /**
+   * The card for the options set now. The preview may still show the one
+   * before a change. Its covers are data URLs, so its canvas can be saved and
+   * copied.
+   */
   async function drawForExport(): Promise<HTMLCanvasElement> {
     if (!card) throw new Error("there is no card to draw");
+    const kept = exportCovers.current;
+    const missing = card.games.filter((game) => game.cover && !kept.has(game.gameId)).map((game) => game.gameId);
+    if (missing.length > 0) {
+      const dataUrls = await api.getCoverDataUrls(missing);
+      for (const gameId of missing) kept.set(gameId, dataUrls[gameId] ?? null);
+    }
+    const games = card.games.map((game) => ({ ...game, cover: game.cover ? (kept.get(game.gameId) ?? null) : null }));
     const target = document.createElement("canvas");
-    await drawShareCard(target, card, options, look);
+    await drawShareCard(target, { ...card, games }, options, look);
     return target;
   }
 

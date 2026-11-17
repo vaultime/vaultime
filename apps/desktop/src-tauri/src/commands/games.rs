@@ -3,6 +3,7 @@
 
 //! Games of the library, their links, statuses and artwork.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::State;
@@ -112,6 +113,17 @@ pub fn list_preferred_game_assets(
     asset_manager: State<'_, AssetManager>,
 ) -> Result<Vec<GameAssetView>, VaultimeError> {
     assets::list_preferred_game_assets(&db, &asset_manager)
+}
+
+/// The covers of some games as data URLs, for the share card, which the page
+/// draws and saves.
+#[tauri::command(async)]
+pub fn get_cover_data_urls(
+    db: State<'_, Arc<Database>>,
+    asset_manager: State<'_, AssetManager>,
+    game_ids: Vec<String>,
+) -> Result<HashMap<String, String>, VaultimeError> {
+    assets::cover_data_urls(&db, &asset_manager, &game_ids)
 }
 
 #[tauri::command(async)]
