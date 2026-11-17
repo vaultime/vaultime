@@ -111,7 +111,8 @@ pub const SPAN_JOIN_MAX_DENSITY_GAP_PER_MILLE: i64 = 10;
 /// Days in a week, for the journal's weeks. Same as `DAYS_PER_WEEK` in
 /// `lib/constants.ts`.
 pub const DAYS_PER_WEEK: i64 = 7;
-/// Most days the library's recent play may look back over.
+/// Most days the library's recent play and recent trust labels may look
+/// back over.
 pub const RECENT_PLAY_MAX_DAYS: u32 = 366;
 /// Longest session that counts as a quick look on the stats page. Same as
 /// `SESSION_QUICK_MAX_MS` in `lib/constants.ts`.
@@ -250,6 +251,9 @@ pub const TITLE_WORD_MIN_CHARS: usize = 3;
 /// Launcher source of Steam games and of playtime read from Steam. Same as
 /// `STEAM_LAUNCHER` in `lib/constants.ts`.
 pub const STEAM_SOURCE: &str = "steam";
+/// Longest window manager name read from the X server, in the 32-bit words
+/// X counts property lengths in.
+pub const WINDOW_MANAGER_NAME_MAX_WORDS: u32 = 255;
 /// Setting that turns the look for new games at start off with `false`.
 /// Same as `SETTING_KEYS.autoDiscover` in `lib/constants.ts`.
 pub const AUTO_DISCOVER_SETTING: &str = "auto_discover_on_start";

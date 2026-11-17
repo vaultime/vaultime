@@ -11,6 +11,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::AppContext;
+use crate::constants::RECENT_PLAY_MAX_DAYS;
 use crate::db::connection::Database;
 use crate::db::models::{Session, SessionEvent, SessionNote};
 use crate::db::repo::{annotations, corrections, games, session_events, sessions};
@@ -45,7 +46,8 @@ pub fn list_sessions(
     let now = chrono::Utc::now();
     playtime::totals::as_shown(&db, &live, &mut all, now.timestamp_millis())?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
-    let recent_since = now - chrono::TimeDelta::days(i64::from(recent_days));
+    let recent_since =
+        now - chrono::TimeDelta::days(i64::from(recent_days.min(RECENT_PLAY_MAX_DAYS)));
     let launcher_of: HashMap<_, _> = games::list_all_games(&db)?
         .into_iter()
         .map(|game| (game.id, game.launcher_source))

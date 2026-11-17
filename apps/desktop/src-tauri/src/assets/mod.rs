@@ -24,7 +24,7 @@ use crate::constants::{
     ARTWORK_SCORE_SCREENSHOT, ARTWORK_SCORE_STEAM_COVER, ARTWORK_SWEEP_MIN_AGE, ASSET_SCAN_DEPTH,
     BANNER_HEIGHT_PX, BANNER_WIDTH_PX, CACHED_JPEG_QUALITY, COVER_HEIGHT_PX, COVER_WIDTH_PX,
     ICON_MAX_SIZE_PX, MAX_ARTWORK_SOURCE_BYTES, MAX_LIBRARY_PREVIEWS, MAX_SCANNED_ASSETS,
-    PLAYER_ARTWORK_SOURCE, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX,
+    PLAYER_ARTWORK_SOURCE, SCREENSHOT_MAX_HEIGHT_PX, SCREENSHOT_MAX_WIDTH_PX, STEAM_SOURCE,
 };
 use crate::db::connection::Database;
 use crate::db::models::{CropRect, Game, GameAsset, GameMetadata};
@@ -272,7 +272,7 @@ pub fn backfill_steam_covers(db: &Database, asset_manager: &AssetManager) -> Res
 
     let mut scanned = 0;
     for game in games::list_local_games(db)? {
-        if game.launcher_source.as_deref() != Some("steam") {
+        if game.launcher_source.as_deref() != Some(STEAM_SOURCE) {
             continue;
         }
         let assets = game_assets::list_assets_for_game(db, &game.id)?;
@@ -656,7 +656,7 @@ fn find_candidates(game: &Game) -> Result<Vec<AssetCandidate>> {
     let mut candidates = Vec::new();
 
     // Steam keeps a portrait cover for every game it installs.
-    if game.launcher_source.as_deref() == Some("steam")
+    if game.launcher_source.as_deref() == Some(STEAM_SOURCE)
         && let Some(folder) = &game.install_folder
         && let Some(cover) = steam::cached_cover(Path::new(folder))
     {

@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use log::info;
 
+use crate::constants::STEAM_SOURCE;
 use crate::db::connection::Database;
 use crate::error::Result;
 use crate::platform::process::path_key;
@@ -276,7 +277,7 @@ fn parse_app_manifest(
         name,
         &executable,
         Some(install_folder.to_string_lossy().into_owned()),
-        "steam",
+        STEAM_SOURCE,
         Some(app_id),
     ))
 }

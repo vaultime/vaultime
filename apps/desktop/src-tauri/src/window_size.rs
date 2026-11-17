@@ -204,7 +204,7 @@ fn x11_window_manager() -> Option<String> {
             atom(b"_NET_WM_NAME")?,
             atom(b"UTF8_STRING")?,
             0,
-            u32::from(u8::MAX),
+            crate::constants::WINDOW_MANAGER_NAME_MAX_WORDS,
         )
         .ok()?
         .reply()
