@@ -214,12 +214,15 @@ fn measure_group(
             if depth + 1 > SVG_MAX_LAYER_DEPTH {
                 return Err("it nests too many layers".into());
             }
-            let rect = child.abs_layer_bounding_box();
-            let width =
-                f64::from(rect.right()).min(bounds.right) - f64::from(rect.left()).max(bounds.left);
-            let height =
-                f64::from(rect.bottom()).min(bounds.bottom) - f64::from(rect.top()).max(bounds.top);
-            let area = area_above + width.max(0.0) * height.max(0.0);
+            // A group without a layer box gets no layer, resvg skips it.
+            let area = area_above
+                + child.abs_layer_bounding_box().map_or(0.0, |rect| {
+                    let width = f64::from(rect.right()).min(bounds.right)
+                        - f64::from(rect.left()).max(bounds.left);
+                    let height = f64::from(rect.bottom()).min(bounds.bottom)
+                        - f64::from(rect.top()).max(bounds.top);
+                    width.max(0.0) * height.max(0.0)
+                });
             load.layer_area = load.layer_area.max(area);
             (depth + 1, area)
         } else {
