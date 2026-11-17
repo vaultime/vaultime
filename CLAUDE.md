@@ -237,13 +237,16 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   `index.css`, which `lib/theme.ts` derives for the chosen look, never loose
   hex values in components. The website in `docs/site` uses the same fonts
   and classes of the same names.
-- The default look is a violet grey a step above black, the vault ground at
-  less than half its color, so cover art carries the color, with violet
-  `#9D7CFF` as the brand color and the color of active time. Players can
-  pick light mode, another ground tone, another accent and a background
-  picture. Every color derives from these choices in `lib/theme.ts`, so
-  components use tokens only, and the `--violet` tokens mean the accent.
-  Game pages take a tint from the cover art.
+- The default look is lit by the game in front: the game a page is about,
+  else the one playing, else the one played last. Its art fills the window
+  behind see-through panels, dimmed more for light art, and the accent, the
+  color of active time, takes the strongest color of that art, a light grey
+  for art without one. The ground is graphite, a step above black, so the
+  art carries the color. Players can pick light mode, another ground tone, a
+  fixed accent, a picture of their own or no background. Every color derives
+  from these choices in `lib/theme.ts`, so components use tokens only, and
+  the `--violet` tokens mean the accent, whatever its color. Game pages take
+  a tint from the cover art.
 - Shell like a music player: the rail, the page and the live bar are panels
   on the darker window tone. The rail lists Home, Journal and Stats, the
   library with All games, and the games played last, with Cloud and Settings
@@ -262,11 +265,13 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   accent takes its second color, and a color shifts only when neither fits.
   Its title in the entries takes its mark, both colors for two-colored art.
 - Logo: clock hands at five past eleven forming a V inside a rounded vault
-  frame, with a pivot in the accent, violet by default. The wordmark is Mona
+  frame, with a pivot in the accent. The logo files and the website keep
+  violet `#9D7CFF` for it. The wordmark is Mona
   Sans 700 at full width (`font-wordmark`), and `scripts/build-brand.py`
   outlines it for the logo files. The lockups keep the proportions of the
   logo in the app, the mark a little taller than the letters. The app draws
-  the tray, taskbar and title bar icons from those files in the accent.
+  the tray, taskbar and title bar icons from those files in the accent in
+  use.
 - Show integrity state clearly without exaggerated security claims.
 
 ## Scope

@@ -19,6 +19,10 @@ export interface AppearanceState {
   mode: ThemeMode;
   /** Hues journal marks keep free for the accent. */
   accentHues: number[];
+  /** The accent the app shows, the color of the game in front worked out. */
+  accent: string;
+  /** The accent the game in front gives, shown on its swatch. */
+  gameAccent: string;
   /** The background picture as a data URL, null without one. */
   background: string | null;
   /** What shows behind every page: the art of the game in front, the picture or nothing. */

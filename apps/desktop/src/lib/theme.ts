@@ -15,15 +15,18 @@ import {
   BACKGROUND_DIM_PERCENT,
   BACKGROUND_SOURCES,
   DEFAULT_LOOK,
+  GAME_ACCENT,
   GLINT_LIGHTNESS,
   GROUND_LEVELS,
   GROUNDS,
+  NO_GAME_ACCENT,
   SCRIM_LIGHTNESS,
   SETTING_KEYS,
   SIGNAL_LEVELS,
   TINT_LEVELS,
 } from "@/lib/constants";
 import { formatOklch, hexToOklch, maxSrgbChroma, oklchToHex, type Oklch } from "@/lib/color";
+import type { ArtColor } from "@/lib/game-tint";
 import type { WindowLook } from "@/lib/types";
 
 export type ThemeMode = "dark" | "light";
@@ -40,7 +43,7 @@ export type BackgroundSource = (typeof BACKGROUND_SOURCES)[number];
 export interface Appearance {
   mode: ModeChoice;
   ground: GroundId;
-  /** A swatch name or a `#rrggbb` color the player picked. */
+  /** The color of the game in front, a swatch name or a `#rrggbb` color the player picked. */
   accent: string;
   /** The art of the game in front, the picture the player chose or none. */
   source: BackgroundSource;
@@ -70,7 +73,7 @@ function isGround(value: string | undefined): value is GroundId {
 }
 
 function isAccent(value: string | undefined): value is string {
-  return value !== undefined && (isSwatch(value) || HEX_COLOR.test(value));
+  return value !== undefined && (value === GAME_ACCENT || isSwatch(value) || HEX_COLOR.test(value));
 }
 
 function clampedNumber(value: string | undefined, range: { min: number; max: number; default: number }): number {
@@ -126,7 +129,7 @@ export function accentColor(accent: string, mode: ThemeMode): AccentColor {
   const levels = ACCENT_LEVELS[mode];
   const picked = isSwatch(accent)
     ? ACCENT_SWATCHES[accent]
-    : (hexToOklch(accent) ?? ACCENT_SWATCHES[DEFAULT_LOOK.accent]);
+    : (hexToOklch(accent) ?? hexToOklch(NO_GAME_ACCENT)!);
   if (picked.chroma < ACCENT_GREY_MAX_CHROMA) {
     return { lightness: levels.grey, chroma: 0, hue: 0, grey: true };
   }
@@ -137,8 +140,24 @@ export function accentColor(accent: string, mode: ThemeMode): AccentColor {
   return { lightness: levels.lightness, chroma, hue: picked.hue, grey: false };
 }
 
-/** The hue journal marks keep free, none for a grey accent. */
+/**
+ * The accent to color the app with: the strongest color of the art of the
+ * game in front for the game accent, a grey where it has none.
+ */
+export function accentInUse(accent: string, colors: ArtColor[]): string {
+  if (accent !== GAME_ACCENT) return accent;
+  const strongest = colors[0];
+  return strongest
+    ? oklchToHex({ lightness: ACCENT_LEVELS.dark.lightness, chroma: strongest.chroma, hue: strongest.hue })
+    : NO_GAME_ACCENT;
+}
+
+/**
+ * The hue journal marks keep free, none for a grey accent or the game
+ * accent, which is the color of a game itself.
+ */
 export function accentHues(accent: string): number[] {
+  if (accent === GAME_ACCENT) return [];
   const color = accentColor(accent, "dark");
   return color.grey ? [] : [color.hue];
 }

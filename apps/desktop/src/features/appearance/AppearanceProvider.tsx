@@ -12,12 +12,14 @@ import {
   BACKGROUND_DIM_PERCENT,
   BACKGROUND_HEADER_OPACITY_PERCENT,
   BACKGROUND_PANEL_OPACITY_PERCENT,
+  GAME_ACCENT,
   WINDOW_LOOK_INTERVAL_MS,
 } from "@/lib/constants";
 import { averageLightness } from "@/lib/game-tint";
 import * as api from "@/lib/tauri";
 import {
   accentHues,
+  accentInUse,
   appearanceFromSettings,
   appearanceSettings,
   resolveMode,
@@ -120,10 +122,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }, [save]);
 
   const mode = resolveMode(appearance.mode, systemDark);
-  const tokens = useMemo(
-    () => themeTokens(mode, appearance.ground, appearance.accent),
-    [mode, appearance.ground, appearance.accent],
-  );
+  const gameAccent = accentInUse(GAME_ACCENT, game?.colors ?? []);
+  const accent = appearance.accent === GAME_ACCENT ? gameAccent : appearance.accent;
+  const tokens = useMemo(() => themeTokens(mode, appearance.ground, accent), [mode, appearance.ground, accent]);
 
   useLayoutEffect(() => {
     applyLook(mode, tokens);
@@ -131,15 +132,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       const cached: CachedLook = {
         appearance,
         tokens: {
-          dark: themeTokens("dark", appearance.ground, appearance.accent),
-          light: themeTokens("light", appearance.ground, appearance.accent),
+          dark: themeTokens("dark", appearance.ground, accent),
+          light: themeTokens("light", appearance.ground, accent),
         },
       };
       localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify(cached));
     } catch {
       // Without storage the next start shows the default look for a moment.
     }
-  }, [appearance, mode, tokens]);
+  }, [appearance, accent, mode, tokens]);
 
   // The icons in the tray and the taskbar and the title bar take the accent
   // and the ground, and the title bar the chosen mode. A change goes out at
@@ -150,7 +151,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     const send = () => {
       windowLookSentAt.current = performance.now();
       api
-        .setWindowLook(windowLook(mode, appearance.ground, appearance.accent, appearance.mode))
+        .setWindowLook(windowLook(mode, appearance.ground, accent, appearance.mode))
         .catch(logFailure("coloring the window and its icons"));
     };
     const wait = windowLookSentAt.current + WINDOW_LOOK_INTERVAL_MS - performance.now();
@@ -160,7 +161,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     }
     const timer = window.setTimeout(send, wait);
     return () => window.clearTimeout(timer);
-  }, [mode, appearance.ground, appearance.accent, appearance.mode]);
+  }, [mode, appearance.ground, accent, appearance.mode]);
 
   const backdrop =
     appearance.source === "game" ? (game?.cover ?? null) : appearance.source === "picture" ? background : null;
@@ -237,6 +238,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       appearance,
       mode,
       accentHues: accentHues(appearance.accent),
+      accent,
+      gameAccent,
       background,
       backdrop,
       backdropDim,
@@ -246,7 +249,20 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       pickGameBackground,
       clearBackground,
     }),
-    [appearance, mode, background, backdrop, backdropDim, showGame, change, chooseBackground, pickGameBackground, clearBackground],
+    [
+      appearance,
+      mode,
+      accent,
+      gameAccent,
+      background,
+      backdrop,
+      backdropDim,
+      showGame,
+      change,
+      chooseBackground,
+      pickGameBackground,
+      clearBackground,
+    ],
   );
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;

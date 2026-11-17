@@ -224,28 +224,29 @@
 }
 
 /*
- * The default look, violet on a violet grey a step above black. lib/theme.ts derives every
- * token below for the mode, ground and accent the player picks and sets them
- * on the root element, so these only hold until the page starts. The
- * --violet tokens are the accent, violet unless the player picks another.
+ * The default look, a graphite ground a step above black with a neutral
+ * accent, until the game in front gives its color. lib/theme.ts derives every
+ * token below for the mode, ground and accent and sets them on the root
+ * element, so these only hold until the page starts. The --violet tokens are
+ * the accent, whatever its color.
  */
 :root {
-  --window: #08080a;
-  --ink: #111014;
-  --surface: #18171c;
-  --raised: #1f1d23;
-  --hairline: #2c2931;
-  --rule: #222027;
-  --text: #f2f1f4;
-  --soft: #b9b5c0;
-  --faint: #8e8a96;
-  --violet: #9d7cff;
-  --violet-hover: #b39aff;
-  --violet-ink: #140e22;
-  --hairline-strong: #3b3842;
-  --idle: #484452;
-  --amber: #f0b45a;
-  --sky: #7fb0ff;
+  --window: #080809;
+  --ink: #101112;
+  --surface: #171819;
+  --raised: #1d1e20;
+  --hairline: #2a2b2d;
+  --rule: #202224;
+  --text: #f1f2f2;
+  --soft: #b5b7bb;
+  --faint: #8a8c90;
+  --violet: #d1d1d1;
+  --violet-hover: #e8e8e8;
+  --violet-ink: #121212;
+  --hairline-strong: #383a3d;
+  --idle: #44464b;
+  --amber: #f0b45b;
+  --sky: #80b0ff;
   /* Shadows under covers and floating panels. */
   --scrim: #000000;
   /* Faint light washes on hover and around covers. */

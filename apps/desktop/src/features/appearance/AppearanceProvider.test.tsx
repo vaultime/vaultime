@@ -80,7 +80,7 @@ describe("the look after a restore", () => {
       </SettingsProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "violet" }));
+    fireEvent.click(await screen.findByRole("button", { name: "game" }));
     expect(await screen.findByRole("button", { name: "teal" })).toBeDefined();
   });
 });

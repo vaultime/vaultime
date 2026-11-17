@@ -3,7 +3,7 @@
 
 import { useState, type ReactNode } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Check, ImagePlus, Images, Loader2, Pipette, X } from "lucide-react";
+import { Check, Gamepad2, ImagePlus, Images, Loader2, Pipette, X } from "lucide-react";
 import { PageSection } from "@/components/layout/Page";
 import { Cover } from "@/components/media/Cover";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   ARTWORK_DIALOG_EXTENSIONS,
   BACKGROUND_BLUR_PX,
   BACKGROUND_DIM_PERCENT,
+  GAME_ACCENT,
 } from "@/lib/constants";
 import { onRadioKeys, radioTabIndex } from "@/lib/radio-group";
 import {
@@ -75,8 +76,18 @@ function StackedRow({ label, hint, children }: { label: string; hint?: ReactNode
 
 /** Dark or light, a ground tone, an accent and a background picture. */
 export function AppearanceSection() {
-  const { appearance, mode, background, backdrop, change, chooseBackground, pickGameBackground, clearBackground } =
-    useAppearance();
+  const {
+    appearance,
+    mode,
+    accent,
+    gameAccent,
+    background,
+    backdrop,
+    change,
+    chooseBackground,
+    pickGameBackground,
+    clearBackground,
+  } = useAppearance();
   const { summaries } = useLibrary();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,10 +191,27 @@ export function AppearanceSection() {
         </div>
       </StackedRow>
 
-      <StackedRow label="Accent" hint="The color of active time and buttons.">
+      <StackedRow label="Accent" hint="The color of active time and buttons, by default from the art of your game.">
         <div className="flex flex-wrap items-center gap-3">
           <div role="radiogroup" aria-label="Accent" onKeyDown={onRadioKeys} className="flex flex-wrap items-center gap-3">
-            {ACCENT_SWATCH_IDS.map((swatch, index) => {
+            <button
+              type="button"
+              role="radio"
+              aria-checked={appearance.accent === GAME_ACCENT}
+              tabIndex={radioTabIndex(appearance.accent === GAME_ACCENT, 0, !custom)}
+              aria-label="From your game"
+              title="From your game"
+              onClick={() => change({ accent: GAME_ACCENT })}
+              className={cn(
+                "flex size-8 items-center justify-center rounded-full transition-shadow focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none",
+                appearance.accent === GAME_ACCENT && "ring-2 ring-text ring-offset-2 ring-offset-ink",
+              )}
+              style={{ background: formatOklch(accentColor(gameAccent, mode)) }}
+            >
+              <Gamepad2 className="size-4 text-violet-ink" strokeWidth={2.2} />
+            </button>
+            {ACCENT_SWATCH_IDS.map((swatch, swatchIndex) => {
+              const index = swatchIndex + 1;
               const selected = appearance.accent === swatch;
               return (
                 <button
@@ -219,7 +247,7 @@ export function AppearanceSection() {
             <input
               type="color"
               aria-label={custom ? `Your own color, ${appearance.accent}, in use` : "Your own color"}
-              value={custom ? appearance.accent : oklchToHex(accentColor(appearance.accent, mode))}
+              value={custom ? appearance.accent : oklchToHex(accentColor(accent, mode))}
               onChange={(event) => change({ accent: event.target.value.toLowerCase() }, { gradual: true })}
               className="absolute inset-0 size-full cursor-pointer opacity-0"
             />

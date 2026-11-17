@@ -3,7 +3,14 @@
 
 import { describe, expect, it } from "vitest";
 import { contrastRatio, hexToOklch, oklchToHex, type Oklch } from "./color";
-import { ACCENT_MIN_CHROMA, BACKGROUND_BLUR_PX, BACKGROUND_DIM_PERCENT, SETTING_KEYS, TINT_LEVELS } from "./constants";
+import {
+  ACCENT_MIN_CHROMA,
+  BACKGROUND_BLUR_PX,
+  BACKGROUND_DIM_PERCENT,
+  GAME_ACCENT,
+  SETTING_KEYS,
+  TINT_LEVELS,
+} from "./constants";
 import { markColors } from "./game-tint";
 import {
   ACCENT_SWATCH_IDS,
@@ -11,6 +18,7 @@ import {
   GROUND_IDS,
   accentColor,
   accentHues,
+  accentInUse,
   appearanceFromSettings,
   appearanceSettings,
   resolveMode,
@@ -34,25 +42,25 @@ function parse(color: string, tokens: Record<string, string> = {}): Oklch {
 }
 
 describe("themeTokens", () => {
-  it("keeps the violet grey look of index.css as the default", () => {
-    const tokens = themeTokens("dark", "vault", "violet");
+  it("keeps the graphite look of index.css as the default", () => {
+    const tokens = themeTokens("dark", DEFAULT_APPEARANCE.ground, accentInUse(DEFAULT_APPEARANCE.accent, []));
     const before: Record<string, string> = {
-      "--window": "#08080a",
-      "--ink": "#111014",
-      "--surface": "#18171c",
-      "--raised": "#1f1d23",
-      "--hairline": "#2c2931",
-      "--rule": "#222027",
-      "--text": "#f2f1f4",
-      "--soft": "#b9b5c0",
-      "--faint": "#8e8a96",
-      "--violet": "#9d7cff",
-      "--violet-hover": "#b39aff",
-      "--violet-ink": "#140e22",
-      "--hairline-strong": "#3b3842",
-      "--idle": "#484452",
-      "--amber": "#f0b45a",
-      "--sky": "#7fb0ff",
+      "--window": "#080809",
+      "--ink": "#101112",
+      "--surface": "#171819",
+      "--raised": "#1d1e20",
+      "--hairline": "#2a2b2d",
+      "--rule": "#202224",
+      "--text": "#f1f2f2",
+      "--soft": "#b5b7bb",
+      "--faint": "#8a8c90",
+      "--violet": "#d1d1d1",
+      "--violet-hover": "#e8e8e8",
+      "--violet-ink": "#121212",
+      "--hairline-strong": "#383a3d",
+      "--idle": "#44464b",
+      "--amber": "#f0b45b",
+      "--sky": "#80b0ff",
       "--destructive": "#ff7a85",
     };
     for (const [token, hex] of Object.entries(before)) {
@@ -116,6 +124,28 @@ describe("themeTokens", () => {
   });
 });
 
+describe("accentInUse", () => {
+  it("takes the strongest color of the game in front for the game accent", () => {
+    const accent = accentInUse(GAME_ACCENT, [
+      { hue: 200, chroma: 0.12 },
+      { hue: 20, chroma: 0.15 },
+    ]);
+    expect(Math.abs(accentColor(accent, "dark").hue - 200)).toBeLessThan(2);
+    expect(accentColor(accent, "dark").grey).toBe(false);
+  });
+
+  it("is a light neutral for art without a strong color, and leaves picked accents alone", () => {
+    expect(accentColor(accentInUse(GAME_ACCENT, []), "dark").grey).toBe(true);
+    expect(accentInUse("teal", [{ hue: 200, chroma: 0.12 }])).toBe("teal");
+    expect(accentInUse("#aa3355", [])).toBe("#aa3355");
+  });
+
+  it("keeps no hue free in the journal, as it is a game's own color", () => {
+    expect(accentHues(GAME_ACCENT)).toEqual([]);
+    expect(appearanceFromSettings({}).accent).toBe(GAME_ACCENT);
+  });
+});
+
 describe("accentColor", () => {
   it("brings every color to the lightness of the mode", () => {
     for (const hex of ["#ff0000", "#204060", "#ffee88", "#00ff88"]) {
@@ -141,8 +171,8 @@ describe("accentColor", () => {
     expect(accentColor("#6b5f73", "dark").chroma).toBeGreaterThanOrEqual(ACCENT_MIN_CHROMA);
   });
 
-  it("falls back to violet for an unknown value", () => {
-    expect(accentColor("nonsense", "dark")).toEqual(accentColor("violet", "dark"));
+  it("falls back to the neutral accent for an unknown value", () => {
+    expect(accentColor("nonsense", "dark").grey).toBe(true);
   });
 });
 

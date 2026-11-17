@@ -519,8 +519,8 @@ export const TINT_MAX_STRENGTH = 1.2;
 
 /**
  * Ground tones: the hue of the ground and how colorful it is, where 1 is the
- * violet ink Vaultime started with. The default vault ground keeps less than
- * half of it, so cover art carries the color.
+ * violet ink Vaultime started with. Graphite, the default, keeps little of
+ * it, so cover art carries the color.
  */
 export const GROUNDS = {
   vault: { hue: 300, chroma: 0.45 },
@@ -553,8 +553,8 @@ export const GROUND_LEVELS = {
 };
 
 /**
- * Accent colors to pick from, violet first. Each keeps its hue, and its
- * chroma is cut to what fits sRGB at the accent lightness of the mode.
+ * Fixed accent colors to pick from. Each keeps its hue, and its chroma is
+ * cut to what fits sRGB at the accent lightness of the mode.
  */
 export const ACCENT_SWATCHES = {
   violet: { hue: BRAND_HUE_DEG, chroma: 0.187 },
@@ -620,7 +620,11 @@ export const BACKGROUND_BLUR_BLEED = 2;
 /** Hues around the wheel on the swatch that opens the color picker. */
 export const ACCENT_WHEEL_STEPS = 6;
 /** The look of a new install, Vaultime as it started. */
-export const DEFAULT_LOOK = { mode: "dark", ground: "vault", accent: "violet" } as const;
+export const DEFAULT_LOOK = { mode: "dark", ground: "graphite", accent: "game" } as const;
+/** The accent setting that takes the color of the art of the game in front. */
+export const GAME_ACCENT = "game";
+/** The accent while the game in front has no strong color, a grey the theme makes a light neutral. */
+export const NO_GAME_ACCENT = "#808080";
 /**
  * Least time between two updates of the icons and the title bar, while a color
  * is dragged in the picker. A single change goes out at once.
