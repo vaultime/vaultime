@@ -620,8 +620,9 @@ fn check_same_schema(staged: &Database) -> Result<()> {
 type SchemaPart = (String, String, String, Option<String>);
 
 /// Every part of a database, its statements exactly as stored, since even
-/// a moved line break can end a comment elsewhere. Statistics SQLite may
-/// keep are left out.
+/// a moved line break can end a comment elsewhere. Only a CRLF reads as the
+/// line break it is, as each build stores the line endings of the checkout
+/// it was made from. Statistics SQLite may keep are left out.
 fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
     let mut stmt = conn
         .prepare(
@@ -636,7 +637,8 @@ fn schema_of(conn: &Connection) -> Result<Vec<SchemaPart>> {
                 row.get(0)?,
                 row.get(1)?,
                 row.get(2)?,
-                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(3)?
+                    .map(|sql| sql.replace("\r\n", "\n")),
             ))
         })
         .map_err(check_failed)?;

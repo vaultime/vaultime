@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A login item you turned off stays off on Linux.** On XFCE, Cinnamon and MATE, turning off Vaultime in the desktop's startup settings came undone at the next start, which wrote the login item anew. Vaultime now leaves an item the desktop switched off alone.
 - **A steady live clock.** The running time in the live bar went back a few seconds now and then. It now counts on from the moment Vaultime last counted the session.
 - **Settings after a restore.** Switches like closing to the tray, the idle time and automatic backups showed the values from before a restore until you opened Settings again. They show the restored ones right away.
+- **Backups between Windows and Linux.** A backup made on Windows could not be restored or merged on Linux, nor one from Linux on Windows. Vaultime said it held database parts it never writes, as the two systems wrote the same tables with other line endings. Each now reads the other's backups.
 
 ## [0.6.0] - 2026-10-20
 

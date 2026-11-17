@@ -8,6 +8,8 @@ deploy/server/* text eol=lf
 PKGBUILD text eol=lf
 packaging/winget/*.yaml text eol=lf
 .SRCINFO text eol=lf
+# The desktop migrations too, so every build stores the same statements.
+apps/desktop/src-tauri/migrations/*.sql text eol=lf
 
 # sqlx checksums include line endings. Databases recorded 0001 and 0002 with
 # CRLF and every later migration with LF, so each checkout keeps exactly those

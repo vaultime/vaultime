@@ -2472,6 +2472,29 @@ mod tests {
     }
 
     #[test]
+    fn takes_a_backup_whose_statements_end_their_lines_another_way() {
+        // Each build stores its statements with the line endings of the
+        // checkout it came from, CRLF on Windows and LF on Linux.
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        laptop.play(&game, 20);
+        for ending in ["char(10)", "char(13) || char(10)"] {
+            let backup = laptop.back_up();
+            rewrite(&backup, |conn| {
+                conn.execute_batch(&format!(
+                    "PRAGMA writable_schema = ON;
+                     UPDATE sqlite_master
+                     SET sql = replace(replace(sql, char(13) || char(10), char(10)), char(10), {ending})
+                     WHERE sql IS NOT NULL;"
+                ))
+                .unwrap();
+            });
+            assert!(desktop.preview(&backup).is_ok(), "{ending}");
+        }
+    }
+
+    #[test]
     fn a_pc_seen_through_another_cannot_be_claimed_by_a_new_key() {
         let desktop = Pc::new("desktop");
         let laptop = Pc::new("laptop");
