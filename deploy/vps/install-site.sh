@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 # Installs or updates the Vaultime website and its downloads on Ubuntu 24.04.
 # Run as root. Caddy has to be installed already. The script writes the site
