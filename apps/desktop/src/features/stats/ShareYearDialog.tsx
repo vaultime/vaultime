@@ -466,7 +466,7 @@ function SidePanel({
                   <button
                     type="button"
                     aria-pressed={!choice.left}
-                    aria-label={choice.left ? `Put ${choice.title} back on the card` : `Leave ${choice.title} off the card`}
+                    aria-label={`Show ${choice.title} on the card`}
                     title={choice.left ? "Put back on the card" : "Leave off the card"}
                     onClick={() => onToggleChoice(choice.gameId)}
                     className="flex size-7 shrink-0 items-center justify-center rounded-md text-faint transition-colors hover:bg-glint/6 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
