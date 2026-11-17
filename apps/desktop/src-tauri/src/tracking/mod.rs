@@ -3,6 +3,7 @@
 
 //! Session tracking: process detection, session lifecycle and active or idle time.
 
+pub mod away;
 pub mod engine;
 pub mod live;
 pub mod seen;

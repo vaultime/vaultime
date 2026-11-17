@@ -18,6 +18,7 @@ use crate::error::VaultimeError;
 use crate::playtime;
 use crate::playtime::games::{GameTotals, LauncherTime};
 use crate::screenshots::{self, SessionScreenshots};
+use crate::tracking::away::{self, AwayTimer};
 use crate::tracking::live::LiveSessions;
 
 /// Every session, each game's totals of them and the time each launcher's
@@ -142,6 +143,28 @@ pub fn discard_session(
     reason: String,
 ) -> Result<Session, VaultimeError> {
     corrections::discard_session(&db, &session_id, &reason)
+}
+
+/// The timer running for play away from this PC, if any.
+#[tauri::command(async)]
+pub fn get_away_timer(db: State<'_, Arc<Database>>) -> Result<Option<AwayTimer>, VaultimeError> {
+    away::current(&db)
+}
+
+/// Starts timing play of `game_id` away from this PC.
+#[tauri::command(async)]
+pub fn start_away_timer(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    game_id: String,
+) -> Result<AwayTimer, VaultimeError> {
+    away::start(&db, &game_id, &app_context.device_id)
+}
+
+/// Stops the timer, once its play was saved or set aside.
+#[tauri::command(async)]
+pub fn clear_away_timer(db: State<'_, Arc<Database>>) -> Result<(), VaultimeError> {
+    away::clear(&db)
 }
 
 /// Adds play Vaultime did not see, labeled Manual. `launcher` is `steam`

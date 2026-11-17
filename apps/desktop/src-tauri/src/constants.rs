@@ -30,6 +30,9 @@ pub const SESSION_NOTE_MAX_CHARS: usize = 280;
 /// Longest session a player can add by hand. Same as
 /// `MANUAL_SESSION_MAX_HOURS` in `lib/constants.ts`.
 pub const MANUAL_SESSION_MAX: Duration = Duration::from_hours(24);
+/// Setting with the timer running for play away from this PC, as JSON with
+/// the game and when it started, empty while none runs.
+pub const AWAY_TIMER_SETTING: &str = "away_timer";
 /// Launchers that give every game a folder of its own, so any game program
 /// in it counts for the game, whichever build or launcher step runs. Same
 /// as `FOLDER_MATCH_LAUNCHERS` in `lib/constants.ts`.
