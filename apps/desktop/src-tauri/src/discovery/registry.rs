@@ -846,11 +846,9 @@ mod tests {
         let registered = by_publisher(&sample());
         let installs = [
             battlenet::Install {
-                uid: "fenris".into(),
                 folder: "E:/BlizzardLibrary/Diablo IV".into(),
             },
             battlenet::Install {
-                uid: "pro".into(),
                 folder: "D:/Games/Overwatch/".into(),
             },
         ];

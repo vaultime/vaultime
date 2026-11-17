@@ -58,6 +58,7 @@ pub(crate) fn attach_validated_status(conn: &Connection, mut session: Session) -
 }
 
 /// Creates a new open session for a game on a device, starting now.
+#[cfg(test)]
 pub fn create_session(db: &Database, game_id: &str, device_id: &str) -> Result<Session> {
     create_session_at(db, game_id, device_id, chrono::Utc::now())
 }
@@ -113,6 +114,7 @@ pub fn create_session_at(
 }
 
 /// Closes an open session now, recording its final timing data.
+#[cfg(test)]
 pub fn end_session(
     db: &Database,
     session_id: &str,

@@ -594,6 +594,7 @@ pub fn slices_from(spans: &[Span]) -> Vec<Slice> {
 
 /// Where `session`'s time fell, a quarter hour at a time, from the stretches
 /// `spans_of` places it in.
+#[cfg(test)]
 pub fn slices_of(
     session: &Session,
     events: &[impl TimedEvent],

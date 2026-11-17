@@ -122,6 +122,7 @@ pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bo
 }
 
 /// Whether the process runs a program from inside `folder`, at any depth.
+#[cfg(test)]
 pub fn runs_from_folder(process: &RunningProcess, folder: &str) -> bool {
     InstallFolder::new(folder).contains(process)
 }

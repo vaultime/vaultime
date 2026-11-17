@@ -15,8 +15,6 @@ const NOT_GAMES: &[&str] = &["agent", "battle.net", "bna"];
 /// A game Battle.net installed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Install {
-    /// Like `fenris` for Diablo IV.
-    pub(crate) uid: String,
     pub(crate) folder: String,
 }
 
@@ -51,10 +49,7 @@ pub(crate) fn parse(data: &[u8]) -> Vec<Install> {
             let folder = text(&fields(bytes(&install, 3)?)?, 1)?.trim().to_owned();
             let state = fields(bytes(&install, 4)?)?;
             let installed = number(&fields(bytes(&state, 1)?)?, 1) == Some(1);
-            (installed && !folder.is_empty()).then(|| Install {
-                uid: uid.to_owned(),
-                folder,
-            })
+            (installed && !folder.is_empty()).then_some(Install { folder })
         })
         .collect()
 }
@@ -97,7 +92,6 @@ mod tests {
         assert_eq!(
             parse(&data),
             [Install {
-                uid: "fenris".into(),
                 folder: "E:/BlizzardLibrary/Diablo IV".into()
             }]
         );
