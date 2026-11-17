@@ -4,6 +4,7 @@
 //! Process enumeration and game executable matching.
 
 use std::collections::HashMap;
+use std::path::{Component, Path};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
@@ -134,13 +135,22 @@ pub struct InstallFolder {
 
 impl InstallFolder {
     pub fn new(folder: &str) -> Self {
+        // The root of a drive or share holds every program on it, so it
+        // never counts as a game's folder, also where a link leads there.
+        if !below_a_root(folder) {
+            return Self { keys: Vec::new() };
+        }
         let resolved = std::fs::canonicalize(folder)
             .ok()
             .map(|path| strip_verbatim_prefix(&path.to_string_lossy()).to_owned());
+        if resolved.as_deref().is_some_and(is_mount_point) {
+            return Self { keys: Vec::new() };
+        }
+        let resolved = resolved.filter(|path| below_a_root(path));
         let mut keys: Vec<String> = Vec::new();
         for candidate in std::iter::once(folder).chain(resolved.as_deref()) {
             let key = path_key(candidate).trim_end_matches(['/', '\\']).to_owned();
-            if !key.is_empty() && !keys.contains(&key) {
+            if !keys.contains(&key) {
                 keys.push(key);
             }
         }
@@ -154,6 +164,33 @@ impl InstallFolder {
         };
         self.keys.iter().any(|folder| is_inside(exe, folder))
     }
+}
+
+/// Whether `path` names a folder below the root of a drive, a share or the
+/// file system.
+fn below_a_root(path: &str) -> bool {
+    Path::new(path)
+        .components()
+        .any(|component| matches!(component, Component::Normal(_)))
+}
+
+/// Whether a drive is mounted at `path`, as Linux gives each drive a
+/// folder: the folder lies on another device than the one above it.
+#[cfg(unix)]
+fn is_mount_point(path: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let path = Path::new(path);
+    let device = |path: &Path| std::fs::metadata(path).map(|meta| meta.dev()).ok();
+    path.parent()
+        .and_then(device)
+        .is_some_and(|above| device(path).is_some_and(|here| here != above))
+}
+
+/// Windows gives drives letters, which `below_a_root` refuses. A drive mounted
+/// at a folder is rare there and counts as that folder.
+#[cfg(not(unix))]
+fn is_mount_point(_path: &str) -> bool {
+    false
 }
 
 /// True when `path` lies below `folder`, both given as path keys.
@@ -380,6 +417,31 @@ mod tests {
             folder
         ));
         assert!(!runs_from_folder(&running(r"C:\Games\Hades II"), folder));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_root_of_a_drive_or_share_is_no_install_folder() {
+        let browser = running(r"C:\Program Files\Browser\browser.exe");
+        for root in [r"C:\", "C:", "c:/", r"\\?\C:\"] {
+            assert!(!runs_from_folder(&browser, root), "{root}");
+        }
+        assert!(!below_a_root(r"\\server\share"));
+        assert!(!below_a_root(r"\\?\UNC\server\share\"));
+        assert!(below_a_root(r"\\server\share\Game"));
+        assert!(below_a_root(r"D:\Game"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_drive_mounted_at_a_folder_is_no_install_folder() {
+        // /proc is a file system of its own, as a drive mounted at a folder is.
+        assert!(!runs_from_folder(&running("/proc/self/exe"), "/proc"));
+        let folder = std::env::temp_dir().join(format!("vaultime-mount-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&folder).unwrap();
+        let game = running(&format!("{}/game", folder.display()));
+        assert!(runs_from_folder(&game, &folder.to_string_lossy()));
+        std::fs::remove_dir(&folder).unwrap();
     }
 
     #[cfg(unix)]
