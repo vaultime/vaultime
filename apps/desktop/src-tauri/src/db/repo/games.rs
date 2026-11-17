@@ -365,7 +365,10 @@ pub fn launcher_id(game: &Game) -> Option<String> {
         .launcher_id
 }
 
-fn change_metadata(
+/// Reads a game's metadata, changes it and writes it back in one
+/// transaction, so two changes at once both stay. A change that leaves it as
+/// it was writes nothing.
+pub(crate) fn change_metadata(
     db: &Database,
     id: &str,
     change: impl FnOnce(&mut GameMetadata),
@@ -376,32 +379,18 @@ fn change_metadata(
             .map_err(map_db)?;
         let mut metadata: GameMetadata =
             serde_json::from_str(&game.metadata_json).unwrap_or_default();
+        let before = serde_json::to_string(&metadata).ok();
         change(&mut metadata);
         let metadata_json = serde_json::to_string(&metadata)
             .map_err(|error| VaultimeError::Database(format!("invalid metadata json: {error}")))?;
+        if before.as_ref() == Some(&metadata_json) {
+            return Ok(game);
+        }
         conn.execute(
             "UPDATE games SET metadata_json = ?1, updated_at = datetime('now') WHERE id = ?2",
             params![metadata_json, id],
         )
         .map_err(map_db)?;
-        conn.query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
-            .map_err(map_db)
-    })
-}
-
-pub fn set_metadata(db: &Database, id: &str, metadata: &GameMetadata) -> Result<Game> {
-    let metadata_json = serde_json::to_string(metadata)
-        .map_err(|error| VaultimeError::Database(format!("invalid metadata json: {error}")))?;
-
-    db.with_conn(|conn| {
-        conn.execute(
-            "UPDATE games
-             SET metadata_json = ?1, updated_at = datetime('now')
-             WHERE id = ?2",
-            params![metadata_json, id],
-        )
-        .map_err(map_db)?;
-
         conn.query_row("SELECT * FROM games WHERE id = ?1", [id], row_to_game)
             .map_err(map_db)
     })
@@ -571,6 +560,23 @@ mod tests {
         let plain = set_favorite(&db, &hades, false).unwrap();
         assert!(!plain.metadata_json.contains("favorite"));
         assert!(set_favorite(&db, "missing", true).is_err());
+    }
+
+    #[test]
+    fn metadata_left_as_it_was_is_not_written() {
+        let db = test_db();
+        let hades = titled(&db, "Hades II", "steam");
+        let old = "2020-01-01 00:00:00";
+        db.with_conn(|conn| {
+            conn.execute("UPDATE games SET updated_at = ?1", [old])
+                .map_err(map_db)
+        })
+        .unwrap();
+
+        let same = change_metadata(&db, &hades, |_| {}).unwrap();
+        assert_eq!(same.updated_at, old);
+        let changed = change_metadata(&db, &hades, |metadata| metadata.favorite = true).unwrap();
+        assert_ne!(changed.updated_at, old);
     }
 
     #[test]

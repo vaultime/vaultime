@@ -432,9 +432,9 @@ pub fn delete_game_asset(
     game_assets::delete_asset(db, &asset.id)?;
     cleanup_assets(asset_manager, std::slice::from_ref(&asset));
 
-    let mut metadata = parse_game_metadata(&games::get_game(db, game_id)?);
-    metadata.cover_crops.remove(&asset.id);
-    games::set_metadata(db, game_id, &metadata)?;
+    games::change_metadata(db, game_id, |metadata| {
+        metadata.cover_crops.remove(&asset.id);
+    })?;
     // The next image takes over when it was the cover.
     ensure_preferred_asset(db, game_id, None)?;
     list_game_assets(db, game_id)
@@ -535,14 +535,14 @@ fn use_cover(db: &Database, game: &Game, asset_id: &str, crop: Option<CropRect>)
         .into_iter()
         .map(|asset| asset.id)
         .collect();
-    let mut metadata = parse_game_metadata(&games::get_game(db, &game.id)?);
-    metadata.preferred_cover_asset_id = Some(asset_id.to_string());
-    metadata.cover_crops.retain(|id, _| assets.contains(id));
-    match crop {
-        Some(crop) => metadata.cover_crops.insert(asset_id.to_string(), crop),
-        None => metadata.cover_crops.remove(asset_id),
-    };
-    games::set_metadata(db, &game.id, &metadata)?;
+    games::change_metadata(db, &game.id, |metadata| {
+        metadata.preferred_cover_asset_id = Some(asset_id.to_string());
+        metadata.cover_crops.retain(|id, _| assets.contains(id));
+        match crop {
+            Some(crop) => metadata.cover_crops.insert(asset_id.to_string(), crop),
+            None => metadata.cover_crops.remove(asset_id),
+        };
+    })?;
     Ok(())
 }
 
@@ -555,41 +555,37 @@ pub fn set_preferred_game_asset(db: &Database, game_id: &str, asset_id: &str) ->
         ));
     }
 
-    let mut metadata = parse_game_metadata(&game);
-    metadata.preferred_cover_asset_id = Some(asset.id);
-    games::set_metadata(db, &game.id, &metadata)?;
+    games::change_metadata(db, &game.id, |metadata| {
+        metadata.preferred_cover_asset_id = Some(asset.id);
+    })?;
     Ok(true)
 }
 
 /// Keeps the cover the game has while it exists. Otherwise the player's own
-/// image takes over, then the best found one, then any. The game is read
-/// right before it is written, so a cover the player picked meanwhile stays.
+/// image takes over, then the best found one, then any. The cover is read
+/// in the transaction that writes it, so one the player picked meanwhile
+/// stays.
 fn ensure_preferred_asset(
     db: &Database,
     game_id: &str,
     best_found_asset_id: Option<&str>,
 ) -> Result<()> {
     let assets = game_assets::list_assets_for_game(db, game_id)?;
-    let game = games::get_game(db, game_id)?;
-    let mut metadata = parse_game_metadata(&game);
     let find = |asset_id: &str| assets.iter().find(|asset| asset.id == asset_id);
-    let next_preferred = metadata
-        .preferred_cover_asset_id
-        .as_deref()
-        .and_then(find)
-        .or_else(|| {
-            assets
-                .iter()
-                .find(|asset| asset.source == PLAYER_ARTWORK_SOURCE)
-        })
-        .or_else(|| best_found_asset_id.and_then(find))
-        .or_else(|| assets.first())
-        .map(|asset| asset.id.clone());
-    if next_preferred == metadata.preferred_cover_asset_id {
-        return Ok(());
-    }
-    metadata.preferred_cover_asset_id = next_preferred;
-    games::set_metadata(db, game_id, &metadata)?;
+    games::change_metadata(db, game_id, |metadata| {
+        metadata.preferred_cover_asset_id = metadata
+            .preferred_cover_asset_id
+            .as_deref()
+            .and_then(find)
+            .or_else(|| {
+                assets
+                    .iter()
+                    .find(|asset| asset.source == PLAYER_ARTWORK_SOURCE)
+            })
+            .or_else(|| best_found_asset_id.and_then(find))
+            .or_else(|| assets.first())
+            .map(|asset| asset.id.clone());
+    })?;
     Ok(())
 }
 
