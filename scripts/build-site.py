@@ -105,6 +105,8 @@ GUIDES_NAV = [
         ("steam-deck-playtime.md", "Steam Deck"),
         ("epic-games-playtime.md", "Epic Games"),
         ("gog-galaxy-playtime.md", "GOG Galaxy"),
+        ("xbox-app-playtime.md", "Xbox app"),
+        ("ea-app-playtime.md", "EA app"),
         ("linux-playtime.md", "Heroic and Lutris on Linux"),
     ]),
 ]
