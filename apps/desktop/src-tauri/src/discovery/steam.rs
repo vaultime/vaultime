@@ -348,6 +348,7 @@ fn is_steam_tool(name: &str, app_id: &str) -> bool {
     matches!(
         app_id,
         "228980"  // Steamworks Common Redistributables
+        | "250820" // SteamVR, which runs beside every VR game
         | "1070560" // Steam Linux Runtime
         | "1887720" // Proton
         | "2180100" // Proton Hotfix
@@ -606,6 +607,7 @@ mod tests {
             "228980"
         ));
         assert!(is_steam_tool("Proton 9.0-4", "2348590"));
+        assert!(is_steam_tool("SteamVR", "250820"));
         assert!(!is_steam_tool("Counter-Strike 2", "730"));
     }
 
