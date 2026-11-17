@@ -14,7 +14,7 @@ Each day shows its total and a strip of 24 hours in the colors of the games you 
 >
 > 3h 12m in all, 2h 58m active, 14m idle.
 
-The wording changes from session to session but always stays the same for the same session. Sessions note first looks, hour marks, returns after a long break, records and games left running. An hour mark is the session that took a game past ten, twenty-five, fifty, a hundred, two hundred fifty, five hundred or a thousand hours, and every thousand after, counting its playtime from before Vaultime as its total does. Status changes you set, like finishing a game, show up between the sessions and say how long you had played the game by then: its time up to that moment, counted as the stats count it, with any playtime from before Vaultime.
+The wording changes from session to session but always stays the same for the same session. In a week of three finished sessions or more, the longest says so under its entry. Sessions note first looks, hour marks, returns after a long break, records and games left running. An hour mark is the session that took a game past ten, twenty-five, fifty, a hundred, two hundred fifty, five hundred or a thousand hours, and every thousand after, counting its playtime from before Vaultime as its total does. Status changes you set, like finishing a game, show up between the sessions and say how long you had played the game by then: its time up to that moment, counted as the stats count it, with any playtime from before Vaultime.
 
 ### Game colors
 

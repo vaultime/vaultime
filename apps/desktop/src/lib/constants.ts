@@ -153,6 +153,8 @@ export const FALLBACK_DEVICE_ID_CHARS = 10;
 export const JOURNAL_WEEK_GAMES = 8;
 /** The shortest bar under a cover at the top of a journal week, as a share of the longest. */
 export const JOURNAL_WEEK_BAR_MIN_SHARE = 0.08;
+/** Finished sessions a journal week needs before one of them is called its longest. */
+export const JOURNAL_RECORD_MIN_SESSIONS = 3;
 /** Calendar days that count as recent on the library home, today included. Same as TRAY_RECENT_DAYS in constants.rs. */
 export const RECENT_DAYS = 7;
 

@@ -19,7 +19,7 @@ import { scrollMotion } from "@/lib/anchors";
 import { describeError, logFailure } from "@/lib/utils";
 import { DaySection } from "./DaySection";
 import { WeekGames } from "./WeekGames";
-import { dayId, entryId, journalDays, weekStart, weeksBack, type JournalDay } from "./week";
+import { dayId, entryId, journalDays, longestSession, weekStart, weeksBack, type JournalDay } from "./week";
 
 /**
  * Chromium, which WebView2 runs on, opens a date picker for a date field.
@@ -163,6 +163,7 @@ export function JournalPage() {
   }, [weekGames, byGame, accentHues, mode]);
 
   const onCorrected = useCallback(() => void refresh(), [refresh]);
+  const longestId = useMemo(() => longestSession(days, sessionsById), [days, sessionsById]);
 
   // Events explain flagged sessions and skipped sleep. Only the games of this week are loaded.
   const gameIds = [...new Set(days.flatMap((day) => day.parts.map((part) => part.game_id)))].sort().join(",");
@@ -305,6 +306,7 @@ export function JournalPage() {
             notes={notes}
             onSaveNote={saveNote}
             onCorrected={onCorrected}
+            longestId={longestId}
             flashed={flashedDay === toDayKey(day.start)}
             linked={linked !== null && hasSession(day, linked) ? linked : null}
             onLink={setLinked}

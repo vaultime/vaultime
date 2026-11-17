@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { NotebookPen, Scissors } from "lucide-react";
+import { Award, NotebookPen, Scissors } from "lucide-react";
 import { PhraseText } from "@/components/media/PhraseText";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export function SessionLine({
   when,
   cover,
   highlighted = false,
+  record,
   amountsNote,
   bordered = true,
   note,
@@ -54,6 +55,8 @@ export function SessionLine({
   cover?: ReactNode;
   /** Marks the line, its time in the title color, while another part of the page points at it. */
   highlighted?: boolean;
+  /** A record the session holds, said under its numbers. */
+  record?: string;
   /** Said after the amounts, like how much of the session counts on a later day. */
   amountsNote?: ReactNode;
   bordered?: boolean;
@@ -138,6 +141,12 @@ export function SessionLine({
           )}
           {trustNote && <span className="text-soft"> {trustNote}</span>}
         </div>
+        {record && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-soft">
+            <Award className="size-3.5 shrink-0" style={{ color: titleColor }} aria-hidden="true" />
+            {record}
+          </p>
+        )}
         {editing ? (
           <form className="mt-2.5 flex flex-wrap items-center gap-2" onSubmit={(event) => void save(event)}>
             <Input

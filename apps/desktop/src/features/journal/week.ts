@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { DAY_MS, DAYS_PER_WEEK } from "@/lib/constants";
-import { parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
-import type { JournalWeekPlay, PlayRun, SideBySideGroup, StripPart, WeekStatusChange } from "@/lib/types";
+import { DAY_MS, DAYS_PER_WEEK, JOURNAL_RECORD_MIN_SESSIONS } from "@/lib/constants";
+import { compareTimes, parseVaultimeDate, startOfDay, startOfWeek, toDayKey } from "@/lib/time";
+import type { JournalWeekPlay, PlayRun, Session, SideBySideGroup, StripPart, WeekStatusChange } from "@/lib/types";
 
 /** One day of the journal, as the core worked it out, with the status changes on it. */
 export interface JournalDay {
@@ -38,6 +38,26 @@ export function weeksBack(day: string | null): number {
   const asked = startOfWeek(new Date(year, month - 1, date));
   // Rounded, since a week with a clock change is an hour longer or shorter.
   return Math.min(0, Math.round((asked.getTime() - thisWeek.getTime()) / (DAYS_PER_WEEK * DAY_MS)));
+}
+
+/**
+ * The finished session that ran longest among those that began in the week,
+ * the earlier one on a tie. Null for a week with too few to call one longest.
+ */
+export function longestSession(days: JournalDay[], sessionsById: Map<string, Session>): string | null {
+  const finished = days
+    .flatMap((day) => day.sessionIds)
+    .flatMap((id) => {
+      const session = sessionsById.get(id);
+      return session?.ended_at_wall ? [session] : [];
+    });
+  if (finished.length < JOURNAL_RECORD_MIN_SESSIONS) return null;
+  return finished.reduce((best, session) =>
+    session.runtime_ms > best.runtime_ms ||
+    (session.runtime_ms === best.runtime_ms && compareTimes(session.started_at_wall, best.started_at_wall) < 0)
+      ? session
+      : best,
+  ).id;
 }
 
 /** The Monday of the week `offset` weeks from the one that holds `now`, 0 for that week. */

@@ -156,6 +156,7 @@ export const DaySection = memo(function DaySection({
   notes,
   onSaveNote,
   onCorrected,
+  longestId,
   flashed,
   linked,
   onLink,
@@ -175,6 +176,8 @@ export const DaySection = memo(function DaySection({
   notes: Record<string, string>;
   onSaveNote: (sessionId: string, note: string) => Promise<void>;
   onCorrected: () => void;
+  /** The week's longest session, which says so under its entry. */
+  longestId: string | null;
   /** Whether a jump just went to this day, which marks its name. */
   flashed: boolean;
   /** The session marked on every day it ran. */
@@ -436,6 +439,7 @@ export const DaySection = memo(function DaySection({
                   when={formatSpanOnDay(parseVaultimeDate(session.started_at_wall), ended, day.start)}
                   cover={<EntryCover summary={byGame.get(session.game_id)} title={titleOf(session.game_id)} />}
                   highlighted={linked === session.id}
+                  record={session.id === longestId ? "The longest session of the week" : undefined}
                   amountsNote={
                     later.length > 0 && (
                       <>

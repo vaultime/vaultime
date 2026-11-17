@@ -4,9 +4,9 @@
 import { describe, expect, it } from "vitest";
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import { toDayKey } from "@/lib/time";
-import { at } from "@/test/sessions";
+import { at, session } from "@/test/sessions";
 import type { JournalWeekPlay, WeekStatusChange } from "@/lib/types";
-import { journalDays, weekStart, weeksBack } from "./week";
+import { journalDays, longestSession, weekStart, weeksBack, type JournalDay } from "./week";
 
 // A Wednesday. The week runs from Monday 5 October.
 const NOW = new Date(2026, 9, 7, 12, 0);
@@ -27,6 +27,33 @@ const EMPTY_WEEK: JournalWeekPlay = {
   carried_over: 0,
   status_changes: [],
 };
+
+describe("longestSession", () => {
+  const day = (sessionIds: string[]): JournalDay => ({
+    start: new Date(2026, 9, 5),
+    sessionIds,
+    parts: [],
+    runs: [],
+    groups: [],
+    changes: [],
+    playedMs: 0,
+  });
+  const byId = (...sessions: ReturnType<typeof session>[]) => new Map(sessions.map((each) => [each.id, each]));
+
+  it("names the finished session that ran longest, the earlier one on a tie", () => {
+    const short = session(at(2026, 10, 5, 18), 40, { id: "short" });
+    const first = session(at(2026, 10, 5, 20), 90, { id: "first" });
+    const second = session(at(2026, 10, 6, 20), 90, { id: "second" });
+    const running = session(at(2026, 10, 7, 10), 300, { id: "running", ended_at_wall: null });
+    const sessions = byId(short, first, second, running);
+    expect(longestSession([day(["second", "running"]), day(["short", "first"])], sessions)).toBe("first");
+  });
+
+  it("calls none longest in a week of few sessions", () => {
+    const sessions = byId(session(at(2026, 10, 5, 18), 40, { id: "a" }), session(at(2026, 10, 5, 20), 90, { id: "b" }));
+    expect(longestSession([day(["a", "b"])], sessions)).toBeNull();
+  });
+});
 
 describe("weekStart", () => {
   it("finds the Monday of a week and goes back a week at a time", () => {
