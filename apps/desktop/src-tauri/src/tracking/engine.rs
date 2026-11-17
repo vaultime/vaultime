@@ -445,7 +445,46 @@ fn poll_tick(
         &tracked_games,
     );
 
-    for (game_id, observation) in &observed_games {
+    start_sessions(db, device_id, live, active, &observed_games);
+
+    // All clocks are read together after the work above, which can wait on
+    // the database while a backup runs. Reading them apart would look like a
+    // clock change.
+    let clocks = Clocks::read();
+    count_running_sessions(
+        db,
+        live,
+        active,
+        &observed_games,
+        &tracking_settings,
+        &activity_snapshot,
+        &clocks,
+    );
+    end_finished_sessions(db, live, active, &observed_games, &clocks);
+
+    debug!(
+        "poll tick: {} tracked, {} running, {} active sessions",
+        tracked_games.len(),
+        observed_games
+            .values()
+            .filter(|state| state.is_running)
+            .count(),
+        active.len(),
+    );
+
+    Ok(())
+}
+
+/// Opens a session for each game that began running. Its live clock starts
+/// at zero as of its start.
+fn start_sessions(
+    db: &Database,
+    device_id: &str,
+    live: &LiveSessions,
+    active: &mut HashMap<String, ActiveSession>,
+    observed_games: &HashMap<String, GameObservation>,
+) {
+    for (game_id, observation) in observed_games {
         if observation.is_running && !active.contains_key(game_id) {
             let (started, started_wall) = (Instant::now(), Utc::now());
             match sessions::create_session_at(db, game_id, device_id, started_wall) {
@@ -474,11 +513,19 @@ fn poll_tick(
             }
         }
     }
+}
 
-    // All clocks are read together after the work above, which can wait on
-    // the database while a backup runs. Reading them apart would look like a
-    // clock change.
-    let clocks = Clocks::read();
+/// Counts the tick of `clocks` for each session whose game runs. A session
+/// whose game is missing keeps its counters and when they were counted.
+fn count_running_sessions(
+    db: &Database,
+    live: &LiveSessions,
+    active: &mut HashMap<String, ActiveSession>,
+    observed_games: &HashMap<String, GameObservation>,
+    tracking_settings: &TrackingSettings,
+    activity_snapshot: &ActivitySnapshot,
+    clocks: &Clocks,
+) {
     for session in active.values_mut() {
         if let Some(observation) = observed_games.get(&session.game_id) {
             if !observation.is_running {
@@ -489,9 +536,9 @@ fn poll_tick(
                 db,
                 session,
                 *observation,
-                &tracking_settings,
-                &activity_snapshot,
-                &clocks,
+                tracking_settings,
+                activity_snapshot,
+                clocks,
             );
             live.update(
                 &session.session_id,
@@ -507,20 +554,6 @@ fn poll_tick(
             }
         }
     }
-
-    end_finished_sessions(db, live, active, &observed_games, &clocks);
-
-    debug!(
-        "poll tick: {} tracked, {} running, {} active sessions",
-        tracked_games.len(),
-        observed_games
-            .values()
-            .filter(|state| state.is_running)
-            .count(),
-        active.len(),
-    );
-
-    Ok(())
 }
 
 /// Ends the sessions of games that were missing for
@@ -1533,6 +1566,92 @@ mod tests {
         let open = sessions::get_active_sessions(&f.db, "laptop").unwrap();
         assert_eq!(open.len(), 1);
         assert_eq!(open[0].id, theirs.id);
+    }
+
+    #[test]
+    fn a_new_session_counts_from_its_start() {
+        let (db, game_id) = library_with("New Game");
+        let live = LiveSessions::default();
+        let mut active = HashMap::new();
+        let observed = HashMap::from([
+            (game_id.clone(), PLAYING),
+            ("not-running".to_owned(), GameObservation::default()),
+        ]);
+        start_sessions(&db, "device", &live, &mut active, &observed);
+        // A game already tracked keeps its session.
+        start_sessions(&db, "device", &live, &mut active, &observed);
+
+        let open = sessions::get_active_sessions(&db, "device").unwrap();
+        assert_eq!(open.len(), 1);
+        assert_eq!(active.len(), 1);
+        let session = &active[&game_id];
+        assert_eq!(session.session_id, open[0].id);
+        assert!(session.last_foreground_at.is_some());
+        // The page's clock runs on from the start until the first tick counts.
+        assert_eq!(live.get(&open[0].id), Some(LiveCounters::default()));
+        assert_eq!(
+            live.counted_at_ms(&open[0].id),
+            Some(parse_wall_timestamp(&open[0].started_at_wall).timestamp_millis())
+        );
+    }
+
+    #[test]
+    fn a_missed_tick_keeps_what_the_tick_before_counted() {
+        let f = fixture();
+        let live = LiveSessions::default();
+        let start = clocks_at(Utc::now());
+        let session = ActiveSession::new(
+            f.session_id.clone(),
+            f.game_id.clone(),
+            start.now,
+            start.wall,
+            integrity::STATUS_LOCAL.into(),
+        );
+        let mut active = HashMap::from([(f.game_id.clone(), session)]);
+        let step = chrono::Duration::from_std(POLL_INTERVAL).unwrap();
+        let tick = |count: u32| Clocks {
+            now: start.now + POLL_INTERVAL * count,
+            wall: start.wall + step * i32::try_from(count).unwrap(),
+            asleep_ms: None,
+        };
+        let running = HashMap::from([(f.game_id.clone(), PLAYING)]);
+        let missing = HashMap::from([(f.game_id.clone(), GameObservation::default())]);
+        let count = |active: &mut HashMap<String, ActiveSession>,
+                     observed: &HashMap<String, GameObservation>,
+                     clocks: &Clocks| {
+            count_running_sessions(
+                &f.db,
+                &live,
+                active,
+                observed,
+                &settings(),
+                &desktop(Duration::ZERO),
+                clocks,
+            );
+            end_finished_sessions(&f.db, &live, active, observed, clocks);
+        };
+        let counted = |runtime_ms| LiveCounters {
+            runtime_ms,
+            active_ms: runtime_ms,
+            idle_ms: 0,
+        };
+
+        count(&mut active, &running, &tick(1));
+        count(&mut active, &missing, &tick(2));
+        assert!(active.contains_key(&f.game_id));
+        assert_eq!(live.get(&f.session_id), Some(counted(5_000)));
+        assert_eq!(
+            live.counted_at_ms(&f.session_id),
+            Some(tick(1).wall.timestamp_millis())
+        );
+
+        // Back at the next tick, it counts the time since the last one.
+        count(&mut active, &running, &tick(3));
+        assert_eq!(live.get(&f.session_id), Some(counted(15_000)));
+        assert_eq!(
+            live.counted_at_ms(&f.session_id),
+            Some(tick(3).wall.timestamp_millis())
+        );
     }
 
     #[test]
