@@ -636,3 +636,5 @@ export const NO_GAME_ACCENT = "#808080";
 export const WINDOW_LOOK_INTERVAL_MS = 120;
 /** Key of the copy of the look in local storage, read before the first paint. public/theme-boot.js repeats it. */
 export const APPEARANCE_CACHE_KEY = "vaultime.appearance";
+/** Key of the game played last in local storage, so a start shows its art and color at once. */
+export const APPEARANCE_GAME_CACHE_KEY = "vaultime.appearance-game";

@@ -20,6 +20,7 @@ import {
 import { useSettings } from "@/features/settings/settings-context";
 import {
   APPEARANCE_CACHE_KEY,
+  APPEARANCE_GAME_CACHE_KEY,
   APPEARANCE_SAVE_DELAY_MS,
   BACKGROUND_CONTRAST_DIM_PER_LIGHTNESS,
   BACKGROUND_CONTRAST_LIGHTNESS,
@@ -54,8 +55,6 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 interface CachedLook {
   appearance: Appearance;
   tokens: Record<ThemeMode, Record<string, string>>;
-  /** The games in front then, so a start shows their art before the library is read. */
-  games?: GamesInFront;
 }
 
 const NO_GAMES: GamesInFront = { page: null, home: null };
@@ -63,8 +62,7 @@ const NO_GAMES: GamesInFront = { page: null, home: null };
 /** The game played last in the last run, also as the page's, as a start opens Home. */
 function cachedGames(): GamesInFront {
   try {
-    const cached = JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY) ?? "null") as Partial<CachedLook> | null;
-    const home = cached?.games?.home;
+    const home: unknown = JSON.parse(localStorage.getItem(APPEARANCE_GAME_CACHE_KEY) ?? "null");
     return isGameInFront(home) ? { page: home, home } : NO_GAMES;
   } catch {
     return NO_GAMES;
@@ -170,13 +168,22 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
           dark: themeTokens("dark", appearance.ground, windowAccent),
           light: themeTokens("light", appearance.ground, windowAccent),
         },
-        games,
       };
       localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify(cached));
     } catch {
       // Without storage the next start shows the default look for a moment.
     }
-  }, [appearance, windowAccent, games, mode, tokens]);
+  }, [appearance, windowAccent, mode, tokens]);
+
+  // Written only when the game changes, as its cover is a long data URL.
+  useEffect(() => {
+    if (!gamesKnown) return;
+    try {
+      localStorage.setItem(APPEARANCE_GAME_CACHE_KEY, JSON.stringify(games.home));
+    } catch {
+      // Without storage the next start shows the art once the library is read.
+    }
+  }, [games.home, gamesKnown]);
 
   // The icons in the tray and the taskbar and the title bar take the accent
   // and the ground, and the title bar the chosen mode. A change goes out at

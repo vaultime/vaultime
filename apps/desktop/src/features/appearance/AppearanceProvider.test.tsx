@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSettings } from "@/features/settings/settings-context";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
 import { hexToOklch } from "@/lib/color";
-import { APPEARANCE_CACHE_KEY, SETTING_KEYS } from "@/lib/constants";
+import { APPEARANCE_GAME_CACHE_KEY, SETTING_KEYS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
 import { useAppearance, type GamesInFront } from "./appearance-context";
 import { AppearanceProvider } from "./AppearanceProvider";
@@ -108,7 +108,7 @@ describe("an update", () => {
 
 describe("a start", () => {
   it("shows the game played last in the last run before the library is read", async () => {
-    localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify({ games: { page: TEAL, home: ORANGE } }));
+    localStorage.setItem(APPEARANCE_GAME_CACHE_KEY, JSON.stringify(ORANGE));
     vi.mocked(api.listSettings).mockResolvedValueOnce([]);
     render(
       <SettingsProvider>
@@ -148,6 +148,8 @@ describe("the window look", () => {
     await waitFor(() => expect(api.setWindowLook).toHaveBeenCalledOnce());
     const { iconAccent } = vi.mocked(api.setWindowLook).mock.lastCall![0];
     expect(Math.abs(hexToOklch(iconAccent)!.hue - ORANGE.colors[0].hue)).toBeLessThan(5);
+    // Only the game played last is kept for the next start.
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_GAME_CACHE_KEY)!)).toEqual(ORANGE);
   });
 });
 
