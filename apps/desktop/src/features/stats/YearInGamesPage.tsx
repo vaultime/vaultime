@@ -37,7 +37,8 @@ function YearStory() {
   const { sessions, summaries, covers, statusChanges, loaded } = useLibrary();
   const [play, setPlay] = useState<{ year: number; play: YearPlay } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [position, setPosition] = useState(0);
+  // The chapter shown, by name, so one coming or going keeps it in place.
+  const [shown, setShown] = useState<YearChapter | null>(null);
   // Chapters already shown, whose numbers sit still when they come back.
   const [seen, setSeen] = useState<ReadonlySet<YearChapter>>(() => new Set());
   const [sharing, setSharing] = useState(false);
@@ -76,13 +77,13 @@ function YearStory() {
   }, [play, year, sessions, statusChanges, byGame]);
 
   const chapters = useMemo(() => told?.story.chapters ?? [], [told]);
-  const at = Math.min(position, Math.max(0, chapters.length - 1));
+  const at = Math.max(0, shown === null ? 0 : chapters.indexOf(shown));
   const chapter = chapters[at];
   const go = useCallback(
     (next: number) => {
       if (next < 0 || next >= chapters.length || next === at) return;
       setSeen((current) => new Set(current).add(chapters[at]));
-      setPosition(next);
+      setShown(chapters[next]);
     },
     [chapters, at],
   );
