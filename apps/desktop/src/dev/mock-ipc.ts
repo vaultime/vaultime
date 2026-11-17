@@ -54,6 +54,8 @@ import type {
   CloudAuthSession,
   CloudBackupRecord,
   CloudPc,
+  CreateGameInput,
+  DiscoveredGame,
   FolderPc,
   AwayTimer,
   CloudDevice,
@@ -476,6 +478,38 @@ function shownSessions(): Session[] {
     const linked = gameLinks.find((link) => link.game_id === session.game_id)?.linked_game_id;
     return counted(linked ? { ...session, game_id: linked, recorded_game_id: session.game_id } : session);
   });
+}
+
+/** A game added by hand or from Discover, kept until a reload. */
+function addGame(input: CreateGameInput): Game {
+  const game: Game = {
+    id: `added-${allGames.length + 1}`,
+    title: input.title,
+    executable_path: input.executable_path ?? null,
+    install_folder: input.install_folder ?? null,
+    launcher_source: input.launcher_source ?? null,
+    metadata_json: "{}",
+    is_hidden: false,
+    created_at: iso(Date.now()),
+    updated_at: iso(Date.now()),
+    origin_device_id: null,
+  };
+  allGames.push(game);
+  return game;
+}
+
+/** What a session keeps when it ends at `endedAt`, its times shared out evenly over its span. */
+function trimmed(sessionId: string, endedAt: string) {
+  const session = sessionsNow().find((each) => each.id === sessionId);
+  if (!session) return { runtime_ms: 0, active_ms: 0, idle_ms: 0 };
+  const start = new Date(session.started_at_wall).getTime();
+  const end = session.ended_at_wall ? new Date(session.ended_at_wall).getTime() : Date.now();
+  const share = end > start ? Math.min(1, Math.max(0, (new Date(endedAt).getTime() - start) / (end - start))) : 1;
+  return {
+    runtime_ms: Math.round(session.runtime_ms * share),
+    active_ms: Math.round(session.active_ms * share),
+    idle_ms: Math.round(session.idle_ms * share),
+  };
 }
 
 /** Every session, the running ones counted on to the moment asked. */
@@ -1123,6 +1157,7 @@ function drawCover(art: MockArt, crop: CropRect): string {
 }
 
 function saveCover(gameId: string, art: MockArt, crop: CropRect) {
+  preferredCovers.delete(gameId);
   pickedCovers.set(gameId, {
     art,
     crop,
@@ -1460,11 +1495,18 @@ function sampleCovers(gameId: string): GameAssetView[] {
   return covers;
 }
 
+/** The image each game uses as its cover, once Use as cover picked one. */
+const preferredCovers = new Map<string, string>();
+
 function gameAssets(gameId: string): GameAssetView[] {
   const picked = pickedCovers.get(gameId)?.asset;
   const covers = coverFiles ? coverAssets().filter((asset) => asset.game_id === gameId) : posterAsset(gameId);
   const listed = picked ? [picked, ...covers.map((asset) => ({ ...asset, is_preferred: false }))] : covers;
-  const all = [...listed, ...sampleCovers(gameId)].filter((asset) => !deletedAssets.has(asset.id));
+  const kept = [...listed, ...sampleCovers(gameId)].filter((asset) => !deletedAssets.has(asset.id));
+  const preferred = preferredCovers.get(gameId);
+  const all = kept.some((asset) => asset.id === preferred)
+    ? kept.map((asset) => ({ ...asset, is_preferred: asset.id === preferred }))
+    : kept;
   // As in the core, one image is always the cover.
   if (all.length > 0 && !all.some((asset) => asset.is_preferred)) all[0] = { ...all[0], is_preferred: true };
   return all;
@@ -1949,6 +1991,45 @@ mockIPC((cmd, payload) => {
       const art = picked && picked.asset.id === args.assetId ? picked.art : pickedArt;
       return art ? saveCover(gameId, art, args.crop as CropRect) : gameAssets(gameId);
     }
+    case "create_game":
+      return addGame(args.input as CreateGameInput);
+    case "import_discovered_games":
+      return (args.discoveries as DiscoveredGame[]).map((found) =>
+        addGame({
+          title: found.title,
+          executable_path: found.executable_path,
+          install_folder: found.install_folder,
+          launcher_source: found.source,
+        }),
+      );
+    case "delete_game": {
+      const index = allGames.findIndex((game) => game.id === args.id);
+      if (index >= 0) allGames.splice(index, 1);
+      return index >= 0;
+    }
+    case "scan_game_assets":
+      return gameAssets(String(args.gameId));
+    case "set_preferred_game_asset":
+      preferredCovers.set(String(args.gameId), String(args.assetId));
+      return true;
+    case "preview_trim":
+      return trimmed(String(args.sessionId), String(args.endedAt));
+    case "export_local_backup":
+      return {
+        ...laptopBackup(false, false),
+        backup_id: "this-pc-backup",
+        source_device_id: thisPc.device_id,
+        backup_path: `${String(args.destinationDir)}\\vaultime-backup-20261117T180000Z`,
+      };
+    case "upload_remote_backup": {
+      const backup = cloudBackup("backup-3", String(args.label ?? "Backup"), 0, allGames.length, allSessions.length);
+      return { backup, payload_summary: backup.metadata_json, artwork_uploaded: 0 };
+    }
+    case "store_cloud_session_secure":
+    case "clear_cloud_session_secure":
+    case "store_cloud_backup_key_secure":
+    case "clear_cloud_backup_key_secure":
+      return true;
     default:
       // Everything else answers with an empty result.
       return cmd.startsWith("list_") || cmd.startsWith("get_") ? [] : null;
