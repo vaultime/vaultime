@@ -36,7 +36,7 @@ Vaultime notices when a game starts, from any launcher, and keeps the time it wa
 - **A journal of your play.** Every session written as a sentence beside its cover, week by week, with the screenshots you took in Steam.
 - **Stats for every year.** A calendar of every day, the hours you play and your games month by month, and a picture of your year to share.
 - **Your artwork, your look.** Covers from your own game folders, framed the way you like, and any accent color.
-- **Honest trust labels.** Clock jumps, crashes and edits made outside Vaultime show up instead of hiding in a total.
+- **Honest trust labels.** Clock jumps, crashes and most edits made outside Vaultime show up instead of hiding in a total.
 - **Several PCs, one history.** Merge another PC's sessions from its backup.
 - **Backups.** Daily local backups, a sync folder for your other PCs and optional encrypted cloud backup to a server you run.
 
@@ -59,7 +59,7 @@ Vaultime has no analytics and no telemetry. See the [privacy policy](docs/legal/
 
 ## License
 
-Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its setup files are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well. The name Vaultime and its logo are not covered by these licenses.
+Vaultime is free software. The app is licensed under the [GNU General Public License](LICENSE), version 3 or later. The cloud server and its setup files are licensed under the [GNU Affero General Public License](apps/api/LICENSE), version 3 or later, so a changed server that others use online has to share its source as well.
 
 The interface components from shadcn/ui are under the [MIT license](LICENSES/MIT.txt), and the fonts Mona Sans, Newsreader, Geist and Geist Mono under the SIL Open Font License 1.1.
 

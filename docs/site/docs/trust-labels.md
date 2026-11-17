@@ -5,7 +5,7 @@ Every session carries a label that tells how much its record can be trusted. A l
 ## The labels
 
 Local
-: Recorded normally on this PC and unchanged since.
+: Recorded normally on this PC, with no sign of a change since.
 
 Suspicious
 : Something about the record does not add up: the system clock jumped while the game ran, or the record was changed outside Vaultime. The session keeps its time, but the label stays.

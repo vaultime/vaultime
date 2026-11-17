@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. Please check first that you run the latest version, shown at the bottom of the library rail.
+        Thanks for reporting. Please check first that you run the latest version, shown at the top of Settings and in Settings, About.
         Security problems go to the [private report form](https://github.com/vaultime/vaultime/security/advisories/new) instead.
   - type: textarea
     id: what
