@@ -38,7 +38,7 @@ The heart beside the status on a game's page makes it a favorite, and so do **Ad
 All games shows every game as its cover, with its time and when you last played it. A badge marks a game with a Suspicious or Recovered session in the last 30 days.
 
 Find a game
-: The field at the top filters by title, the titles of linked installs included. ++Ctrl+F++ jumps there from anywhere.
+: The field at the top filters by title, the titles of linked installs included. On All games, Favorites and a launcher's page ++Ctrl+F++ jumps there, on other pages it opens the command palette.
 
 Status
 : **All**, **Backlog**, **Playing**, **Finished** and **Dropped** show the games with that status, each with its count. Statuses no game has stay out.
