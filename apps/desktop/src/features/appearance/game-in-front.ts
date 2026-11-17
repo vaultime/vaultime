@@ -5,6 +5,9 @@ import { useEffect, useEffectEvent } from "react";
 import { useMatch } from "react-router";
 import { useAppearance, type GameInFront } from "@/features/appearance/appearance-context";
 import { useLibrary, usePlaying, type GameSummary } from "@/features/library/library-context";
+import { usePageVisible } from "@/lib/use-page-visible";
+
+const NOTHING_PLAYING: ReadonlySet<string> = new Set();
 
 /**
  * The game a page is about, else the one playing, else the one played last,
@@ -44,7 +47,11 @@ function artKey(summary: GameSummary | null): string {
  */
 export function useShowGameInFront() {
   const { summaries, visible, artRead } = useLibrary();
-  const playing = usePlaying();
+  // Running sessions are polled only while the page is seen, so a hidden
+  // page goes by the library, which the core reloads when one starts or ends.
+  const seen = usePageVisible();
+  const polled = usePlaying();
+  const playing = seen ? polled : NOTHING_PLAYING;
   const page = useMatch("/library/:gameId");
   const { showGames } = useAppearance();
   const front = gameInFront(summaries, visible, playing, page?.params.gameId);

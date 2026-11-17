@@ -9,10 +9,11 @@ use chrono::{DateTime, Local, TimeDelta, Utc};
 use log::{debug, info, warn};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime, Webview};
+use tauri::{AppHandle, Emitter, Manager, Runtime, Webview};
 
 use crate::constants::{
-    CLOSE_TO_TRAY_SETTING, TRAY_MIN_PLAYED_MS, TRAY_RECENT_DAYS, TRAY_STATUS_INTERVAL,
+    CLOSE_TO_TRAY_SETTING, LIBRARY_CHANGED_EVENT, TRAY_MIN_PLAYED_MS, TRAY_RECENT_DAYS,
+    TRAY_STATUS_INTERVAL,
 };
 use crate::db::connection::Database;
 use crate::db::repo::sessions::{self, SessionSpan};
@@ -156,7 +157,9 @@ const NOTHING_RUNNING: &str = "No game running";
 const NOTHING_TODAY: &str = "Nothing played today";
 
 /// Keeps the status lines of the tray menu current. They change at most once
-/// a minute, so the menu is only touched when their text does.
+/// a minute, so the menu is only touched when their text does. A session that
+/// starts or ends reloads the library of the page, which polls only while it
+/// is seen, so the window and its icons follow the game played.
 fn start_status_updates<R: Runtime>(app: AppHandle<R>, items: StatusItems<R>) {
     let db = Arc::clone(&app.state::<Arc<Database>>());
     let live = Arc::clone(&app.state::<Arc<LiveSessions>>());
@@ -165,15 +168,24 @@ fn start_status_updates<R: Runtime>(app: AppHandle<R>, items: StatusItems<R>) {
         .name("vaultime-tray".into())
         .spawn(move || {
             let mut shown = StatusLines::default();
+            let mut running: Option<Vec<String>> = None;
             loop {
                 match status_lines(&db, &live, &device_id, Utc::now()) {
-                    Ok(lines) if lines != shown => {
-                        let _ = items.playing.set_text(&lines.playing);
-                        let _ = items.today.set_text(&lines.today);
-                        let _ = items.recent.set_text(&lines.recent);
-                        shown = lines;
+                    Ok((lines, now_running)) => {
+                        if lines != shown {
+                            let _ = items.playing.set_text(&lines.playing);
+                            let _ = items.today.set_text(&lines.today);
+                            let _ = items.recent.set_text(&lines.recent);
+                            shown = lines;
+                        }
+                        if running
+                            .as_ref()
+                            .is_some_and(|before| *before != now_running)
+                        {
+                            let _ = app.emit(LIBRARY_CHANGED_EVENT, ());
+                        }
+                        running = Some(now_running);
                     }
-                    Ok(_) => {}
                     Err(error) => debug!("tray status not updated: {error}"),
                 }
                 std::thread::sleep(TRAY_STATUS_INTERVAL);
@@ -184,15 +196,18 @@ fn start_status_updates<R: Runtime>(app: AppHandle<R>, items: StatusItems<R>) {
     }
 }
 
+/// The status lines and the ids of the sessions running on this PC, sorted.
 fn status_lines(
     db: &Database,
     live: &LiveSessions,
     device_id: &str,
     now: DateTime<Utc>,
-) -> Result<StatusLines> {
+) -> Result<(StatusLines, Vec<String>)> {
     let since = integrity::format_timestamp(local_day_start(now));
     let mut spans = sessions::spans_since(db, &since, device_id)?;
     spans.retain(|span| span.ended_at_wall.is_none());
+    let mut running_ids: Vec<String> = spans.iter().map(|span| span.session_id.clone()).collect();
+    running_ids.sort();
     let now_ms = now.timestamp_millis();
     // The time the live bar shows, without what a launcher set aside.
     let mut running = db.with_conn(|conn| {
@@ -211,7 +226,7 @@ fn status_lines(
     let today = summaries::today_of(&Local, now_ms);
     let played = summaries::played_on(db, live, &Local, today, now_ms)?;
     let recent = summaries::played_in_last(db, live, &Local, TRAY_RECENT_DAYS, today, now_ms)?;
-    Ok(describe_status(&spans, played, recent))
+    Ok((describe_status(&spans, played, recent), running_ids))
 }
 
 /// The first moment of the local day `now` falls in. Where the clocks jump
@@ -522,8 +537,10 @@ mod tests {
                 idle_ms: 0,
             },
         );
-        let lines = status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
+        let (lines, running) =
+            status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();
         assert_eq!(lines.playing, "Playing Client, 2h 00m");
+        assert_eq!(running, [session.id]);
     }
 
     #[test]
