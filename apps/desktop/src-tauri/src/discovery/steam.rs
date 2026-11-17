@@ -338,7 +338,6 @@ fn is_steam_tool(name: &str, app_id: &str) -> bool {
         || lower.contains("proton")
         || lower.contains("steam linux runtime")
         || lower.contains("steamworks")
-        || lower.starts_with("steam ")
         || lower.contains("directx")
         || lower.contains("vcredist")
     {
@@ -348,6 +347,7 @@ fn is_steam_tool(name: &str, app_id: &str) -> bool {
     matches!(
         app_id,
         "228980"  // Steamworks Common Redistributables
+        | "241100" // Steam Controller Configs
         | "250820" // SteamVR, which runs beside every VR game
         | "1070560" // Steam Linux Runtime
         | "1887720" // Proton
@@ -608,7 +608,11 @@ mod tests {
         ));
         assert!(is_steam_tool("Proton 9.0-4", "2348590"));
         assert!(is_steam_tool("SteamVR", "250820"));
+        assert!(is_steam_tool("Steam Controller Configs", "241100"));
+        assert!(is_steam_tool("Steam Linux Runtime 3.0 (sniper)", "1628350"));
         assert!(!is_steam_tool("Counter-Strike 2", "730"));
+        // Games whose names start with Steam are games.
+        assert!(!is_steam_tool("Steam Marines", "251010"));
     }
 
     #[test]
