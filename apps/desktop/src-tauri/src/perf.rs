@@ -368,6 +368,46 @@ fn page_timings(
     live
 }
 
+/// What the live bar, the tray and a game's page ask for again and again,
+/// while a game runs.
+fn poll_timings(
+    db: &Database,
+    game_ids: &[String],
+    live: &LiveSessions,
+    timed: &dyn Fn(&str, &mut dyn FnMut() -> String),
+) {
+    let tz = chrono::Local;
+    let now_ms = Utc::now().timestamp_millis();
+    let today = crate::playtime::summaries::today_of(&tz, now_ms);
+    timed("running sessions", &mut || {
+        let running = sessions::get_active_sessions(db, "device").unwrap();
+        format!("{} running", running.len())
+    });
+    timed("tray status", &mut || {
+        let (_, running) = crate::tray::status_lines(db, live, "device", Utc::now()).unwrap();
+        format!("{} running", running.len())
+    });
+    timed("a game's hours of the week", &mut || {
+        let rows = totals::play_totals(
+            db,
+            live,
+            &tz,
+            today - TimeDelta::days(365 * 10),
+            today + TimeDelta::days(1),
+            totals::Bucket::HourOfWeek,
+            Some(&game_ids[2]),
+            now_ms,
+        )
+        .unwrap();
+        format!("{} rows", rows.len())
+    });
+    timed("a game counted up to now", &mut || {
+        let links = games::links(db).unwrap();
+        let counted = totals::counted_until(db, live, &links, &game_ids[2], now_ms, now_ms);
+        format!("{} ms", counted.unwrap())
+    });
+}
+
 /// A session of `game_id` that another PC left open `years` back after an
 /// hour of play, as a restored backup brings it.
 fn leave_open_elsewhere(db: &Database, game_id: &str, years: i64) {
@@ -465,6 +505,24 @@ fn launcher_and_open_elsewhere_timings(
         slices::rebuild_for_game(db, &launcher).unwrap();
         String::new()
     });
+    timed(
+        "slices of a game's sessions as a merge brings them",
+        &mut || {
+            let ids: Vec<String> = db
+                .with_conn(|conn| {
+                    let mut stmt = conn
+                        .prepare("SELECT id FROM sessions WHERE game_id = ?1")
+                        .map_err(map_db)?;
+                    let rows = stmt
+                        .query_map([&game_ids[5]], |row| row.get(0))
+                        .map_err(map_db)?;
+                    rows.collect::<rusqlite::Result<_>>().map_err(map_db)
+                })
+                .unwrap();
+            slices::rebuild_merged(db, &ids).unwrap();
+            format!("{} sessions", ids.len())
+        },
+    );
     let now_ms = Utc::now().timestamp_millis();
     let today = summaries::today_of(&tz, now_ms);
     timed("live bar, open elsewhere", &mut || {
@@ -596,6 +654,7 @@ fn large_history() {
         String::new()
     });
     let live = page_timings(&db, &game_ids, &timed);
+    poll_timings(&db, &game_ids, &live, &timed);
     launcher_and_open_elsewhere_timings(&db, &game_ids, &live, &timed);
     let bytes = std::fs::metadata(&path).map_or(0, |meta| meta.len());
     println!("database file: {} MB", bytes / 1_000_000);

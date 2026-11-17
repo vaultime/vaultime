@@ -100,7 +100,7 @@ struct StatusItems<R: Runtime> {
 
 /// What the status lines of the tray menu say.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct StatusLines {
+pub(crate) struct StatusLines {
     playing: String,
     today: String,
     recent: String,
@@ -197,7 +197,7 @@ fn start_status_updates<R: Runtime>(app: AppHandle<R>, items: StatusItems<R>) {
 }
 
 /// The status lines and the ids of the sessions running on this PC, sorted.
-fn status_lines(
+pub(crate) fn status_lines(
     db: &Database,
     live: &LiveSessions,
     device_id: &str,
