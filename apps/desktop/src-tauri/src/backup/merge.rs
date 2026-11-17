@@ -340,7 +340,12 @@ fn apply_checked(
     if plan.sessions.is_empty() {
         staged.close();
         copy_from(db, &staged.db_path, copy_annotations)?;
-        remember_merged(db, &source, &staged.manifest.created_at);
+        // A first merge that brings no session leaves the PC unmerged, so
+        // its next backup waits for the player instead of coming in by
+        // itself with keys nobody looked at.
+        if !plan.trust.first_merge() {
+            remember_merged(db, &source, &staged.manifest.created_at);
+        }
         return Ok(summary);
     }
     summary.safety_backup_path =
@@ -2059,6 +2064,17 @@ mod tests {
             last_merged(&desktop.db).get(&manifest.source_device_id),
             Some(&manifest.created_at)
         );
+    }
+
+    #[test]
+    fn a_first_merge_that_brings_no_session_leaves_the_pc_unmerged() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        laptop.game("Hades", None);
+        let backup = laptop.back_up();
+        let summary = desktop.merge(&backup, &[]);
+        assert_eq!(summary.sessions_added, 0);
+        assert!(last_merged(&desktop.db).is_empty());
     }
 
     #[test]
