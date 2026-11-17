@@ -222,14 +222,15 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 
 - Premium and image-rich while open, quiet while it runs in the
   background. Never ship stock component styling.
-- Type: Mona Sans a little wide and firm for titles (`font-display`, 110 %
-  width, 600), with page titles at 28px, the hero titles of Home and game
-  pages at 46px and section titles at 18px. Mona Sans at normal width for
-  sentences about play (`font-prose`). Geist for interface text, with
-  tabular figures for durations, counts and stats, and the units smaller in
-  big numbers. Geist Mono only for running clocks, times of day, chart hours,
-  codes and paths. Durations read "4h 05m", "142h" and "40m". Labels are
-  small and in sentence case (`label-small`), never spaced capitals.
+- Type: Mona Sans wide and heavy for titles (`font-display`, 125 % width,
+  760), with page titles at 28px, the hero titles of Home and game pages at
+  66px, 52px in windows under 1280px, and section titles at 18px. Newsreader,
+  a serif made for screens, for sentences about play (`font-prose`). Geist
+  for interface text, with tabular figures for durations, counts and stats,
+  and the units smaller in big numbers. Geist Mono only for running clocks,
+  times of day, chart hours, codes and paths. Durations read "4h 05m", "142h"
+  and "40m". Labels are small and in sentence case (`label-small`), never
+  spaced capitals.
 - Surfaces: panels (`panel`) and cards with a faint 1px inner line, hairline
   rules inside them, no glows. Controls share one system: buttons 34px high
   with 8px corners and a faint fill, segmented choices (`segmented`,

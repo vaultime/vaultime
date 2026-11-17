@@ -416,7 +416,8 @@ function Eyebrow({ color, children }: { color?: string; children: ReactNode }) {
 }
 
 function Title({ children }: { children: ReactNode }) {
-  return <h2 className="font-display mt-1 text-[28px] leading-[1.05] text-balance">{children}</h2>;
+  // Shrinks with the card, so a long one-word title still fits in small windows.
+  return <h2 className="font-display mt-1 text-[clamp(20px,10.5cqw,28px)] leading-[1.05] text-balance">{children}</h2>;
 }
 
 /** The chapter's number, counted up from zero the first time it shows, the units smaller. */

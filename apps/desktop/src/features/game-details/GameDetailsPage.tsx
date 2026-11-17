@@ -222,7 +222,7 @@ function GamePage({ gameId }: { gameId: string }) {
             title={game.title}
             src={cover}
             variant="card"
-            className="hidden h-[200px] w-[150px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex"
+            className="hidden h-[200px] w-[150px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex xl:h-[288px] xl:w-[216px]"
           />
         </div>
       </TintedHeader>

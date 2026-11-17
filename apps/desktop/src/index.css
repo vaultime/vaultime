@@ -8,6 +8,8 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist/wght-italic.css";
 @import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/newsreader/standard.css";
+@import "@fontsource-variable/newsreader/standard-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -52,19 +54,18 @@
   }
 }
 
-/* Mona Sans a little wide and firm, for titles. */
+/* Mona Sans wide and heavy, for titles. */
 @utility font-display {
-  font-stretch: 110%;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-stretch: 125%;
+  font-weight: 760;
+  letter-spacing: -0.035em;
 }
 
-/* Mona Sans at normal width and a little lighter, for sentences about play. */
+/* Newsreader, a serif made for reading on screens, for sentences about play. */
 @utility font-prose {
-  @apply font-display;
   font-stretch: 100%;
-  font-weight: 450;
-  letter-spacing: -0.01em;
+  font-weight: 420;
+  letter-spacing: -0.005em;
 }
 
 /* The wordmark, Mona Sans at full width, bold and tight. */
@@ -187,6 +188,7 @@
 
 @theme inline {
   --font-display: "Mona Sans Variable", system-ui, sans-serif;
+  --font-prose: "Newsreader Variable", Georgia, serif;
   --font-sans: "Geist Variable", system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 

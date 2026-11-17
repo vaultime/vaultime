@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Interface
 
 - **Lit by your game.** The art of the game you play or played last fills the window behind see-through panels, and a game page shows its own. Light art is dimmed a little more, so text stays easy to read. The accent takes the color of that art too, and the ground is a neutral graphite. Settings, Appearance can show a picture of your own, no background or a fixed accent instead.
+- **New type.** Titles are wider and bolder, game pages show a bigger cover, and the sentences about your play are set in Newsreader, a serif made for reading on screens.
 - **What's new.** After an update, a line over the page opens the changes of the new version under the covers of the games you played last. Settings, About and the command palette show them again.
 - **Year in games.** Your year told in chapters, one card at a time, from the stats page or the command palette: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when you play, where your hours came from and the games you finished. It counts every launcher and play while offline, and Vaultime works it out on your PC.
 - **Steam screenshots in the journal.** Screenshots you take with Steam show under the session they were taken in. Vaultime reads them from Steam's folder and copies nothing, and a switch in Settings turns them off.

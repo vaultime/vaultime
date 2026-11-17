@@ -98,7 +98,7 @@ export function LibraryHero(props: HeroProps) {
           title={game.title}
           src={cover}
           variant="card"
-          className="hidden h-[220px] w-[165px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex"
+          className="hidden h-[220px] w-[165px] p-3.5 text-2xl shadow-2xl shadow-scrim/40 lg:flex xl:h-[288px] xl:w-[216px]"
         />
       </div>
     </TintedHeader>

@@ -105,7 +105,7 @@ export function TintedTitle({ tint, text }: { tint: GameTint; text: string }) {
   return (
     <h1
       ref={lineRef}
-      className="font-display mt-2.5 text-[46px] leading-none tracking-[-0.03em] whitespace-nowrap"
+      className="font-display mt-2.5 text-[52px] leading-none whitespace-nowrap xl:text-[66px]"
       style={{ color: tint.ink }}
     >
       {/* The line keeps the full size height, the shrunk title sits on its baseline. */}
