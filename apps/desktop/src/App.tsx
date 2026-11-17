@@ -7,6 +7,7 @@ import { HomePage } from "@/features/library/HomePage";
 import { LibraryPage } from "@/features/library/LibraryPage";
 import { JournalPage } from "@/features/journal/JournalPage";
 import { StatsPage } from "@/features/stats/StatsPage";
+import { YearInGamesPage } from "@/features/stats/YearInGamesPage";
 import { CloudPage } from "@/features/cloud/CloudPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { GameDetailsPage } from "@/features/game-details/GameDetailsPage";
@@ -24,6 +25,7 @@ export function App() {
         <Route path="journal" element={<JournalPage />} />
         <Route path="sessions" element={<Navigate to="/journal" replace />} />
         <Route path="stats" element={<StatsPage />} />
+        <Route path="stats/year/:year?" element={<YearInGamesPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route
           path="cloud"

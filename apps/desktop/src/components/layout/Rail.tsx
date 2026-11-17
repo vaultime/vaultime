@@ -55,6 +55,7 @@ export function Rail() {
             key={to}
             to={to}
             icon={<Icon className={PAGE_ICON} strokeWidth={1.75} />}
+            active={location.pathname.startsWith(to)}
             className="h-[34px] text-[13.5px]"
           >
             {label}

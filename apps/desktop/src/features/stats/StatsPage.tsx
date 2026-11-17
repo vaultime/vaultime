@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ChevronLeft, ChevronRight, Share } from "lucide-react";
+import { ChevronLeft, ChevronRight, GalleryVerticalEnd, Share } from "lucide-react";
 import { ActiveIdleLegend } from "@/components/charts/PlayBars";
 import { PeriodBars, type PeriodColumn } from "@/components/charts/PeriodBars";
 import { WeekClock } from "@/components/charts/WeekClock";
@@ -239,7 +239,11 @@ export function StatsPage() {
             </div>
             {!all && (
               <>
-                <Button variant="outline" className="mr-1 h-11" onClick={() => setSharing(true)}>
+                <Button variant="outline" nativeButton={false} render={<Link to={`/stats/year/${year}`} />}>
+                  <GalleryVerticalEnd strokeWidth={1.8} />
+                  Year in games
+                </Button>
+                <Button variant="outline" className="mr-1" onClick={() => setSharing(true)}>
                   <Share strokeWidth={1.8} />
                   Share your year
                 </Button>

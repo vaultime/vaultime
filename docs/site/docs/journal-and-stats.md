@@ -82,6 +82,12 @@ Session lengths
 Left running
 : Games that often ran while you were away. Only shown when there are some.
 
+### Year in games
+
+**Year in games**, at the top of the stats page or in the command palette, tells a year in chapters, one card at a time: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when in the day you play, the launchers your hours came from and the games you finished. A chapter with nothing to tell is left out. Space or the arrow keys move on, and **Share your year** on the page makes a picture of the year to post.
+
+Like the stats page, it counts every PC whose sessions you merged, the time each launcher's copy of a game recorded and play while offline. Hidden games count in the hours but never show. Vaultime works it out on your PC from your journal and uploads nothing.
+
 ### Share your year
 
 **Share your year**, at the top of the stats page or in the command palette, makes a picture of the year to post. It shows your hours of active play, the days you played, your longest streak, the busiest month, the year calendar, your most played games with their covers and colors, and a line about the year.
