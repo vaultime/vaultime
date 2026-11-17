@@ -43,9 +43,16 @@ nav a { color: var(--faint); text-decoration: none; }
 nav a:hover { color: var(--text); }
 nav.top a { padding: 12px 0; }
 
-.hero { padding: 88px 0 72px; border-bottom: 1px solid var(--rule);
-  background: radial-gradient(110% 120% at 85% 0%, #1f1733 0%, var(--ink) 60%); }
-.hero h1 { margin-top: 18px; max-width: 820px; font-size: clamp(40px, 8vw, 96px); line-height: 0.97; }
+/* The vista runs behind the header and the hero and fades into the ground. */
+.landing header { position: absolute; inset: 0 0 auto; z-index: 1; border-bottom-color: transparent; }
+.hero { position: relative; isolation: isolate; padding: 168px 0 72px; border-bottom: 1px solid var(--rule); }
+.hero-art { position: absolute; inset: 0 0 auto; z-index: -1; height: min(800px, 58vw); overflow: hidden; }
+.hero-art img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 38% 22%; }
+.hero-art::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgb(14 11 20 / 0.55), rgb(14 11 20 / 0) 160px),
+    linear-gradient(90deg, var(--ink) 6%, rgb(14 11 20 / 0.72) 36%, rgb(14 11 20 / 0) 66%),
+    linear-gradient(0deg, var(--ink) 4%, rgb(14 11 20 / 0) 46%); }
+.hero h1 { margin-top: 18px; max-width: 9em; font-size: clamp(40px, 7vw, 84px); line-height: 0.97; }
 .hero p { margin-top: 24px; max-width: 620px; font-size: clamp(19px, 2.4vw, 24px); line-height: 1.35; color: var(--soft); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .button { display: inline-flex; align-items: center; height: 44px; padding: 0 22px; border: 0; border-radius: 22px; font-family: inherit; font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
@@ -128,7 +135,8 @@ nav a[aria-current="page"] { color: var(--text); }
 
 /* The app as it looks, under the hero. */
 .shot { margin-top: 56px; }
-.shot img { display: block; width: 100%; height: auto; border: 1px solid var(--hairline); border-radius: 14px; }
+.shot img { display: block; width: 100%; height: auto; border: 1px solid var(--hairline); border-radius: 14px;
+  box-shadow: 0 48px 120px -48px rgb(0 0 0 / 0.8); }
 .doc .lead a { color: var(--violet); text-decoration: none; }
 .doc .lead a:hover { color: var(--violet-hover); }
 
@@ -250,7 +258,10 @@ nav a[aria-current="page"] { color: var(--text); }
   nav.top { gap: 18px; }
   nav.top a:not(.keep) { display: none; }
   .shot { margin-top: 40px; }
-  .hero { padding: 56px 0 48px; }
+  .hero { padding: 212px 0 48px; }
+  .hero-art { height: 520px; }
+  .hero-art img { object-position: 76% 0; }
+  .hero-art::after { background: linear-gradient(180deg, rgb(14 11 20 / 0.5), rgb(14 11 20 / 0.3) 30%, rgb(14 11 20 / 0.8) 72%, var(--ink)); }
   .day, section.doc { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
   .entry .when { grid-column: 1 / -1; width: auto; }

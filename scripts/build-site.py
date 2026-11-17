@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Builds the website into dist-site: the landing page, its styles, the fonts
-the app ships, the documentation, the screenshots and HTML versions of the
-legal pages and the changelog.
+"""Builds the website into dist-site: the landing page, its styles and art,
+the fonts the app ships, the documentation, the screenshots and HTML versions
+of the legal pages and the changelog.
 
     python scripts/build-site.py
 
@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "docs/site"
 DOCS = SITE / "docs"
 SCREENSHOTS = ROOT / "assets/screenshots"
+ART = SITE / "art"
 OUT = ROOT / "dist-site"
 FONTS = ROOT / "apps/desktop/node_modules/@fontsource-variable"
 REPO_URL = "https://github.com/vaultime/vaultime"
@@ -490,6 +491,7 @@ def main():
     for name, source in FONT_FILES.items():
         shutil.copyfile(source, OUT / "fonts" / name)
     shutil.copytree(SCREENSHOTS, OUT / "screenshots")
+    shutil.copytree(ART, OUT / "art")
     shutil.copyfile(SOCIAL_PREVIEW, OUT / "social-preview.png")
     for asset in ("site.css", "site.js"):
         shutil.copyfile(SITE / asset, OUT / asset)
