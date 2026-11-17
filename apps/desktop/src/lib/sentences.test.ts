@@ -15,6 +15,7 @@ import {
   statusSentence,
   weekSentence,
 } from "./sentences";
+import { nextMark } from "./milestones";
 
 describe("libraryPlaytime", () => {
   it("puts the week in italics", () => {
@@ -30,6 +31,17 @@ describe("libraryPlaytime", () => {
     expect(libraryPlaytime(3 * HOUR_MS, 0).before).toBe("Three hours so far.");
     expect(libraryPlaytime(30 * MINUTE_MS, 0).before).toBe("Thirty minutes so far.");
     expect(libraryPlaytime(10_000, 0).before).toBe("The clock has just started.");
+  });
+
+  it("tells how far the next hour mark is once it is close", () => {
+    expect(libraryPlaytime(92 * HOUR_MS, 0, nextMark(92 * HOUR_MS)).before).toBe(
+      "Ninety-two hours so far. A hundred hours is eight hours away.",
+    );
+    expect(libraryPlaytime(92 * HOUR_MS, 4 * HOUR_MS, nextMark(92 * HOUR_MS)).after).toBe(
+      " of them this past week. A hundred hours is eight hours away.",
+    );
+    expect(libraryPlaytime(88 * HOUR_MS, 0, nextMark(88 * HOUR_MS)).before).toBe("Eighty-eight hours so far.");
+    expect(libraryPlaytime(70 * HOUR_MS, 0, nextMark(70 * HOUR_MS)).before).toBe("Seventy hours so far.");
   });
 });
 

@@ -33,8 +33,15 @@ export function marksBetween(fromMs: number, toMs: number): number[] {
   return marks;
 }
 
-/** The next hour mark of a game with `totalMs`, and how far it is from the one before. */
-export function nextMark(totalMs: number): { mark: number; progress: number; leftMs: number } {
+/** The next hour mark of a game, how far along from the one before, from 0 to 1, and the time left. */
+export interface NextMark {
+  mark: number;
+  progress: number;
+  leftMs: number;
+}
+
+/** The next hour mark of a game with `totalMs`. */
+export function nextMark(totalMs: number): NextMark {
   const mark = markAfter(totalMs / HOUR_MS);
   const from = markBefore(mark) * HOUR_MS;
   return { mark, progress: (totalMs - from) / (mark * HOUR_MS - from), leftMs: mark * HOUR_MS - totalMs };

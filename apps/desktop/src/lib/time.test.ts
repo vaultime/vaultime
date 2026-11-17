@@ -8,7 +8,9 @@ import {
   UI_LOCALE,
   clockPercent,
   compareTimes,
+  formatCalendarDay,
   formatClock,
+  formatDate,
   formatDayPart,
   formatHoursMinutes,
   formatHoursShort,
@@ -26,6 +28,16 @@ import {
   toLocalInput,
   weekdayOf,
 } from "./time";
+
+describe("formatCalendarDay", () => {
+  it("adds the year only for a day of another year", () => {
+    const today = new Date(2026, 10, 17, 12, 0);
+    expect(formatCalendarDay(at(2026, 3, 4, 20, 0), today)).toBe(
+      formatDate(new Date(2026, 2, 4), { month: "short", day: "numeric" }),
+    );
+    expect(formatCalendarDay(at(2025, 11, 20, 20, 0), today)).toContain("2025");
+  });
+});
 
 // Tuesday evening, local time.
 const now = new Date(2026, 8, 29, 21, 30);

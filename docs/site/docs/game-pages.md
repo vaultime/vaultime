@@ -18,6 +18,8 @@ The **Event log** below lists the events in the records of the game's sessions t
 
 The totals show the game's runtime, active and idle time, the number of sessions, how many were Suspicious or Recovered, the longest session and when you first played it. With playtime imported from Steam, **Before Vaultime** shows that part on its own.
 
+**Hour marks** shows how far the game is from its next mark, as a ring, and lists the marks it passed with the day of the session that took it past. Marks passed in playtime from before Vaultime say so. The marks are ten, twenty-five, fifty, a hundred, two hundred fifty, five hundred and a thousand hours, then every thousand.
+
 ## Status
 
 The heart next to the status makes the game one of your [favorites](library.md#favorites). **Set a status** marks a game as Backlog, Playing, Finished or Dropped. The status shows in the journal on the day you set it, and the library can filter and group by it. A second install that counts as the game keeps the status it had, but the game shows its own until you unlink the install.

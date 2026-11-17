@@ -21,7 +21,7 @@ import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { GameHistory } from "@/features/game-details/GameHistory";
 import { FavoriteButton, StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, STEAM_LAUNCHER } from "@/lib/constants";
+import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, MINUTE_MS, STEAM_LAUNCHER } from "@/lib/constants";
 import { launchersOf, linkedTo, whereFrom } from "@/lib/links";
 import { runtimeByHour } from "@/lib/play-totals";
 import { gamePlaytime } from "@/lib/sentences";
@@ -31,7 +31,7 @@ import { compareTimes, formatCalendarDay, formatHoursMinutes, parseVaultimeDate,
 import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
 import { describeError, logFailure } from "@/lib/utils";
 import { capitalize } from "@/lib/words";
-import { AsideSection, EarlierSection, TotalRow } from "./Aside";
+import { AsideSection, EarlierSection, HourMarksSection, TotalRow } from "./Aside";
 import { CoverPicker } from "./CoverPicker";
 import { EventLog } from "./EventLog";
 import { ForeignGameRows, LinkedGameRows, SameGameRow, StepsAsideRow } from "./TrackingRows";
@@ -308,6 +308,10 @@ function GamePage({ gameId }: { gameId: string }) {
           </AsideSection>
 
           {summary.earlier && <EarlierSection earlier={summary.earlier} />}
+
+          {summary.totalMs >= MINUTE_MS && (
+            <HourMarksSection totalMs={summary.totalMs} sessions={sessions} earlierMs={summary.earlier?.earlier_ms} />
+          )}
 
           <CoverPicker
             gameId={gameId}

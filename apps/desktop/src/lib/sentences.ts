@@ -9,9 +9,11 @@ import {
   HABIT_MIN_SHARE,
   HOUR_MS,
   LAUNCHER_TOP_GAME_MIN_SHARE,
+  MILESTONE_NEAR_PROGRESS,
   MINUTE_MS,
   WEEK_TOP_GAME_MIN_SHARE,
 } from "@/lib/constants";
+import { markWords, type NextMark } from "@/lib/milestones";
 import { dayPartOfHour, formatHoursMinutes, formatRelativeDay, type DayPart } from "@/lib/time";
 import type { GameStatus, LedgerReport, SideBySideGroup } from "@/lib/types";
 import { amountWords, capitalize, countWords, DAY_PART_WORDS, durationWords, numberWords } from "@/lib/words";
@@ -23,9 +25,19 @@ export interface Phrase {
   after?: string;
 }
 
-/** "Twenty-eight hours so far, *ten* of them this past week." */
-export function libraryPlaytime(runtimeMs: number, weekRuntimeMs: number): Phrase {
+/**
+ * "Twenty-eight hours so far, *ten* of them this past week." Near the next
+ * hour mark it adds how far that is: "A hundred hours is twelve hours away."
+ */
+export function libraryPlaytime(runtimeMs: number, weekRuntimeMs: number, next?: NextMark): Phrase {
   if (runtimeMs < MINUTE_MS) return { before: "The clock has just started." };
+  const phrase = playtimeSoFar(runtimeMs, weekRuntimeMs);
+  if (!next || next.progress < MILESTONE_NEAR_PROGRESS || next.leftMs < MINUTE_MS) return phrase;
+  const near = ` ${capitalize(markWords(next.mark))} is ${amountWords(next.leftMs)} away.`;
+  return phrase.em === undefined ? { before: phrase.before + near } : { ...phrase, after: `${phrase.after ?? ""}${near}` };
+}
+
+function playtimeSoFar(runtimeMs: number, weekRuntimeMs: number): Phrase {
   const total = `${capitalize(amountWords(runtimeMs))} so far`;
   if (runtimeMs < HOUR_MS) return { before: `${total}.` };
 

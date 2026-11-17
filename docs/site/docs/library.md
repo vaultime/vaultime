@@ -4,7 +4,7 @@ Home shows what you play now, All games holds every game, and the rail on the le
 
 ## Home
 
-Home leads with the game you play now, or the one you played last, in the colors of its cover. Below it are your last seven days in numbers, with the time played, the share of it that was active, the sessions and the longest one, and a shelf of the games you played lately, which ends with a link to all your games.
+Home leads with the game you play now, or the one you played last, in the colors of its cover, and says how far its next [hour mark](game-pages.md#totals) is once it gets close. Below it are your last seven days in numbers, with the time played, the share of it that was active, the sessions and the longest one, and a shelf of the games you played lately, which ends with a link to all your games.
 
 With no games yet, Home says **Start your library** and offers **Discover games** and **Add a game**.
 

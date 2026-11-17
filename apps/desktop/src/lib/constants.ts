@@ -384,6 +384,8 @@ export const SHARE_QUIET_MAX_DAYS = 10;
 export const MILESTONE_HOURS = [10, 25, 50, 100, 250, 500, 1000];
 /** Past the last of MILESTONE_HOURS, a mark every this many hours. */
 export const MILESTONE_STEP_HOURS = 1000;
+/** Home tells how far the next hour mark is from this much of the way there on. */
+export const MILESTONE_NEAR_PROGRESS = 0.8;
 /** Games in the top chapter of Year in games. */
 export const YEAR_STORY_TOP_GAMES = 5;
 /** Games named for the week with the most play in Year in games. */

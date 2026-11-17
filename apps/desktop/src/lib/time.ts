@@ -59,10 +59,13 @@ export function parseVaultimeDate(value: string): Date {
   return new Date(`${value}Z`);
 }
 
-export function formatCalendarDay(value: string): string {
-  return formatDate(parseVaultimeDate(value), {
+/** "3 Oct", with the year for a day of another year: "3 Oct 2025". */
+export function formatCalendarDay(value: string, now = new Date()): string {
+  const date = parseVaultimeDate(value);
+  return formatDate(date, {
     month: "short",
     day: "numeric",
+    year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
   });
 }
 
@@ -176,7 +179,7 @@ export function formatDayPart(value: string, now = new Date()): string {
   if (days === 0) return part === "night" ? "Tonight" : `This ${part}`;
   if (days === 1) return part === "night" ? "Last night" : `Yesterday ${part}`;
   if (days < WEEKDAY_NAME_DAYS) return `${formatDate(day, { weekday: "long" })} ${part}`;
-  return formatCalendarDay(value);
+  return formatCalendarDay(value, now);
 }
 
 /** "Today 22:10", "Yesterday 22:10", "Sun 21:40", "16 Sept 21:40". */

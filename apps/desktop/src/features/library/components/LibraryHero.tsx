@@ -14,6 +14,7 @@ import { PhraseText } from "@/components/media/PhraseText";
 import { LastPlayed } from "@/features/library/components/LastPlayed";
 import type { GameSummary } from "@/features/library/library-context";
 import { BRAND_TINT } from "@/lib/game-tint";
+import { nextMark } from "@/lib/milestones";
 import { libraryPlaytime } from "@/lib/sentences";
 import { numberWords } from "@/lib/words";
 
@@ -81,7 +82,7 @@ export function LibraryHero(props: HeroProps) {
           </TintedOverline>
           <TintedTitle tint={tint} text={game.title} />
           <TintedSentence tint={tint}>
-            <PhraseText phrase={libraryPlaytime(summary.totalMs, weekRuntimeMs)} />
+            <PhraseText phrase={libraryPlaytime(summary.totalMs, weekRuntimeMs, nextMark(summary.totalMs))} />
           </TintedSentence>
           <div className="mt-7 flex flex-wrap gap-3">
             <TintedButton tint={tint} solid to={`/library/${game.id}`}>
