@@ -399,7 +399,7 @@ fn merge_by_itself(
 
 /// A new game links to the game the preview suggests only on the same
 /// launcher id, and stays on its own otherwise.
-fn automatic_choices(preview: &MergePreview) -> Vec<GameChoice> {
+pub(crate) fn automatic_choices(preview: &MergePreview) -> Vec<GameChoice> {
     preview
         .games
         .iter()

@@ -9,16 +9,19 @@
 //! it. A PC writes only its own folder and reads the others, whose backups
 //! it puts together in staging, images back in place, and merges or
 //! restores like any backup. One a sync service is still bringing in fails
-//! its check there and waits.
+//! its check there and waits. As with the cloud, the first backup of a PC
+//! merges through the player and its newer ones by themselves, as long as
+//! they need no choice of the player.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 
+use super::cloud_merge::{AutoMerge, automatic_choices};
 use super::merge::{self, GameChoice, MergePreview, MergeSummary, instant};
 use super::{
     BACKUP_MANIFEST_FILE, LocalBackupManifest, LocalBackupSummary, cleanup_staging_dir, create_dir,
@@ -47,6 +50,10 @@ static STAGING: Mutex<()> = Mutex::new(());
 fn staging() -> MutexGuard<'static, ()> {
     STAGING.lock().unwrap_or_else(PoisonError::into_inner)
 }
+
+/// The backups the last automatic merge left for the player, by PC, so the
+/// next check does not put them together again.
+static WAITING: LazyLock<Mutex<HashMap<String, AutoMerge>>> = LazyLock::new(Mutex::default);
 
 /// The newest backup of a PC in the sync folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -471,6 +478,114 @@ pub fn restore(
     summary
 }
 
+/// Merges the newest sync folder backup of every PC merged here before that
+/// has a newer one, as far as it needs no choice of the player. Returns what
+/// it did, with the backups that still wait for the player.
+pub fn merge_due(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+) -> Result<Vec<AutoMerge>> {
+    let _staging = staging();
+    let pcs = list_pcs(db)?;
+    let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut done = Vec::new();
+    for pc in pcs
+        .into_iter()
+        .filter(|pc| !pc.this_pc && pc.merged_before && pc.newer)
+    {
+        if let Some(waited) = waiting
+            .get(&pc.device_id)
+            .filter(|waited| waited.backup_id == pc.backup_id)
+        {
+            done.push(waited.clone());
+            continue;
+        }
+        let Some(outcome) = merge_one(db, asset_manager, app_context, pc) else {
+            continue;
+        };
+        if outcome.outcome == "merged" {
+            waiting.remove(&outcome.device_id);
+        } else {
+            waiting.insert(outcome.device_id.clone(), outcome.clone());
+        }
+        done.push(outcome);
+    }
+    Ok(done)
+}
+
+/// Merges the newest backup of `pc` by itself, or notes why it waits for the
+/// player. None when it could not be read, which the next check tries again.
+fn merge_one(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    pc: FolderPc,
+) -> Option<AutoMerge> {
+    // A preview the player has open keeps the copy it shows. The next check
+    // merges.
+    if staging_folder(app_context, &pc.device_id)
+        .is_ok_and(|folder| folder.join("backup").join(BACKUP_MANIFEST_FILE).is_file())
+    {
+        return None;
+    }
+    let merged = staged(db, app_context, &pc.device_id, false)
+        .and_then(|staged| merge_by_itself(db, asset_manager, app_context, &staged));
+    discard_staged(app_context, &pc.device_id);
+    let mut outcome = AutoMerge {
+        device_id: pc.device_id,
+        name: pc.name,
+        backup_id: pc.backup_id,
+        outcome: "merged",
+        sessions_added: 0,
+        sessions_grown: 0,
+    };
+    match merged {
+        Ok(Ok(summary)) => {
+            info!(
+                "merged the sync folder backup of {} by itself: {} new, {} grown",
+                outcome.device_id, summary.sessions_added, summary.sessions_grown
+            );
+            outcome.sessions_added = summary.sessions_added;
+            outcome.sessions_grown = summary.sessions_grown;
+        }
+        Ok(Err(reason)) => {
+            info!(
+                "the sync folder backup of {} waits for the player: {reason}",
+                outcome.device_id
+            );
+            outcome.outcome = reason;
+        }
+        Err(error) => {
+            warn!(
+                "the sync folder backup of {} did not merge: {error}",
+                outcome.device_id
+            );
+            return None;
+        }
+    }
+    Some(outcome)
+}
+
+/// Merges the staged backup without the player, or says why it needs them:
+/// `new_key` or `failing`.
+fn merge_by_itself(
+    db: &Database,
+    asset_manager: &AssetManager,
+    app_context: &AppContext,
+    staged: &Path,
+) -> Result<std::result::Result<MergeSummary, &'static str>> {
+    let preview = merge::preview(db, app_context, staged, false)?;
+    if preview.unknown_keys {
+        return Ok(Err("new_key"));
+    }
+    if preview.failing > 0 || preview.own_failing > 0 {
+        return Ok(Err("failing"));
+    }
+    let choices = automatic_choices(&preview);
+    merge::apply(db, asset_manager, app_context, staged, &choices, false).map(Ok)
+}
+
 /// Clears what an earlier run left in staging.
 pub fn sweep(app_dir: &Path) {
     let folder = app_dir.join(SYNC_STAGING_DIR);
@@ -691,6 +806,48 @@ mod tests {
         let laptop_row = pcs.iter().find(|pc| pc.device_id == "laptop").unwrap();
         assert!(laptop_row.merged_before && !laptop_row.newer);
         assert!(pcs.iter().any(|pc| pc.device_id == "desktop" && pc.this_pc));
+    }
+
+    #[test]
+    fn newer_backups_of_a_merged_pc_come_in_by_themselves() {
+        let (laptop, desktop, _) = two_pcs();
+        let game = laptop.game("Hades", Some("1145360"));
+        laptop.play(&game, 30);
+        publish(&laptop.db, &back_up(&laptop)).unwrap();
+
+        desktop.act();
+        let due = || merge_due(&desktop.db, &desktop.assets, &desktop.context).unwrap();
+        assert!(
+            due().is_empty(),
+            "the first backup of a PC waits for the player"
+        );
+        preview_merge(&desktop.db, &desktop.context, "laptop", false).unwrap();
+        merge_backup(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            "laptop",
+            &[link(&game)],
+            false,
+        )
+        .unwrap();
+
+        let second = laptop.play(&game, 45);
+        publish(&laptop.db, &back_up(&laptop)).unwrap();
+        desktop.act();
+        let done = due();
+        assert_eq!(done.len(), 1);
+        assert_eq!((done[0].outcome, done[0].sessions_added), ("merged", 1));
+        assert_eq!(desktop.events(&second), laptop.events(&second));
+        assert!(due().is_empty(), "a merged backup is not merged again");
+
+        laptop.play(&game, 20);
+        publish(&laptop.db, &back_up(&laptop)).unwrap();
+        desktop.act();
+        preview_merge(&desktop.db, &desktop.context, "laptop", false).unwrap();
+        assert!(due().is_empty(), "an open preview keeps its backup");
+        discard(&desktop.context, "laptop");
+        assert_eq!(due().len(), 1);
     }
 
     #[test]
