@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Backups
 
-- **Cloud backup on a server of your own.** Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home, with Docker Compose as the docs describe. The Cloud page connects to it by its address and says whether it takes new accounts. The privacy policy and the terms now cover only the website and the software.
+- **Cloud backup on a server of your own.** Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home, with Docker Compose as the docs describe. The Cloud page connects to it by its address and says whether it takes new accounts. The privacy policy now covers only the website and the software.
+- **Goodbye to the beta server.** The cloud backup server Vaultime ran during the beta is shut down. The app forgets a sign-in to it and its backup key, and your library and history on this PC stay as they were. Cloud backup now goes to a server of your own, as above.
 - **Sync folder.** Keep backups in a folder that Dropbox, Google Drive, OneDrive, Syncthing or a NAS keeps the same on every PC. Each PC copies its automatic backups there with every image stored once, and the PCs that share the folder find each other: merge another PC once and its newer sessions come in by themselves within the hour. A new PC can restore from the folder.
 
 ### Library
@@ -22,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lit by your game.** The art of the game you play or played last, or of one you pick, fills the window behind see-through panels, and a game page shows its own. Art that would make text hard to read is dimmed a little more. The accent takes the color of that art too, and the ground is a neutral graphite. Settings, Appearance can show a picture of your own, no background or a fixed accent instead. A picture you chose before stays with its dim and blur. Without one, the background starts out at the new dim and blur.
 - **The logo wears your accent.** Its frame, hands and name take the accent in the app and on the tray, the taskbar and the shortcuts, whether or not you are signed in to a cloud backup server. On Linux, installed from a package, the app menu and the dock show it too.
 - **No terms of service.** Vaultime runs no service, so the website and Settings, About link only the privacy policy, and the licenses of the app and the server cover the rest.
-- **New type.** Titles are wider and bolder, game pages show a bigger cover, and the sentences about your play are set in Newsreader, a serif made for reading on screens.
+- **New type and controls.** Titles are wider and bolder, labels are in sentence case and numbers have even figures, and the sentences about your play are set in Newsreader, a serif made for reading on screens. Buttons and choices share one size, and game pages show a bigger cover.
 - **What's new.** After an update, a line over the page opens the changes of the new version under the covers of the games you played last. Settings, About and the command palette show them again.
 - **Year in games.** Your year told in chapters, one card at a time, from the stats page or the command palette: the year in numbers, your game of the year, your top five, the longest session, the week you played most, when you play, where your hours came from and the games you finished. It counts every launcher and play while offline, and Vaultime works it out on your PC.
 - **Steam screenshots in the journal.** Screenshots you take with Steam show under the session they were taken in. Vaultime reads them from Steam's folder and copies nothing, and a switch in Settings turns them off.
@@ -36,7 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Groups and a new sort.** All games groups its games by launcher, last played, status or PC, and sorts by when games were added too. It remembers both.
 - **Counts on the status filter.** Each status in All games shows how many games have it.
 - **The live bar in the game's colors.** The bar at the bottom takes a wash of the running game's colors.
-- **Type and controls.** Titles are set a little wider and firmer, labels in sentence case and numbers with even figures, and buttons and choices share one size.
 - **Leave a game off your year.** Share your year lists the games its card names, and each can be left off. The next one moves up, and the hours still count it.
 - **Shorter times.** Durations read 4h 05m and 142h everywhere, the tray included.
 - **The past week in the tray.** The tray menu shows how long you played in the past seven days, under today, counted as Home counts it.
