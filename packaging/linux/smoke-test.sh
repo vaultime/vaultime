@@ -13,6 +13,7 @@ set -euo pipefail
 work=$(mktemp -d)
 cp "$1" "$work/"
 package="$work/$(basename "$1")"
+# shellcheck source=/dev/null
 . /etc/os-release
 echo "== $PRETTY_NAME, $(basename "$package")"
 
@@ -86,7 +87,8 @@ sleep "$settle_secs"
 alive=0
 [ -n "$(app_pids)" ] && alive=1
 
-kill "$runner" $(app_pids) 2>/dev/null || true
+mapfile -t pids < <(app_pids)
+kill "$runner" "${pids[@]}" 2>/dev/null || true
 
 if [ "$started" -ne 1 ] || [ "$alive" -ne 1 ] || grep -qiE "panicked|crashed|segmentation" "$out"; then
   echo "smoke test FAILED (started=$started alive=$alive)"
