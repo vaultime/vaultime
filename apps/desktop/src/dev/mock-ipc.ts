@@ -39,6 +39,7 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { DAY_MS, DEVICE_NAME_MAX_CHARS, FOLDER_MATCH_LAUNCHERS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
+import { artOfImage } from "@/dev/mock-art";
 import {
   estimateGameTotals,
   estimateLauncherTimes,
@@ -1950,7 +1951,13 @@ mockIPC((cmd, payload) => {
     case "list_game_assets":
       return gameAssets(String(args.gameId));
     case "list_preferred_game_assets":
-      return preferredAssets();
+      // The core sends each cover with its colors.
+      return Promise.all(
+        preferredAssets().map(async (asset) => ({
+          ...asset,
+          tint: asset.preview_data_url ? await artOfImage(asset.preview_data_url) : null,
+        })),
+      );
     case "list_ignored_programs":
       return ignoredPrograms;
     case "ignore_program": {

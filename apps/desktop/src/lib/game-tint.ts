@@ -10,19 +10,9 @@ import {
   MARK_MIN_HUE_GAP_DEG,
   MARK_NEUTRAL_LIGHTNESS,
   MARK_TINTED_GREY_CHROMA,
-  TINT_COLORFUL_MIN_CHROMA,
-  TINT_COLORFUL_MIN_SHARE,
-  TINT_HUE_BINS,
   TINT_LEVELS,
-  TINT_MAX_LIGHTNESS,
-  TINT_MAX_STRENGTH,
   TINT_MIN_ALPHA,
-  TINT_MIN_LIGHTNESS,
-  TINT_MIN_STRENGTH,
   TINT_SAMPLE_PX,
-  TINT_SECOND_MIN_GAP_DEG,
-  TINT_SECOND_MIN_SHARE,
-  TINT_TYPICAL_CHROMA,
 } from "@/lib/constants";
 import { maxSrgbChroma, srgbToOklab } from "@/lib/color";
 import type { ThemeMode } from "@/lib/theme";
@@ -188,89 +178,25 @@ export function markColors(palettes: ArtColor[][], taken: number[] = [], mode: T
 }
 
 /**
- * The tint of RGBA pixels. Its main colors are the strongest bands of hues
- * among the colorful pixels, so a cover in red and blue gives red and blue
- * instead of a mix of both. A second band counts when it is far enough from
- * the first and nearly as strong. Art with too few colorful pixels, like
- * black, white or grey art, gets a grey tint and no colors.
+ * The tint of art from the colors the core read from it. Art without strong
+ * colors, like black, white or grey art, gets a grey tint.
  */
-export function tintFromPixels(data: Uint8ClampedArray): GameTint {
-  const bins = Array.from({ length: TINT_HUE_BINS }, () => ({ a: 0, b: 0, chroma: 0, count: 0 }));
+export function tintFromArt(art: ArtTint): GameTint {
+  const [first] = art.colors;
+  const tint = first ? tintFromHue(first.hue, art.strength, art.colors) : tintFromHue(BRAND_HUE_DEG, 0, []);
+  return art.lightness === null ? tint : { ...tint, lightness: art.lightness };
+}
+
+/** The average OKLab lightness of the opaque RGBA pixels, from 0 to 1, null when none is opaque. */
+export function lightnessOfPixels(data: Uint8ClampedArray): number | null {
   let opaque = 0;
-  let colorful = 0;
-  let sumChroma = 0;
-  let sumLightness = 0;
-  let counted = 0;
+  let sum = 0;
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] < TINT_MIN_ALPHA) continue;
     opaque += 1;
-    const { lightness, a, b } = srgbToOklab(data[i], data[i + 1], data[i + 2]);
-    sumLightness += lightness;
-    if (lightness < TINT_MIN_LIGHTNESS || lightness > TINT_MAX_LIGHTNESS) continue;
-    const chroma = Math.hypot(a, b);
-    sumChroma += chroma;
-    counted += 1;
-    if (chroma < TINT_COLORFUL_MIN_CHROMA) continue;
-    colorful += 1;
-    const hue = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
-    const bin = bins[Math.floor((hue / 360) * TINT_HUE_BINS) % TINT_HUE_BINS];
-    bin.a += a;
-    bin.b += b;
-    bin.chroma += chroma;
-    bin.count += 1;
+    sum += srgbToOklab(data[i], data[i + 1], data[i + 2]).lightness;
   }
-  if (opaque === 0) return tintFromHue(BRAND_HUE_DEG, 0, []);
-  const lightness = sumLightness / opaque;
-  if (colorful / opaque < TINT_COLORFUL_MIN_SHARE) return { ...tintFromHue(BRAND_HUE_DEG, 0, []), lightness };
-
-  // A band is a bin with its two neighbors, weighted by colorfulness.
-  const band = (center: number) =>
-    [center - 1, center, center + 1].map((index) => bins[(index + TINT_HUE_BINS) % TINT_HUE_BINS]);
-  const weight = (center: number) => band(center).reduce((sum, bin) => sum + bin.chroma, 0);
-  const colorOf = (center: number): ArtColor => {
-    const picked = band(center);
-    const sum = (key: "a" | "b" | "chroma" | "count") => picked.reduce((total, bin) => total + bin[key], 0);
-    return { hue: ((Math.atan2(sum("b"), sum("a")) * 180) / Math.PI + 360) % 360, chroma: sum("chroma") / sum("count") };
-  };
-  const centers = Array.from({ length: TINT_HUE_BINS }, (_, center) => center);
-  const strongest = centers.reduce((best, center) => (weight(center) > weight(best) ? center : best));
-  const binGap = Math.ceil((TINT_SECOND_MIN_GAP_DEG / 360) * TINT_HUE_BINS);
-  const apart = (center: number) => {
-    const distance = Math.abs(center - strongest);
-    return Math.min(distance, TINT_HUE_BINS - distance) >= binGap;
-  };
-  const runnerUp = centers.filter(apart).reduce<number | null>(
-    (best, center) => (best === null || weight(center) > weight(best) ? center : best),
-    null,
-  );
-
-  const colors = [colorOf(strongest)];
-  if (runnerUp !== null && weight(runnerUp) >= weight(strongest) * TINT_SECOND_MIN_SHARE) colors.push(colorOf(runnerUp));
-  const strength = Math.min(
-    TINT_MAX_STRENGTH,
-    Math.max(TINT_MIN_STRENGTH, sumChroma / counted / TINT_TYPICAL_CHROMA),
-  );
-  return { ...tintFromHue(colors[0].hue, strength, colors), lightness };
-}
-
-/** Tints of the images of the latest `tintsFromImages`, by image source. */
-let imageTints = new Map<string, Promise<GameTint | null>>();
-
-/**
- * The tints of cover images by key, leaving out images that cannot be read.
- * Only the images of the latest call stay remembered, so a cover that
- * changed or went away does not keep its data URL in memory.
- */
-export async function tintsFromImages(images: Record<string, string>): Promise<Record<string, GameTint>> {
-  const kept = new Map<string, Promise<GameTint | null>>();
-  for (const src of Object.values(images)) kept.set(src, imageTints.get(src) ?? readImageTint(src));
-  imageTints = kept;
-  const tints: Record<string, GameTint> = {};
-  for (const [key, src] of Object.entries(images)) {
-    const tint = await kept.get(src);
-    if (tint) tints[key] = tint;
-  }
-  return tints;
+  return opaque === 0 ? null : sum / opaque;
 }
 
 /** Average lightness of background pictures, by source, so a picture shown again is not read again. */
@@ -280,12 +206,13 @@ const pictureLightness = new Map<string, Promise<number | null>>();
 export function averageLightness(src: string): Promise<number | null> {
   const known = pictureLightness.get(src);
   if (known) return known;
-  const read = readPixels(src).then((data) => (data ? (tintFromPixels(data).lightness ?? null) : null));
+  const read = readPixels(src).then((data) => (data ? lightnessOfPixels(data) : null));
   pictureLightness.set(src, read);
   return read;
 }
 
-async function readPixels(src: string): Promise<Uint8ClampedArray | null> {
+/** The pixels of an image scaled to `TINT_SAMPLE_PX` square, null when it cannot be read. */
+export async function readPixels(src: string): Promise<Uint8ClampedArray | null> {
   try {
     const image = new Image();
     image.src = src;
@@ -301,9 +228,4 @@ async function readPixels(src: string): Promise<Uint8ClampedArray | null> {
   } catch {
     return null;
   }
-}
-
-async function readImageTint(src: string): Promise<GameTint | null> {
-  const data = await readPixels(src);
-  return data ? tintFromPixels(data) : null;
 }

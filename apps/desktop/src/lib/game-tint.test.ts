@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { maxSrgbChroma } from "./color";
 import {
   MARK_CHROMA_BOOST,
@@ -11,7 +11,7 @@ import {
   MARK_MIN_HUE_GAP_DEG,
   MARK_TINTED_GREY_CHROMA,
 } from "./constants";
-import { markColors, tintForTitle, tintFromPixels, tintsFromImages, type ArtColor } from "./game-tint";
+import { lightnessOfPixels, markColors, tintForTitle, tintFromArt, type ArtColor } from "./game-tint";
 
 const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
@@ -39,88 +39,40 @@ describe("tintForTitle", () => {
   });
 });
 
-describe("tintFromPixels", () => {
-  it("keeps black art grey, even with a faint cast", () => {
-    const tint = tintFromPixels(pixels([900, 0, 0, 0], [124, 38, 44, 38]));
+describe("tintFromArt", () => {
+  const fill = (tint: { fill: string }) => oklch(tint.fill.replace("var(--tint-fill)", "0.3"));
+
+  it("keeps art without strong colors grey and carries its lightness", () => {
+    const tint = tintFromArt({ colors: [], strength: 0, lightness: 0.2 });
     expect(tint.colors).toEqual([]);
-    expect(oklch(tint.fill.replace("var(--tint-fill)", "0.3")).chroma).toBe(0);
+    expect(fill(tint).chroma).toBe(0);
+    expect(tint.lightness).toBe(0.2);
   });
 
-  it("measures how light the art is, and a title's color has no lightness", () => {
-    expect(tintFromPixels(pixels([1024, 255, 255, 255])).lightness).toBeCloseTo(1, 2);
-    expect(tintFromPixels(pixels([512, 0, 0, 0], [512, 255, 255, 255])).lightness).toBeCloseTo(0.5, 2);
-    expect(tintFromPixels(pixels([1024, 0, 0, 0, 0])).lightness).toBeUndefined();
+  it("takes the hue of the strongest color, as colorful as the art", () => {
+    const colors = [
+      { hue: 27, chroma: 0.1 },
+      { hue: 264, chroma: 0.08 },
+    ];
+    const strong = tintFromArt({ colors, strength: 1.2, lightness: 0.5 });
+    const faint = tintFromArt({ colors, strength: 0.2, lightness: 0.5 });
+    expect(strong.colors).toEqual(colors);
+    expect(fill(strong).hue).toBe(27);
+    expect(fill(faint).chroma).toBeLessThan(fill(strong).chroma);
+  });
+
+  it("gives art without an opaque pixel no lightness, as a title's color has none", () => {
+    expect(tintFromArt({ colors: [], strength: 0, lightness: null }).lightness).toBeUndefined();
     expect(tintForTitle("Celeste").lightness).toBeUndefined();
-  });
-
-  it("keeps white and grey art grey", () => {
-    expect(tintFromPixels(pixels([1024, 250, 250, 250])).colors).toEqual([]);
-    expect(tintFromPixels(pixels([1024, 128, 128, 128])).colors).toEqual([]);
-  });
-
-  it("ignores a speck of color on black", () => {
-    expect(tintFromPixels(pixels([1000, 0, 0, 0], [24, 220, 30, 30])).colors).toEqual([]);
-  });
-
-  it("takes the main colors instead of a mix of them", () => {
-    const tint = tintFromPixels(pixels([600, 220, 30, 30], [424, 30, 60, 230]));
-    // Red is near 29 degrees and blue near 264, a mix would be magenta.
-    expect(tint.colors).toHaveLength(2);
-    expect(distance(tint.colors[0].hue, 27)).toBeLessThan(10);
-    expect(distance(tint.colors[1].hue, 264)).toBeLessThan(10);
-  });
-
-  it("keeps both colors of a logo in gold and blue", () => {
-    const tint = tintFromPixels(pixels([300, 0, 0, 0], [360, 200, 160, 70], [364, 20, 110, 150]));
-    expect(tint.colors).toHaveLength(2);
-    const hues = tint.colors.map((color) => color.hue);
-    expect(hues.some((hue) => distance(hue, 75) < 15)).toBe(true);
-    expect(hues.some((hue) => distance(hue, 225) < 20)).toBe(true);
-  });
-
-  it("leaves out a small second color", () => {
-    const tint = tintFromPixels(pixels([900, 220, 30, 30], [124, 30, 60, 230]));
-    expect(tint.colors).toHaveLength(1);
-  });
-
-  it("does not count a neighboring shade as a second color", () => {
-    const tint = tintFromPixels(pixels([512, 220, 30, 30], [512, 230, 110, 30]));
-    expect(tint.colors).toHaveLength(1);
-  });
-
-  it("finds the color of a logo on a transparent field", () => {
-    const tint = tintFromPixels(pixels([900, 0, 0, 0, 0], [124, 40, 160, 60]));
-    expect(tint.colors).toHaveLength(1);
-    expect(distance(tint.colors[0].hue, 145)).toBeLessThan(10);
-  });
-
-  it("returns grey for an empty image", () => {
-    expect(tintFromPixels(pixels([16, 0, 0, 0, 0])).colors).toEqual([]);
   });
 });
 
-describe("tintsFromImages", () => {
-  it("reads each image once and forgets images the latest call left out", async () => {
-    const read: string[] = [];
-    vi.stubGlobal(
-      "Image",
-      class {
-        set src(value: string) {
-          read.push(value);
-        }
-        decode() {
-          return Promise.reject(new Error("no image in tests"));
-        }
-      },
-    );
-    try {
-      expect(await tintsFromImages({ a: "first", b: "second" })).toEqual({});
-      await tintsFromImages({ a: "first" });
-      await tintsFromImages({ a: "first", b: "second" });
-      expect(read).toEqual(["first", "second", "second"]);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+describe("lightnessOfPixels", () => {
+  it("measures how light the opaque pixels are", () => {
+    expect(lightnessOfPixels(pixels([1024, 255, 255, 255]))).toBeCloseTo(1, 2);
+    expect(lightnessOfPixels(pixels([512, 0, 0, 0], [512, 255, 255, 255]))).toBeCloseTo(0.5, 2);
+    expect(lightnessOfPixels(pixels([512, 255, 255, 255], [512, 0, 0, 0, 0]))).toBeCloseTo(1, 2);
+    expect(lightnessOfPixels(pixels([1024, 0, 0, 0, 0]))).toBeNull();
   });
 });
 

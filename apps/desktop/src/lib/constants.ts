@@ -491,7 +491,11 @@ export const GAMUT_SEARCH_MAX_CHROMA = 0.4;
 /** Halvings when searching the most chroma inside sRGB, enough for three decimals. */
 export const GAMUT_SEARCH_STEPS = 12;
 
-/** Covers are scaled down to this many pixels square before reading colors. */
+// Colors of art. The core works out the colors of covers with the constants
+// of the same names in constants.rs. Here the lightness of a picture of your
+// own and the sample art of the preview read them.
+
+/** Art is scaled down to this many pixels square before reading colors. */
 export const TINT_SAMPLE_PX = 32;
 
 /** Pixels more transparent than this alpha byte are skipped. */

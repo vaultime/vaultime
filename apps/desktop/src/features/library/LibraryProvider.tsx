@@ -12,7 +12,7 @@ import {
   TRUST_BADGE_RECENT_DAYS,
 } from "@/lib/constants";
 import { useSettings } from "@/features/settings/settings-context";
-import { tintForTitle, tintsFromImages, type GameTint } from "@/lib/game-tint";
+import { tintForTitle, tintFromArt, type GameTint } from "@/lib/game-tint";
 import { compareTitles } from "@/lib/game-sort";
 import { isFavorite } from "@/lib/game-metadata";
 import { launcherKey, launchersOfGame } from "@/lib/launchers";
@@ -21,6 +21,7 @@ import type {
   Device,
   EarlierPlaytime,
   Game,
+  GameAssetView,
   GameLink,
   GameStatus,
   GameStatusChange,
@@ -43,6 +44,30 @@ import {
 } from "./library-context";
 
 /** Games, sessions, covers and the live session, shared by the shell and pages. */
+/** A cover's tint with the colors it came from. */
+interface ArtTintOf {
+  key: string;
+  tint: GameTint;
+}
+
+/**
+ * The tints of the covers by game. A cover whose colors did not change keeps
+ * its tint, so a reload does not draw every page a second time.
+ */
+function tintsOfCovers(assets: GameAssetView[], current: Record<string, ArtTintOf>): Record<string, ArtTintOf> {
+  const next: Record<string, ArtTintOf> = {};
+  for (const asset of assets) {
+    if (!asset.tint) continue;
+    const key = JSON.stringify(asset.tint);
+    const known = current[asset.game_id];
+    next[asset.game_id] = known?.key === key ? known : { key, tint: tintFromArt(asset.tint) };
+  }
+  const games = Object.keys(next);
+  const same =
+    games.length === Object.keys(current).length && games.every((gameId) => current[gameId] === next[gameId]);
+  return same ? current : next;
+}
+
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -67,8 +92,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const savedThreshold = Number(settings[SETTING_KEYS.idleThreshold]);
   const idleThresholdSeconds =
     Number.isFinite(savedThreshold) && savedThreshold > 0 ? savedThreshold : DEFAULT_IDLE_THRESHOLD_SECS;
-  const [artTints, setArtTints] = useState<Record<string, GameTint>>({});
-  const [artReadFor, setArtReadFor] = useState<Record<string, string> | null>(null);
+  const [artTints, setArtTints] = useState<Record<string, ArtTintOf>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Ids of the running sessions at the last poll. Null until the first poll.
@@ -117,6 +141,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             .map((asset) => [asset.game_id, asset.preview_data_url as string]),
         ),
       );
+      setArtTints((current) => tintsOfCovers(assets, current));
       setError(null);
     } catch (loadError) {
       setError(describeError(loadError));
@@ -191,26 +216,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
-  useEffect(() => {
-    let cancelled = false;
-    tintsFromImages(covers).then((next) => {
-      if (cancelled) return;
-      // Tints are kept per image, so unchanged covers give the same objects
-      // and a reload does not draw every page a second time.
-      setArtTints((current) => {
-        const keys = Object.keys(next);
-        const same =
-          keys.length === Object.keys(current).length && keys.every((gameId) => current[gameId] === next[gameId]);
-        return same ? current : next;
-      });
-      setArtReadFor(covers);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [covers]);
-  // A failed load reads no art, so the look keeps what it had.
-  const artRead = loaded && error === null && artReadFor === covers;
+  const artRead = loaded && error === null;
 
   const summaries = useMemo(() => {
     const totalsByGame = new Map(totals.map((total) => [total.game_id, total]));
@@ -225,7 +231,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         launchers: launchersOfGame(game, links),
         launcherMs: {},
         cover: covers[game.id] ?? null,
-        tint: artTints[game.id] ?? tintForTitle(game.title),
+        tint: artTints[game.id]?.tint ?? tintForTitle(game.title),
         runtimeMs: total?.runtime_ms ?? 0,
         activeMs: total?.active_ms ?? 0,
         idleMs: total?.idle_ms ?? 0,
