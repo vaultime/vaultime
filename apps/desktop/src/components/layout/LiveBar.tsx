@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 /** The panel at the bottom of every page: the running game, like a music player. */
 export function LiveBar() {
-  const { games, covers, summaries, idleThresholdSeconds } = useLibrary();
+  const { games, covers, summaries, idleThresholdSeconds, thisDeviceId } = useLibrary();
   const active = useActiveSessions();
   const activePolledAt = useLastPoll();
   const current = useCurrentSession();
@@ -29,7 +29,10 @@ export function LiveBar() {
   const todayMs = usePlayedToday();
 
   if (!current) {
-    const watched = games.filter((game) => game.executable_path).length;
+    // Games that came with another PC's sessions are not watched here.
+    const watched = games.filter(
+      (game) => game.executable_path && (!game.origin_device_id || game.origin_device_id === thisDeviceId),
+    ).length;
     return (
       <footer aria-label="Live session" className={BAR}>
         <div className={SIDE}>
