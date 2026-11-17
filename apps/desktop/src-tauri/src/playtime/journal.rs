@@ -199,11 +199,12 @@ fn placed_between(
     now_ms: i64,
 ) -> Result<Vec<Placed>> {
     // Read with a day to spare, as stored times may differ in form, then
-    // checked on the clock.
+    // checked on the clock. The end picks the sessions, as the weeks looked
+    // at are mostly recent, and the start would pick nearly all of them.
     let margin = TimeDelta::days(1).num_milliseconds();
     let mut stmt = conn
         .prepare_cached(
-            "SELECT * FROM sessions
+            "SELECT * FROM sessions INDEXED BY idx_sessions_ended_at
              WHERE started_at_wall < ?2 AND (ended_at_wall IS NULL OR ended_at_wall >= ?1)
              ORDER BY started_at_wall, id",
         )

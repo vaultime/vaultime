@@ -79,6 +79,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0016_drop_unread_settings",
         include_str!("../../migrations/0016_drop_unread_settings.sql"),
     ),
+    (
+        "0017_session_end_indexes",
+        include_str!("../../migrations/0017_session_end_indexes.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.
@@ -195,6 +199,7 @@ mod tests {
         assert!(refused.contains("newer version of Vaultime"), "{refused}");
         assert!(refused.contains("9999_from_a_newer_version"), "{refused}");
     }
+
     #[test]
     fn keeps_no_seeded_setting_nothing_reads() {
         let conn = Connection::open_in_memory().unwrap();

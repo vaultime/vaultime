@@ -433,9 +433,10 @@ fn wall_ms(value: &str) -> Option<i64> {
 /// recorded a session may close it.
 pub fn get_active_sessions(db: &Database, device_id: &str) -> Result<Vec<Session>> {
     db.with_conn(|conn| {
+        // Named, so a lost index fails loudly instead of slowing every poll.
         let mut stmt = conn
-            .prepare(
-                "SELECT * FROM sessions
+            .prepare_cached(
+                "SELECT * FROM sessions INDEXED BY idx_sessions_running
                  WHERE ended_at_wall IS NULL AND device_id = ?1
                  ORDER BY started_at_wall DESC",
             )
@@ -556,7 +557,8 @@ pub struct LauncherRuntime {
 
 /// Runtime per game id that `launcher` may have counted as well, for each
 /// game as it was recorded, links left to the caller. Only sessions that
-/// ended by `ended_by` count, as a launcher's number is a snapshot.
+/// ended by `ended_by` count, as a launcher's number is a snapshot. Nearly
+/// all have, so the index on the end is left out of the read.
 pub fn launcher_runtime_by_game(
     db: &Database,
     launcher: &str,
@@ -579,7 +581,7 @@ pub fn launcher_runtime_by_game(
                      ON manual.session_id = sessions.id AND manual.event_type = 'added_manually'
                  WHERE (manual.id IS NULL
                     OR json_extract(manual.payload_json, '$.launcher') = ?1)
-                    AND sessions.ended_at_wall <= ?2
+                    AND +sessions.ended_at_wall <= ?2
                  GROUP BY sessions.game_id",
             )
             .map_err(map_db)?;
