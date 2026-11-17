@@ -312,17 +312,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         Err(error) => log::warn!("the ledger of this PC did not begin: {error}"),
     }
 
-    // Before the tracker starts, so no session ends halfway through.
-    match playtime::slices::ensure_current(&database) {
-        Ok(0) => {}
-        Ok(count) => info!("worked out the play slices of {count} sessions"),
-        Err(error) => log::warn!("play slices not built: {error}"),
-    }
-    // Also before tracking, as it rewrites the file.
-    if let Err(error) = db::upkeep::reclaim_space(&database) {
-        log::warn!("database space not given back: {error}");
-    }
-
+    let upkeep_database = Arc::clone(&database);
     let live = Arc::new(LiveSessions::default());
     let engine = TrackingEngine::start(Arc::clone(&database), device_id.clone(), Arc::clone(&live));
 
@@ -370,8 +360,36 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         tray::show_main_window(app.handle());
     }
+    // Last, as the window takes its size from the database.
+    start_upkeep(app.handle().clone(), upkeep_database);
 
     Ok(())
+}
+
+/// Upkeep that can take seconds, on a thread of its own so the window shows
+/// right away: the play slices once their counting changed, as after an
+/// update, then the space of deleted rows given back. Each holds the
+/// database while it runs, so the tracker and the pages wait for it and
+/// never meet half of it.
+fn start_upkeep(app: tauri::AppHandle, database: Arc<Database>) {
+    let spawned = std::thread::Builder::new()
+        .name("vaultime-upkeep".into())
+        .spawn(move || {
+            match playtime::slices::ensure_current(&database) {
+                Ok(0) => {}
+                Ok(count) => {
+                    info!("worked out the play slices of {count} sessions");
+                    let _ = app.emit(LIBRARY_CHANGED_EVENT, ());
+                }
+                Err(error) => log::warn!("play slices not built: {error}"),
+            }
+            if let Err(error) = db::upkeep::reclaim_space(&database) {
+                log::warn!("database space not given back: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        log::warn!("could not start the upkeep: {error}");
+    }
 }
 
 /// Work left from older versions and the artwork cache sweep, once per start

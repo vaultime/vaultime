@@ -20,8 +20,8 @@ pub fn optimize(db: &Database) -> Result<()> {
 
 /// Gives the space of deleted rows back to the disk once it is a large share
 /// of the file, as after rebuilding the play slices or removing a game with
-/// a long history. Runs at start, before tracking, as it rewrites the file.
-/// Returns the bytes given back.
+/// a long history. Runs at start, and the tracker waits while it rewrites
+/// the file. Returns the bytes given back.
 pub fn reclaim_space(db: &Database) -> Result<i64> {
     db.with_conn(|conn| {
         let free = free_bytes(conn)?;
