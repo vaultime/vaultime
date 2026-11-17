@@ -138,7 +138,7 @@ export function LocalBackupsSection({
             <span className="mt-1 block font-mono text-xs break-all text-soft">{folder || "Not set"}</span>
           </>
         }
-        hint="A folder on another drive or one that syncs keeps them safe if this drive fails."
+        hint="A folder on another drive keeps them safe if this drive fails. A sync folder keeps them on your other PCs too."
       >
         <Button variant="outline" size="sm" onClick={changeFolder} disabled={busy}>
           Change
