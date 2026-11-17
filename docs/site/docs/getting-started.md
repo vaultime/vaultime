@@ -31,6 +31,8 @@ When a package manager installed Vaultime and its package says so, Vaultime leav
 
 Vaultime looks for a new version when it starts and every few hours. When one is out, a banner offers **Update and restart**. You can also look by hand under Settings, About, with **Check now**.
 
+After an update, a line over the page offers **See what's new**, the changes of the new version under the covers of the games you played last. It comes once per version and never on a fresh install. **What's new** under Settings, About, or in the command palette shows them again.
+
 ## First start
 
 Home starts empty and says so: **Start your library**, with two buttons, **Discover games** and **Add a game**. There is no account and no setup wizard. Vaultime starts watching as soon as a game is in your library.
