@@ -11,10 +11,10 @@
     @font-face { font-family: "Mona Sans"; font-weight: 200 900; font-stretch: 75% 125%; src: url("../apps/desktop/node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-standard-normal.woff2") format("woff2"); }
     @font-face { font-family: "Geist"; font-weight: 100 900; src: url("../apps/desktop/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2"); }
     @font-face { font-family: "Geist Mono"; font-weight: 100 900; src: url("../apps/desktop/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2"); }
-    /* The colors of the website, site.css. */
+    /* The colors of the website, site.css: graphite with the grey accent. */
     :root {
-      --ink: #0e0b14; --hairline: #2a2238; --rule: #231c31;
-      --text: #eee8f6; --soft: #d9d1e6; --faint: #a99fbc; --violet: #9d7cff;
+      --ink: #101112; --hairline: #2a2b2d; --rule: #202224;
+      --text: #f1f2f2; --soft: #b5b7bb; --faint: #8a8c90; --violet: #d1d1d1;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 1280px; height: 640px; overflow: hidden; }
@@ -23,7 +23,7 @@
       font-family: "Geist", sans-serif;
       color: var(--text);
       background:
-        linear-gradient(90deg, var(--ink) 38%, rgb(14 11 20 / 0.55) 62%, rgb(14 11 20 / 0.2)),
+        linear-gradient(90deg, var(--ink) 38%, rgb(16 17 18 / 0.55) 62%, rgb(16 17 18 / 0.2)),
         url("../docs/site/art/vista.jpg") 62% 30% / cover,
         var(--ink);
       -webkit-font-smoothing: antialiased;
@@ -34,8 +34,8 @@
     .label { margin-top: 64px; }
     h1 {
       margin-top: 16px;
-      font-family: "Mona Sans", sans-serif; font-stretch: 110%; font-weight: 600;
-      font-size: 46px; line-height: 1.08; letter-spacing: -0.02em;
+      font-family: "Mona Sans", sans-serif; font-stretch: 125%; font-weight: 760;
+      font-size: 44px; line-height: 1.04; letter-spacing: -0.035em;
     }
     h1 em { font-style: normal; color: var(--violet); }
     .times { margin-top: 36px; width: 340px; border-top: 1px solid var(--rule); }
