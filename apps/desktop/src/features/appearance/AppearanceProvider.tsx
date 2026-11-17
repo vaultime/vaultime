@@ -273,12 +273,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   );
 
   // A picture chosen before the background could follow the game stays, with
-  // its dim and blur. Without one the art starts at the defaults, as a dim and
-  // blur set for a picture leave the art too sharp behind the panels.
+  // its dim and blur. Without one, a dim and blur set for a picture go back to
+  // the defaults, as they leave the art too sharp behind the panels. A fresh
+  // install saves nothing, so a restore can still bring the look of a backup.
   const settleEarlierBackground = useEffectEvent((picture: string | null) => {
     if (values[SETTING_KEYS.backgroundSource] !== undefined) return;
     if (picture) change({ source: "picture" });
-    else change({ source: "game", dim: BACKGROUND_DIM_PERCENT.default, blur: BACKGROUND_BLUR_PX.default });
+    else if (values[SETTING_KEYS.backgroundDim] !== undefined || values[SETTING_KEYS.backgroundBlur] !== undefined) {
+      change({ source: "game", dim: BACKGROUND_DIM_PERCENT.default, blur: BACKGROUND_BLUR_PX.default });
+    }
   });
 
   useEffect(() => {

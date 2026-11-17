@@ -365,6 +365,7 @@ export function AppearanceSection() {
 
         {backdrop && (
           <div className="mt-6 grid max-w-[520px] gap-5">
+            {/* The source is saved along, so a start never takes these for a dim and blur of an earlier version. */}
             <SliderRow label="Dim" value={`${appearance.dim}%`} hint="Art that would hide the text is dimmed a little more.">
               <Slider
                 label="Dim"
@@ -372,7 +373,7 @@ export function AppearanceSection() {
                 min={BACKGROUND_DIM_PERCENT.min}
                 max={BACKGROUND_DIM_PERCENT.max}
                 valueText={(value) => `${value} percent`}
-                onChange={(dim) => change({ dim }, { gradual: true })}
+                onChange={(dim) => change({ dim, source: appearance.source }, { gradual: true })}
               />
             </SliderRow>
             <SliderRow label="Blur" value={`${appearance.blur} px`} hint="Softens it behind the text.">
@@ -382,7 +383,7 @@ export function AppearanceSection() {
                 min={BACKGROUND_BLUR_PX.min}
                 max={BACKGROUND_BLUR_PX.max}
                 valueText={(value) => `${value} pixels`}
-                onChange={(blur) => change({ blur }, { gradual: true })}
+                onChange={(blur) => change({ blur, source: appearance.source }, { gradual: true })}
               />
             </SliderRow>
           </div>

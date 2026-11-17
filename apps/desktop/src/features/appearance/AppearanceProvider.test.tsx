@@ -138,6 +138,23 @@ describe("an update", () => {
     expect(api.setSetting).toHaveBeenCalledWith(SETTING_KEYS.backgroundBlur, String(BACKGROUND_BLUR_PX.default));
   });
 
+  it("saves nothing on a fresh install, so a restore can still bring the look of a backup", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce([]);
+    vi.mocked(api.getBackgroundImage).mockClear();
+    vi.mocked(api.setSetting).mockClear();
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/teal.jpg" lightness={0.4} />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    await screen.findByLabelText("Dim");
+    await waitFor(() => expect(api.getBackgroundImage).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(api.setSetting).not.toHaveBeenCalled();
+  });
+
   it("leaves dim and blur alone once a background was chosen", async () => {
     vi.mocked(api.listSettings).mockResolvedValueOnce([
       ...EARLIER_DIM_AND_BLUR,
