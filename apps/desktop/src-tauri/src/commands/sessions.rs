@@ -29,20 +29,29 @@ pub struct SessionList {
     pub sessions: Vec<Session>,
     pub games: Vec<GameTotals>,
     pub launchers: Vec<LauncherTime>,
+    /// Sessions whose chain is not checked yet, with their stored status.
+    pub unchecked: Vec<String>,
 }
 
 /// Every session, running ones as of the tracker's latest tick, each with
 /// the time it set aside and the time it shares with another copy of its
 /// game, and each game's totals. Trust labels of the last `recent_days` days
-/// count as recent too.
+/// count as recent too. Unless `checked`, it takes only the checks it
+/// remembers, which leaves most chains unchecked after a start.
 #[tauri::command(async)]
 pub fn list_sessions(
     db: State<'_, Arc<Database>>,
     live: State<'_, Arc<LiveSessions>>,
     app_context: State<'_, AppContext>,
     recent_days: u32,
+    checked: bool,
 ) -> Result<SessionList, VaultimeError> {
-    let mut all = sessions::list_all_sessions(&db)?;
+    let checks = if checked {
+        sessions::Checks::All
+    } else {
+        sessions::Checks::Remembered
+    };
+    let (mut all, unchecked) = sessions::list_sessions_checked(&db, checks)?;
     let now = chrono::Utc::now();
     playtime::totals::as_shown(&db, &live, &mut all, now.timestamp_millis())?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
@@ -56,6 +65,7 @@ pub fn list_sessions(
         games: playtime::games::game_totals(&all, recent_since, now),
         launchers: playtime::games::launcher_times(&all, &launcher_of),
         sessions: all,
+        unchecked,
     })
 }
 

@@ -397,6 +397,8 @@ export interface SessionList {
   sessions: Session[];
   games: GameTotals[];
   launchers: LauncherTime[];
+  /** Sessions whose chain the core has not checked yet, with their stored status. */
+  unchecked: string[];
 }
 
 /** The last few days of play. Mirrors the Rust `RecentPlay` struct. */

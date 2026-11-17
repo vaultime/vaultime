@@ -53,8 +53,19 @@ export function GameDetailsPage() {
 
 function GamePage({ gameId }: { gameId: string }) {
   const navigate = useNavigate();
-  const { summaries, sessions: allSessions, loaded, refresh, notes, saveNote, setStatus, setFavorite, links, thisDeviceId } =
-    useLibrary();
+  const {
+    summaries,
+    sessions: allSessions,
+    unchecked,
+    loaded,
+    refresh,
+    notes,
+    saveNote,
+    setStatus,
+    setFavorite,
+    links,
+    thisDeviceId,
+  } = useLibrary();
   const awayTimer = useAwayTimer();
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [assets, setAssets] = useState<GameAssetView[]>([]);
@@ -349,7 +360,10 @@ function GamePage({ gameId }: { gameId: string }) {
             <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
             <TotalRow label="Idle" value={formatHoursMinutes(summary.idleMs)} />
             <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
-            <TotalRow label="Suspicious" value={String(summary.suspiciousCount)} />
+            <TotalRow
+              label="Suspicious"
+              value={sessions.some((session) => unchecked.has(session.id)) ? "Checking" : String(summary.suspiciousCount)}
+            />
             <TotalRow label="Recovered" value={String(summary.recoveredCount)} />
             <TotalRow label="Longest" value={formatHoursMinutes(summary.longestSessionMs)} />
             <TotalRow

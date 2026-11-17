@@ -76,7 +76,7 @@ export function SessionLine({
     [session, gameTitle, gameSessions, earlierMs],
   );
   const live = !session.ended_at_wall;
-  const { devices, thisDeviceId, links } = useLibrary();
+  const { devices, thisDeviceId, links, unchecked } = useLibrary();
   const elsewhere = recordedElsewhere(session, devices, thisDeviceId);
   const through = recordedThrough(session, links, thisDeviceId);
   // Only the PC that recorded a merged session may change its history.
@@ -205,7 +205,7 @@ export function SessionLine({
           )}
         </span>
       )}
-      <IntegrityBadge status={session.integrity_status} />
+      <IntegrityBadge status={session.integrity_status} checking={unchecked.has(session.id)} />
       {onCorrected && correcting && (
         <CorrectSessionDialog
           session={session}

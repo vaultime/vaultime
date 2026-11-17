@@ -47,6 +47,8 @@ export interface GameSummary {
 interface LibraryState {
   games: Game[];
   sessions: Session[];
+  /** Sessions whose chain is not checked yet, as after a start. Their trust label waits for it. */
+  unchecked: ReadonlySet<string>;
   covers: Record<string, string>;
   idleThresholdSeconds: number;
   /** Every game with its totals, most recently played first. */

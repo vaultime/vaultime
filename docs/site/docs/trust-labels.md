@@ -19,6 +19,8 @@ Edited
 Manual
 : Added by you for play Vaultime did not see, like a session on another PC. It counts as active time.
 
+After every start Vaultime checks the record of each session again, several at a time, as it keeps no checks from one start to the next. Until a session's record is checked its label says **Checking**, never Local, while one already marked Suspicious says so right away. With years of play this takes a second or two, and the pages do not wait for it.
+
 There is no Verified label. Vaultime saves it for a check done by a server, and no such check exists yet. Nothing on your own PC can prove that a record is genuine, so Vaultime does not claim it.
 
 ## What makes a session Suspicious

@@ -27,10 +27,11 @@ import type {
   GameTotals,
   LauncherTime,
   Session,
+  SessionList,
 } from "@/lib/types";
 import * as api from "@/lib/tauri";
 import { usePageVisible } from "@/lib/use-page-visible";
-import { describeError } from "@/lib/utils";
+import { describeError, logFailure } from "@/lib/utils";
 import {
   ActiveContext,
   CountedAtContext,
@@ -45,6 +46,9 @@ import {
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [games, setGames] = useState<Game[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(() => new Set());
+  // Counts the loads, so the checked sessions of a load never replace those of a newer one.
+  const loads = useRef(0);
   const [totals, setTotals] = useState<GameTotals[]>([]);
   const [launcherTimes, setLauncherTimes] = useState<LauncherTime[]>([]);
   const [earlier, setEarlier] = useState<EarlierPlaytime[]>([]);
@@ -74,11 +78,21 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const pageVisible = usePageVisible();
 
   const refresh = useCallback(async () => {
+    const load = ++loads.current;
+    const showHistory = (history: SessionList) => {
+      setSessions(history.sessions);
+      setTotals(history.games);
+      setLauncherTimes(history.launchers);
+      setUnchecked(new Set(history.unchecked));
+    };
+    let history: SessionList;
     try {
-      const [nextGames, history, assets, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
+      // The sessions come with the chain checks the core remembers, so the
+      // pages show before every chain is checked after a start.
+      const [nextGames, quick, assets, nextEarlier, nextChanges, nextNotes, nextDevices, nextLinks, deviceId] =
         await Promise.all([
           api.listGames(),
-          api.listSessions(TRUST_BADGE_RECENT_DAYS),
+          api.listSessions(TRUST_BADGE_RECENT_DAYS, false),
           api.listPreferredGameAssets(),
           api.listEarlierPlaytime(),
           api.listStatusChanges(),
@@ -87,13 +101,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           api.listGameLinks(),
           api.getDeviceId(),
         ]);
+      history = quick;
       setDevices(nextDevices);
       setLinks(nextLinks);
       setThisDeviceId(deviceId);
       setGames(nextGames);
-      setSessions(history.sessions);
-      setTotals(history.games);
-      setLauncherTimes(history.launchers);
+      showHistory(history);
       setEarlier(nextEarlier);
       setStatusChanges(nextChanges);
       setNotes(Object.fromEntries(nextNotes.map((note) => [note.session_id, note.note])));
@@ -107,8 +120,18 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setError(null);
     } catch (loadError) {
       setError(describeError(loadError));
+      return;
     } finally {
       setLoaded(true);
+    }
+    // Hidden, only the window look reads the library, which needs no trust
+    // labels. A load after this one brings newer sessions, so it wins.
+    if (history.unchecked.length === 0 || document.visibilityState !== "visible") return;
+    try {
+      const checked = await api.listSessions(TRUST_BADGE_RECENT_DAYS, true);
+      if (load === loads.current) showHistory(checked);
+    } catch (checkError) {
+      logFailure("checking the chains of the sessions")(checkError);
     }
   }, []);
 
@@ -284,6 +307,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     () => ({
       games,
       sessions,
+      unchecked,
       covers,
       idleThresholdSeconds,
       summaries,
@@ -305,6 +329,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [
       games,
       sessions,
+      unchecked,
       covers,
       idleThresholdSeconds,
       summaries,

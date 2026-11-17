@@ -286,9 +286,12 @@ export async function setPreferredGameAsset(
   });
 }
 
-/** Every session and each game's totals. Trust labels of the last `recentDays` days count as recent. */
-export async function listSessions(recentDays: number): Promise<SessionList> {
-  return invoke<SessionList>("list_sessions", { recentDays });
+/**
+ * Every session and each game's totals. Trust labels of the last `recentDays` days count as recent.
+ * Unless `checked`, the core takes only the chain checks it remembers, which is quick.
+ */
+export async function listSessions(recentDays: number, checked: boolean): Promise<SessionList> {
+  return invoke<SessionList>("list_sessions", { recentDays, checked });
 }
 
 /**

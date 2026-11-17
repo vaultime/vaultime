@@ -1757,11 +1757,16 @@ mockIPC((cmd, payload) => {
     case "list_sessions": {
       // Copies, as the real IPC sends, so corrections show up as new data.
       const sessions = shownSessions();
-      return {
+      const list = {
         sessions,
         games: estimateGameTotals(sessions, Number(args.recentDays)),
         launchers: estimateLauncherTimes(sessions, allGames),
+        unchecked: [] as string[],
       };
+      // ?checking shows the first look after a start, with the chains checked seconds later.
+      if (!params.has("checking")) return list;
+      if (args.checked) return new Promise((resolve) => setTimeout(() => resolve(list), 6000));
+      return { ...list, unchecked: sessions.filter((session) => session.ended_at_wall).map((session) => session.id) };
     }
     case "export_sessions":
       return allSessions.filter((session) => session.ended_at_wall).length;
