@@ -299,14 +299,45 @@ pub fn import(
     asset_manager: &AssetManager,
     picked: &[DiscoveredGame],
 ) -> Result<Vec<Game>> {
+    // A folder find, like a program seen running, may be a launcher's game
+    // the player left out before, which the launcher knows better.
+    let folder_finds = picked
+        .iter()
+        .any(|candidate| candidate.source == "folder_scan" && !candidate.already_added);
+    let launchers = if folder_finds {
+        discover_launcher_games(db)?
+    } else {
+        Vec::new()
+    };
+    import_with(db, asset_manager, picked, &launchers)
+}
+
+fn import_with(
+    db: &Database,
+    asset_manager: &AssetManager,
+    picked: &[DiscoveredGame],
+    launchers: &[DiscoveredGame],
+) -> Result<Vec<Game>> {
     // What the page knew may be old, as after a double click or with one
     // program in two lists, so the library is asked again.
     let mut existing = library_executables(db)?;
     let mut imported = Vec::new();
-    for candidate in picked.iter().filter(|candidate| !candidate.already_added) {
-        if !existing.insert(path_key(&candidate.executable_path)) {
+    for found in picked.iter().filter(|candidate| !candidate.already_added) {
+        let key = path_key(&found.executable_path);
+        if !existing.insert(key.clone()) {
             continue;
         }
+        let known = launchers
+            .iter()
+            .filter(|_| found.source == "folder_scan")
+            .find(|game| path_key(&game.executable_path) == key);
+        let candidate = known.map_or_else(
+            || found.clone(),
+            |game| DiscoveredGame {
+                same_game: found.same_game.clone(),
+                ..game.clone()
+            },
+        );
         let input = CreateGame {
             title: candidate.title.clone(),
             executable_path: Some(candidate.executable_path.clone()),
@@ -833,13 +864,37 @@ mod tests {
             games::links(&db).unwrap().get(&imported[0].id),
             Some(&steam.id)
         );
-        let again = import(&db, &assets, &[candidate("/gog/hades/hades.exe", false)]).unwrap();
+        let again = import_with(
+            &db,
+            &assets,
+            &[candidate("/gog/hades/hades.exe", false)],
+            &[],
+        )
+        .unwrap();
         assert!(again.is_empty(), "a second click adds nothing");
         let twice = [
             candidate("/gog/hades2/hades2.exe", false),
             candidate("/gog/hades2/hades2.exe", false),
         ];
-        assert_eq!(import(&db, &assets, &twice).unwrap().len(), 1);
+        assert_eq!(import_with(&db, &assets, &twice, &[]).unwrap().len(), 1);
+
+        // A folder find that a launcher knows comes in as that launcher's game.
+        let folder_find = DiscoveredGame {
+            source: "folder_scan".into(),
+            source_id: None,
+            same_game: None,
+            ..candidate("/epic/tunic/Tunic.exe", false)
+        };
+        let epic = DiscoveredGame {
+            title: "TUNIC".into(),
+            source: "epic".into(),
+            source_id: Some("tunic-id".into()),
+            install_folder: Some("/epic/tunic".into()),
+            ..folder_find.clone()
+        };
+        let added = import_with(&db, &assets, &[folder_find], &[epic]).unwrap();
+        assert_eq!(added[0].launcher_source.as_deref(), Some("epic"));
+        assert_eq!(games::launcher_id(&added[0]).as_deref(), Some("tunic-id"));
         let _ = std::fs::remove_dir_all(cache);
     }
 
