@@ -75,6 +75,23 @@ describe("the backdrop", () => {
   });
 });
 
+describe("an update", () => {
+  it("keeps a background picture chosen before the background could follow the game", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce([]);
+    vi.mocked(api.getBackgroundImage).mockResolvedValueOnce("data:image/png;base64,cGljdHVyZQ==");
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/teal.jpg" />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    const backdrop = await screen.findByLabelText("Backdrop");
+    await waitFor(() => expect(backdrop.textContent).toBe("data:image/png;base64,cGljdHVyZQ=="));
+    expect(api.setSetting).toHaveBeenCalledWith(SETTING_KEYS.backgroundSource, "picture");
+  });
+});
+
 describe("a start", () => {
   it("shows the game played last in the last run before the library is read", async () => {
     localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify({ games: { page: TEAL, home: ORANGE } }));

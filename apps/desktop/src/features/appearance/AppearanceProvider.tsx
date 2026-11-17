@@ -1,7 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AppearanceContext,
   type AppearanceState,
@@ -18,6 +27,7 @@ import {
   BACKGROUND_HEADER_OPACITY_PERCENT,
   BACKGROUND_PANEL_OPACITY_PERCENT,
   GAME_ACCENT,
+  SETTING_KEYS,
   WINDOW_LOOK_INTERVAL_MS,
 } from "@/lib/constants";
 import { averageLightness } from "@/lib/game-tint";
@@ -120,19 +130,6 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [lightness, setLightness] = useState<{ of: string; value: number | null } | null>(null);
   // Drags wait a moment before they are saved, so a slider saves once.
   const pending = useRef(new Map<string, { value: string; timer: number }>());
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getBackgroundImage()
-      .then((picture) => {
-        if (!cancelled) setBackground(picture);
-      })
-      .catch(logFailure("loading the background picture"));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const query = window.matchMedia(DARK_QUERY);
@@ -253,6 +250,26 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     },
     [save],
   );
+
+  // A picture chosen before the background could follow the game stays.
+  const keepEarlierPicture = useEffectEvent((picture: string | null) => {
+    if (picture && values[SETTING_KEYS.backgroundSource] === undefined) change({ source: "picture" });
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getBackgroundImage()
+      .then((picture) => {
+        if (cancelled) return;
+        setBackground(picture);
+        keepEarlierPicture(picture);
+      })
+      .catch(logFailure("loading the background picture"));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const chooseBackground = useCallback(
     async (path: string) => {
