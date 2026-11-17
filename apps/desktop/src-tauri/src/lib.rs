@@ -158,6 +158,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::playtime::get_recent_play,
         commands::playtime::get_steps_aside_hint,
         commands::games::set_game_steps_aside,
+        commands::games::set_game_favorite,
         commands::discovery::list_ignored_programs,
         commands::discovery::ignore_program,
         commands::discovery::allow_program,

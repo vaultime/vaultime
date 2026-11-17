@@ -67,6 +67,9 @@ pub struct GameMetadata {
     /// client. Its time beside another game is set aside.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub steps_aside: bool,
+    /// One of the player's favorites, which the library lists apart.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub favorite: bool,
     /// The launcher's own id for the game, like the Steam app id, so the same
     /// game can be told apart on another PC.
     #[serde(default, skip_serializing_if = "Option::is_none")]

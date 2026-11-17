@@ -345,6 +345,12 @@ pub fn set_steps_aside(db: &Database, id: &str, steps_aside: bool) -> Result<Gam
     change_metadata(db, id, |metadata| metadata.steps_aside = steps_aside)
 }
 
+/// Makes a game one of the player's favorites, or no longer. The rest of
+/// its metadata stays as it is.
+pub fn set_favorite(db: &Database, id: &str, favorite: bool) -> Result<Game> {
+    change_metadata(db, id, |metadata| metadata.favorite = favorite)
+}
+
 /// Stores the launcher's own id for a game. The rest of its metadata stays.
 pub fn set_launcher_id(db: &Database, id: &str, launcher_id: &str) -> Result<Game> {
     change_metadata(db, id, |metadata| {
@@ -549,6 +555,22 @@ mod tests {
             .into_iter()
             .map(|game| game.id)
             .collect()
+    }
+
+    #[test]
+    fn a_favorite_keeps_the_rest_of_the_metadata() {
+        let db = test_db();
+        let hades = titled(&db, "Hades II", "steam");
+        set_launcher_id(&db, &hades, "1145350").unwrap();
+
+        let favorite = set_favorite(&db, &hades, true).unwrap();
+        let metadata: GameMetadata = serde_json::from_str(&favorite.metadata_json).unwrap();
+        assert!(metadata.favorite);
+        assert_eq!(metadata.launcher_id.as_deref(), Some("1145350"));
+
+        let plain = set_favorite(&db, &hades, false).unwrap();
+        assert!(!plain.metadata_json.contains("favorite"));
+        assert!(set_favorite(&db, "missing", true).is_err());
     }
 
     #[test]

@@ -78,6 +78,16 @@ pub fn set_game_steps_aside(
     library::set_steps_aside(&db, &game_id, steps_aside)
 }
 
+/// Makes a game one of the player's favorites, or no longer.
+#[tauri::command(async)]
+pub fn set_game_favorite(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+    favorite: bool,
+) -> Result<Game, VaultimeError> {
+    games::set_favorite(&db, &game_id, favorite)
+}
+
 #[tauri::command(async)]
 pub fn list_game_assets(
     db: State<'_, Arc<Database>>,
