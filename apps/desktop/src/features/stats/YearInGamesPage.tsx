@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { ChevronLeft, ChevronRight, Share } from "lucide-react";
 import { Notice, StepButton } from "@/components/layout/Page";
@@ -18,6 +18,11 @@ import { ShareYearDialog } from "./ShareYearDialog";
 import { StoryCard } from "./YearChapters";
 
 /** Year in games: a year told in chapters, one card at a time, made on this PC. */
+/** A click on the story's own buttons leaves focus where it was, so Space moves on after it as the hint says. */
+function keepFocus(event: MouseEvent) {
+  event.preventDefault();
+}
+
 export function YearInGamesPage() {
   const { year } = useParams();
   // Another year starts over at its first chapter.
@@ -130,7 +135,7 @@ function YearStory() {
           <p className="font-prose mt-3 text-[17px] leading-[1.45] text-pretty text-soft">{intro}</p>
           {story && chapters.length > 0 && (
             <>
-              <ol aria-label="Chapters" className="mt-6 flex flex-col gap-px">
+              <ol aria-label="Chapters" onMouseDown={keepFocus} className="mt-6 flex flex-col gap-px">
                 {chapters.map((each, index) => (
                   <li key={each}>
                     <button
@@ -165,7 +170,7 @@ function YearStory() {
 
         {told && story && chapter && (
           <div className="flex flex-col items-center">
-            <div className="flex items-center gap-5">
+            <div onMouseDown={keepFocus} className="flex items-center gap-5">
               <StepButton label="Previous chapter" disabled={at === 0} onClick={() => go(at - 1)}>
                 <ChevronLeft className="size-[18px]" strokeWidth={1.8} />
               </StepButton>
