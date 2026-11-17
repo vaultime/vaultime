@@ -9,6 +9,7 @@ import { capitalize, plural } from "@/lib/words";
 const WAITING: Record<Exclude<AutoMerge["outcome"], "merged">, string> = {
   new_key: "Its newest backup brings a key this PC does not know yet, so it waits for you.",
   failing: "Its newest backup has sessions that fail their check, so it waits for you.",
+  error: "Its newest backup did not come in by itself yet. If that lasts, merge it to see why.",
 };
 
 /** What the row of another PC's newest backup, in the cloud or the sync folder, says about it. */

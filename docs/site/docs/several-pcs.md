@@ -25,6 +25,7 @@ With cloud backup on both PCs, Settings, Other PCs lists the newest cloud backup
 
 - A game that is new here counts as one of yours only when it comes from the same launcher with the same launcher id. Otherwise it stays on its own, and you can link it on its game page.
 - A backup that brings a key this PC does not trust, or sessions that fail their check, waits for you. The row says why, and **Merge** opens the dialog.
+- A backup that does not come in, like one still syncing or one from a Vaultime this PC cannot read, says so on its row. Vaultime tries again at the next check, and **Merge** shows why.
 
 Each PC uploads its own backup once a day, and the server always keeps the newest backup of every PC, so the others can merge it.
 

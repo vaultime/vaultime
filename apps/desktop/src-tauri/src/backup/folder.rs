@@ -509,10 +509,15 @@ pub fn merge_due(
         let Some(outcome) = merge_one(db, asset_manager, app_context, pc) else {
             continue;
         };
-        if outcome.outcome == "merged" {
-            waiting.remove(&outcome.device_id);
-        } else {
-            waiting.insert(outcome.device_id.clone(), outcome.clone());
+        match outcome.outcome {
+            "merged" => {
+                waiting.remove(&outcome.device_id);
+            }
+            // Tried again at the next check, as it may still be syncing.
+            "error" => {}
+            _ => {
+                waiting.insert(outcome.device_id.clone(), outcome.clone());
+            }
         }
         done.push(outcome);
     }
@@ -566,7 +571,7 @@ fn merge_one(
                 "the sync folder backup of {} did not merge: {error}",
                 outcome.device_id
             );
-            return None;
+            outcome.outcome = "error";
         }
     }
     Some(outcome)
@@ -841,7 +846,7 @@ mod tests {
 
     #[test]
     fn newer_backups_of_a_merged_pc_come_in_by_themselves() {
-        let (laptop, desktop, _) = two_pcs();
+        let (laptop, desktop, root) = two_pcs();
         let game = laptop.game("Hades", Some("1145360"));
         laptop.play(&game, 30);
         publish(&laptop.db, &back_up(&laptop)).unwrap();
@@ -871,6 +876,18 @@ mod tests {
         assert_eq!((done[0].outcome, done[0].sessions_added), ("merged", 1));
         assert_eq!(desktop.events(&second), laptop.events(&second));
         assert!(due().is_empty(), "a merged backup is not merged again");
+
+        // One that does not come in says so, and is tried again.
+        laptop.play(&game, 10);
+        let broken = back_up(&laptop);
+        publish(&laptop.db, &broken).unwrap();
+        let copied = root.join("laptop").join(broken.file_name().unwrap());
+        let whole = fs::read(copied.join(DATABASE_FILE)).unwrap();
+        fs::write(copied.join(DATABASE_FILE), b"half of a database").unwrap();
+        desktop.act();
+        assert_eq!(due()[0].outcome, "error");
+        fs::write(copied.join(DATABASE_FILE), whole).unwrap();
+        assert_eq!(due()[0].outcome, "merged");
 
         laptop.play(&game, 20);
         publish(&laptop.db, &back_up(&laptop)).unwrap();

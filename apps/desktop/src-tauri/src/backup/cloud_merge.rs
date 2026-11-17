@@ -72,7 +72,8 @@ pub struct AutoMerge {
     pub device_id: String,
     pub name: Option<String>,
     pub backup_id: String,
-    /// `merged`, or why it waits for the player: `new_key` or `failing`.
+    /// `merged`, why it waits for the player, `new_key` or `failing`, or
+    /// `error` when it did not come in, which the next check tries again.
     pub outcome: &'static str,
     pub sessions_added: usize,
     pub sessions_grown: usize,
@@ -304,7 +305,7 @@ fn merge_due_with(
     }
     *waiting = done
         .iter()
-        .filter(|merge| merge.outcome != "merged")
+        .filter(|merge| !matches!(merge.outcome, "merged" | "error"))
         .map(|merge| (merge.device_id.clone(), merge.clone()))
         .collect();
     Ok(done)
@@ -362,7 +363,7 @@ fn merge_one(
                 "the cloud backup of {} did not merge: {error}",
                 outcome.device_id
             );
-            return None;
+            outcome.outcome = "error";
         }
     }
     Some(outcome)

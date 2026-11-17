@@ -810,7 +810,7 @@ export interface AutoMerge {
   device_id: string;
   name: string | null;
   backup_id: string;
-  outcome: "merged" | "new_key" | "failing";
+  outcome: "merged" | "new_key" | "failing" | "error";
   sessions_added: number;
   sessions_grown: number;
 }
