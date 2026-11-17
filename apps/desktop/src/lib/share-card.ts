@@ -81,6 +81,44 @@ export interface ShareCard {
 /** The most games any format names. */
 const MOST_GAMES = Math.max(...Object.values(SHARE_TOP_GAMES));
 
+/** A game the card may name, for the player to leave off or put back. */
+export interface ShareChoice {
+  gameId: string;
+  title: string;
+  cover: string | null;
+  activeMs: number;
+  /** Left off the card by the player. */
+  left: boolean;
+}
+
+/** The year's games, the most active first, the order the card names them in. */
+function byActivity(stats: YearStats) {
+  return [...stats.games].sort((a, b) => b.activeMs - a.activeMs || b.runtimeMs - a.runtimeMs);
+}
+
+/**
+ * The games a card naming `count` games names, with those left off in their
+ * place, so each can be put back. Hidden games never show.
+ */
+export function shareChoices(
+  stats: YearStats,
+  gameInfo: (gameId: string) => ShareGameInfo | undefined,
+  count: number,
+  leftOff: ReadonlySet<string>,
+): ShareChoice[] {
+  const choices: ShareChoice[] = [];
+  let named = 0;
+  for (const game of byActivity(stats)) {
+    if (named >= count) break;
+    const info = gameInfo(game.gameId);
+    if (!info || info.hidden || game.activeMs <= 0) continue;
+    const left = leftOff.has(game.gameId);
+    choices.push({ gameId: game.gameId, title: info.title, cover: info.cover, activeMs: game.activeMs, left });
+    if (!left) named += 1;
+  }
+  return choices;
+}
+
 /**
  * The card for a year of the stats page, null for a year without play.
  * Hidden games count in the totals, as everywhere, but are never named or
@@ -112,7 +150,7 @@ export function buildShareCard({
   );
   const markOf = new Map(stats.games.map((game, index) => [game.gameId, parseOklchList(marks[index].fill)]));
 
-  const byActive = [...stats.games].sort((a, b) => b.activeMs - a.activeMs || b.runtimeMs - a.runtimeMs);
+  const byActive = byActivity(stats);
   const shown = (gameId: string) => {
     const info = gameInfo(gameId);
     return info !== undefined && !info.hidden;

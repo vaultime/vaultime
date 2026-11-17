@@ -92,6 +92,9 @@ Format
 On the card
 : **Game titles and covers**, **Calendar of the year** and **Name of this PC** can each be switched off. Without titles the card shows how many games you played and how the time split. Hidden games never appear.
 
+Games on the card
+: The games the card names, each with an eye to leave it off. The next game moves up in its place, and a game left off still counts in the hours.
+
 Look
 : Dark or light, always in your ground and accent.
 

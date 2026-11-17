@@ -3,21 +3,24 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
-import { Check, Copy, Download, Loader2 } from "lucide-react";
+import { Check, Copy, Download, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Notice } from "@/components/layout/Page";
+import { Cover } from "@/components/media/Cover";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useAppearance } from "@/features/appearance/appearance-context";
 import { useLibrary } from "@/features/library/library-context";
-import { HOUR_MS, SHARE_COPIED_NOTE_MS, SHARE_FORMATS } from "@/lib/constants";
+import { HOUR_MS, SHARE_COPIED_NOTE_MS, SHARE_FORMATS, SHARE_TOP_GAMES } from "@/lib/constants";
 import { onRadioKeys, radioTabIndex } from "@/lib/radio-group";
 import {
   buildShareCard,
   previewScale,
   SHARE_FORMAT_IDS,
+  shareChoices,
   shareFileName,
   type ShareCard,
+  type ShareChoice,
   type ShareFormat,
   type ShareGameInfo,
   type ShareOptions,
@@ -25,6 +28,7 @@ import {
 import type { YearStats } from "@/lib/stats";
 import * as api from "@/lib/tauri";
 import type { ThemeMode } from "@/lib/theme";
+import { formatHoursShort } from "@/lib/time";
 import { cn, describeError } from "@/lib/utils";
 import { plural } from "@/lib/words";
 import { drawShareCard, type CardLook } from "./share-card-draw";
@@ -86,6 +90,7 @@ export function ShareYearDialog({
   const [showGames, setShowGames] = useState(true);
   const [showCalendar, setShowCalendar] = useState(true);
   const [showPcName, setShowPcName] = useState(false);
+  const [leftOff, setLeftOff] = useState<ReadonlySet<string>>(() => new Set());
   const [cardMode, setCardMode] = useState<ThemeMode>(mode);
   const [pcName, setPcName] = useState<string | null>(null);
   const [busy, setBusy] = useState<"save" | "copy" | null>(null);
@@ -113,9 +118,9 @@ export function ShareYearDialog({
   }, [copied]);
 
   const options: ShareOptions = { format, showGames, showCalendar, showPcName, mode: cardMode };
-  const card = useMemo(() => {
+  const gameInfo = useMemo(() => {
     const byGame = new Map(summaries.map((summary) => [summary.game.id, summary]));
-    const gameInfo = (gameId: string): ShareGameInfo | undefined => {
+    return (gameId: string): ShareGameInfo | undefined => {
       const summary = byGame.get(gameId);
       if (!summary) return undefined;
       return {
@@ -125,15 +130,35 @@ export function ShareYearDialog({
         colors: summary.tint.colors,
       };
     };
-    return buildShareCard({
-      stats: year.stats,
-      gameInfo,
-      pcName,
-      accentHues,
-      options: { showGames, showPcName, mode: cardMode },
-      now: year.now,
+  }, [summaries, covers]);
+  const card = useMemo(
+    () =>
+      buildShareCard({
+        stats: year.stats,
+        // A game left off counts as a hidden one: in the hours, never named.
+        gameInfo: (gameId) => {
+          const info = gameInfo(gameId);
+          return info && leftOff.has(gameId) ? { ...info, hidden: true } : info;
+        },
+        pcName,
+        accentHues,
+        options: { showGames, showPcName, mode: cardMode },
+        now: year.now,
+      }),
+    [year.stats, year.now, gameInfo, leftOff, pcName, accentHues, showGames, showPcName, cardMode],
+  );
+  const choices = useMemo(
+    () => shareChoices(year.stats, gameInfo, SHARE_TOP_GAMES[format], leftOff),
+    [year.stats, gameInfo, format, leftOff],
+  );
+
+  function toggleLeftOff(gameId: string) {
+    setLeftOff((current) => {
+      const next = new Set(current);
+      if (!next.delete(gameId)) next.add(gameId);
+      return next;
     });
-  }, [year.stats, year.now, summaries, covers, pcName, accentHues, showGames, showPcName, cardMode]);
+  }
 
   /** The card for the options set now. The preview may still show the one before a change. */
   async function drawForExport(): Promise<HTMLCanvasElement> {
@@ -199,6 +224,8 @@ export function ShareYearDialog({
               showPcName={showPcName}
               setShowPcName={setShowPcName}
               pcName={pcName}
+              choices={choices}
+              onToggleChoice={toggleLeftOff}
               cardMode={cardMode}
               setCardMode={setCardMode}
               empty={!card}
@@ -323,6 +350,8 @@ function SidePanel({
   showPcName,
   setShowPcName,
   pcName,
+  choices,
+  onToggleChoice,
   cardMode,
   setCardMode,
   empty,
@@ -340,6 +369,8 @@ function SidePanel({
   showPcName: boolean;
   setShowPcName: (show: boolean) => void;
   pcName: string | null;
+  choices: ShareChoice[];
+  onToggleChoice: (gameId: string) => void;
   cardMode: ThemeMode;
   setCardMode: (mode: ThemeMode) => void;
   empty: boolean;
@@ -413,6 +444,43 @@ function SidePanel({
             />
           </div>
         </fieldset>
+
+        {showGames && choices.length > 0 && (
+          <fieldset className="mt-5 min-w-0">
+            <legend className="label-small">Games on the card</legend>
+            <ul className="mt-1.5">
+              {choices.map((choice) => (
+                <li key={choice.gameId} className="flex items-center gap-3 border-b border-rule py-2 last:border-b-0">
+                  <Cover
+                    title={choice.title}
+                    src={choice.cover}
+                    variant="tile"
+                    className="h-8 w-6 rounded-[3px] text-[9px]"
+                  />
+                  <span className={cn("min-w-0 flex-1 truncate text-[14px]", choice.left ? "text-faint" : "text-text")}>
+                    {choice.title}
+                  </span>
+                  <span className="shrink-0 text-[12px] text-faint tabular-nums">
+                    {choice.left ? "Left off" : formatHoursShort(choice.activeMs)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-pressed={!choice.left}
+                    aria-label={choice.left ? `Put ${choice.title} back on the card` : `Leave ${choice.title} off the card`}
+                    title={choice.left ? "Put back on the card" : "Leave off the card"}
+                    onClick={() => onToggleChoice(choice.gameId)}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-faint transition-colors hover:bg-glint/6 hover:text-text focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none"
+                  >
+                    {choice.left ? <EyeOff className="size-4" strokeWidth={1.75} /> : <Eye className="size-4" strokeWidth={1.75} />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[12px] leading-relaxed text-faint">
+              A game left off still counts in the hours, it just goes unnamed.
+            </p>
+          </fieldset>
+        )}
 
         <fieldset className="mt-5 min-w-0">
           <legend className="label-small">Look</legend>

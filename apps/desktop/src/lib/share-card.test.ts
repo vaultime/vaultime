@@ -14,6 +14,7 @@ import {
   gamesFor,
   previewScale,
   SHARE_FORMAT_IDS,
+  shareChoices,
   shareFileName,
   stackBlocks,
   type ShareGameInfo,
@@ -56,6 +57,30 @@ function cardFor(sessions: Session[], options: Partial<ShareOptions> = {}, pcNam
     now,
   });
 }
+
+describe("shareChoices", () => {
+  const stats = yearStats(
+    evenings([["a", 5], ["d", 4], ["b", 3], ["c", 2], ["e", 1]]),
+    2026,
+    estimateYearPlay(evenings([["a", 5], ["d", 4], ["b", 3], ["c", 2], ["e", 1]]), 2026, now.getTime()),
+  );
+  const titles = (count: number, leftOff: string[] = []) =>
+    shareChoices(stats, (gameId) => GAMES[gameId], count, new Set(leftOff)).map(
+      (choice) => `${choice.title}${choice.left ? " (left off)" : ""}`,
+    );
+
+  it("lists the games the card names, the most active first, never a hidden one", () => {
+    expect(titles(3)).toEqual(["Elden Ring", "Hades II", "Balatro"]);
+  });
+
+  it("keeps a game left off in its place and names the next one", () => {
+    expect(titles(3, ["b"])).toEqual(["Elden Ring", "Hades II (left off)", "Balatro", "Celeste"]);
+  });
+
+  it("stops when the year runs out of games", () => {
+    expect(titles(5, ["a"])).toEqual(["Elden Ring (left off)", "Hades II", "Balatro", "Celeste"]);
+  });
+});
 
 const year = evenings([
   ["d", 9],
