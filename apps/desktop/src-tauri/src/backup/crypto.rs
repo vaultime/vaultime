@@ -7,15 +7,14 @@
 //! Version 2 uses XChaCha20-Poly1305. Every file gets a random 16 byte nonce
 //! prefix and the rest of the nonce counts its chunks, so the thousands of
 //! artwork files of an account never share a nonce. Every chunk is bound to
-//! whether it is the last one, so a file cut short does not decrypt. Version 1
-//! archives, ChaCha20-Poly1305 with a 4 byte prefix, can still be read.
+//! whether it is the last one, so a file cut short does not decrypt.
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use chacha20poly1305::aead::{Aead, Payload};
-use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -27,14 +26,10 @@ use crate::error::{Result, VaultimeError};
 /// Name of the current scheme in backup metadata.
 pub const SCHEME: &str = "xchacha20poly1305-chunked-v2";
 
-const MAGIC_V1: &[u8; 8] = b"VTENC01\n";
 const MAGIC_V2: &[u8; 8] = b"VTENC02\n";
-const AAD_V1: &[u8] = b"vaultime-cloud-backup";
 const AAD_V2: &[u8] = b"vaultime-cloud-backup-v2";
 const TAG_BYTES: usize = 16;
 const CHUNK_INDEX_BYTES: usize = 8;
-const V1_NONCE_BYTES: usize = 12;
-const V1_NONCE_PREFIX_BYTES: usize = V1_NONCE_BYTES - CHUNK_INDEX_BYTES;
 const V2_NONCE_BYTES: usize = 24;
 const V2_NONCE_PREFIX_BYTES: usize = V2_NONCE_BYTES - CHUNK_INDEX_BYTES;
 const LAST_CHUNK: u8 = 1;
@@ -111,19 +106,6 @@ pub fn decrypt_file(
                 Payload {
                     msg: ciphertext,
                     aad: &v2_aad(flags),
-                },
-            )
-        })
-    } else if &magic == MAGIC_V1 {
-        let cipher = ChaCha20Poly1305::new(key.into());
-        let mut prefix = [0_u8; V1_NONCE_PREFIX_BYTES];
-        input.read_exact(&mut prefix).map_err(io)?;
-        decrypt_chunks(&mut input, &mut output, |index, _, ciphertext| {
-            cipher.decrypt(
-                &Nonce::from(nonce::<V1_NONCE_BYTES>(&prefix, index)),
-                Payload {
-                    msg: ciphertext,
-                    aad: AAD_V1,
                 },
             )
         })
@@ -437,44 +419,9 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
-    /// The version 1 writer, kept to prove old cloud backups still restore.
-    fn encrypt_v1(plaintext: &[u8], prefix: [u8; V1_NONCE_PREFIX_BYTES]) -> Vec<u8> {
-        let cipher = ChaCha20Poly1305::new((&KEY).into());
-        let mut out = MAGIC_V1.to_vec();
-        out.extend_from_slice(&prefix);
-        let chunks: Vec<&[u8]> = plaintext.chunks(ENCRYPTION_CHUNK_BYTES).collect();
-        for (index, chunk) in chunks.iter().enumerate() {
-            let last = index + 1 == chunks.len();
-            let sealed = cipher
-                .encrypt(
-                    &Nonce::from(nonce::<V1_NONCE_BYTES>(&prefix, index as u64)),
-                    Payload {
-                        msg: chunk,
-                        aad: AAD_V1,
-                    },
-                )
-                .unwrap();
-            write_chunk(&mut out, u8::from(last), chunk.len(), &sealed).unwrap();
-        }
-        out
-    }
-
     // Existing cloud backups must stay decryptable across crate upgrades.
     #[test]
     fn chunk_output_is_stable() {
-        let v1 = ChaCha20Poly1305::new((&KEY).into())
-            .encrypt(
-                &Nonce::from(nonce::<V1_NONCE_BYTES>(&[1, 2, 3, 4], 3)),
-                Payload {
-                    msg: b"vaultime",
-                    aad: AAD_V1,
-                },
-            )
-            .unwrap();
-        assert_eq!(
-            crate::hex::encode(&v1),
-            "8b520c0a28beb3c892b7e36e387f57ca4d0da19da09e9629"
-        );
         let v2 = XChaCha20Poly1305::new((&KEY).into())
             .encrypt(
                 &XNonce::from(nonce::<V2_NONCE_BYTES>(&[9; V2_NONCE_PREFIX_BYTES], 3)),
@@ -488,18 +435,6 @@ mod tests {
             crate::hex::encode(&v2),
             "ed24a28318f282075b0d7e57953b01d9ea4b00ea56635d2b"
         );
-    }
-
-    #[test]
-    fn version_1_archives_still_decrypt() {
-        let dir = scratch();
-        let bytes: Vec<u8> = (0..ENCRYPTION_CHUNK_BYTES + 99)
-            .map(|i| (i % 13) as u8)
-            .collect();
-        fs::write(dir.join("sealed"), encrypt_v1(&bytes, [1, 2, 3, 4])).unwrap();
-        decrypt_file(&dir.join("sealed"), &dir.join("opened"), &KEY).unwrap();
-        assert_eq!(fs::read(dir.join("opened")).unwrap(), bytes);
-        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

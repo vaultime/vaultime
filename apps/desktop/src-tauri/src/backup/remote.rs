@@ -63,7 +63,7 @@ pub struct RemoteBackupPayloadSummary {
     pub archive_checksum: String,
     pub archive_size_bytes: u64,
     /// Size of the artwork the backup restores. It is stored apart from the
-    /// archive, once for all backups. Zero for backups made before that.
+    /// archive, once for all backups.
     #[serde(default)]
     pub artwork_bytes: u64,
 }
@@ -365,10 +365,7 @@ pub(crate) fn fetch_backup(
     }
 
     let archive_path = staging_dir.join("backup.enc");
-    api.download(
-        &format!("/v1/backups/{backup_id}/download?attachment=false"),
-        &archive_path,
-    )?;
+    api.download(&format!("/v1/backups/{backup_id}/download"), &archive_path)?;
 
     let (_, actual_checksum) = hash_file(&archive_path)?;
     if actual_checksum != backup.checksum {
@@ -405,8 +402,7 @@ struct LedgerKeysRecord {
     public_keys: Vec<String>,
 }
 
-/// The ledger keys each PC of the account registered, by PC. A server from
-/// before ledger keys knows none.
+/// The ledger keys each PC of the account registered, by PC.
 pub(crate) fn registered_keys(
     api_base_url: &str,
     access_token: &str,
@@ -418,9 +414,6 @@ pub(crate) fn registered_keys(
         .bearer_auth(api.access_token)
         .send()
         .map_err(map_cloud_http)?;
-    if response.status() == StatusCode::NOT_FOUND {
-        return Ok(HashMap::new());
-    }
     let records = ensure_success(response)?
         .json::<Vec<LedgerKeysRecord>>()
         .map_err(|error| VaultimeError::Cloud(format!("failed to parse API response: {error}")))?;
@@ -437,8 +430,8 @@ pub(crate) fn registered_keys(
 
 /// Registers the keys this PC's ledger signs with as the keys of
 /// `device_id`, so another PC merging its backups counts them. The server
-/// keeps every key it was given. A server from before ledger keys, or one
-/// that refuses them, never stops an upload.
+/// keeps every key it was given. A server that refuses them never stops an
+/// upload.
 fn register_ledger_keys(api: &Api, device_id: &str) {
     let mut keys: Vec<String> = match ledger::own_keys() {
         Ok(keys) => keys.into_iter().collect(),
@@ -464,8 +457,7 @@ fn register_ledger_keys(api: &Api, device_id: &str) {
     }
 }
 
-/// The key check of the newest complete backup. `None` when it has none,
-/// like backups from before key checks.
+/// The key check of the newest complete backup, `None` without one.
 fn newest_key_check(api: &Api) -> Result<Option<String>> {
     let backups = send_json::<Vec<RemoteBackupRecord>>(
         api.client
@@ -637,8 +629,7 @@ fn upload_missing_artwork(
     Ok(missing.len())
 }
 
-/// Puts the artwork a backup lists into the extracted backup folder. Backups
-/// made before artwork was stored apart carry it in the archive instead.
+/// Puts the artwork a backup lists into the extracted backup folder.
 fn restore_artwork(
     api: &Api,
     extracted_dir: &Path,
@@ -646,9 +637,6 @@ fn restore_artwork(
     staging_dir: &Path,
 ) -> Result<()> {
     let index_path = extracted_dir.join(ARTWORK_INDEX_FILE);
-    if !index_path.exists() {
-        return Ok(());
-    }
     let index: BTreeMap<String, String> = serde_json::from_slice(
         &fs::read(&index_path).map_err(map_backup_io)?,
     )
