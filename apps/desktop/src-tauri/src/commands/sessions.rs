@@ -17,6 +17,7 @@ use crate::db::repo::{annotations, corrections, games, session_events, sessions}
 use crate::error::VaultimeError;
 use crate::playtime;
 use crate::playtime::games::{GameTotals, LauncherTime};
+use crate::screenshots::{self, SessionScreenshots};
 use crate::tracking::live::LiveSessions;
 
 /// Every session, each game's totals of them and the time each launcher's
@@ -169,6 +170,27 @@ pub fn add_manual_session(
 #[tauri::command(async)]
 pub fn list_session_notes(db: State<'_, Arc<Database>>) -> Result<Vec<SessionNote>, VaultimeError> {
     annotations::list_session_notes(&db)
+}
+
+/// The Steam screenshots taken during each of these sessions that this PC recorded.
+#[tauri::command(async)]
+pub fn session_screenshots(
+    db: State<'_, Arc<Database>>,
+    app_context: State<'_, AppContext>,
+    session_ids: Vec<String>,
+) -> Result<Vec<SessionScreenshots>, VaultimeError> {
+    screenshots::for_sessions(
+        &db,
+        &app_context.device_id,
+        &session_ids,
+        chrono::Utc::now().timestamp_millis(),
+    )
+}
+
+/// One Steam screenshot in full, as a data URL.
+#[tauri::command(async)]
+pub fn steam_screenshot(app_id: String, file: String) -> Result<String, VaultimeError> {
+    screenshots::picture(&app_id, &file)
 }
 
 /// Sets the note of a session, an empty note removes it.

@@ -144,7 +144,7 @@ pub fn discover_steam_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     Ok(results)
 }
 
-fn find_steam_root() -> Option<PathBuf> {
+pub(crate) fn find_steam_root() -> Option<PathBuf> {
     steam_root_candidates()
         .into_iter()
         .find(|path| path.is_dir())

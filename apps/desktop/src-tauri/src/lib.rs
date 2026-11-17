@@ -19,6 +19,7 @@ pub mod library;
 pub mod platform;
 pub mod playtime;
 pub mod recovery;
+pub mod screenshots;
 pub mod secure_storage;
 pub mod share;
 #[cfg(windows)]
@@ -193,6 +194,8 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::sessions::export_sessions,
         commands::app::save_share_image,
         commands::sessions::trim_session,
+        commands::sessions::session_screenshots,
+        commands::sessions::steam_screenshot,
         commands::sessions::preview_trim,
         commands::sessions::discard_session,
         commands::sessions::add_manual_session,

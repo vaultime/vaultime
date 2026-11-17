@@ -459,6 +459,12 @@ pub const TRAY_MIN_PLAYED_MS: i64 = 60_000;
 /// Days the recent line of the tray menu covers, today included. Same as
 /// `RECENT_DAYS` in `lib/constants.ts`, so it matches Home.
 pub const TRAY_RECENT_DAYS: u32 = 7;
+/// Screenshots of a session sent along in small. The rest are only counted.
+pub const SCREENSHOTS_PER_SESSION: usize = 6;
+/// Largest small copy of a Steam screenshot Vaultime reads.
+pub const STEAM_THUMBNAIL_MAX_BYTES: u64 = 1024 * 1024;
+/// Largest Steam screenshot Vaultime opens, so a broken file cannot fill the memory.
+pub const STEAM_SCREENSHOT_MAX_BYTES: u64 = 64 * 1024 * 1024;
 /// Name of the JSON session export, so tools can tell it apart.
 pub const EXPORT_FORMAT_NAME: &str = "vaultime-sessions";
 /// Version of the JSON session export, raised when its fields change.
