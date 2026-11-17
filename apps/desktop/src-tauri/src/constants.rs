@@ -450,6 +450,21 @@ pub const AUTO_BACKUP_INTERVAL: Duration = Duration::from_hours(24);
 pub const AUTO_BACKUP_ON_QUIT_MIN_AGE: Duration = Duration::from_hours(1);
 /// How often the running app checks whether the daily backup is due.
 pub const AUTO_BACKUP_CHECK_INTERVAL: Duration = Duration::from_hours(1);
+/// Setting with the folder the player picked to keep backups in sync between
+/// PCs. A restore keeps this PC's own, and only a command that checks the
+/// folder sets it.
+pub const SYNC_FOLDER_SETTING: &str = "sync_folder";
+/// Folder Vaultime keeps in the picked sync folder, unless the picked one has
+/// this name already.
+pub const SYNC_DIR: &str = "Vaultime";
+/// Folder in a PC's part of the sync folder with its images, each named by
+/// its checksum.
+pub const SYNC_ARTWORK_DIR: &str = "artwork";
+/// File in a PC's part of the sync folder that names the PC.
+pub const SYNC_PC_FILE: &str = "pc.json";
+/// Backups of a PC kept in the sync folder, older ones are deleted. Same as
+/// `SYNC_BACKUP_KEEP` in `lib/constants.ts`.
+pub const SYNC_BACKUP_KEEP: usize = 3;
 /// An unfinished automatic backup that started this long ago is left over
 /// from a crash, never one another PC is still writing or a sync service is
 /// still bringing in.

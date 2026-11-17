@@ -72,10 +72,25 @@ pub fn back_up_if_due(
             folder.display()
         ))
     })?;
-    if newest_age(&folder, &this_pc(app_context)).is_some_and(|age| age < min_age) {
+    let device = this_pc(app_context);
+    if newest_age(&folder, &device).is_some_and(|age| age < min_age) {
+        // A sync folder that was away gets the newest backup once it is back.
+        if let Some(newest) = newest_complete(&folder, &device) {
+            copy_to_sync_folder(db, &newest);
+        }
         return Ok(None);
     }
-    write_backup(db, asset_manager, app_context, &folder).map(Some)
+    let summary = write_backup(db, asset_manager, app_context, &folder)?;
+    copy_to_sync_folder(db, Path::new(&summary.backup_path));
+    Ok(Some(summary))
+}
+
+/// Copies an automatic backup into the sync folder, if one is set. One that
+/// is away, like a NAS that is off, gets a backup at a later check.
+fn copy_to_sync_folder(db: &Database, backup: &Path) {
+    if let Err(error) = super::folder::publish(db, backup) {
+        warn!("could not copy the backup into the sync folder: {error}");
+    }
 }
 
 /// Saves an automatic backup now, also when daily backups are off, as before

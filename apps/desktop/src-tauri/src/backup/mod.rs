@@ -6,6 +6,7 @@
 pub mod auto;
 pub mod cloud_merge;
 pub(crate) mod crypto;
+pub mod folder;
 pub mod merge;
 pub mod remote;
 #[cfg(test)]
@@ -30,7 +31,7 @@ use crate::constants::{
     APPEARANCE_ACCENT_SETTING, APPEARANCE_GROUND_SETTING, APPEARANCE_MODE_SETTING, ASSET_CACHE_DIR,
     AUTO_BACKUP_FOLDER_SETTING, BACKGROUND_BLUR_SETTING, BACKGROUND_DIM_SETTING, BACKUP_VERSION,
     CLOUD_BACKUP_SETTING, DATABASE_BUSY_TIMEOUT, DATABASE_FILE, HASH_BUFFER_BYTES,
-    PLAY_SLICES_VERSION_SETTING, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
+    PLAY_SLICES_VERSION_SETTING, SYNC_FOLDER_SETTING, WINDOW_LOOK_SETTING, WINDOW_SIZE_SETTING,
 };
 use crate::db::connection::Database;
 use crate::db::migrate::known_migrations;
@@ -42,12 +43,14 @@ use crate::platform::process::file_name;
 const BACKUP_DIR_PREFIX: &str = "vaultime-backup";
 pub(crate) const BACKUP_MANIFEST_FILE: &str = "manifest.json";
 /// Settings that belong to this PC. A restore keeps the local values, so a
-/// backup cannot send the daily backups to a folder of its choosing, the
+/// backup cannot send the daily backups or their copies to a folder of its
+/// choosing, the
 /// look stays with the background picture, which backups leave out, the
 /// window keeps a size made for this screen, and cloud backup stays as this
 /// PC's sign in has it.
 const DEVICE_SETTINGS: &[&str] = &[
     AUTO_BACKUP_FOLDER_SETTING,
+    SYNC_FOLDER_SETTING,
     CLOUD_BACKUP_SETTING,
     APPEARANCE_MODE_SETTING,
     APPEARANCE_GROUND_SETTING,
@@ -933,18 +936,7 @@ fn write_manifest(backup_dir: &Path, manifest: &LocalBackupManifest) -> Result<(
 /// Reads and checks the manifest. Returns it with the artwork files that
 /// passed their check.
 fn load_and_validate_manifest(backup_dir: &Path) -> Result<(LocalBackupManifest, Vec<String>)> {
-    let manifest_path = backup_dir.join(BACKUP_MANIFEST_FILE);
-    let manifest_json = fs::read_to_string(&manifest_path).map_err(|error| {
-        warn!("no backup manifest at {}: {error}", manifest_path.display());
-        VaultimeError::Invalid("This folder is not a Vaultime backup.".into())
-    })?;
-
-    let manifest: LocalBackupManifest = serde_json::from_str(&manifest_json).map_err(|error| {
-        VaultimeError::Backup(format!(
-            "failed to parse backup manifest {}: {error}",
-            manifest_path.display()
-        ))
-    })?;
+    let manifest = read_manifest(backup_dir)?;
 
     if manifest.backup_version != BACKUP_VERSION {
         return Err(VaultimeError::Backup(format!(
@@ -975,6 +967,21 @@ fn load_and_validate_manifest(backup_dir: &Path) -> Result<(LocalBackupManifest,
     }
 
     Ok((manifest, artwork))
+}
+
+/// Reads the manifest in `backup_dir` without checking the files it lists.
+fn read_manifest(backup_dir: &Path) -> Result<LocalBackupManifest> {
+    let manifest_path = backup_dir.join(BACKUP_MANIFEST_FILE);
+    let manifest_json = fs::read_to_string(&manifest_path).map_err(|error| {
+        warn!("no backup manifest at {}: {error}", manifest_path.display());
+        VaultimeError::Invalid("This folder is not a Vaultime backup.".into())
+    })?;
+    serde_json::from_str(&manifest_json).map_err(|error| {
+        VaultimeError::Backup(format!(
+            "failed to parse backup manifest {}: {error}",
+            manifest_path.display()
+        ))
+    })
 }
 
 /// Checks the listed files. The database must be listed and intact. Artwork
