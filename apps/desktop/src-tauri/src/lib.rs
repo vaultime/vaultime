@@ -64,8 +64,12 @@ pub struct AppContext {
 pub fn run() {
     tauri::Builder::default()
         // Must be registered first. A second instance would track every game twice.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            tray::show_main_window(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // A login item that starts a second time stays out of sight, as
+            // the first start does.
+            if !args.iter().any(|arg| arg == tray::MINIMIZED_ARG) {
+                tray::show_main_window(app);
+            }
         }))
         .plugin(log_plugin())
         .plugin(tauri_plugin_opener::init())
