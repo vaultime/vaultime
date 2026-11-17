@@ -103,6 +103,7 @@ GUIDES_NAV = [
     ("Launchers", [
         ("steam-playtime.md", "Steam"),
         ("steam-deck-playtime.md", "Steam Deck"),
+        ("linux-playtime.md", "Heroic and Lutris on Linux"),
     ]),
 ]
 
