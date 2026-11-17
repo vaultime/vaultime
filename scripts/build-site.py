@@ -132,13 +132,22 @@ def guide_url(source):
     return section_url("/guides/", source)
 
 
-# Links between the Markdown files point at their pages instead. The guides
-# link to their overview as /guides/, since the docs have an index.md too.
-URL_FOR_SOURCE = {source.name: f"/{page}" for page, _, source, _ in PAGES}
-URL_FOR_SOURCE.update({source: doc_url(source) for _, entries in DOCS_NAV for source, _ in entries})
-URL_FOR_SOURCE.update(
-    {source: guide_url(source) for _, entries in GUIDES_NAV for source, _ in entries if source != "index.md"}
-)
+# Links between the Markdown files point at their pages instead, found by
+# file name, so two pages may not share one. The guides link to their
+# overview as /guides/, since the docs have an index.md too.
+def page_urls():
+    urls = {}
+    pages = [(source.name, f"/{page}") for page, _, source, _ in PAGES]
+    pages += [(source, doc_url(source)) for _, entries in DOCS_NAV for source, _ in entries]
+    pages += [(source, guide_url(source)) for _, entries in GUIDES_NAV for source, _ in entries if source != "index.md"]
+    for name, url in pages:
+        if name in urls:
+            raise SystemExit(f"Two pages are named {name}, so links to it would be ambiguous")
+        urls[name] = url
+    return urls
+
+
+URL_FOR_SOURCE = page_urls()
 
 
 def link_target(target):
@@ -146,9 +155,10 @@ def link_target(target):
         return target
     path, _, anchor = target.partition("#")
     name = Path(path).name
-    if "screenshots/" in path:
+    folder = Path(path).parent.name
+    if folder == "screenshots":
         return f"/screenshots/{name}"
-    if "art/" in path:
+    if folder == "art":
         return f"/art/{name}"
     if name.endswith(".md") and name not in URL_FOR_SOURCE:
         raise SystemExit(f"Link to a page the site does not have: {target}")
