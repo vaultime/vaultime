@@ -236,8 +236,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   with 8px corners and a faint fill, segmented choices (`segmented`,
   `segment`) and square step buttons. Colors come from the tokens in
   `index.css`, which `lib/theme.ts` derives for the chosen look, never loose
-  hex values in components. The website in `docs/site` uses the same fonts
-  and classes of the same names.
+  hex values in components. The website in `docs/site` uses the same fonts,
+  the graphite tokens with the grey accent of art without a strong color and
+  classes of the same names. A guide takes the color of its picture, worked
+  out by the rule of the app.
 - The default look is lit by the game in front: the game a page is about,
   else the one playing, else the one played last. Its art fills the window
   behind see-through panels, dimmed more where it would hide the text, and
