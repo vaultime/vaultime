@@ -123,7 +123,13 @@ pub fn is_likely_game_executable(filename: &str) -> bool {
         "uninst",
         "setup",
         "install",
-        "crash",
+        // Not plain "crash", which would take Crash Bandicoot and Crashlands.
+        "crashhandler",
+        "crash_handler",
+        "crashpad",
+        "crashreport",
+        "crashsender",
+        "crashdump",
         "reporter",
         "redist",
         "vcredist",
@@ -232,6 +238,10 @@ mod tests {
     #[test]
     fn rejects_non_game_executables() {
         assert!(!is_likely_game_executable("UnityCrashHandler64.exe"));
+        assert!(!is_likely_game_executable("crashpad_handler.exe"));
+        assert!(!is_likely_game_executable("CrashReporter.exe"));
+        assert!(is_likely_game_executable("CrashBandicootNSaneTrilogy.exe"));
+        assert!(is_likely_game_executable("Crashlands.exe"));
         assert!(!is_likely_game_executable("unins000.exe"));
         assert!(!is_likely_game_executable("vcredist_x64.exe"));
         assert!(is_likely_game_executable("Cyberpunk2077.exe"));
