@@ -3,8 +3,9 @@
 
 //! The window around the page in the look the player picked. The logo on the
 //! tray, the taskbar and the title bar takes the accent in its frame and
-//! hands, as the logo in the app does. On Windows the shortcuts of this
-//! program show the same, and the title bar follows dark or light mode. Windows 11 also gives it
+//! hands, as the logo in the app does. The shortcuts of this program on
+//! Windows and its launcher on Linux show the same, and on Windows the title
+//! bar follows dark or light mode. Windows 11 also gives it
 //! the ground of the page and the window border the accent. Linux leaves
 //! the title bar to the desktop.
 
@@ -81,8 +82,9 @@ struct Drawn {
     look: Option<WindowLook>,
     /// The accent of the icon, none for the bundled logo.
     icon: Option<String>,
-    /// The accent the shortcuts of this program were last given.
-    #[cfg(windows)]
+    /// The accent the shortcuts of this program, or its launcher on Linux,
+    /// were last given.
+    #[cfg(any(windows, target_os = "linux"))]
     shortcut_accent: Option<String>,
 }
 
@@ -129,8 +131,8 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
         paint_title_bar(app, look);
         drawn.look = Some(look.clone());
     }
-    // The shortcuts show what the tray shows. Development builds leave them
-    // alone, as they do login items.
+    // The shortcuts, and the launcher on Linux, show what the tray shows.
+    // Development builds leave them alone, as they do login items.
     #[cfg(windows)]
     if !cfg!(debug_assertions)
         && let Some(look) = &look
@@ -141,6 +143,14 @@ pub fn redraw<R: Runtime>(app: &AppHandle<R>) {
             context.app_dir.join(crate::constants::APPEARANCE_DIR),
             look.icon_accent.clone(),
         );
+        drawn.shortcut_accent = Some(look.icon_accent.clone());
+    }
+    #[cfg(target_os = "linux")]
+    if !cfg!(debug_assertions)
+        && let Some(look) = &look
+        && drawn.shortcut_accent.as_ref() != Some(&look.icon_accent)
+    {
+        crate::launcher_icon::follow(look.icon_accent.clone());
         drawn.shortcut_accent = Some(look.icon_accent.clone());
     }
     // The bundled logo shows until the page has told the accent, at start.

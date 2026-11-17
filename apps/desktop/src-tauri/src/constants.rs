@@ -588,10 +588,26 @@ pub const WINDOW_ICON_PX: u32 = 256;
 /// Sizes in the icon file of this program's shortcuts, as Explorer, the
 /// Start menu and the taskbar pick them at every display scale.
 pub const SHORTCUT_ICON_SIZES_PX: [u32; 6] = [16, 24, 32, 48, 64, 256];
-/// How long shortcuts wait before they take a new logo, so a start, which
-/// learns whether this PC is signed in a moment after the window shows,
-/// changes them once.
+/// How long shortcuts, and the launcher on Linux, wait before they take a new
+/// logo, so an accent tried out in the settings changes them once.
 pub const SHORTCUT_ICON_DELAY: Duration = Duration::from_secs(10);
+/// Name of this program's icon in the icon theme, as the desktop entry of the
+/// Linux packages gives it.
+pub const LAUNCHER_ICON_NAME: &str = "vaultime";
+/// File name of the desktop entry the Linux packages install.
+pub const DESKTOP_ENTRY_FILE: &str = "Vaultime.desktop";
+/// Sizes of the launcher icon in the user's icon folder, in pixels and the
+/// display scale they are for, as the hicolor theme names its folders.
+pub const LAUNCHER_ICON_SIZES: [(u32, u32); 8] = [
+    (32, 1),
+    (48, 1),
+    (64, 1),
+    (128, 1),
+    (256, 1),
+    (512, 1),
+    (128, 2),
+    (256, 2),
+];
 /// How deep shortcuts are looked for in the Start menu, whose programs may
 /// sit in a folder of their own.
 pub const SHORTCUT_SEARCH_DEPTH: usize = 2;

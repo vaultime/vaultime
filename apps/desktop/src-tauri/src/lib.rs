@@ -15,6 +15,8 @@ pub mod error;
 pub mod export;
 pub mod hex;
 pub mod integrity;
+#[cfg(target_os = "linux")]
+pub mod launcher_icon;
 pub mod library;
 pub mod platform;
 pub mod playtime;
