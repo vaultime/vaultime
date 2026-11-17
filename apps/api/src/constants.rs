@@ -33,6 +33,9 @@ pub const EMAIL_MAX_CHARS: usize = 254;
 /// Whether the server takes new accounts when `VAULTIME_OPEN_SIGNUPS` is
 /// unset. Closed, so a server only opens on purpose.
 pub const DEFAULT_OPEN_SIGNUPS: bool = false;
+/// Shortest access token secret and refresh token pepper, in characters.
+/// Operators fill them in by hand, `openssl rand -hex 32` gives 64.
+pub const MIN_SECRET_CHARS: usize = 32;
 
 // Abuse limits
 //

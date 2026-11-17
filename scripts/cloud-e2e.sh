@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Runs the cloud backup round trip of the desktop core against the real API.
-# PostgreSQL and the API run in Docker, the desktop test runs on this machine.
+# PostgreSQL and the server image of apps/api/Dockerfile run in Docker, the
+# desktop test runs on this machine.
 #
 #   bash scripts/cloud-e2e.sh
 #
@@ -12,7 +13,7 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-repo_mount="$(cd "$repo" && { pwd -W 2>/dev/null || pwd; })"
+image=vaultime-e2e-server
 network=vaultime-e2e
 db=vaultime-e2e-db
 api=vaultime-e2e-api
@@ -28,9 +29,9 @@ small_grace_secs=2
 # A third API that leaves sign-ups closed, as they are by default.
 closed_api=vaultime-e2e-api-closed
 closed_port=19007
-# The port the API listens on inside its container, as in install-api.sh.
-api_port=9005
-# Random bytes in each test secret, as install-api.sh makes them.
+# The port the server listens on in its image.
+api_port=8080
+# Random bytes in each test secret, as deploy/server/.env.example asks for.
 secret_bytes=32
 # How long the API gets to answer its health check, in seconds.
 health_wait_secs=30
@@ -39,21 +40,24 @@ log_tail_lines=40
 url="http://127.0.0.1:$port"
 python=$(command -v python3 || command -v python)
 
+# Removing with -v takes the /data volume of each API along.
 cleanup() {
-  docker rm -f "$api" "$small_api" "$closed_api" "$db" >/dev/null 2>&1 || true
+  docker rm -f -v "$api" "$small_api" "$closed_api" "$db" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
+  docker image rm "$image" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 cleanup
 
-echo "== building the API"
-bash "$repo/scripts/build-api.sh"
+echo "== building the server image"
+docker build -q -t "$image" "$repo/apps/api" >/dev/null
 
 echo "== starting PostgreSQL and the API"
 docker network create "$network" >/dev/null
+# The PostgreSQL of deploy/server/compose.yaml.
 docker run -d --name "$db" --network "$network" \
   -e POSTGRES_USER=vaultime -e POSTGRES_PASSWORD=e2e -e POSTGRES_DB=vaultime \
-  postgres:16 >/dev/null
+  postgres:17-alpine >/dev/null
 # Over TCP, so the temporary server of the first start does not count.
 until docker exec "$db" pg_isready -h 127.0.0.1 -U vaultime -q; do sleep 1; done
 
@@ -68,15 +72,12 @@ start_api() {
   shift 2
   MSYS_NO_PATHCONV=1 docker run -d --name "$name" --network "$network" \
     -p "127.0.0.1:$host_port:$api_port" \
-    --mount "type=bind,source=$repo_mount/dist-api,target=/app,readonly" \
-    -e VAULTIME_API_BIND="0.0.0.0:$api_port" \
     -e VAULTIME_DATABASE_URL="postgres://vaultime:e2e@$db:5432/vaultime" \
-    -e VAULTIME_BACKUP_ROOT=/tmp/backups \
     -e VAULTIME_ACCESS_TOKEN_SECRET="$(secret)" \
     -e VAULTIME_REFRESH_TOKEN_PEPPER="$(secret)" \
     -e VAULTIME_MIN_BACKUP_INTERVAL_SECONDS=0 \
     -e VAULTIME_STALE_PENDING_BACKUP_SECONDS=0 \
-    "$@" vaultime-linux-check /app/vaultime-api >/dev/null
+    "$@" "$image" >/dev/null
   for _ in $(seq 1 "$health_wait_secs"); do
     curl -fsS "http://127.0.0.1:$host_port/healthz" >/dev/null 2>&1 && return 0
     sleep 1
@@ -94,7 +95,7 @@ closed_url="http://127.0.0.1:$closed_port"
   || { echo "an API with sign-ups closed took a new account"; exit 1; }
 [ "$(curl -fsS "$closed_url/healthz" | field signups_open)" = False ] \
   || { echo "the health check of a closed API said sign-ups were open"; exit 1; }
-docker rm -f "$closed_api" >/dev/null
+docker rm -f -v "$closed_api" >/dev/null
 
 # The round trip needs two kept backups. A reused refresh token ends its
 # session at once here, the grace for a retry has its own check further down.

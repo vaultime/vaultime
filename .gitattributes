@@ -1,6 +1,9 @@
 # Shell scripts run on Linux, so they keep LF even in Windows checkouts.
 *.sh text eol=lf
 Dockerfile text eol=lf
+.dockerignore text eol=lf
+# The server setup runs on Linux too.
+deploy/server/* text eol=lf
 *.py text eol=lf
 *.service text eol=lf
 *.timer text eol=lf

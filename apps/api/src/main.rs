@@ -9,6 +9,7 @@ mod limits;
 mod models;
 mod routes;
 
+use std::io::IsTerminal;
 use std::sync::Arc;
 
 use config::Config;
@@ -35,6 +36,8 @@ async fn main() -> Result<(), AppError> {
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| EnvFilter::new("vaultime_api=info,tower_http=info")),
         )
+        // Color codes only clutter docker logs and journals.
+        .with_ansi(std::io::stdout().is_terminal())
         .init();
 
     let config = Arc::new(Config::from_env()?);

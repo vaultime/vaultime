@@ -9,6 +9,7 @@ use crate::constants::{
     DEFAULT_MAX_ACCOUNT_BYTES, DEFAULT_MAX_BACKUP_BYTES, DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT,
     DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT, DEFAULT_MIN_BACKUP_INTERVAL_SECS,
     DEFAULT_OPEN_SIGNUPS, DEFAULT_REFRESH_REUSE_GRACE_SECS, DEFAULT_STALE_PENDING_BACKUP_SECS,
+    MIN_SECRET_CHARS,
 };
 use crate::error::AppError;
 
@@ -41,8 +42,8 @@ impl Config {
             })?,
             database_url: env_var("VAULTIME_DATABASE_URL")?,
             backup_root: PathBuf::from(env_var("VAULTIME_BACKUP_ROOT")?),
-            access_token_secret: env_var("VAULTIME_ACCESS_TOKEN_SECRET")?,
-            refresh_token_pepper: env_var("VAULTIME_REFRESH_TOKEN_PEPPER")?,
+            access_token_secret: env_secret("VAULTIME_ACCESS_TOKEN_SECRET")?,
+            refresh_token_pepper: env_secret("VAULTIME_REFRESH_TOKEN_PEPPER")?,
             open_signups: env_bool("VAULTIME_OPEN_SIGNUPS", DEFAULT_OPEN_SIGNUPS)?,
             max_backup_bytes: env_i64("VAULTIME_MAX_BACKUP_BYTES", DEFAULT_MAX_BACKUP_BYTES, 1)?,
             max_account_bytes: env_i64("VAULTIME_MAX_ACCOUNT_BYTES", DEFAULT_MAX_ACCOUNT_BYTES, 1)?,
@@ -77,6 +78,20 @@ impl Config {
 
 fn env_var(name: &str) -> Result<String, AppError> {
     env::var(name).map_err(|_| AppError::configuration(format!("missing env var {name}")))
+}
+
+fn env_secret(name: &str) -> Result<String, AppError> {
+    check_secret(name, env_var(name)?)
+}
+
+/// A short secret would sign tokens someone could guess.
+fn check_secret(name: &str, value: String) -> Result<String, AppError> {
+    if value.chars().count() < MIN_SECRET_CHARS {
+        return Err(AppError::configuration(format!(
+            "{name} must be at least {MIN_SECRET_CHARS} characters long"
+        )));
+    }
+    Ok(value)
 }
 
 fn env_i64(name: &str, default: i64, min: i64) -> Result<i64, AppError> {
@@ -164,6 +179,22 @@ mod tests {
                 matches!(open_signups(Ok(invalid)), Err(AppError::Configuration(_))),
                 "{invalid:?} was taken"
             );
+        }
+    }
+
+    #[test]
+    fn secrets_need_their_minimum_length() {
+        let name = "VAULTIME_ACCESS_TOKEN_SECRET";
+        let long_enough = "s".repeat(MIN_SECRET_CHARS);
+        assert_eq!(
+            check_secret(name, long_enough.clone()).unwrap(),
+            long_enough
+        );
+        for short in [String::new(), "s".repeat(MIN_SECRET_CHARS - 1)] {
+            assert!(matches!(
+                check_secret(name, short),
+                Err(AppError::Configuration(message)) if message.starts_with(name)
+            ));
         }
     }
 }
