@@ -3,6 +3,7 @@
 
 //! Sessions: listing, correcting, notes and the export.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -12,17 +13,19 @@ use tauri::State;
 use crate::AppContext;
 use crate::db::connection::Database;
 use crate::db::models::{Session, SessionEvent, SessionNote};
-use crate::db::repo::{annotations, corrections, session_events, sessions};
+use crate::db::repo::{annotations, corrections, games, session_events, sessions};
 use crate::error::VaultimeError;
 use crate::playtime;
-use crate::playtime::games::GameTotals;
+use crate::playtime::games::{GameTotals, LauncherTime};
 use crate::tracking::live::LiveSessions;
 
-/// Every session and each game's totals of them.
+/// Every session, each game's totals of them and the time each launcher's
+/// copies of a game recorded.
 #[derive(Debug, Serialize)]
 pub struct SessionList {
     pub sessions: Vec<Session>,
     pub games: Vec<GameTotals>,
+    pub launchers: Vec<LauncherTime>,
 }
 
 /// Every session, running ones as of the tracker's latest tick, each with
@@ -41,8 +44,13 @@ pub fn list_sessions(
     playtime::totals::as_shown(&db, &live, &mut all, now.timestamp_millis())?;
     sessions::show_running_elsewhere(&db, &app_context.device_id, &mut all)?;
     let recent_since = now - chrono::TimeDelta::days(i64::from(recent_days));
+    let launcher_of: HashMap<_, _> = games::list_all_games(&db)?
+        .into_iter()
+        .map(|game| (game.id, game.launcher_source))
+        .collect();
     Ok(SessionList {
         games: playtime::games::game_totals(&all, recent_since, now),
+        launchers: playtime::games::launcher_times(&all, &launcher_of),
         sessions: all,
     })
 }

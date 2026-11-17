@@ -36,6 +36,7 @@ import { DAY_MS, DEVICE_NAME_MAX_CHARS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/
 import { fillView, toCrop } from "@/lib/crop";
 import {
   estimateGameTotals,
+  estimateLauncherTimes,
   estimateJournalWeek,
   estimatePlayedToday,
   estimateRecentPlay,
@@ -1605,7 +1606,11 @@ mockIPC((cmd, payload) => {
     case "list_sessions": {
       // Copies, as the real IPC sends, so corrections show up as new data.
       const sessions = shownSessions();
-      return { sessions, games: estimateGameTotals(sessions, Number(args.recentDays)) };
+      return {
+        sessions,
+        games: estimateGameTotals(sessions, Number(args.recentDays)),
+        launchers: estimateLauncherTimes(sessions, allGames),
+      };
     }
     case "export_sessions":
       return allSessions.filter((session) => session.ended_at_wall).length;

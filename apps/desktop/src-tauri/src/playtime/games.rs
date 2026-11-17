@@ -4,7 +4,8 @@
 //! What the library and a game's page show for each game: its time, its
 //! sessions and their trust labels, every install that counts as it included.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::BuildHasher;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -93,6 +94,48 @@ pub fn game_totals(
         }
     }
     by_game.into_values().collect()
+}
+
+/// The time one launcher's copies of a game recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LauncherTime {
+    /// The game shown, which installs linked to it count as.
+    pub game_id: String,
+    /// Where the copies came from as their game names it, like `steam` or
+    /// `folder_scan`, none for a game added by hand.
+    pub launcher: Option<String>,
+    /// Time that counts, a stretch two copies shared counted once.
+    pub runtime_ms: i64,
+}
+
+/// The time each launcher's copies of each game recorded, so a launcher's
+/// page shows what was played through it. A session counts for the launcher
+/// of the install that recorded it, which may be another install or a game
+/// of another PC linked to the game shown. `launcher_of` maps every game to
+/// its launcher.
+pub fn launcher_times<S: BuildHasher>(
+    sessions: &[Session],
+    launcher_of: &HashMap<String, Option<String>, S>,
+) -> Vec<LauncherTime> {
+    let mut times: BTreeMap<(&str, Option<&str>), i64> = BTreeMap::new();
+    for session in sessions.iter().filter(|session| counts_as_play(session)) {
+        let recorded = session
+            .recorded_game_id
+            .as_ref()
+            .unwrap_or(&session.game_id);
+        let launcher = launcher_of.get(recorded).and_then(Option::as_deref);
+        *times
+            .entry((session.game_id.as_str(), launcher))
+            .or_default() += session.counted_runtime_ms;
+    }
+    times
+        .into_iter()
+        .map(|((game_id, launcher), runtime_ms)| LauncherTime {
+            game_id: game_id.into(),
+            launcher: launcher.map(Into::into),
+            runtime_ms,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -200,6 +243,51 @@ mod tests {
             totals[0].last_played_at.as_deref(),
             Some("2026-10-07T12:00:00.000Z")
         );
+    }
+
+    #[test]
+    fn each_launcher_gets_the_time_its_copies_recorded() {
+        let launcher_of = HashMap::from([
+            ("cyberpunk".to_string(), Some("steam".to_string())),
+            ("cyberpunk-gog".to_string(), Some("gog".to_string())),
+            ("celeste".to_string(), Some("folder_scan".to_string())),
+            ("tetris".to_string(), None),
+        ]);
+        let steam = session("cyberpunk", "2026-10-02T18:00:00.000Z", 60, "local");
+        let mut gog = session("cyberpunk", "2026-10-03T18:00:00.000Z", 45, "local");
+        gog.recorded_game_id = Some("cyberpunk-gog".into());
+        let mut shared = session("cyberpunk", "2026-10-04T18:00:00.000Z", 30, "local");
+        shared.recorded_game_id = Some("cyberpunk-gog".into());
+        // Its half hour ran beside the Steam copy and counts there.
+        shared.counted_runtime_ms = 0;
+        let mut discarded = session("cyberpunk", "2026-10-05T18:00:00.000Z", 0, "edited");
+        discarded.runtime_ms = 0;
+        let found = session("celeste", "2026-10-06T08:00:00.000Z", 20, "local");
+        let by_hand = session("tetris", "2026-10-06T09:00:00.000Z", 10, "local");
+
+        let times = launcher_times(
+            &[steam, gog, shared, discarded, found, by_hand],
+            &launcher_of,
+        );
+        let minutes = |game: &str, launcher: Option<&str>| {
+            times
+                .iter()
+                .find(|time| time.game_id == game && time.launcher.as_deref() == launcher)
+                .map(|time| time.runtime_ms / 60_000)
+        };
+        assert_eq!(minutes("cyberpunk", Some("steam")), Some(60));
+        assert_eq!(minutes("cyberpunk", Some("gog")), Some(45));
+        assert_eq!(minutes("celeste", Some("folder_scan")), Some(20));
+        assert_eq!(minutes("tetris", None), Some(10));
+        assert_eq!(times.len(), 4);
+    }
+
+    #[test]
+    fn a_session_of_a_game_no_longer_known_counts_without_launcher() {
+        let gone = session("removed", "2026-10-02T18:00:00.000Z", 30, "local");
+        let times = launcher_times(&[gone], &HashMap::new());
+        assert_eq!(times[0].launcher, None);
+        assert_eq!(times[0].runtime_ms, 30 * 60_000);
     }
 
     #[test]

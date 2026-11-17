@@ -18,11 +18,13 @@ import { countsAsPlay } from "@/lib/sessions";
 import { parseVaultimeDate, startOfDay, toDayKey } from "@/lib/time";
 import type {
   DayShare,
+  Game,
   GameStatusChange,
   GameTime,
   GameTotals,
   JournalDayPlay,
   JournalWeekPlay,
+  LauncherTime,
   PlayRun,
   RecentPlay,
   RunPiece,
@@ -378,6 +380,20 @@ function estimateSessionsBetween(
     session_lengths: lengths,
     longest_session_id: longest?.id ?? null,
   };
+}
+
+/** What `list_sessions` answers for the time each launcher's copies of a game recorded. */
+export function estimateLauncherTimes(sessions: Session[], games: Game[]): LauncherTime[] {
+  const launcherOf = new Map(games.map((game) => [game.id, game.launcher_source]));
+  const times = new Map<string, LauncherTime>();
+  for (const session of sessions.filter(countsAsPlay)) {
+    const launcher = launcherOf.get(session.recorded_game_id ?? session.game_id) ?? null;
+    const key = `${session.game_id}|${launcher}`;
+    const time = times.get(key) ?? { game_id: session.game_id, launcher, runtime_ms: 0 };
+    time.runtime_ms += session.counted_runtime_ms;
+    times.set(key, time);
+  }
+  return [...times.values()];
 }
 
 /** What `list_sessions` answers for each game, trust labels of the last `recentDays` days counting as recent. */

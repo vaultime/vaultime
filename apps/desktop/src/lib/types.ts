@@ -352,10 +352,21 @@ export interface GameTotals {
   recent_recovered_count: number;
 }
 
-/** Every session and each game's totals of them. */
+/** The time one launcher's copies of a game recorded. Mirrors the Rust `LauncherTime` struct. */
+export interface LauncherTime {
+  /** The game shown, which installs linked to it count as. */
+  game_id: string;
+  /** Where the copies came from as their game names it, like "steam" or "folder_scan", null for a game added by hand. */
+  launcher: string | null;
+  /** Time that counts, a stretch two copies shared counted once. */
+  runtime_ms: number;
+}
+
+/** Every session, each game's totals of them and the time each launcher's copies of a game recorded. */
 export interface SessionList {
   sessions: Session[];
   games: GameTotals[];
+  launchers: LauncherTime[];
 }
 
 /** The last few days of play. Mirrors the Rust `RecentPlay` struct. */
