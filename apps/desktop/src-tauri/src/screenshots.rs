@@ -84,33 +84,37 @@ pub fn for_sessions(
         .into_iter()
         .filter_map(|(game_id, app_id)| Some((game_id, app_id?)))
         .collect();
-    Ok(
-        taken_during(&ranges, &app_of, steam_screenshots::list(&root))
+    let mut found = Vec::new();
+    for (session_id, shots) in taken_during(&ranges, &app_of, steam_screenshots::list(&root)) {
+        // Steam keeps listing a screenshot deleted outside it.
+        let shots: Vec<_> = shots
             .into_iter()
-            .map(|(session_id, shots)| SessionScreenshots {
-                session_id,
-                total: shots.len(),
-                shots: shots
-                    .into_iter()
-                    .take(SCREENSHOTS_PER_SESSION)
-                    .map(|shot| Screenshot {
-                        thumbnail: steam_screenshots::picture(
-                            &root,
-                            &shot.app_id,
-                            &shot.file,
-                            true,
-                        )
-                        .and_then(|path| data_url(&path, STEAM_THUMBNAIL_MAX_BYTES)),
-                        taken_at_ms: shot.taken_at * 1000,
-                        width: shot.width,
-                        height: shot.height,
-                        app_id: shot.app_id,
-                        file: shot.file,
-                    })
-                    .collect(),
+            .filter(|shot| {
+                steam_screenshots::picture(&root, &shot.app_id, &shot.file, false).is_some()
             })
-            .collect(),
-    )
+            .collect();
+        if shots.is_empty() {
+            continue;
+        }
+        found.push(SessionScreenshots {
+            session_id,
+            total: shots.len(),
+            shots: shots
+                .into_iter()
+                .take(SCREENSHOTS_PER_SESSION)
+                .map(|shot| Screenshot {
+                    thumbnail: steam_screenshots::picture(&root, &shot.app_id, &shot.file, true)
+                        .and_then(|path| data_url(&path, STEAM_THUMBNAIL_MAX_BYTES)),
+                    taken_at_ms: shot.taken_at * 1000,
+                    width: shot.width,
+                    height: shot.height,
+                    app_id: shot.app_id,
+                    file: shot.file,
+                })
+                .collect(),
+        });
+    }
+    Ok(found)
 }
 
 /// Whether the journal shows Steam screenshots, which it does unless turned off.
