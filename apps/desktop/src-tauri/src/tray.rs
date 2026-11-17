@@ -536,6 +536,7 @@ mod tests {
                 active_ms: runtime_ms,
                 idle_ms: 0,
             },
+            chrono::Utc::now(),
         );
         let (lines, running) =
             status_lines(&db, &live, &here, start + TimeDelta::minutes(180)).unwrap();

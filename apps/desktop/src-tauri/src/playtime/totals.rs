@@ -1287,6 +1287,7 @@ mod tests {
                 active_ms: 40 * MINUTE,
                 idle_ms: 0,
             },
+            chrono::Utc::now(),
         );
         let now = (utc(start) + TimeDelta::minutes(40)).timestamp_millis();
 
@@ -1504,6 +1505,7 @@ mod tests {
                 active_ms: 60 * MINUTE,
                 idle_ms: 0,
             },
+            chrono::Utc::now(),
         );
         let now = (utc(start) + TimeDelta::minutes(60)).timestamp_millis();
 

@@ -89,7 +89,7 @@ export function useLibrary(): LibraryState {
 // The live session has contexts of its own, so a poll renders only what shows it.
 export const ActiveContext = createContext<Session[]>([]);
 export const PlayingContext = createContext<ReadonlySet<string>>(new Set());
-export const LastPollContext = createContext(0);
+export const CountedAtContext = createContext<Record<string, number>>({});
 export const MinuteContext = createContext(0);
 export const PlayedTodayContext = createContext(0);
 
@@ -103,9 +103,9 @@ export function usePlaying(): ReadonlySet<string> {
   return useContext(PlayingContext);
 }
 
-/** When the running sessions were last polled, for ticking the live timer between polls. */
-export function useLastPoll(): number {
-  return useContext(LastPollContext);
+/** When the tracker counted each running session's times, by session id, for ticking its timer on from there. */
+export function useCountedAt(): Record<string, number> {
+  return useContext(CountedAtContext);
 }
 
 /** The minute of the last poll, so words like "5 min ago" move on. */

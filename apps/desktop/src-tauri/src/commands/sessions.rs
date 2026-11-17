@@ -65,6 +65,9 @@ pub struct ActiveSessions {
     pub sessions: Vec<Session>,
     /// Clock time with a game running today, as the journal counts it.
     pub played_today_ms: i64,
+    /// When the tracker counted each session's times, in Unix milliseconds,
+    /// so its clock can run on from there.
+    pub counted_at_ms: HashMap<String, i64>,
 }
 
 /// The running sessions as of the tracker's latest tick, and today's play.
@@ -74,14 +77,12 @@ pub fn get_active_sessions(
     live: State<'_, Arc<LiveSessions>>,
     app_context: State<'_, AppContext>,
 ) -> Result<ActiveSessions, VaultimeError> {
+    // One copy of the counters, so the times, the sessions and today's play
+    // all come from the same ticks.
+    let live = live.snapshot();
     let mut active = sessions::get_active_sessions(&db, &app_context.device_id)?;
-    playtime::totals::as_shown(
-        &db,
-        &live,
-        &mut active,
-        chrono::Utc::now().timestamp_millis(),
-    )?;
     let now_ms = chrono::Utc::now().timestamp_millis();
+    playtime::totals::as_shown(&db, &live, &mut active, now_ms)?;
     let played_today_ms = playtime::summaries::played_on(
         &db,
         &live,
@@ -89,9 +90,18 @@ pub fn get_active_sessions(
         playtime::summaries::today_of(&chrono::Local, now_ms),
         now_ms,
     )?;
+    // A session the tracker has not counted yet runs on from now.
+    let counted_at_ms = active
+        .iter()
+        .map(|session| {
+            let counted = live.counted_at_ms(&session.id).unwrap_or(now_ms);
+            (session.id.clone(), counted)
+        })
+        .collect();
     Ok(ActiveSessions {
         sessions: active,
         played_today_ms,
+        counted_at_ms,
     })
 }
 

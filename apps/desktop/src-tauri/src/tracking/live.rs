@@ -4,7 +4,9 @@
 //! Counters of the running sessions as of the latest tick.
 
 use std::collections::HashMap;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
+use chrono::{DateTime, Utc};
 
 use crate::db::models::Session;
 
@@ -21,12 +23,40 @@ pub struct LiveCounters {
 /// counters from here instead.
 #[derive(Debug, Default)]
 pub struct LiveSessions {
-    counters: Mutex<HashMap<String, LiveCounters>>,
+    counted: Mutex<HashMap<String, Counted>>,
+}
+
+/// A session's counters and when its latest tick counted them.
+#[derive(Debug, Clone, Copy)]
+struct Counted {
+    counters: LiveCounters,
+    /// Unix milliseconds.
+    at_ms: i64,
 }
 
 impl LiveSessions {
-    pub fn update(&self, session_id: &str, counters: LiveCounters) {
-        self.lock().insert(session_id.to_owned(), counters);
+    /// Takes a session's counters as of `wall`, when its tick counted them.
+    /// Each session keeps its own time, as a tick that misses a game leaves
+    /// that session's counters as they were.
+    pub fn update(&self, session_id: &str, counters: LiveCounters, wall: DateTime<Utc>) {
+        let at_ms = wall.timestamp_millis();
+        self.lock()
+            .insert(session_id.to_owned(), Counted { counters, at_ms });
+    }
+
+    /// When the tracker last counted a session, so its clock can run on from
+    /// there.
+    pub fn counted_at_ms(&self, session_id: &str) -> Option<i64> {
+        self.lock().get(session_id).map(|counted| counted.at_ms)
+    }
+
+    /// A copy as of now, for reads that have to agree with each other while
+    /// the tracker counts on.
+    #[must_use]
+    pub fn snapshot(&self) -> Self {
+        Self {
+            counted: Mutex::new(self.lock().clone()),
+        }
     }
 
     pub fn remove(&self, session_id: &str) {
@@ -34,7 +64,7 @@ impl LiveSessions {
     }
 
     pub fn get(&self, session_id: &str) -> Option<LiveCounters> {
-        self.lock().get(session_id).copied()
+        self.lock().get(session_id).map(|counted| counted.counters)
     }
 
     /// Brings an open session up to the latest tick. A closed session, or one
@@ -51,8 +81,8 @@ impl LiveSessions {
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, LiveCounters>> {
-        self.counters.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock(&self) -> MutexGuard<'_, HashMap<String, Counted>> {
+        self.counted.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -95,7 +125,7 @@ mod tests {
             active_ms: 40_000,
             idle_ms: 5_000,
         };
-        live.update("running", counters);
+        live.update("running", counters, Utc::now());
 
         let mut session = open_session("running");
         live.apply(&mut session);
@@ -112,5 +142,27 @@ mod tests {
         let mut stored = open_session("running");
         live.apply(&mut stored);
         assert_eq!(stored.runtime_ms, 30_000);
+    }
+
+    #[test]
+    fn keeps_when_each_session_was_counted() {
+        let live = LiveSessions::default();
+        let tick = |ms| DateTime::from_timestamp_millis(ms).unwrap();
+        let counters = LiveCounters {
+            runtime_ms: 5_000,
+            active_ms: 5_000,
+            idle_ms: 0,
+        };
+        live.update("running", counters, tick(1_790_000_005_000));
+        // Its game was missing at the latest tick, which left it as it was.
+        live.update("missing", counters, tick(1_790_000_000_000));
+        assert_eq!(live.counted_at_ms("running"), Some(1_790_000_005_000));
+        assert_eq!(live.counted_at_ms("missing"), Some(1_790_000_000_000));
+        assert_eq!(live.counted_at_ms("ended"), None);
+
+        let seen = live.snapshot();
+        live.remove("running");
+        assert_eq!(seen.get("running"), Some(counters));
+        assert_eq!(seen.counted_at_ms("running"), Some(1_790_000_005_000));
     }
 }

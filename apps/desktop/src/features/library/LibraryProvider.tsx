@@ -33,7 +33,7 @@ import { usePageVisible } from "@/lib/use-page-visible";
 import { describeError } from "@/lib/utils";
 import {
   ActiveContext,
-  LastPollContext,
+  CountedAtContext,
   LibraryContext,
   MinuteContext,
   PlayedTodayContext,
@@ -55,7 +55,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [links, setLinks] = useState<GameLink[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
-  const [lastPoll, setLastPoll] = useState(() => Date.now());
+  const [countedAt, setCountedAt] = useState<Record<string, number>>({});
   const [playedToday, setPlayedToday] = useState(0);
   const [today, setToday] = useState(() => toDayKey(new Date()));
   const [minute, setMinute] = useState(() => Math.floor(Date.now() / MINUTE_MS));
@@ -120,7 +120,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     function poll() {
       api
         .getActiveSessions()
-        .then(({ sessions: next, played_today_ms }) => {
+        .then(({ sessions: next, played_today_ms, counted_at_ms }) => {
           if (cancelled) return;
           const json = JSON.stringify(next);
           if (json !== activeJson.current) {
@@ -128,7 +128,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             setActive(next);
           }
           setPlayedToday(played_today_ms);
-          setLastPoll(Date.now());
+          // Each clock runs on from the tick its session's times are of. A poll
+          // before the next tick brings the same times, so no clock jumps back.
+          setCountedAt(counted_at_ms);
           setMinute(Math.floor(Date.now() / MINUTE_MS));
           setToday(toDayKey(new Date()));
           // The first poll, or a session started or ended: totals changed.
@@ -327,11 +329,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     <LibraryContext.Provider value={value}>
       <ActiveContext.Provider value={active}>
         <PlayingContext.Provider value={playing}>
-          <LastPollContext.Provider value={lastPoll}>
+          <CountedAtContext.Provider value={countedAt}>
             <MinuteContext.Provider value={minute}>
               <PlayedTodayContext.Provider value={playedToday}>{children}</PlayedTodayContext.Provider>
             </MinuteContext.Provider>
-          </LastPollContext.Provider>
+          </CountedAtContext.Provider>
         </PlayingContext.Provider>
       </ActiveContext.Provider>
     </LibraryContext.Provider>

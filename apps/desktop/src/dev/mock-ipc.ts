@@ -1767,8 +1767,15 @@ mockIPC((cmd, payload) => {
       const ids = new Set(shownSessions().filter((session) => session.game_id === args.gameId).map((session) => session.id));
       return events.filter((event) => ids.has(event.session_id) && event.event_type !== "heartbeat");
     }
-    case "get_active_sessions":
-      return { sessions: runningNow(), played_today_ms: estimatePlayedToday(sessionsNow()) };
+    case "get_active_sessions": {
+      const running = runningNow();
+      const countedAt = Date.now();
+      return {
+        sessions: running,
+        played_today_ms: estimatePlayedToday(sessionsNow()),
+        counted_at_ms: Object.fromEntries(running.map((session) => [session.id, countedAt])),
+      };
+    }
     case "get_journal_week":
       return estimateJournalWeek(
         sessionsNow(),

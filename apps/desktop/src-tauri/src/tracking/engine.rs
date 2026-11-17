@@ -461,7 +461,11 @@ fn poll_tick(
                     if observation.has_foreground_window {
                         active_session.last_foreground_at = Some(started);
                     }
-                    live.update(&active_session.session_id, active_session.counters());
+                    live.update(
+                        &active_session.session_id,
+                        active_session.counters(),
+                        active_session.last_wall_at,
+                    );
                     active.insert(game_id.clone(), active_session);
                 }
                 Err(error) => {
@@ -489,7 +493,11 @@ fn poll_tick(
                 &activity_snapshot,
                 &clocks,
             );
-            live.update(&session.session_id, session.counters());
+            live.update(
+                &session.session_id,
+                session.counters(),
+                session.last_wall_at,
+            );
             // One session that fails to store its tick holds up no other.
             if let Err(error) = applied {
                 error!(

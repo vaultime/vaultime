@@ -116,6 +116,12 @@ export const ACTIVE_POLL_MS = 5 * SECOND_MS;
 /** How often the live timer redraws between polls. */
 export const LIVE_TICK_MS = SECOND_MS;
 
+/**
+ * The longest stretch the tracker counts between two ticks, so the live timer
+ * runs on no further past a session's last count. Same as MAX_TICK_GAP_MS in constants.rs.
+ */
+export const MAX_TICK_GAP_MS = 60 * SECOND_MS;
+
 /** Idle threshold shown until the settings load. Same as DEFAULT_IDLE_THRESHOLD_SECS in constants.rs. */
 export const DEFAULT_IDLE_THRESHOLD_SECS = 300;
 

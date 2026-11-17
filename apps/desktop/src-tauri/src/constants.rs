@@ -73,7 +73,8 @@ pub const CLOCK_STEP_TOLERANCE_MS: i64 = 20_000;
 pub const CLOCK_TOTAL_DRIFT_TOLERANCE_MS: i64 = 45_000;
 /// A longer pause between ticks means the machine slept or the tracker stalled.
 /// That time is not counted. On Windows the monotonic clock keeps running
-/// during sleep and on Linux it stops, so both clocks are checked.
+/// during sleep and on Linux it stops, so both clocks are checked. The live
+/// clock of the page runs on no further, as `MAX_TICK_GAP_MS` in constants.ts.
 pub const MAX_TICK_GAP_MS: i64 = 60_000;
 /// How far the clock that counts through sleep may run ahead of the
 /// monotonic clock in one tick before the tick counts as asleep, in

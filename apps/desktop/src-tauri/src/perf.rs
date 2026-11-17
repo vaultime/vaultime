@@ -260,6 +260,7 @@ fn start_running(db: &Database, game_id: &str, live: &LiveSessions) {
             active_ms: MINUTES * 60_000,
             idle_ms: 0,
         },
+        chrono::Utc::now(),
     );
 }
 

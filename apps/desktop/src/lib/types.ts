@@ -419,6 +419,8 @@ export interface ActiveSessions {
   sessions: Session[];
   /** Clock time with a game running today, as the journal counts it. */
   played_today_ms: number;
+  /** When the tracker counted each session's times, in Unix milliseconds, by session id. */
+  counted_at_ms: Record<string, number>;
 }
 
 /** Why a game's page suggests stepping aside. Mirrors the Rust `StepsAsideHint` struct. */

@@ -10,12 +10,12 @@ import { useAwayTimer } from "@/features/away/away-timer-context";
 import {
   useActiveSessions,
   useCurrentSession,
-  useLastPoll,
+  useCountedAt,
   useLibrary,
   usePlayedToday,
 } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
-import { LIVE_TICK_MS, SECOND_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
+import { LIVE_TICK_MS, MAX_TICK_GAP_MS, SECOND_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
 import { formatCalendarDay, formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
 import { usePageVisible } from "@/lib/use-page-visible";
 import type { AwayTimer } from "@/lib/types";
@@ -33,7 +33,7 @@ function idleTimeText(seconds: number): string {
 export function LiveBar() {
   const { games, covers, summaries, idleThresholdSeconds, thisDeviceId } = useLibrary();
   const active = useActiveSessions();
-  const activePolledAt = useLastPoll();
+  const countedAt = useCountedAt();
   const current = useCurrentSession();
   const { timer, stop } = useAwayTimer();
 
@@ -104,7 +104,7 @@ export function LiveBar() {
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-        <RunningClock runtimeMs={current.runtime_ms} polledAt={activePolledAt} />
+        <RunningClock runtimeMs={current.runtime_ms} since={countedAt[current.id]} maxRunOnMs={MAX_TICK_GAP_MS} />
         <div className="flex items-center gap-2.5 text-[11.5px] text-faint tabular-nums">
           <span className="whitespace-nowrap">Active {formatHoursMinutes(current.active_ms)}</span>
           <span aria-hidden="true" className="block h-1 w-20 overflow-hidden rounded-full bg-idle lg:w-40 xl:w-60">
@@ -124,7 +124,7 @@ export function LiveBar() {
           >
             <Timer className="size-3.5 shrink-0 text-violet" />
             <span className="hidden truncate xl:inline">{games.find((g) => g.id === timer.game_id)?.title}</span>
-            <RunningClock small runtimeMs={0} polledAt={parseVaultimeDate(timer.started_at).getTime()} />
+            <RunningClock small runtimeMs={0} since={parseVaultimeDate(timer.started_at).getTime()} />
             <Square className="size-2.5 shrink-0" fill="currentColor" />
           </button>
         ) : (
@@ -176,7 +176,7 @@ function TimedBar({ timer, onStop }: { timer: AwayTimer; onStop: () => void }) {
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-        <RunningClock runtimeMs={0} polledAt={started.getTime()} />
+        <RunningClock runtimeMs={0} since={started.getTime()} />
         <span className="text-[11.5px] text-faint">Timed by you, saved as Manual</span>
       </div>
       <div className={cn(SIDE, "justify-end")}>
@@ -194,10 +194,22 @@ const BAR = "panel col-span-2 flex h-[72px] items-center gap-[18px] pr-3.5 pl-3"
 const SIDE = "flex w-[230px] min-w-0 shrink-0 items-center gap-3 xl:w-[290px]";
 
 /**
- * The running time, ticking every second from the last poll while the window
- * is seen, so it does not jump every poll. Only the clock draws each second.
+ * The running time, `runtimeMs` as of `since`, ticking every second while the
+ * window is seen, so it does not jump every poll. Only the clock draws each second.
+ * It runs on at most `maxRunOnMs` past `since`, so a count gone stale, as
+ * across a sleep, adds no time the tracker would not count.
  */
-function RunningClock({ runtimeMs, polledAt, small }: { runtimeMs: number; polledAt: number; small?: boolean }) {
+function RunningClock({
+  runtimeMs,
+  since,
+  maxRunOnMs = Infinity,
+  small,
+}: {
+  runtimeMs: number;
+  since: number;
+  maxRunOnMs?: number;
+  small?: boolean;
+}) {
   const [now, setNow] = useState(() => Date.now());
   const visible = usePageVisible();
   useEffect(() => {
@@ -205,7 +217,7 @@ function RunningClock({ runtimeMs, polledAt, small }: { runtimeMs: number; polle
     const timer = setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
     return () => clearInterval(timer);
   }, [visible]);
-  const shownMs = runtimeMs + Math.max(0, now - polledAt);
+  const shownMs = runtimeMs + Math.min(Math.max(0, now - since), maxRunOnMs);
   return (
     <span
       className={cn(
