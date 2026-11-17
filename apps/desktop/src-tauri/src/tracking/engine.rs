@@ -63,8 +63,8 @@ struct ActiveSession {
     stored_at: Instant,
     /// Ticks in a row the game was missing from the process list.
     missed_ticks: u32,
-    /// The wall time of the first of them, where the session ends when the
-    /// game stays gone. A later tick may come only after the PC slept.
+    /// Where the session ends when the game stays gone, worked out at the
+    /// first of them. A later tick may come only after the PC slept.
     missing_since: Option<DateTime<Utc>>,
 }
 
@@ -110,6 +110,40 @@ impl ActiveSession {
     /// True when ticks were counted since the last checkpoint.
     fn has_unsaved_time(&self) -> bool {
         self.stored.runtime_ms != self.runtime_ms
+    }
+
+    /// The time from the last counted tick to the tick of `clocks`.
+    fn elapsed(&self, clocks: &Clocks) -> ElapsedMs {
+        ElapsedMs {
+            mono: clocks
+                .now
+                .saturating_duration_since(self.last_tick_at)
+                .as_millis() as i64,
+            wall: clocks
+                .wall
+                .signed_duration_since(self.last_wall_at)
+                .num_milliseconds(),
+            // Only growth counts. A reading that moved back, as WSL2 can
+            // have it, is no sleep.
+            slept: clocks
+                .asleep_ms
+                .zip(self.last_asleep_ms)
+                .map_or(0, |(now_asleep, before_asleep)| {
+                    (now_asleep - before_asleep).max(0)
+                }),
+        }
+    }
+
+    /// Where the session ends when it ends at the tick of `clocks`: there,
+    /// or at its last counted tick when a sleep or a stall lies between
+    /// them, as the game may have gone any time before it. Never before the
+    /// last counted tick.
+    fn end_at(&self, clocks: &Clocks) -> DateTime<Utc> {
+        if self.elapsed(clocks).is_gap() {
+            self.last_wall_at
+        } else {
+            clocks.wall.max(self.last_wall_at)
+        }
     }
 }
 
@@ -330,8 +364,12 @@ fn poll_loop(
 /// Ends every tracked session as tracking stops, one whose game went missing
 /// where it did.
 fn end_all_sessions(db: &Database, live: &LiveSessions, active: HashMap<String, ActiveSession>) {
+    let clocks = Clocks::read();
     for session in active.into_values() {
-        end_active_session(db, live, &session, session.missing_since);
+        let ended_at = session
+            .missing_since
+            .unwrap_or_else(|| session.end_at(&clocks));
+        end_active_session(db, live, &session, ended_at);
     }
 }
 
@@ -436,11 +474,7 @@ fn poll_tick(
     // All clocks are read together after the work above, which can wait on
     // the database while a backup runs. Reading them apart would look like a
     // clock change.
-    let clocks = Clocks {
-        now: Instant::now(),
-        wall: Utc::now(),
-        asleep_ms: platform::clock::asleep_ms(),
-    };
+    let clocks = Clocks::read();
     for session in active.values_mut() {
         if let Some(observation) = observed_games.get(&session.game_id) {
             if !observation.is_running {
@@ -466,7 +500,7 @@ fn poll_tick(
         }
     }
 
-    end_finished_sessions(db, live, active, &observed_games, clocks.wall);
+    end_finished_sessions(db, live, active, &observed_games, &clocks);
 
     debug!(
         "poll tick: {} tracked, {} running, {} active sessions",
@@ -490,7 +524,7 @@ fn end_finished_sessions(
     live: &LiveSessions,
     active: &mut HashMap<String, ActiveSession>,
     observed_games: &HashMap<String, GameObservation>,
-    wall: DateTime<Utc>,
+    clocks: &Clocks,
 ) {
     let mut finished = Vec::new();
     for (game_id, session) in active.iter_mut() {
@@ -503,7 +537,9 @@ fn end_finished_sessions(
             continue;
         }
         session.missed_ticks += 1;
-        session.missing_since.get_or_insert(wall);
+        if session.missing_since.is_none() {
+            session.missing_since = Some(session.end_at(clocks));
+        }
         if session.missed_ticks >= MISSED_TICKS_BEFORE_END {
             finished.push(game_id.clone());
         }
@@ -513,7 +549,10 @@ fn end_finished_sessions(
         let Some(session) = active.get(&game_id) else {
             continue;
         };
-        if end_active_session(db, live, session, session.missing_since) {
+        let ended_at = session
+            .missing_since
+            .unwrap_or_else(|| session.end_at(clocks));
+        if end_active_session(db, live, session, ended_at) {
             active.remove(&game_id);
         } else if !still_open(db, session) {
             live.remove(&session.session_id);
@@ -523,19 +562,19 @@ fn end_finished_sessions(
 }
 
 /// Closes a session with the counters of its last counted tick, as of
-/// `ended_at` or now. Returns whether it closed.
+/// `ended_at`. Returns whether it closed.
 fn end_active_session(
     db: &Database,
     live: &LiveSessions,
     session: &ActiveSession,
-    ended_at: Option<DateTime<Utc>>,
+    ended_at: DateTime<Utc>,
 ) -> bool {
     let ended = sessions::end_session_at(
         db,
         &session.session_id,
         (session.runtime_ms, session.active_ms, session.idle_ms),
         &session.integrity_status,
-        &ended_at.map_or_else(integrity::now_timestamp, integrity::format_timestamp),
+        &integrity::format_timestamp(ended_at),
     );
     match ended {
         Ok(_) => {
@@ -712,6 +751,31 @@ struct Clocks {
     asleep_ms: Option<i64>,
 }
 
+impl Clocks {
+    fn read() -> Self {
+        Self {
+            now: Instant::now(),
+            wall: Utc::now(),
+            asleep_ms: platform::clock::asleep_ms(),
+        }
+    }
+}
+
+/// The time between two ticks on each clock, in milliseconds.
+struct ElapsedMs {
+    mono: i64,
+    wall: i64,
+    slept: i64,
+}
+
+impl ElapsedMs {
+    /// Whether the PC slept or tracking stalled in between, so the time is
+    /// skipped, not counted.
+    fn is_gap(&self) -> bool {
+        self.mono.max(self.wall) > MAX_TICK_GAP_MS || self.slept > SUSPEND_DETECT_MS
+    }
+}
+
 fn apply_observation(
     db: &Database,
     session: &mut ActiveSession,
@@ -729,27 +793,14 @@ fn apply_observation(
         session.last_signal_at = now;
     }
 
-    let delta_ms = now
-        .saturating_duration_since(session.last_tick_at)
-        .as_millis() as i64;
-
+    let elapsed = session.elapsed(clocks);
+    let (delta_ms, wall_delta_ms) = (elapsed.mono, elapsed.wall);
     if delta_ms <= 0 {
         return Ok(());
     }
 
     // The previous tick, where a checkpoint that closes a stretch belongs.
     let previous_wall = session.last_wall_at;
-    let wall_delta_ms = current_wall
-        .signed_duration_since(previous_wall)
-        .num_milliseconds();
-    // Only growth counts. A reading that moved back, as WSL2 can have it,
-    // is no sleep.
-    let slept_ms = clocks
-        .asleep_ms
-        .zip(session.last_asleep_ms)
-        .map_or(0, |(now_asleep, before_asleep)| {
-            (now_asleep - before_asleep).max(0)
-        });
     // The clocks move on only once the writes before them went through, so
     // a tick whose write fails is taken again in full by the next one.
     let move_clocks = |session: &mut ActiveSession| {
@@ -758,7 +809,7 @@ fn apply_observation(
         session.last_asleep_ms = clocks.asleep_ms;
     };
 
-    if delta_ms.max(wall_delta_ms) > MAX_TICK_GAP_MS || slept_ms > SUSPEND_DETECT_MS {
+    if elapsed.is_gap() {
         save_checkpoint(db, session, previous_wall, now)?;
         sessions::record_tracking_gap(
             db,
@@ -1189,8 +1240,13 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
+        fixture_from(Utc::now())
+    }
+
+    /// A game with a session that started at `started` and still runs.
+    fn fixture_from(started: DateTime<Utc>) -> Fixture {
         let (db, game_id) = library_with("Gap Game");
-        let session = sessions::create_session(&db, &game_id, "device").unwrap();
+        let session = sessions::create_session_at(&db, &game_id, "device", started).unwrap();
         Fixture {
             db,
             game_id,
@@ -1279,6 +1335,30 @@ mod tests {
             .is_empty()
     }
 
+    fn ended_at(f: &Fixture) -> Option<String> {
+        f.db.with_conn(|conn| {
+            sessions::stored_session(conn, &f.session_id).map_err(crate::db::repo::map_db)
+        })
+        .unwrap()
+        .ended_at_wall
+    }
+
+    /// The clocks of a tick at `wall` that follows the last one right away.
+    fn clocks_at(wall: DateTime<Utc>) -> Clocks {
+        Clocks {
+            now: Instant::now(),
+            wall,
+            asleep_ms: None,
+        }
+    }
+
+    /// The tracker counted a tick of the running game at `wall`.
+    fn counted_at(active: &mut HashMap<String, ActiveSession>, f: &Fixture, wall: DateTime<Utc>) {
+        let session = active.get_mut(&f.game_id).unwrap();
+        session.last_tick_at = Instant::now();
+        session.last_wall_at = wall;
+    }
+
     #[test]
     fn a_session_ends_only_once_its_game_was_missing_for_several_ticks() {
         let f = fixture();
@@ -1288,18 +1368,18 @@ mod tests {
         let running = HashMap::from([(f.game_id.clone(), PLAYING)]);
 
         for _ in 1..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
+            end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(Utc::now()));
         }
         assert!(active.contains_key(&f.game_id));
         // Back in the list, so missing again starts the count over.
-        end_finished_sessions(&f.db, &live, &mut active, &running, Utc::now());
+        end_finished_sessions(&f.db, &live, &mut active, &running, &clocks_at(Utc::now()));
         for _ in 1..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
+            end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(Utc::now()));
         }
         assert!(active.contains_key(&f.game_id));
         assert!(is_open(&f));
 
-        end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
+        end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(Utc::now()));
         assert!(active.is_empty());
         assert!(!is_open(&f));
     }
@@ -1311,28 +1391,65 @@ mod tests {
         let mut active = tracked(&f);
         let running = HashMap::from([(f.game_id.clone(), PLAYING)]);
         let missing = HashMap::new();
-        let first = Utc::now() + chrono::Duration::minutes(1);
-        let gone = first + chrono::Duration::minutes(10);
+        let step = chrono::Duration::from_std(POLL_INTERVAL).unwrap();
+        let first = Utc::now();
+        let back = first + step;
+        let gone = back + step;
 
         // Missing once, back again, then gone for good.
-        end_finished_sessions(&f.db, &live, &mut active, &missing, first);
-        end_finished_sessions(&f.db, &live, &mut active, &running, first);
-        end_finished_sessions(&f.db, &live, &mut active, &missing, gone);
+        end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(first));
+        counted_at(&mut active, &f, back);
+        end_finished_sessions(&f.db, &live, &mut active, &running, &clocks_at(back));
+        end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(gone));
         // The next tick came only after the PC slept for hours.
         let woke = gone + chrono::Duration::hours(5);
         for _ in 1..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing, woke);
+            end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(woke));
         }
         assert!(active.is_empty());
-        let stored =
-            f.db.with_conn(|conn| {
-                sessions::stored_session(conn, &f.session_id).map_err(crate::db::repo::map_db)
-            })
-            .unwrap();
-        assert_eq!(
-            stored.ended_at_wall,
-            Some(integrity::format_timestamp(gone))
+        assert_eq!(ended_at(&f), Some(integrity::format_timestamp(gone)));
+    }
+
+    #[test]
+    fn a_game_gone_at_the_first_tick_after_a_sleep_ends_at_its_last_counted_tick() {
+        // Hours on the wall clock alone as Linux sleeps, and half a minute
+        // only the time asleep tells, too short for the gap limit.
+        for (asleep, slept_ms) in [
+            (chrono::Duration::hours(8), 0),
+            (chrono::Duration::seconds(30), 30_000),
+        ] {
+            let f = fixture_from(Utc::now() - chrono::Duration::minutes(1));
+            let live = LiveSessions::default();
+            let mut active = tracked(&f);
+            let session = active.get_mut(&f.game_id).unwrap();
+            session.last_asleep_ms = Some(1_000);
+            let last = session.last_wall_at;
+            let woke = Clocks {
+                now: Instant::now(),
+                wall: last + asleep + chrono::Duration::from_std(POLL_INTERVAL).unwrap(),
+                asleep_ms: Some(1_000 + slept_ms),
+            };
+
+            for _ in 0..MISSED_TICKS_BEFORE_END {
+                end_finished_sessions(&f.db, &live, &mut active, &HashMap::new(), &woke);
+            }
+            assert!(active.is_empty());
+            assert_eq!(ended_at(&f), Some(integrity::format_timestamp(last)));
+        }
+    }
+
+    #[test]
+    fn a_running_game_ends_before_a_sleep_when_tracking_stops_right_after_it() {
+        let f = fixture_from(Utc::now() - chrono::Duration::hours(6));
+        let session = session_after(&f, Duration::from_secs(5), chrono::Duration::hours(5));
+        let last = session.last_wall_at;
+
+        end_all_sessions(
+            &f.db,
+            &LiveSessions::default(),
+            HashMap::from([(f.game_id.clone(), session)]),
         );
+        assert_eq!(ended_at(&f), Some(integrity::format_timestamp(last)));
     }
 
     #[test]
@@ -1340,19 +1457,11 @@ mod tests {
         let f = fixture();
         let live = LiveSessions::default();
         let mut active = tracked(&f);
-        let gone = Utc::now() + chrono::Duration::minutes(1);
-        end_finished_sessions(&f.db, &live, &mut active, &HashMap::new(), gone);
+        let gone = Utc::now();
+        end_finished_sessions(&f.db, &live, &mut active, &HashMap::new(), &clocks_at(gone));
 
         end_all_sessions(&f.db, &live, active);
-        let stored =
-            f.db.with_conn(|conn| {
-                sessions::stored_session(conn, &f.session_id).map_err(crate::db::repo::map_db)
-            })
-            .unwrap();
-        assert_eq!(
-            stored.ended_at_wall,
-            Some(integrity::format_timestamp(gone))
-        );
+        assert_eq!(ended_at(&f), Some(integrity::format_timestamp(gone)));
     }
 
     #[test]
@@ -1371,13 +1480,13 @@ mod tests {
         );
 
         for _ in 0..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
+            end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(Utc::now()));
         }
         assert!(active.contains_key(&f.game_id));
         assert!(is_open(&f));
 
         refuse("DROP TRIGGER refuse_end;");
-        end_finished_sessions(&f.db, &live, &mut active, &missing, Utc::now());
+        end_finished_sessions(&f.db, &live, &mut active, &missing, &clocks_at(Utc::now()));
         assert!(active.is_empty());
         assert!(!is_open(&f));
     }
@@ -1390,7 +1499,13 @@ mod tests {
         sessions::end_session(&f.db, &f.session_id, 0, 0, 0, integrity::STATUS_LOCAL).unwrap();
 
         for _ in 0..MISSED_TICKS_BEFORE_END {
-            end_finished_sessions(&f.db, &live, &mut active, &HashMap::new(), Utc::now());
+            end_finished_sessions(
+                &f.db,
+                &live,
+                &mut active,
+                &HashMap::new(),
+                &clocks_at(Utc::now()),
+            );
         }
         assert!(active.is_empty());
     }
@@ -1424,7 +1539,7 @@ mod tests {
 
     #[test]
     fn sleep_gap_is_skipped_without_flagging() {
-        let f = fixture();
+        let f = fixture_from(Utc::now() - chrono::Duration::hours(3));
         // Linux suspend: the wall clock moved two hours, the monotonic clock did not.
         let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::hours(2));
         tick(&f, &mut session);
@@ -1443,7 +1558,7 @@ mod tests {
 
     #[test]
     fn windows_style_sleep_gap_is_skipped() {
-        let f = fixture();
+        let f = fixture_from(Utc::now() - chrono::Duration::hours(2));
         // Both clocks kept running through sleep.
         let mut session = session_after(&f, Duration::from_secs(3_600), chrono::Duration::hours(1));
         tick(&f, &mut session);
@@ -1569,7 +1684,7 @@ mod tests {
 
     #[test]
     fn a_short_suspend_is_skipped_not_flagged() {
-        let f = fixture();
+        let f = fixture_from(Utc::now() - chrono::Duration::minutes(1));
         // Half a minute asleep: too short for the gap limit, but the time
         // the PC slept grew by it.
         let mut session = session_after(&f, Duration::from_secs(5), chrono::Duration::seconds(35));

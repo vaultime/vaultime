@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Publisher in Windows.** Apps and features and the program's properties now name the publisher Vaultime instead of vaultime.
 - **Legacy Games and Big Fish by name.** Games found through these two launchers named no launcher and read as added by hand. They now name their launcher.
 - **Wednesday fits in the journal.** In a window of 1280 pixels and wider, the journal's day names no longer run into the strip of play beside them.
+- **A game quit right before sleep.** When the PC went to sleep within seconds of quitting a game, its session ended only when the PC woke, so the journal showed it running through the night. It now ends where Vaultime last saw the game.
 
 ## [0.6.0] - 2026-10-20
 
