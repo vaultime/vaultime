@@ -4,7 +4,8 @@
 #
 # Builds packaging/aur/PKGBUILD in an Arch Linux container, writes its
 # .SRCINFO, checks both with namcap, installs the package and checks that
-# the program finds every library and leaves its updates to the AUR.
+# the program finds every library and leaves its updates to the AUR, which
+# needs a release that reads the package manager file.
 # Needs Docker. Run it after changing pkgver and sha256sums.
 set -euo pipefail
 
@@ -30,5 +31,9 @@ MSYS_NO_PATHCONV=1 docker run --rm \
       exit 1
     fi
     test "$(cat /usr/lib/vaultime/package-manager)" = "the AUR"
+    if ! grep -qa lib/vaultime/package-manager /usr/bin/vaultime; then
+      echo "vaultime $pkgver does not read the package manager file yet, publish from the first release that does"
+      exit 1
+    fi
     echo "$pkgname $pkgver builds, installs and finds its libraries"
   '
