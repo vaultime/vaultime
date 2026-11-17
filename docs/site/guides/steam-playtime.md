@@ -28,7 +28,7 @@ Each December, Steam Replay sums up your year on Steam: the games you played, yo
 
 [Vaultime](/) is a free app for Windows and Linux that counts every game you start, Steam games included, and keeps active time apart from idle time.
 
-- It reads your Steam totals under Settings, Earlier playtime, **Import from Steam**, and counts on from there without counting anything twice.
+- Under Settings, Earlier playtime, **Import from Steam** it reads Steam's totals for the Steam games installed and in your library, and counts on from there without counting anything twice.
 - Every session lands in a journal of your days, with when you played and for how long.
 - **Year in games** counts your whole year, offline play and every other launcher included, whenever you open it.
 
