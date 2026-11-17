@@ -56,6 +56,8 @@ Every account gets the same limits, so that no account can fill the server. Add 
 
 Everything on the server comes from the PCs. Each PC keeps its whole history and uploads a new backup every day, so a lost server costs only the accounts: create them again and each PC uploads anew. To keep a copy of the server anyway, stop it with `docker compose stop` and copy the Docker volumes `vaultime_db` and `vaultime_backups`.
 
+The server does not run as root. The volumes in `compose.yaml` need nothing, but a folder of your own mounted at `/data` instead has to belong to user and group 10001, for example with `chown -R 10001:10001` on it, or every upload fails.
+
 ## What the server sees
 
 The server and whoever runs it see what [Backups](backups.md#what-the-server-sees) lists: email addresses, the PCs of each account and the size and counts of each backup, never games, sessions or artwork.

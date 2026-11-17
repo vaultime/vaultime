@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# A Vaultime server with its database. Copy .env.example to .env, fill it in
+# and start it with `docker compose up -d`. Add `--profile caddy` on a server
+# of its own, and Caddy in front gets a certificate for VAULTIME_DOMAIN by
+# itself. Behind a reverse proxy you already run, point it at VAULTIME_PORT
+# on this machine instead.
+
+name: vaultime
+
+services:
+  server:
+    image: ghcr.io/vaultime/vaultime-server:${VAULTIME_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Limits set in .env reach the server too.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      VAULTIME_DATABASE_URL: postgres://vaultime:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/vaultime
+      VAULTIME_ACCESS_TOKEN_SECRET: ${VAULTIME_ACCESS_TOKEN_SECRET:?set VAULTIME_ACCESS_TOKEN_SECRET in .env}
+      VAULTIME_REFRESH_TOKEN_PEPPER: ${VAULTIME_REFRESH_TOKEN_PEPPER:?set VAULTIME_REFRESH_TOKEN_PEPPER in .env}
+      VAULTIME_OPEN_SIGNUPS: ${VAULTIME_OPEN_SIGNUPS:-false}
+    volumes:
+      - backups:/data
+    # Only this machine reaches it directly, everyone else through https.
+    ports:
+      - 127.0.0.1:${VAULTIME_PORT:-8080}:8080
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vaultime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: vaultime
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U vaultime -d vaultime]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  caddy:
+    image: caddy:2
+    profiles: [caddy]
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${VAULTIME_DOMAIN:?set VAULTIME_DOMAIN in .env} --to server:8080
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - caddy:/data
+
+volumes:
+  backups:
+  db:
+  caddy:

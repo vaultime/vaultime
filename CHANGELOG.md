@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Backups
 
-- **Cloud backup on a server of your own.** Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home. The Cloud page connects to it by its address and says whether it takes new accounts. The privacy policy and the terms now cover only the website and the software.
+- **Cloud backup on a server of your own.** Cloud backup runs on a Vaultime server that you or a friend set up, on a rented server or a NAS at home, with Docker Compose as the docs describe. The Cloud page connects to it by its address and says whether it takes new accounts. The privacy policy and the terms now cover only the website and the software.
 - **Sync folder.** Keep backups in a folder that Dropbox, Google Drive, OneDrive, Syncthing or a NAS keeps the same on every PC. Each PC copies its automatic backups there with every image stored once, and the PCs that share the folder find each other: merge another PC once and its newer sessions come in by themselves within the hour. A new PC can restore from the folder.
 
 ### Library
