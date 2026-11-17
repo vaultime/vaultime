@@ -168,6 +168,12 @@ impl InstallFolder {
         };
         self.keys.iter().any(|folder| is_inside(exe, folder))
     }
+
+    /// Whether the folder is a whole drive or share, so no program counts as
+    /// inside it.
+    pub fn is_refused(&self) -> bool {
+        self.keys.is_empty()
+    }
 }
 
 /// Whether `path` names a folder below the root of a drive, a share or the

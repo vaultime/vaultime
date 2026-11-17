@@ -22,20 +22,28 @@ import { AddSessionDialog } from "@/features/game-details/AddSessionDialog";
 import { GameHistory } from "@/features/game-details/GameHistory";
 import { FavoriteButton, StatusPicker } from "@/features/game-details/StatusPicker";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
-import { FOLDER_MATCH_LAUNCHERS, GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
+import { GAME_RECENT_SESSIONS, MINUTE_MS } from "@/lib/constants";
 import { countedBySteam, launchersOf, whereFrom } from "@/lib/links";
 import { runtimeByHour } from "@/lib/play-totals";
 import { gamePlaytime } from "@/lib/sentences";
 import { stepsAside } from "@/lib/game-metadata";
 import * as api from "@/lib/tauri";
 import { compareTimes, formatCalendarDay, formatHoursMinutes, parseVaultimeDate, startOfDay, toDayKey } from "@/lib/time";
-import type { Game, GameAssetView, SessionEvent } from "@/lib/types";
+import type { FolderMatch, Game, GameAssetView, SessionEvent } from "@/lib/types";
 import { describeError, logFailure } from "@/lib/utils";
 import { capitalize } from "@/lib/words";
 import { AsideSection, EarlierSection, HourMarksSection, TotalRow } from "./Aside";
 import { CoverPicker } from "./CoverPicker";
 import { EventLog } from "./EventLog";
 import { ForeignGameRows, LinkedGameRows, SameGameRow, StepsAsideRow } from "./TrackingRows";
+
+/** How the tracker recognizes the game, by what it makes of its install folder. */
+const MATCHED_BY: Record<FolderMatch, string> = {
+  unused: "Matched by its full path.",
+  counts:
+    "Matched by its full path, or by any game program in its install folder, since its launcher starts games in steps.",
+  refused: "Matched by its full path, as its install folder is a whole drive or share.",
+};
 
 export function GameDetailsPage() {
   const { gameId } = useParams();
@@ -101,6 +109,24 @@ function GamePage({ gameId }: { gameId: string }) {
       cancelled = true;
     };
   }, [gameId, firstPlayedAt, sessions]);
+
+  // Whether the programs in the install folder count too, as the tracker decides it.
+  const folder = summary?.game.install_folder;
+  const launcher = summary?.game.launcher_source;
+  const program = summary?.game.executable_path;
+  const [folderMatch, setFolderMatch] = useState<FolderMatch | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getFolderMatch(gameId)
+      .then((next) => {
+        if (!cancelled) setFolderMatch(next);
+      })
+      .catch(logFailure("asking whether the game's install folder counts"));
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, folder, launcher, program]);
 
   useEffect(() => {
     let cancelled = false;
@@ -352,12 +378,12 @@ function GamePage({ gameId }: { gameId: string }) {
             ) : game.executable_path ? (
               <>
                 <div className="font-mono text-xs leading-relaxed break-all text-soft">{game.executable_path}</div>
-                <p className="mt-2 text-[13px] text-faint">
-                  {game.install_folder && FOLDER_MATCH_LAUNCHERS.includes(game.launcher_source ?? "")
-                    ? "Matched by its full path, or by any game program in its install folder, since its launcher starts games in steps."
-                    : "Matched by its full path."}{" "}
-                  By file name only when Windows hides the path or the game runs through Wine.
-                </p>
+                {folderMatch && (
+                  <p className="mt-2 text-[13px] text-faint">
+                    {MATCHED_BY[folderMatch]} By file name only when Windows hides the path or the game runs through
+                    Wine.
+                  </p>
+                )}
               </>
             ) : (
               <p className="text-[13px] text-faint">

@@ -37,7 +37,7 @@
 // a local one or one in the cloud, asks whether this PC is the Laptop set up again.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { DAY_MS, DEVICE_NAME_MAX_CHARS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
+import { DAY_MS, DEVICE_NAME_MAX_CHARS, FOLDER_MATCH_LAUNCHERS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
 import {
   estimateGameTotals,
@@ -1950,6 +1950,11 @@ mockIPC((cmd, payload) => {
       const metadata = JSON.parse(game.metadata_json || "{}");
       game.metadata_json = JSON.stringify({ ...metadata, steps_aside: Boolean(args.stepsAside) || undefined });
       return game;
+    }
+    case "get_folder_match": {
+      const game = games.find((entry) => entry.id === args.gameId);
+      if (!game?.executable_path || !game.install_folder || game.origin_device_id) return "unused";
+      return FOLDER_MATCH_LAUNCHERS.includes(game.launcher_source ?? "") ? "counts" : "unused";
     }
     case "set_game_favorite": {
       const game = games.find((entry) => entry.id === args.gameId);

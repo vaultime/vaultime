@@ -21,6 +21,7 @@ import type {
   DiscoveredGame,
   EarlierPlaytime,
   ExportFormat,
+  FolderMatch,
   Game,
   GameAssetView,
   GameChoice,
@@ -377,6 +378,11 @@ export async function allowProgram(pathKey: string): Promise<boolean> {
 /** Makes a game count only while no other game runs, like a launcher, or always again. */
 export async function setGameStepsAside(gameId: string, stepsAside: boolean): Promise<Game> {
   return invoke<Game>("set_game_steps_aside", { gameId, stepsAside });
+}
+
+/** Whether the game programs in a game's install folder count for it. */
+export async function getFolderMatch(gameId: string): Promise<FolderMatch> {
+  return invoke<FolderMatch>("get_folder_match", { gameId });
 }
 
 /** Makes a game one of the player's favorites, or no longer. */

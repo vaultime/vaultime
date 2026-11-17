@@ -728,6 +728,12 @@ interface CloudBackupPayloadSummary {
 /** Where a game stands for the player. */
 export type GameStatus = "backlog" | "playing" | "finished" | "dropped";
 
+/**
+ * What the tracker makes of a game's install folder: whether any game program
+ * in it counts too, or not as it is a whole drive or share. Mirrors the Rust `FolderMatch`.
+ */
+export type FolderMatch = "unused" | "counts" | "refused";
+
 /** A game's status from a moment on. "none" clears it. */
 export interface GameStatusChange {
   id: string;

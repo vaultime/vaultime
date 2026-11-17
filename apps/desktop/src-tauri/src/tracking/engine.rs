@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
+use serde::Serialize;
 use sysinfo::System;
 
 use crate::constants::{
@@ -698,17 +699,7 @@ fn game_processes<'a>(
     folders: &mut FolderCache,
 ) -> Option<Vec<&'a RunningProcess>> {
     let exe_path = game.executable_path.as_deref()?;
-    let own_folder = if game
-        .launcher_source
-        .as_deref()
-        .is_some_and(|source| FOLDER_MATCH_LAUNCHERS.contains(&source))
-    {
-        game.install_folder
-            .as_deref()
-            .map(|folder| folders.get(folder))
-    } else {
-        None
-    };
+    let own_folder = own_folder(game).map(|folder| folders.get(folder));
     Some(
         processes
             .iter()
@@ -720,6 +711,45 @@ fn game_processes<'a>(
             })
             .collect(),
     )
+}
+
+/// The install folder whose game programs count for the game too, as its
+/// launcher gives every game a folder of its own.
+fn own_folder(game: &Game) -> Option<&str> {
+    let source = game.launcher_source.as_deref()?;
+    if FOLDER_MATCH_LAUNCHERS.contains(&source) {
+        game.install_folder.as_deref()
+    } else {
+        None
+    }
+}
+
+/// What the tracker makes of a game's install folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FolderMatch {
+    /// Only the game's program counts, as its launcher gives games no folder
+    /// of their own, or the game names no folder or program, or is not
+    /// tracked here.
+    Unused,
+    /// Any game program in the folder counts too.
+    Counts,
+    /// Only the program counts, as the folder is a whole drive or share.
+    Refused,
+}
+
+/// Whether the game programs in a game's install folder count for it. This
+/// resolves the folder's links and mounts.
+pub fn folder_match(game: &Game) -> FolderMatch {
+    // The tracker watches the games `list_local_games` lists.
+    let this = crate::integrity::ledger::this_device().ok();
+    let local = game.origin_device_id.is_none() || game.origin_device_id == this;
+    let tracked = game.executable_path.is_some() && local;
+    match own_folder(game).filter(|_| tracked) {
+        None => FolderMatch::Unused,
+        Some(folder) if InstallFolder::new(folder).is_refused() => FolderMatch::Refused,
+        Some(_) => FolderMatch::Counts,
+    }
 }
 
 /// Install folders with their links resolved, so a tick needs no file
@@ -2029,5 +2059,44 @@ mod tests {
         let gap = &d.events("tracking_gap")[0];
         assert!(gap.sequence > checkpoints[0].sequence);
         assert_eq!(d.stored().runtime_ms, 15_000);
+    }
+
+    #[test]
+    fn a_folder_counts_only_for_launchers_with_folders_of_their_own_and_below_a_drive() {
+        let db = Database::open_in_memory().unwrap();
+        let folder = std::env::temp_dir().to_string_lossy().into_owned();
+        let drive = if cfg!(windows) { r"C:\" } else { "/" };
+        let game = |launcher: Option<&str>, program: Option<&str>, folder: &str| {
+            games::create_game(
+                &db,
+                &CreateGame {
+                    title: "Folder Game".into(),
+                    executable_path: program.map(Into::into),
+                    install_folder: Some(folder.into()),
+                    launcher_source: launcher.map(Into::into),
+                },
+            )
+            .unwrap()
+        };
+
+        let steam = game(Some("steam"), Some("game.exe"), &folder);
+        assert_eq!(folder_match(&steam), FolderMatch::Counts);
+        let whole_drive = game(Some("steam"), Some("game.exe"), drive);
+        assert_eq!(folder_match(&whole_drive), FolderMatch::Refused);
+        let by_hand = game(None, Some("game.exe"), &folder);
+        assert_eq!(folder_match(&by_hand), FolderMatch::Unused);
+        let no_program = game(Some("steam"), None, &folder);
+        assert_eq!(folder_match(&no_program), FolderMatch::Unused);
+        let theirs = Game {
+            origin_device_id: Some("laptop".into()),
+            ..steam
+        };
+        assert_eq!(folder_match(&theirs), FolderMatch::Unused);
+        // A game of this PC that came back with a merge is tracked too.
+        let ours = Game {
+            origin_device_id: Some(crate::integrity::ledger::this_device().unwrap()),
+            ..theirs
+        };
+        assert_eq!(folder_match(&ours), FolderMatch::Counts);
     }
 }

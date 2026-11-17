@@ -15,6 +15,7 @@ use crate::db::repo::games::GameLink;
 use crate::db::repo::{annotations, games};
 use crate::error::VaultimeError;
 use crate::library;
+use crate::tracking::engine::{self, FolderMatch};
 
 /// Linked games, other installs here and games of other PCs, with the games
 /// they count as.
@@ -76,6 +77,15 @@ pub fn set_game_steps_aside(
     steps_aside: bool,
 ) -> Result<Game, VaultimeError> {
     library::set_steps_aside(&db, &game_id, steps_aside)
+}
+
+/// Whether the game programs in the game's install folder count for it.
+#[tauri::command(async)]
+pub fn get_folder_match(
+    db: State<'_, Arc<Database>>,
+    game_id: String,
+) -> Result<FolderMatch, VaultimeError> {
+    Ok(engine::folder_match(&games::get_game(&db, &game_id)?))
 }
 
 /// Makes a game one of the player's favorites, or no longer.
