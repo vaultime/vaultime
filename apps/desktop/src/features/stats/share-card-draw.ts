@@ -238,7 +238,7 @@ interface Stat {
 function activeAmount(card: ShareCard): { value: string; unit: string; words: string } {
   if (card.activeMs < HOUR_MS) {
     const minutes = Math.floor(card.activeMs / MINUTE_MS);
-    return { value: String(minutes), unit: "min", words: minutes === 1 ? "minute" : "minutes" };
+    return { value: String(minutes), unit: "m", words: minutes === 1 ? "minute" : "minutes" };
   }
   const hours = Math.floor(card.activeMs / HOUR_MS);
   return { value: String(hours), unit: "h", words: hours === 1 ? "hour" : "hours" };
