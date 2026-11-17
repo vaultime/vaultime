@@ -100,6 +100,10 @@ GUIDES_NAV = [
         ("index.md", "All guides"),
         ("all-your-playtime.md", "All your playtime in one place"),
     ]),
+    ("Launchers", [
+        ("steam-playtime.md", "Steam"),
+        ("steam-deck-playtime.md", "Steam Deck"),
+    ]),
 ]
 
 # A page lists its sections beside the text once it has this many.
