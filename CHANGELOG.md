@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A steady live clock.** The running time in the live bar went back a few seconds now and then. It now counts on from the moment Vaultime last counted the session.
 - **Settings after a restore.** Switches like closing to the tray, the idle time and automatic backups showed the values from before a restore until you opened Settings again. They show the restored ones right away.
 - **Backups between Windows and Linux.** A backup made on Windows could not be restored or merged on Linux, nor one from Linux on Windows. Vaultime said it held database parts it never writes, as the two systems wrote the same tables with other line endings. Each now reads the other's backups.
+- **Quick with years of play.** The journal, a game's page, the live bar and the tray read only the sessions they show instead of every session, and merging a PC no longer reads its whole history again for each session. With a long history they answer several times faster.
 
 ## [0.6.0] - 2026-10-20
 
