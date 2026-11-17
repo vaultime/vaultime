@@ -12,6 +12,7 @@ import { requestFind } from "@/lib/find";
 import { otherDialogOpen } from "@/lib/found-games";
 import { CommandPalette } from "./CommandPalette";
 import { LiveBar } from "./LiveBar";
+import { useShowGameInFront } from "@/features/appearance/game-in-front";
 import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
 import { UpdateBanner } from "./UpdateBanner";
@@ -43,6 +44,7 @@ export function AppLayout() {
   const [searchParams] = useSearchParams();
   const { refresh } = useLibrary();
   const { found, dismiss } = useFoundGames(otherDialogOpen(searchParams, paletteOpen));
+  useShowGameInFront();
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

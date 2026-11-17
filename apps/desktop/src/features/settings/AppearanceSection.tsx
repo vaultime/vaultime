@@ -26,6 +26,7 @@ import {
   accentColor,
   groundColor,
   type AccentSwatch,
+  type BackgroundSource,
   type GroundId,
   type ModeChoice,
 } from "@/lib/theme";
@@ -35,6 +36,12 @@ const MODES: { value: ModeChoice; label: string }[] = [
   { value: "dark", label: "Dark" },
   { value: "light", label: "Light" },
   { value: "system", label: "System" },
+];
+
+const SOURCES: { value: BackgroundSource; label: string }[] = [
+  { value: "game", label: "Your game" },
+  { value: "picture", label: "Picture" },
+  { value: "none", label: "None" },
 ];
 
 const GROUND_NAMES: Record<GroundId, string> = {
@@ -68,7 +75,7 @@ function StackedRow({ label, hint, children }: { label: string; hint?: ReactNode
 
 /** Dark or light, a ground tone, an accent and a background picture. */
 export function AppearanceSection() {
-  const { appearance, mode, background, change, chooseBackground, pickGameBackground, clearBackground } =
+  const { appearance, mode, background, backdrop, change, chooseBackground, pickGameBackground, clearBackground } =
     useAppearance();
   const { summaries } = useLibrary();
   const [busy, setBusy] = useState(false);
@@ -106,9 +113,9 @@ export function AppearanceSection() {
   return (
     <PageSection
       title="Appearance"
-      description="How Vaultime looks on this PC. Backups leave the look and the picture out."
+      description="How Vaultime looks on this PC."
     >
-      <StackedRow label="Mode" hint="System follows the dark or light setting of your PC.">
+      <StackedRow label="Mode" hint="System follows your PC.">
         <div
           role="radiogroup"
           aria-label="Mode"
@@ -131,7 +138,7 @@ export function AppearanceSection() {
         </div>
       </StackedRow>
 
-      <StackedRow label="Ground" hint="The tone of the pages behind the text.">
+      <StackedRow label="Ground" hint="The tone behind the text.">
         <div
           role="radiogroup"
           aria-label="Ground"
@@ -173,7 +180,7 @@ export function AppearanceSection() {
         </div>
       </StackedRow>
 
-      <StackedRow label="Accent" hint="The color of active time, buttons and highlights. Any color you pick is brought to a lightness that reads well.">
+      <StackedRow label="Accent" hint="The color of active time and buttons.">
         <div className="flex flex-wrap items-center gap-3">
           <div role="radiogroup" aria-label="Accent" onKeyDown={onRadioKeys} className="flex flex-wrap items-center gap-3">
             {ACCENT_SWATCH_IDS.map((swatch, index) => {
@@ -226,60 +233,71 @@ export function AppearanceSection() {
         </div>
       </StackedRow>
 
-      <StackedRow
-        label="Background picture"
-        hint="A picture of your own or the art of a game, behind every page. It stays on this PC."
-      >
-        <div className="flex flex-wrap items-center gap-5">
-          {background && (
-            <span className="relative h-[90px] w-[144px] overflow-hidden rounded-md border border-hairline">
-              <img src={background} alt="" className="size-full object-cover" />
-              <span className="absolute inset-0 bg-ink" style={{ opacity: appearance.dim / 100 }} />
-              <span className="absolute inset-x-3 bottom-3 h-[3px] w-12 rounded-full bg-text" />
-            </span>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => void choosePicture()} disabled={busy}>
-              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
-              Choose a picture
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="outline" size="sm" disabled={busy || withArt.length === 0}>
-                    <Images className="size-3.5" />
-                    Use a game's art
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="w-64">
-                {withArt.map((summary) => (
-                  <DropdownMenuItem
-                    key={summary.game.id}
-                    onClick={() => void run(() => pickGameBackground(summary.game.id))}
-                  >
-                    <Cover title={summary.game.title} src={summary.cover} variant="tile" className="size-7 text-xs" />
-                    <span className="truncate">{summary.game.title}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {background && (
-              <Button variant="ghost" size="sm" onClick={() => void run(clearBackground)} disabled={busy}>
-                <X className="size-3.5" />
-                Remove
-              </Button>
-            )}
-          </div>
+      <StackedRow label="Background" hint="Your game puts the art of what you play behind every page.">
+        <div role="radiogroup" aria-label="Background" onKeyDown={onRadioKeys} className="segmented">
+          {SOURCES.map((option, index) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={appearance.source === option.value}
+              tabIndex={radioTabIndex(appearance.source === option.value, index, true)}
+              onClick={() => change({ source: option.value })}
+              className="segment"
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
 
-        {background && (
+        {appearance.source === "picture" && (
+          <div className="mt-5 flex flex-wrap items-center gap-5">
+            {background && (
+              <span className="relative h-[90px] w-[144px] overflow-hidden rounded-md border border-hairline">
+                <img src={background} alt="" className="size-full object-cover" />
+                <span className="absolute inset-0 bg-ink" style={{ opacity: appearance.dim / 100 }} />
+                <span className="absolute inset-x-3 bottom-3 h-[3px] w-12 rounded-full bg-text" />
+              </span>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => void choosePicture()} disabled={busy}>
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
+                Choose a picture
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="outline" size="sm" disabled={busy || withArt.length === 0}>
+                      <Images className="size-3.5" />
+                      Use a game's art
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="start" className="w-64">
+                  {withArt.map((summary) => (
+                    <DropdownMenuItem
+                      key={summary.game.id}
+                      onClick={() => void run(() => pickGameBackground(summary.game.id))}
+                    >
+                      <Cover title={summary.game.title} src={summary.cover} variant="tile" className="size-7 text-xs" />
+                      <span className="truncate">{summary.game.title}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {background && (
+                <Button variant="ghost" size="sm" onClick={() => void run(clearBackground)} disabled={busy}>
+                  <X className="size-3.5" />
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {backdrop && (
           <div className="mt-6 grid max-w-[520px] gap-5">
-            <SliderRow
-              label="Dim"
-              value={`${appearance.dim}%`}
-              hint="How much of the ground lies over the picture."
-            >
+            <SliderRow label="Dim" value={`${appearance.dim}%`} hint="Light art is dimmed a little more.">
               <Slider
                 label="Dim"
                 value={appearance.dim}
@@ -289,7 +307,7 @@ export function AppearanceSection() {
                 onChange={(dim) => change({ dim }, { gradual: true })}
               />
             </SliderRow>
-            <SliderRow label="Blur" value={`${appearance.blur} px`} hint="Softens the picture so text stands out.">
+            <SliderRow label="Blur" value={`${appearance.blur} px`} hint="Softens it behind the text.">
               <Slider
                 label="Blur"
                 value={appearance.blur}

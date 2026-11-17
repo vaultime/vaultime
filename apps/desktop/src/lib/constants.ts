@@ -76,6 +76,8 @@ export const SETTING_KEYS = {
   backgroundDim: "background_dim",
   /** How far the background picture is blurred. Same as BACKGROUND_BLUR_SETTING in constants.rs. */
   backgroundBlur: "background_blur",
+  /** Where the background comes from. Same as BACKGROUND_SOURCE_SETTING in constants.rs. */
+  backgroundSource: "background_source",
   /** The version whose changes the player saw or set aside. Same as WHATS_NEW_SEEN_SETTING in constants.rs. */
   whatsNewSeen: "whats_new_seen",
 } as const;
@@ -595,12 +597,20 @@ export const SCRIM_LIGHTNESS = { dark: 0, light: 0.32 };
 /** Lightness of the faint washes on hover and around covers, per mode. */
 export const GLINT_LIGHTNESS = { dark: 1, light: 0.18 };
 
+/** Where the background comes from: the art of the game in front, a picture or nothing. */
+export const BACKGROUND_SOURCES = ["game", "picture", "none"] as const;
 /** Share of the ground laid over the background picture, in percent. */
-export const BACKGROUND_DIM_PERCENT = { min: 40, max: 95, default: 78 };
+export const BACKGROUND_DIM_PERCENT = { min: 40, max: 95, default: 55 };
 /** Blur of the background picture, in pixels. */
-export const BACKGROUND_BLUR_PX = { min: 0, max: 48, default: 16 };
+export const BACKGROUND_BLUR_PX = { min: 0, max: 64, default: 44 };
+/** How much more colorful the blurred background picture is drawn, 1 as it is. */
+export const BACKGROUND_SATURATION = 1.5;
+/** Pictures lighter than this on average, in OKLab lightness, are dimmed more, so text keeps its contrast. */
+export const BACKGROUND_BRIGHT_LIGHTNESS = 0.5;
+/** Extra dim for those, in percent per unit of average lightness above it. */
+export const BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS = 50;
 /** Opacity of tinted headers in front of a background picture, in percent. */
-export const BACKGROUND_HEADER_OPACITY_PERCENT = 86;
+export const BACKGROUND_HEADER_OPACITY_PERCENT = 30;
 /** Opacity of the panels in front of a background picture, in percent. */
 export const BACKGROUND_PANEL_OPACITY_PERCENT = 62;
 /** Wait after the last move of a slider or the color picker before the value is saved. */

@@ -13,6 +13,7 @@ import {
   ACCENT_SWATCHES,
   BACKGROUND_BLUR_PX,
   BACKGROUND_DIM_PERCENT,
+  BACKGROUND_SOURCES,
   DEFAULT_LOOK,
   GLINT_LIGHTNESS,
   GROUND_LEVELS,
@@ -34,11 +35,15 @@ const MODE_CHOICES: ModeChoice[] = ["dark", "light", "system"];
 export const GROUND_IDS = Object.keys(GROUNDS) as GroundId[];
 export const ACCENT_SWATCH_IDS = Object.keys(ACCENT_SWATCHES) as AccentSwatch[];
 
+export type BackgroundSource = (typeof BACKGROUND_SOURCES)[number];
+
 export interface Appearance {
   mode: ModeChoice;
   ground: GroundId;
   /** A swatch name or a `#rrggbb` color the player picked. */
   accent: string;
+  /** The art of the game in front, the picture the player chose or none. */
+  source: BackgroundSource;
   /** Share of the ground over the background picture, in percent. */
   dim: number;
   /** Blur of the background picture, in pixels. */
@@ -49,6 +54,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   mode: DEFAULT_LOOK.mode,
   ground: DEFAULT_LOOK.ground,
   accent: DEFAULT_LOOK.accent,
+  source: "game",
   dim: BACKGROUND_DIM_PERCENT.default,
   blur: BACKGROUND_BLUR_PX.default,
 };
@@ -78,6 +84,7 @@ const APPEARANCE_SETTING_KEYS: Record<keyof Appearance, string> = {
   mode: SETTING_KEYS.appearanceMode,
   ground: SETTING_KEYS.appearanceGround,
   accent: SETTING_KEYS.appearanceAccent,
+  source: SETTING_KEYS.backgroundSource,
   dim: SETTING_KEYS.backgroundDim,
   blur: SETTING_KEYS.backgroundBlur,
 };
@@ -87,10 +94,12 @@ export function appearanceFromSettings(values: Record<string, string | undefined
   const mode = values[APPEARANCE_SETTING_KEYS.mode];
   const ground = values[APPEARANCE_SETTING_KEYS.ground];
   const accent = values[APPEARANCE_SETTING_KEYS.accent];
+  const source = values[APPEARANCE_SETTING_KEYS.source];
   return {
     mode: MODE_CHOICES.includes(mode as ModeChoice) ? (mode as ModeChoice) : DEFAULT_APPEARANCE.mode,
     ground: isGround(ground) ? ground : DEFAULT_APPEARANCE.ground,
     accent: isAccent(accent) ? accent.toLowerCase() : DEFAULT_APPEARANCE.accent,
+    source: BACKGROUND_SOURCES.includes(source as BackgroundSource) ? (source as BackgroundSource) : DEFAULT_APPEARANCE.source,
     dim: clampedNumber(values[APPEARANCE_SETTING_KEYS.dim], BACKGROUND_DIM_PERCENT),
     blur: clampedNumber(values[APPEARANCE_SETTING_KEYS.blur], BACKGROUND_BLUR_PX),
   };

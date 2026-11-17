@@ -49,7 +49,7 @@ The cross on an image deletes it after you confirm. The file it came from is nev
 
 ### Colors from the cover
 
-The page takes its tint from the cover, and so does the game's mark in the journal. Settings, Appearance can also use a game's art as the background picture of the whole app.
+The page takes its tint from the cover, and so does the game's mark in the journal. Its art also fills the window behind the panels while the page is open, unless Settings, Appearance shows a picture or no background.
 
 ## One game, two installs
 

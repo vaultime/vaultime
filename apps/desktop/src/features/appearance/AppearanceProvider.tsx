@@ -2,15 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AppearanceContext, type AppearanceState } from "@/features/appearance/appearance-context";
+import { AppearanceContext, type AppearanceState, type GameInFront } from "@/features/appearance/appearance-context";
 import { useSettings } from "@/features/settings/settings-context";
 import {
   APPEARANCE_CACHE_KEY,
   APPEARANCE_SAVE_DELAY_MS,
+  BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS,
+  BACKGROUND_BRIGHT_LIGHTNESS,
+  BACKGROUND_DIM_PERCENT,
   BACKGROUND_HEADER_OPACITY_PERCENT,
   BACKGROUND_PANEL_OPACITY_PERCENT,
   WINDOW_LOOK_INTERVAL_MS,
 } from "@/lib/constants";
+import { averageLightness } from "@/lib/game-tint";
 import * as api from "@/lib/tauri";
 import {
   accentHues,
@@ -35,6 +39,15 @@ interface CachedLook {
   tokens: Record<ThemeMode, Record<string, string>>;
 }
 
+
+function sameGame(a: GameInFront | null, b: GameInFront | null): boolean {
+  if (!a || !b) return a === b;
+  return (
+    a.cover === b.cover &&
+    a.colors.length === b.colors.length &&
+    a.colors.every((color, index) => color.hue === b.colors[index].hue && color.chroma === b.colors[index].chroma)
+  );
+}
 
 function systemIsDark(): boolean {
   try {
@@ -69,6 +82,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }
   const [systemDark, setSystemDark] = useState(systemIsDark);
   const [background, setBackground] = useState<string | null>(null);
+  const [game, setGame] = useState<GameInFront | null>(null);
+  const [lightness, setLightness] = useState<{ of: string; value: number | null } | null>(null);
   // Drags wait a moment before they are saved, so a slider saves once.
   const pending = useRef(new Map<string, { value: string; timer: number }>());
 
@@ -147,11 +162,36 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [mode, appearance.ground, appearance.accent, appearance.mode]);
 
+  const backdrop =
+    appearance.source === "game" ? (game?.cover ?? null) : appearance.source === "picture" ? background : null;
+
+  useEffect(() => {
+    if (!backdrop) return;
+    let cancelled = false;
+    void averageLightness(backdrop).then((value) => {
+      if (!cancelled) setLightness({ of: backdrop, value });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [backdrop]);
+
+  // Light art takes more dim, so text on the panels keeps its contrast.
+  const known = lightness?.of === backdrop ? (lightness?.value ?? null) : null;
+  const backdropDim = Math.min(
+    BACKGROUND_DIM_PERCENT.max,
+    Math.round(appearance.dim + Math.max(0, (known ?? 0) - BACKGROUND_BRIGHT_LIGHTNESS) * BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS),
+  );
+
   useLayoutEffect(() => {
     const root = document.documentElement.style;
-    root.setProperty("--header-alpha", background ? `${BACKGROUND_HEADER_OPACITY_PERCENT}%` : "100%");
-    root.setProperty("--panel-alpha", background ? `${BACKGROUND_PANEL_OPACITY_PERCENT}%` : "100%");
-  }, [background]);
+    root.setProperty("--header-alpha", backdrop ? `${BACKGROUND_HEADER_OPACITY_PERCENT}%` : "100%");
+    root.setProperty("--panel-alpha", backdrop ? `${BACKGROUND_PANEL_OPACITY_PERCENT}%` : "100%");
+  }, [backdrop]);
+
+  const showGame = useCallback((next: GameInFront | null) => {
+    setGame((current) => (sameGame(current, next) ? current : next));
+  }, []);
 
   const change = useCallback(
     (next: Partial<Appearance>, { gradual = false }: { gradual?: boolean } = {}) => {
@@ -171,13 +211,21 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     [save],
   );
 
-  const chooseBackground = useCallback(async (path: string) => {
-    setBackground(await api.setBackgroundImage(path));
-  }, []);
+  const chooseBackground = useCallback(
+    async (path: string) => {
+      setBackground(await api.setBackgroundImage(path));
+      change({ source: "picture" });
+    },
+    [change],
+  );
 
-  const pickGameBackground = useCallback(async (gameId: string) => {
-    setBackground(await api.setBackgroundFromGame(gameId));
-  }, []);
+  const pickGameBackground = useCallback(
+    async (gameId: string) => {
+      setBackground(await api.setBackgroundFromGame(gameId));
+      change({ source: "picture" });
+    },
+    [change],
+  );
 
   const clearBackground = useCallback(async () => {
     await api.clearBackgroundImage();
@@ -190,12 +238,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       mode,
       accentHues: accentHues(appearance.accent),
       background,
+      backdrop,
+      backdropDim,
+      showGame,
       change,
       chooseBackground,
       pickGameBackground,
       clearBackground,
     }),
-    [appearance, mode, background, change, chooseBackground, pickGameBackground, clearBackground],
+    [appearance, mode, background, backdrop, backdropDim, showGame, change, chooseBackground, pickGameBackground, clearBackground],
   );
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;

@@ -166,15 +166,23 @@ describe("appearanceFromSettings", () => {
       [SETTING_KEYS.appearanceAccent]: "#AA3355",
       [SETTING_KEYS.backgroundDim]: "5",
       [SETTING_KEYS.backgroundBlur]: "999",
+      [SETTING_KEYS.backgroundSource]: "picture",
     });
     expect(appearance).toEqual({
       mode: "light",
       ground: "umber",
       accent: "#aa3355",
+      source: "picture",
       dim: BACKGROUND_DIM_PERCENT.min,
       blur: BACKGROUND_BLUR_PX.max,
     });
     expect(appearanceFromSettings(Object.fromEntries(appearanceSettings(appearance)))).toEqual(appearance);
+  });
+
+  it("shows the art of the game in front unless told otherwise", () => {
+    expect(appearanceFromSettings({}).source).toBe("game");
+    expect(appearanceFromSettings({ [SETTING_KEYS.backgroundSource]: "wallpaper" }).source).toBe("game");
+    expect(appearanceFromSettings({ [SETTING_KEYS.backgroundSource]: "none" }).source).toBe("none");
   });
 });
 

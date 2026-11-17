@@ -257,12 +257,33 @@ export async function tintsFromImages(images: Record<string, string>): Promise<R
   return tints;
 }
 
-async function readImageTint(src: string): Promise<GameTint | null> {
+/** Average lightness of pictures, by source, so a picture shown again is not read again. */
+const pictureLightness = new Map<string, Promise<number | null>>();
+
+/** The average OKLab lightness of a picture, from 0 to 1, null when it cannot be read. */
+export function averageLightness(src: string): Promise<number | null> {
+  const known = pictureLightness.get(src);
+  if (known) return known;
+  const read = readPixels(src).then((data) => {
+    if (!data) return null;
+    let sum = 0;
+    let opaque = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < TINT_MIN_ALPHA) continue;
+      sum += srgbToOklab(data[i], data[i + 1], data[i + 2]).lightness;
+      opaque += 1;
+    }
+    return opaque > 0 ? sum / opaque : null;
+  });
+  pictureLightness.set(src, read);
+  return read;
+}
+
+async function readPixels(src: string): Promise<Uint8ClampedArray | null> {
   try {
     const image = new Image();
     image.src = src;
     await image.decode();
-
     const size = TINT_SAMPLE_PX;
     const canvas = document.createElement("canvas");
     canvas.width = size;
@@ -270,8 +291,13 @@ async function readImageTint(src: string): Promise<GameTint | null> {
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return null;
     context.drawImage(image, 0, 0, size, size);
-    return tintFromPixels(context.getImageData(0, 0, size, size).data);
+    return context.getImageData(0, 0, size, size).data;
   } catch {
     return null;
   }
+}
+
+async function readImageTint(src: string): Promise<GameTint | null> {
+  const data = await readPixels(src);
+  return data ? tintFromPixels(data) : null;
 }

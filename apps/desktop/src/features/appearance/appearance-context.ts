@@ -2,7 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { createContext, useContext } from "react";
+import type { ArtColor } from "@/lib/game-tint";
 import type { Appearance, ThemeMode } from "@/lib/theme";
+
+/** The game a page is about, or the one playing or played last. */
+export interface GameInFront {
+  cover: string | null;
+  /** The main colors of its art, the strongest first. */
+  colors: ArtColor[];
+}
 
 export interface AppearanceState {
   /** What the player picked. */
@@ -13,6 +21,12 @@ export interface AppearanceState {
   accentHues: number[];
   /** The background picture as a data URL, null without one. */
   background: string | null;
+  /** What shows behind every page: the art of the game in front, the picture or nothing. */
+  backdrop: string | null;
+  /** The dim over the backdrop, more than the player's for light pictures. */
+  backdropDim: number;
+  /** Tells which game is in front, for its art behind the pages. */
+  showGame: (game: GameInFront | null) => void;
   /**
    * Applies a change at once and saves it. A `gradual` change, like a slider
    * being dragged, is saved once it stops.

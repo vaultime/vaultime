@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useSettings } from "@/features/settings/settings-context";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
@@ -17,6 +18,10 @@ vi.mock("@/lib/tauri", () => ({
   getBackgroundImage: vi.fn(async () => null),
   setWindowLook: vi.fn(async () => true),
 }));
+vi.mock("@/lib/game-tint", async (original) => ({
+  ...(await original<typeof import("@/lib/game-tint")>()),
+  averageLightness: vi.fn(async () => 0.9),
+}));
 
 function Probe() {
   const { appearance } = useAppearance();
@@ -27,6 +32,40 @@ function Probe() {
     </button>
   );
 }
+
+/** Puts `cover` in front and shows what lies behind the pages. */
+function BackdropProbe({ cover }: { cover: string }) {
+  const { backdrop, backdropDim, showGame, change } = useAppearance();
+  useEffect(() => showGame({ cover, colors: [] }), [cover, showGame]);
+  return (
+    <>
+      <output aria-label="Backdrop">{backdrop ?? "none"}</output>
+      <output aria-label="Dim">{backdropDim}</output>
+      <button type="button" onClick={() => change({ source: "none" })}>
+        None
+      </button>
+    </>
+  );
+}
+
+describe("the backdrop", () => {
+  it("shows the game in front, dims light art more and goes with None", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce([]);
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover="/covers/snowfield.jpg" />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    const backdrop = await screen.findByLabelText("Backdrop");
+    await waitFor(() => expect(backdrop.textContent).toBe("/covers/snowfield.jpg"));
+    // 55 percent, and 20 more for art at 0.9, 0.4 above the bright line.
+    await waitFor(() => expect(screen.getByLabelText("Dim").textContent).toBe("75"));
+    fireEvent.click(screen.getByRole("button", { name: "None" }));
+    expect(backdrop.textContent).toBe("none");
+  });
+});
 
 describe("the look after a restore", () => {
   it("follows the settings the restore brought", async () => {

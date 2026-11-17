@@ -35,12 +35,19 @@ export function TintedHeader({
       }}
     >
       {backdrop && (
-        <img
-          src={backdrop}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 -z-10 size-full scale-125 object-cover opacity-[0.18] blur-3xl"
-        />
+        <>
+          <img
+            src={backdrop}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 -z-10 size-full scale-115 object-cover opacity-50 blur-[22px] saturate-[1.4]"
+          />
+          {/* Keeps the title and the sentence readable on any art. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 -z-[5] bg-[linear-gradient(90deg,color-mix(in_oklab,var(--ink)_80%,transparent),transparent_70%),linear-gradient(0deg,color-mix(in_oklab,var(--ink)_70%,transparent),transparent_60%)]"
+          />
+        </>
       )}
       {children}
     </section>
