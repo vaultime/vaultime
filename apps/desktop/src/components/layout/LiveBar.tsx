@@ -13,7 +13,7 @@ import {
   usePlayedToday,
 } from "@/features/library/library-context";
 import { getIntegrityMeta } from "@/lib/integrity";
-import { LIVE_TICK_MS, SECONDS_PER_MINUTE } from "@/lib/constants";
+import { LIVE_TICK_MS, SECOND_MS } from "@/lib/constants";
 import { formatClock, formatClockTime, formatHoursMinutes, parseVaultimeDate } from "@/lib/time";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { cn } from "@/lib/utils";
@@ -104,7 +104,7 @@ export function LiveBar() {
 
       <div className={cn(SIDE, "justify-end gap-2.5 text-xs text-faint")}>
         <span className="hidden truncate xl:inline">
-          Idle after {Math.round(idleThresholdSeconds / SECONDS_PER_MINUTE)} min away
+          Idle after {formatHoursMinutes(idleThresholdSeconds * SECOND_MS)} away
         </span>
         <Link
           to={`/library/${current.game_id}`}
