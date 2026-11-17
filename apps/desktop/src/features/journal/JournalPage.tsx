@@ -18,6 +18,7 @@ import { useRefreshWhile } from "@/lib/use-refresh-while";
 import { scrollMotion } from "@/lib/anchors";
 import { describeError, logFailure } from "@/lib/utils";
 import { DaySection } from "./DaySection";
+import { ScreenshotViewer } from "./ScreenshotViewer";
 import { WeekGames } from "./WeekGames";
 import { dayId, entryId, journalDays, longestSession, weekStart, weeksBack, type JournalDay } from "./week";
 
@@ -194,6 +195,8 @@ export function JournalPage() {
     };
   }, [startedIds, stored]);
   const screenshotsOf = useCallback((sessionId: string) => screenshots.get(sessionId), [screenshots]);
+  const [viewing, setViewing] = useState<{ sessionId: string; index: number } | null>(null);
+  const openScreenshot = useCallback((sessionId: string, index: number) => setViewing({ sessionId, index }), []);
 
   const earliest = useMemo(
     () =>
@@ -215,6 +218,10 @@ export function JournalPage() {
   if (!shown) return null;
 
   const { play, start, offset: shownOffset } = shown;
+  const titleOfSession = (sessionId: string | undefined) => {
+    const session = sessionId ? sessionsById.get(sessionId) : undefined;
+    return (session && byGame.get(session.game_id)?.game.title) ?? "";
+  };
   const canGoBack = earliest !== null && startOfWeek(earliest) < start;
   const now = new Date();
   const weekEnd = startOfDay(start, DAYS_PER_WEEK);
@@ -324,6 +331,7 @@ export function JournalPage() {
             onCorrected={onCorrected}
             longestId={longestId}
             screenshotsOf={screenshotsOf}
+            onOpenScreenshot={openScreenshot}
             flashed={flashedDay === toDayKey(day.start)}
             linked={linked !== null && hasSession(day, linked) ? linked : null}
             onLink={setLinked}
@@ -331,6 +339,13 @@ export function JournalPage() {
           />
         ))}
       </div>
+      <ScreenshotViewer
+        title={titleOfSession(viewing?.sessionId)}
+        shots={(viewing && screenshots.get(viewing.sessionId)?.shots) ?? []}
+        index={viewing?.index ?? null}
+        onIndex={(index) => setViewing((current) => current && { ...current, index })}
+        onClose={() => setViewing(null)}
+      />
     </div>
   );
 }

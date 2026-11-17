@@ -159,6 +159,7 @@ export const DaySection = memo(function DaySection({
   onCorrected,
   longestId,
   screenshotsOf,
+  onOpenScreenshot,
   flashed,
   linked,
   onLink,
@@ -182,6 +183,7 @@ export const DaySection = memo(function DaySection({
   longestId: string | null;
   /** The Steam screenshots taken during a session. */
   screenshotsOf: (sessionId: string) => SessionScreenshots | undefined;
+  onOpenScreenshot: (sessionId: string, index: number) => void;
   /** Whether a jump just went to this day, which marks its name. */
   flashed: boolean;
   /** The session marked on every day it ran. */
@@ -445,7 +447,14 @@ export const DaySection = memo(function DaySection({
                   cover={<EntryCover summary={byGame.get(session.game_id)} title={titleOf(session.game_id)} />}
                   highlighted={linked === session.id}
                   record={session.id === longestId ? "The longest session of the week" : undefined}
-                  pictures={screenshots && <ScreenshotStrip screenshots={screenshots} />}
+                  pictures={
+                    screenshots && (
+                      <ScreenshotStrip
+                        screenshots={screenshots}
+                        onOpen={(index) => onOpenScreenshot(session.id, index)}
+                      />
+                    )
+                  }
                   amountsNote={
                     later.length > 0 && (
                       <>
