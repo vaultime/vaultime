@@ -100,8 +100,8 @@ fn known_folder(id: &GUID) -> Option<PathBuf> {
 
 /// Points every shortcut in `folders` that starts `program` at the icon of
 /// the logo in `accent`, made once a shortcut needs it. The icons of earlier
-/// accents go once no shortcut is left pointing at one. Returns the
-/// shortcuts changed.
+/// accents go, except one a shortcut that could not be changed still points
+/// at. Returns the shortcuts changed.
 fn point_shortcuts(
     folders: &[(PathBuf, usize)],
     program: &Path,
@@ -114,7 +114,7 @@ fn point_shortcuts(
     let program_name = file_name(&program_key).unwrap_or_default().to_owned();
     let mut icon: Option<PathBuf> = None;
     let mut changed = Vec::new();
-    let mut failed = false;
+    let mut still_used = Vec::new();
     let shortcuts = folders.iter().flat_map(|(folder, depth)| {
         walkdir::WalkDir::new(folder)
             .max_depth(*depth)
@@ -147,9 +147,10 @@ fn point_shortcuts(
             return changed;
         };
         let icon_text = icon.to_string_lossy();
-        if link
-            .icon()
-            .is_some_and(|current| path_key(&current) == path_key(&icon_text))
+        let current = link.icon();
+        if current
+            .as_deref()
+            .is_some_and(|current| path_key(current) == path_key(&icon_text))
         {
             continue;
         }
@@ -159,7 +160,7 @@ fn point_shortcuts(
                 changed.push(shortcut);
             }
             Err(error) => {
-                failed = true;
+                still_used.extend(current);
                 warn!(
                     "could not change the icon of {}: {error}",
                     shortcut.display()
@@ -167,8 +168,8 @@ fn point_shortcuts(
             }
         }
     }
-    if !failed && let Some(icon) = &icon {
-        remove_other_icons(appearance_dir, icon);
+    if let Some(icon) = &icon {
+        remove_other_icons(appearance_dir, icon, &still_used);
     }
     changed
 }
@@ -220,15 +221,18 @@ fn write_icon(appearance_dir: &Path, accent: &str) -> Option<PathBuf> {
     }
 }
 
-/// Removes the icon files of earlier accents and drawings.
-fn remove_other_icons(appearance_dir: &Path, keep: &Path) {
+/// Removes the icon files of earlier accents and drawings, but `keep` and
+/// those shortcuts still point at.
+fn remove_other_icons(appearance_dir: &Path, keep: &Path, still_used: &[String]) {
     let Ok(entries) = fs::read_dir(appearance_dir) else {
         return;
     };
     for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
+        let key = path_key(&path.to_string_lossy());
         if path != keep
+            && !still_used.iter().any(|used| path_key(used) == key)
             && name.starts_with(ICON_PREFIX)
             && path
                 .extension()
@@ -439,6 +443,14 @@ mod tests {
 
         // Nothing to do the second time.
         assert!(point_shortcuts(&folders, &ours, &appearance, TEAL).is_empty());
+        // Icons a shortcut still points at stay, the others go.
+        fs::write(appearance.join("shortcut-icon-00ff00-framed.ico"), b"old").unwrap();
+        fs::write(appearance.join("shortcut-icon-0000ff-framed.ico"), b"old").unwrap();
+        let used = appearance.join("shortcut-icon-00ff00-framed.ico");
+        remove_other_icons(&appearance, &icon, &[used.to_string_lossy().into_owned()]);
+        assert!(used.exists() && icon.exists());
+        assert!(!appearance.join("shortcut-icon-0000ff-framed.ico").exists());
+        fs::remove_file(used).unwrap();
         // Another accent gets its own icon, and the earlier one goes.
         assert_eq!(
             point_shortcuts(&folders, &ours, &appearance, "#F08A2C"),
