@@ -176,6 +176,12 @@ pub fn is_likely_game_executable(filename: &str) -> bool {
         "vbsp",
         "vvis",
         "vrad",
+        // Launchers, which Lutris names as the program of the games they start.
+        "battle.net",
+        "upc",
+        "ubisoftconnect",
+        "eadesktop",
+        "galaxyclient",
     ];
 
     let stem = lower.strip_suffix(".exe").unwrap_or(&lower);
@@ -242,6 +248,8 @@ mod tests {
         assert!(!is_likely_game_executable("CrashReporter.exe"));
         assert!(is_likely_game_executable("CrashBandicootNSaneTrilogy.exe"));
         assert!(is_likely_game_executable("Crashlands.exe"));
+        assert!(!is_likely_game_executable("Battle.net.exe"));
+        assert!(!is_likely_game_executable("UbisoftConnect.exe"));
         assert!(!is_likely_game_executable("unins000.exe"));
         assert!(!is_likely_game_executable("vcredist_x64.exe"));
         assert!(is_likely_game_executable("Cyberpunk2077.exe"));

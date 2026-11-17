@@ -10,6 +10,7 @@ use log::info;
 use rusqlite::{Connection, OpenFlags};
 
 use super::DiscoveredGame;
+use super::metadata::is_likely_game_executable;
 
 /// Lutris data folders, the regular one and the Flatpak one.
 fn data_folders() -> Vec<PathBuf> {
@@ -53,6 +54,13 @@ pub(crate) fn discover(existing: &HashSet<String>) -> Vec<DiscoveredGame> {
                         continue;
                     };
                     let program = Path::new(&executable);
+                    // A launcher the game runs through, with the game in its arguments.
+                    let launcher = program
+                        .file_name()
+                        .is_some_and(|name| !is_likely_game_executable(&name.to_string_lossy()));
+                    if launcher {
+                        continue;
+                    }
                     games.push(DiscoveredGame::new(
                         existing,
                         name,

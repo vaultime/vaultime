@@ -352,7 +352,18 @@ pub fn discover_launcher_games(db: &Database) -> Result<Vec<DiscoveredGame>> {
     }
     #[cfg(target_os = "linux")]
     games.extend(lutris::discover(&existing));
+    games.retain(runnable);
     Ok(games)
+}
+
+/// Whether a launcher's candidate can run. Epic and Heroic keep games listed
+/// after their files are gone, and Lutris may name a program by a relative
+/// or cut path. Other launchers' programs are left as they are, as one in
+/// `WindowsApps` may refuse even a look.
+fn runnable(game: &DiscoveredGame) -> bool {
+    let program = Path::new(&game.executable_path);
+    !matches!(game.source.as_str(), "epic" | "heroic" | "lutris")
+        || (program.is_absolute() && program.is_file())
 }
 
 /// Stores the launcher ids that `found` knows for games in the library that
@@ -656,6 +667,27 @@ mod tests {
         assert_eq!(id_of(&by_folder).as_deref(), Some("b-id"));
         assert_eq!(id_of(&other_launcher), None);
         assert_eq!(id_of(&known).as_deref(), Some("kept"));
+    }
+
+    #[test]
+    fn launcher_programs_that_point_nowhere_are_left_out() {
+        let candidate = |exe: &str, source: &str| DiscoveredGame {
+            title: "Hades".into(),
+            executable_path: exe.into(),
+            install_folder: None,
+            source: source.into(),
+            source_id: None,
+            already_added: false,
+            same_game: None,
+        };
+        let here = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert!(runnable(&candidate(&here, "epic")));
+        assert!(!runnable(&candidate("/gone/hades/hades.exe", "epic")));
+        assert!(!runnable(&candidate("drive_c/Hades/Hades.exe", "lutris")));
+        assert!(runnable(&candidate("/gone/hades/hades.exe", "xbox")));
     }
 
     #[test]
