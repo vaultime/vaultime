@@ -19,6 +19,12 @@ import { StoryCard } from "./YearChapters";
 
 /** Year in games: a year told in chapters, one card at a time, made on this PC. */
 export function YearInGamesPage() {
+  const { year } = useParams();
+  // Another year starts over at its first chapter.
+  return <YearStory key={year ?? ""} />;
+}
+
+function YearStory() {
   const { year: param } = useParams();
   const thisYear = new Date().getFullYear();
   const year = param === undefined ? thisYear : Number(param);
