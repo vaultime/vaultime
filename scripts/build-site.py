@@ -69,6 +69,7 @@ DOCS_NAV = [
     ("Start", [
         ("index.md", "Overview"),
         ("getting-started.md", "Getting started"),
+        ("library.md", "Home and the library"),
     ]),
     ("Playtime", [
         ("counting.md", "How playtime is counted"),

@@ -33,7 +33,7 @@ Vaultime looks for a new version when it starts and every few hours. When one is
 
 ## First start
 
-The library starts empty and says so: **Start your library**, with two buttons, **Discover games** and **Add a game**. There is no account and no setup wizard. Vaultime starts watching as soon as a game is in your library.
+Home starts empty and says so: **Start your library**, with two buttons, **Discover games** and **Add a game**. There is no account and no setup wizard. Vaultime starts watching as soon as a game is in your library.
 
 ## Discover your games
 
@@ -91,7 +91,8 @@ Hiding is for privacy, not for programs that are no games. A hidden game is left
 
 ## Get around
 
-- ++Ctrl+K++ opens the command palette. It finds any game, page or setting and runs common actions like **Save a backup** or **Check for updates**.
+- The rail on the left leads to Home, the journal, the stats and your library by launcher. See [Home and the library](library.md).
+- ++Ctrl+K++, or the search at the top of every page, opens the command palette. It finds any game, launcher, page or setting and runs common actions like **Save a backup** or **Check for updates**.
 - ++Ctrl+F++ finds a game in your library.
 - The live bar at the bottom shows the running game with its timer and how much of it was active.
 
