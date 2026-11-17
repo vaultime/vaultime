@@ -157,16 +157,6 @@ register_keys() { curl -s -o /dev/null -w '%{http_code}' -X POST "$url/v1/ledger
   || { echo "a malformed ledger key was taken"; exit 1; }
 [ "$(register_keys '{"ledger_device_id":"","public_keys":[]}')" = 400 ] \
   || { echo "ledger keys without a PC were taken"; exit 1; }
-echo "== beta application form"
-apply() { curl -s -o /dev/null -w '%{redirect_url}' -X POST "$url/v1/beta/apply" "$@"; }
-[[ $(apply -d email=tester@example.com -d platform=linux -d consent=yes -d note=e2e) == */applied.html ]] \
-  || { echo "a valid application was not taken"; exit 1; }
-[[ $(apply -d email=tester2@example.com -d platform=linux) == */apply-failed.html ]] \
-  || { echo "an application without consent was taken"; exit 1; }
-stored=$(docker exec "$db" psql -U vaultime -d vaultime -tAc "SELECT COUNT(*) FROM beta_applications")
-[ "$stored" = 1 ] || { echo "expected one stored application, found $stored"; exit 1; }
-[ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $token" "$url/v1/admin/beta-applications")" = 403 ] \
-  || { echo "a normal account could list applications"; exit 1; }
 
 echo "== admin account"
 "$python" - "$repo/deploy/vps/bootstrap-admin-account.py" "$db" "$url" <<'EOF'
@@ -194,8 +184,6 @@ sys.exit(bootstrap.main())
 EOF
 admin_token=$(curl -fsS -X POST "$url/v1/auth/login" -H "content-type: application/json" \
   -d '{"email":"admin@example.com","password":"e2e-admin-password"}' | field access_token)
-[ "$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $admin_token" "$url/v1/admin/beta-applications")" = 200 ] \
-  || { echo "the admin could not list applications"; exit 1; }
 [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $admin_token" \
   -H "content-type: application/json" -d '{"note":"e2e"}' "$url/v1/admin/invites")" = 201 ] \
   || { echo "the admin could not create an invite"; exit 1; }

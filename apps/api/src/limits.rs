@@ -15,10 +15,9 @@ use tokio::sync::{OwnedMutexGuard, Semaphore};
 use uuid::Uuid;
 
 use crate::constants::{
-    AUTH_REQUESTS_PER_WINDOW_PER_CLIENT, BETA_APPLICATIONS_PER_HOUR_PER_CLIENT,
-    LOGIN_FAILURES_PER_WINDOW_PER_EMAIL, LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT,
-    MAX_CONCURRENT_PASSWORD_HASHES, RATE_LIMIT_MAX_KEYS, RATE_WINDOW_SECS, SECS_PER_HOUR,
-    UPLOAD_LOCK_WAIT_SECS,
+    AUTH_REQUESTS_PER_WINDOW_PER_CLIENT, LOGIN_FAILURES_PER_WINDOW_PER_EMAIL,
+    LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT, MAX_CONCURRENT_PASSWORD_HASHES,
+    RATE_LIMIT_MAX_KEYS, RATE_WINDOW_SECS, UPLOAD_LOCK_WAIT_SECS,
 };
 use crate::error::{AppError, AppResult};
 
@@ -30,8 +29,6 @@ pub struct Limits {
     /// Failed sign-ins per email address from one client address. Tighter
     /// than the limit per email, so one guesser cannot lock a user out alone.
     pub failures_by_email_and_client: RateLimiter,
-    /// Beta applications per client address.
-    pub beta_by_client: RateLimiter,
     /// Password and invite hashes running at the same time. A password hash
     /// takes about 19 MiB.
     pub hashing: Semaphore,
@@ -57,11 +54,6 @@ impl Limits {
                 LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT,
                 WhenFull::Refuse,
             ),
-            beta_by_client: RateLimiter::new(
-                Duration::from_secs(SECS_PER_HOUR),
-                BETA_APPLICATIONS_PER_HOUR_PER_CLIENT,
-                WhenFull::Refuse,
-            ),
             hashing: Semaphore::new(MAX_CONCURRENT_PASSWORD_HASHES),
             uploads: AccountLocks::default(),
         }
@@ -73,7 +65,6 @@ impl Limits {
             &self.auth_by_client,
             &self.failures_by_email,
             &self.failures_by_email_and_client,
-            &self.beta_by_client,
         ] {
             limiter.prune(Instant::now());
         }

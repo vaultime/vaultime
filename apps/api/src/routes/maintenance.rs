@@ -11,7 +11,7 @@ use uuid::Uuid;
 use super::backups::prune_stale_pending_backups;
 use super::blobs::collect_unreferenced_blobs;
 use crate::AppState;
-use crate::constants::{BETA_APPLICATION_RETENTION_DAYS, MAINTENANCE_INTERVAL_SECS};
+use crate::constants::MAINTENANCE_INTERVAL_SECS;
 use crate::error::AppResult;
 
 pub fn spawn_maintenance(state: AppState) {
@@ -53,11 +53,5 @@ async fn run(state: &AppState) -> AppResult<()> {
     sqlx::query("DELETE FROM cloud_refresh_tokens WHERE expires_at < NOW()")
         .execute(&state.db)
         .await?;
-    sqlx::query(
-        "DELETE FROM beta_applications WHERE created_at < NOW() - make_interval(days => $1)",
-    )
-    .bind(BETA_APPLICATION_RETENTION_DAYS)
-    .execute(&state.db)
-    .await?;
     Ok(())
 }

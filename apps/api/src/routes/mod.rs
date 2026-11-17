@@ -4,7 +4,6 @@
 mod admin;
 mod auth;
 mod backups;
-mod beta;
 mod blobs;
 mod devices;
 mod ledger_keys;
@@ -35,12 +34,6 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/auth/logout", post(auth::logout))
         .route("/v1/auth/password", post(auth::change_password))
         .route("/v1/admin/invites", post(admin::create_invite))
-        .route("/v1/beta/apply", post(beta::apply))
-        .route("/v1/admin/beta-applications", get(beta::list_applications))
-        .route(
-            "/v1/admin/beta-applications/{application_id}",
-            delete(beta::delete_application),
-        )
         .route("/v1/devices", get(devices::list))
         .route("/v1/devices/register", post(devices::register))
         .route("/v1/devices/{device_id}", delete(devices::remove))

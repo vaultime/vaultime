@@ -11,8 +11,6 @@ pub const BYTES_PER_MIB: i64 = 1024 * 1024;
 pub const BYTES_PER_GIB: i64 = 1024 * BYTES_PER_MIB;
 /// Seconds in one minute.
 pub const SECS_PER_MINUTE: i64 = 60;
-/// Seconds in one hour.
-pub const SECS_PER_HOUR: u64 = 60 * 60;
 
 // Database
 
@@ -31,6 +29,8 @@ pub const REFRESH_TOKEN_BYTES: usize = 32;
 /// `deploy/vps/bootstrap-admin-account.py` and `MIN_CLOUD_PASSWORD_CHARS` in
 /// `apps/desktop/src/lib/constants.ts`.
 pub const MIN_PASSWORD_CHARS: usize = 10;
+/// Longest email address an account takes, the limit of the address format.
+pub const EMAIL_MAX_CHARS: usize = 254;
 
 // Abuse limits
 //
@@ -45,8 +45,6 @@ pub const AUTH_REQUESTS_PER_WINDOW_PER_CLIENT: u32 = 60;
 pub const LOGIN_FAILURES_PER_WINDOW_PER_EMAIL: u32 = 30;
 /// Failed sign-ins per email address and window from one client address.
 pub const LOGIN_FAILURES_PER_WINDOW_PER_EMAIL_AND_CLIENT: u32 = 10;
-/// Beta applications one client address may send per hour.
-pub const BETA_APPLICATIONS_PER_HOUR_PER_CLIENT: u32 = 3;
 /// Keys a rate limiter tracks at most, so a flood of addresses cannot fill the memory.
 pub const RATE_LIMIT_MAX_KEYS: usize = 100_000;
 /// Password and invite hashes computed at the same time.
@@ -78,8 +76,8 @@ pub const LEDGER_KEY_HEX_CHARS: usize = 64;
 /// Ledger keys one PC may register. A PC gets a new key when it is set up
 /// again, so a handful is normal.
 pub const MAX_LEDGER_KEYS_PER_PC: i64 = 64;
-/// How often the server removes stale uploads, unused artwork, expired
-/// sessions and old beta applications, in seconds.
+/// How often the server removes stale uploads, unused artwork and expired
+/// sessions, in seconds.
 pub const MAINTENANCE_INTERVAL_SECS: u64 = 60 * 60;
 
 // Invites
@@ -132,20 +130,6 @@ pub const DEFAULT_MIN_BACKUP_INTERVAL_SECS: i64 = 15 * SECS_PER_MINUTE;
 /// backup refers to is kept this long too, so a backup being assembled keeps
 /// the artwork it just uploaded.
 pub const DEFAULT_STALE_PENDING_BACKUP_SECS: i64 = 60 * SECS_PER_MINUTE;
-
-// Beta applications
-
-/// Longest email address an account or a beta application takes, the limit
-/// of the address format. Same as the `maxlength` of the email field in
-/// `docs/site/index.html`.
-pub const EMAIL_MAX_CHARS: usize = 254;
-/// Longest note on a beta application. Same as the `maxlength` of the note
-/// field in `docs/site/index.html`.
-pub const BETA_NOTE_MAX_CHARS: usize = 500;
-/// Applications taken per hour from everyone together. Only stops floods.
-pub const BETA_APPLICATIONS_PER_HOUR: i64 = 30;
-/// Days after which an unanswered application is deleted.
-pub const BETA_APPLICATION_RETENTION_DAYS: i32 = 90;
 
 // Artwork blobs
 
