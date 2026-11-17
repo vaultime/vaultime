@@ -718,7 +718,22 @@ fn export_database_snapshot(db: &Database, destination_path: &Path) -> Result<()
             snapshot(&reader)
         }
         None => db.with_conn(snapshot),
-    }
+    }?;
+    leave_out_this_pc(destination_path)
+}
+
+/// Clears what belongs to this PC alone from a snapshot, so no backup carries
+/// it. Secure delete overwrites the rows, as the file keeps their pages.
+fn leave_out_this_pc(snapshot: &Path) -> Result<()> {
+    Connection::open(snapshot)
+        .and_then(|conn| {
+            conn.execute_batch("PRAGMA secure_delete = ON; DELETE FROM seen_programs;")
+        })
+        .map_err(|error| {
+            VaultimeError::Backup(format!(
+                "failed to leave this PC's programs out of the backup: {error}"
+            ))
+        })
 }
 
 fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()> {
@@ -1292,7 +1307,34 @@ fn sqlite_string_literal(value: &str) -> String {
 mod tests {
     use super::*;
     use crate::db::models::CreateGame;
-    use crate::db::repo::{devices, game_assets, games, sessions};
+    use crate::db::repo::{devices, game_assets, games, seen, sessions};
+
+    #[test]
+    fn a_backup_leaves_the_programs_seen_running_out() {
+        let db = crate::playtime::testing::database();
+        seen::add_front_time(&db, "C:/Games/Tunic/Tunic.exe", "Tunic", 900).unwrap();
+        let folder =
+            std::env::temp_dir().join(format!("vaultime-snapshot-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&folder).unwrap();
+        let file = folder.join(DATABASE_FILE);
+        export_database_snapshot(&db, &file).unwrap();
+        let count: i64 = Connection::open(&file)
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM seen_programs", [], |row| row.get(0))
+            .unwrap();
+        let files = fs::read_dir(&folder).unwrap().count();
+        fs::remove_dir_all(&folder).ok();
+        assert_eq!(
+            (count, files),
+            (0, 1),
+            "no rows and no journal left beside it"
+        );
+        assert_eq!(
+            seen::list(&db, 0).unwrap().len(),
+            1,
+            "this PC keeps its own"
+        );
+    }
 
     #[test]
     fn restores_a_backup_that_predates_a_table() {

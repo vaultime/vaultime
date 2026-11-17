@@ -12,6 +12,7 @@ pub mod game_assets;
 pub mod games;
 pub mod ignored;
 pub mod offered;
+pub mod seen;
 pub mod session_events;
 pub mod sessions;
 pub mod settings;

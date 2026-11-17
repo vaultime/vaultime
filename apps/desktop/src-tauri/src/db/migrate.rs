@@ -71,6 +71,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0014_notable_event_index",
         include_str!("../../migrations/0014_notable_event_index.sql"),
     ),
+    (
+        "0015_seen_programs",
+        include_str!("../../migrations/0015_seen_programs.sql"),
+    ),
 ];
 
 /// Names of all migrations this build knows about.
