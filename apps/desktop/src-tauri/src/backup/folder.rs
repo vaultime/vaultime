@@ -152,6 +152,11 @@ pub fn publish(db: &Database, backup: &Path) -> Result<()> {
         )));
     }
     let manifest = read_manifest(backup)?;
+    // A PC that played nothing has nothing for the others yet, and a new
+    // install that restores a backup next leaves no empty PC behind.
+    if manifest.sessions_count == 0 {
+        return Ok(());
+    }
     let own = pc_folder(&root_in(&picked), &manifest.source_device_id)?;
     let name = backup
         .file_name()
@@ -671,6 +676,13 @@ mod tests {
         )
     }
 
+    /// A game of `pc` with a session, so its backups go to the sync folder.
+    fn played(pc: &Pc) -> String {
+        let game = pc.game("Hades", None);
+        pc.play(&game, 30);
+        game
+    }
+
     fn images(own: &Path) -> usize {
         fs::read_dir(own.join(SYNC_ARTWORK_DIR)).unwrap().count()
     }
@@ -696,7 +708,7 @@ mod tests {
     fn stores_each_image_once_and_keeps_the_newest_backups() {
         let laptop = Pc::new("laptop");
         let root = sync_folder(&laptop, &laptop.context.app_dir.join("Dropbox"));
-        let game = laptop.game("Hades", None);
+        let game = played(&laptop);
         art(&laptop, &game, "cover.jpg", b"cover");
         art(&laptop, &game, "banner.jpg", b"banner");
         let first = back_up(&laptop);
@@ -731,7 +743,7 @@ mod tests {
     fn the_daily_backup_goes_to_the_sync_folder_too() {
         let laptop = Pc::new("laptop");
         let root = sync_folder(&laptop, &laptop.context.app_dir.join("Vaultime"));
-        laptop.act();
+        played(&laptop);
         auto::back_up_if_due(&laptop.db, &laptop.assets, &laptop.context, Duration::ZERO)
             .unwrap()
             .unwrap();
@@ -876,6 +888,7 @@ mod tests {
     #[test]
     fn a_backup_still_syncing_waits() {
         let (laptop, desktop, root) = two_pcs();
+        played(&laptop);
         let backup = back_up(&laptop);
         publish(&laptop.db, &backup).unwrap();
         let copied = root.join("laptop").join(backup.file_name().unwrap());
@@ -902,6 +915,7 @@ mod tests {
     #[test]
     fn a_folder_counts_only_with_backups_of_its_own_pc() {
         let (laptop, desktop, root) = two_pcs();
+        played(&laptop);
         let backup = back_up(&laptop);
         publish(&laptop.db, &backup).unwrap();
         fs::rename(root.join("laptop"), root.join("tablet")).unwrap();
@@ -915,9 +929,18 @@ mod tests {
     fn picking_a_sync_folder_copies_a_backup_right_away() {
         let laptop = Pc::new("laptop");
         let root = sync_folder(&laptop, &laptop.context.app_dir.join("Dropbox"));
-        laptop.act();
+        played(&laptop);
         auto::back_up_to_sync_folder(&laptop.db, &laptop.assets, &laptop.context).unwrap();
         assert_eq!(backups_in(&root.join("laptop")).len(), 1);
+    }
+
+    #[test]
+    fn a_pc_that_played_nothing_stays_out_of_the_sync_folder() {
+        let laptop = Pc::new("laptop");
+        let root = sync_folder(&laptop, &laptop.context.app_dir.join("Dropbox"));
+        laptop.game("Hades", None);
+        publish(&laptop.db, &back_up(&laptop)).unwrap();
+        assert!(!root.join("laptop").exists());
     }
 
     #[test]

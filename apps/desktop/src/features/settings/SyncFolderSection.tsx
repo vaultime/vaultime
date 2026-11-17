@@ -82,8 +82,14 @@ export function SyncFolderSection({
       const picked = await openFileDialog({ multiple: false, directory: true, title: "Choose the sync folder" });
       if (typeof picked !== "string") return;
       setFolder(await api.setSyncFolder(picked));
-      setPcs(await api.listSyncFolderPcs());
-      setMessage("A backup of this PC is in the folder now. Choose the same folder on your other PCs.");
+      const found = await api.listSyncFolderPcs();
+      setPcs(found);
+      // A PC that played nothing yet copies nothing, so a new one can restore first.
+      setMessage(
+        found.some((pc) => pc.this_pc)
+          ? "A backup of this PC is in the folder now. Choose the same folder on your other PCs."
+          : "Once you play, a backup of this PC goes into the folder. Choose the same folder on your other PCs.",
+      );
     });
 
   const stop = () =>
