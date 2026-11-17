@@ -44,9 +44,9 @@ The server does not store IP addresses in its database. To slow down password gu
 
 ## 4. Third Parties
 
-The website, the downloads and app updates come over HTTPS from a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. Like any web server it sees your IP address while it answers a request, and it keeps no access logs.
+The website, the downloads and app updates come over HTTPS from a server operated by the Vaultime maintainer, rented from IONOS SE, which runs the hardware as a processor on the maintainer's behalf. Like any web server it sees your IP address while it answers a request, and it keeps no access logs. This serves our legitimate interest in delivering the website, the downloads and updates (Art. 6(1)(f) GDPR).
 
-Email to and from [vaultime@outlook.de](mailto:vaultime@outlook.de) goes through Microsoft Outlook.com. Microsoft processes these messages and the addresses in them to deliver and store them.
+Email to and from [vaultime@outlook.de](mailto:vaultime@outlook.de) goes through Microsoft Outlook.com. Microsoft processes these messages and the addresses in them to deliver and store them. We use your messages only to answer you, which is our legitimate interest (Art. 6(1)(f) GDPR).
 
 No other third parties, such as analytics, advertising or cloud storage providers, receive your data.
 
