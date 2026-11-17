@@ -102,9 +102,16 @@ function YearStory() {
 
   const story = told?.story;
   const current = year === thisYear;
-  const intro =
+  const span =
     story?.firstDay && story.lastDay
-      ? `${capitalize(amountWords(story.playedMs))} on ${countWords(story.daysPlayed, "day")}, from ${formatDayAndMonth(story.firstDay)} to ${formatDayAndMonth(story.lastDay)}. Made on this PC, nothing is uploaded.`
+      ? story.daysPlayed === 1
+        ? `on ${formatDayAndMonth(story.firstDay)}`
+        : `on ${countWords(story.daysPlayed, "day")}, from ${formatDayAndMonth(story.firstDay)} to ${formatDayAndMonth(story.lastDay)}`
+      : null;
+  // Under a minute of play tells no chapter.
+  const intro =
+    story && span && chapters.length > 0
+      ? `${capitalize(amountWords(story.playedMs))} ${span}. Made on this PC, nothing is uploaded.`
       : error
         ? "Your year did not load."
         : current
