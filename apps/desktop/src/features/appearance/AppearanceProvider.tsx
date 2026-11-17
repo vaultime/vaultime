@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AppearanceContext, type AppearanceState, type GameInFront } from "@/features/appearance/appearance-context";
+import {
+  AppearanceContext,
+  type AppearanceState,
+  type GameInFront,
+  type GamesInFront,
+} from "@/features/appearance/appearance-context";
 import { useSettings } from "@/features/settings/settings-context";
 import {
   APPEARANCE_CACHE_KEY,
@@ -39,8 +44,33 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 interface CachedLook {
   appearance: Appearance;
   tokens: Record<ThemeMode, Record<string, string>>;
+  /** The games in front then, so a start shows their art before the library is read. */
+  games?: GamesInFront;
 }
 
+const NO_GAMES: GamesInFront = { page: null, home: null };
+
+/** The game played last in the last run, also as the page's, as a start opens Home. */
+function cachedGames(): GamesInFront {
+  try {
+    const cached = JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY) ?? "null") as Partial<CachedLook> | null;
+    const home = cached?.games?.home;
+    return isGameInFront(home) ? { page: home, home } : NO_GAMES;
+  } catch {
+    return NO_GAMES;
+  }
+}
+
+function isGameInFront(value: unknown): value is GameInFront {
+  const game = value as Partial<GameInFront> | null | undefined;
+  return (
+    typeof game === "object" &&
+    game !== null &&
+    (game.cover === null || typeof game.cover === "string") &&
+    Array.isArray(game.colors) &&
+    game.colors.every((color) => typeof color?.hue === "number" && typeof color?.chroma === "number")
+  );
+}
 
 function sameGame(a: GameInFront | null, b: GameInFront | null): boolean {
   if (!a || !b) return a === b;
@@ -84,7 +114,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }
   const [systemDark, setSystemDark] = useState(systemIsDark);
   const [background, setBackground] = useState<string | null>(null);
-  const [game, setGame] = useState<GameInFront | null>(null);
+  const [games, setGames] = useState<GamesInFront>(cachedGames);
+  // Until the library tells which games are in front, the window keeps the look the core restored.
+  const [gamesKnown, setGamesKnown] = useState(false);
   const [lightness, setLightness] = useState<{ of: string; value: number | null } | null>(null);
   // Drags wait a moment before they are saved, so a slider saves once.
   const pending = useRef(new Map<string, { value: string; timer: number }>());
@@ -122,8 +154,13 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }, [save]);
 
   const mode = resolveMode(appearance.mode, systemDark);
-  const gameAccent = accentInUse(GAME_ACCENT, game?.colors ?? []);
+  const gameAccent = accentInUse(GAME_ACCENT, games.page?.colors ?? []);
   const accent = appearance.accent === GAME_ACCENT ? gameAccent : appearance.accent;
+  // The window, its icons and the next start, which opens Home, take the game
+  // playing or played last, so the tray and the shortcuts keep their color
+  // while you browse.
+  const windowAccent =
+    appearance.accent === GAME_ACCENT ? accentInUse(GAME_ACCENT, games.home?.colors ?? []) : appearance.accent;
   const tokens = useMemo(() => themeTokens(mode, appearance.ground, accent), [mode, appearance.ground, accent]);
 
   useLayoutEffect(() => {
@@ -132,26 +169,29 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       const cached: CachedLook = {
         appearance,
         tokens: {
-          dark: themeTokens("dark", appearance.ground, accent),
-          light: themeTokens("light", appearance.ground, accent),
+          dark: themeTokens("dark", appearance.ground, windowAccent),
+          light: themeTokens("light", appearance.ground, windowAccent),
         },
+        games,
       };
       localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify(cached));
     } catch {
       // Without storage the next start shows the default look for a moment.
     }
-  }, [appearance, accent, mode, tokens]);
+  }, [appearance, windowAccent, games, mode, tokens]);
 
   // The icons in the tray and the taskbar and the title bar take the accent
   // and the ground, and the title bar the chosen mode. A change goes out at
   // once, a color dragged around in the picker at most once per interval and
   // once more where it stops.
   const windowLookSentAt = useRef(Number.NEGATIVE_INFINITY);
+  const waitForGames = appearance.accent === GAME_ACCENT && !gamesKnown;
   useEffect(() => {
+    if (waitForGames) return;
     const send = () => {
       windowLookSentAt.current = performance.now();
       api
-        .setWindowLook(windowLook(mode, appearance.ground, accent, appearance.mode))
+        .setWindowLook(windowLook(mode, appearance.ground, windowAccent, appearance.mode))
         .catch(logFailure("coloring the window and its icons"));
     };
     const wait = windowLookSentAt.current + WINDOW_LOOK_INTERVAL_MS - performance.now();
@@ -161,10 +201,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     }
     const timer = window.setTimeout(send, wait);
     return () => window.clearTimeout(timer);
-  }, [mode, appearance.ground, accent, appearance.mode]);
+  }, [mode, appearance.ground, windowAccent, appearance.mode, waitForGames]);
 
   const backdrop =
-    appearance.source === "game" ? (game?.cover ?? null) : appearance.source === "picture" ? background : null;
+    appearance.source === "game" ? (games.page?.cover ?? null) : appearance.source === "picture" ? background : null;
 
   useEffect(() => {
     if (!backdrop) return;
@@ -179,9 +219,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
   // Light art takes more dim, so text on the panels keeps its contrast.
   const known = lightness?.of === backdrop ? (lightness?.value ?? null) : null;
+  const brightness = Math.max(0, (known ?? 0) - BACKGROUND_BRIGHT_LIGHTNESS);
   const backdropDim = Math.min(
     BACKGROUND_DIM_PERCENT.max,
-    Math.round(appearance.dim + Math.max(0, (known ?? 0) - BACKGROUND_BRIGHT_LIGHTNESS) * BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS),
+    Math.round(appearance.dim + brightness * BACKGROUND_BRIGHT_DIM_PER_LIGHTNESS),
   );
 
   useLayoutEffect(() => {
@@ -190,8 +231,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     root.setProperty("--panel-alpha", backdrop ? `${BACKGROUND_PANEL_OPACITY_PERCENT}%` : "100%");
   }, [backdrop]);
 
-  const showGame = useCallback((next: GameInFront | null) => {
-    setGame((current) => (sameGame(current, next) ? current : next));
+  const showGames = useCallback((next: GamesInFront) => {
+    setGames((current) => (sameGame(current.page, next.page) && sameGame(current.home, next.home) ? current : next));
+    setGamesKnown(true);
   }, []);
 
   const change = useCallback(
@@ -243,7 +285,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       background,
       backdrop,
       backdropDim,
-      showGame,
+      showGames,
       change,
       chooseBackground,
       pickGameBackground,
@@ -257,7 +299,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       background,
       backdrop,
       backdropDim,
-      showGame,
+      showGames,
       change,
       chooseBackground,
       pickGameBackground,

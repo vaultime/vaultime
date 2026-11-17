@@ -3,12 +3,13 @@
 
 import { useEffect } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSettings } from "@/features/settings/settings-context";
 import { SettingsProvider } from "@/features/settings/SettingsProvider";
-import { SETTING_KEYS } from "@/lib/constants";
+import { hexToOklch } from "@/lib/color";
+import { APPEARANCE_CACHE_KEY, SETTING_KEYS } from "@/lib/constants";
 import * as api from "@/lib/tauri";
-import { useAppearance } from "./appearance-context";
+import { useAppearance, type GamesInFront } from "./appearance-context";
 import { AppearanceProvider } from "./AppearanceProvider";
 
 vi.mock("@tauri-apps/plugin-log", () => ({ warn: vi.fn(async () => {}) }));
@@ -33,10 +34,17 @@ function Probe() {
   );
 }
 
-/** Puts `cover` in front and shows what lies behind the pages. */
-function BackdropProbe({ cover }: { cover: string }) {
-  const { backdrop, backdropDim, showGame, change } = useAppearance();
-  useEffect(() => showGame({ cover, colors: [] }), [cover, showGame]);
+const TEAL = { cover: "/covers/teal.jpg", colors: [{ hue: 190, chroma: 0.12 }] };
+const ORANGE = { cover: "/covers/orange.jpg", colors: [{ hue: 50, chroma: 0.15 }] };
+
+beforeEach(() => localStorage.clear());
+
+/** Puts `cover` in front, unless the library has not told one, and shows what lies behind the pages. */
+function BackdropProbe({ cover }: { cover: string | null }) {
+  const { backdrop, backdropDim, showGames, change } = useAppearance();
+  useEffect(() => {
+    if (cover) showGames({ page: { cover, colors: [] }, home: { cover, colors: [] } });
+  }, [cover, showGames]);
   return (
     <>
       <output aria-label="Backdrop">{backdrop ?? "none"}</output>
@@ -64,6 +72,51 @@ describe("the backdrop", () => {
     await waitFor(() => expect(screen.getByLabelText("Dim").textContent).toBe("75"));
     fireEvent.click(screen.getByRole("button", { name: "None" }));
     expect(backdrop.textContent).toBe("none");
+  });
+});
+
+describe("a start", () => {
+  it("shows the game played last in the last run before the library is read", async () => {
+    localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify({ games: { page: TEAL, home: ORANGE } }));
+    vi.mocked(api.listSettings).mockResolvedValueOnce([]);
+    render(
+      <SettingsProvider>
+        <AppearanceProvider>
+          <BackdropProbe cover={null} />
+        </AppearanceProvider>
+      </SettingsProvider>,
+    );
+    expect((await screen.findByLabelText("Backdrop")).textContent).toBe("/covers/orange.jpg");
+  });
+});
+
+function GamesProbe({ games }: { games: GamesInFront | null }) {
+  const { showGames } = useAppearance();
+  useEffect(() => {
+    if (games) showGames(games);
+  }, [games, showGames]);
+  return <p>Probe</p>;
+}
+
+describe("the window look", () => {
+  it("waits for the games in front and takes the one played last, not the page's", async () => {
+    vi.mocked(api.listSettings).mockResolvedValueOnce([]);
+    vi.mocked(api.setWindowLook).mockClear();
+    const tree = (games: GamesInFront | null) => (
+      <SettingsProvider>
+        <AppearanceProvider>
+          <GamesProbe games={games} />
+        </AppearanceProvider>
+      </SettingsProvider>
+    );
+    const { rerender } = render(tree(null));
+    await screen.findByText("Probe");
+    expect(api.setWindowLook).not.toHaveBeenCalled();
+
+    rerender(tree({ page: TEAL, home: ORANGE }));
+    await waitFor(() => expect(api.setWindowLook).toHaveBeenCalledOnce());
+    const { iconAccent } = vi.mocked(api.setWindowLook).mock.lastCall![0];
+    expect(Math.abs(hexToOklch(iconAccent)!.hue - ORANGE.colors[0].hue)).toBeLessThan(5);
   });
 });
 

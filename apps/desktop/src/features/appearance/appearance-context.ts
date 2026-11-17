@@ -5,11 +5,19 @@ import { createContext, useContext } from "react";
 import type { ArtColor } from "@/lib/game-tint";
 import type { Appearance, ThemeMode } from "@/lib/theme";
 
-/** The game a page is about, or the one playing or played last. */
+/** A game that lights the look, by its art. */
 export interface GameInFront {
   cover: string | null;
   /** The main colors of its art, the strongest first. */
   colors: ArtColor[];
+}
+
+/** The games that light the look. */
+export interface GamesInFront {
+  /** The game a page is about, else the one playing, else the one played last. */
+  page: GameInFront | null;
+  /** The game playing, else the one played last, for the window and its icons. */
+  home: GameInFront | null;
 }
 
 export interface AppearanceState {
@@ -29,8 +37,8 @@ export interface AppearanceState {
   backdrop: string | null;
   /** The dim over the backdrop, more than the player's for light pictures. */
   backdropDim: number;
-  /** Tells which game is in front, for its art behind the pages. */
-  showGame: (game: GameInFront | null) => void;
+  /** Tells which games are in front, for their art and color. */
+  showGames: (games: GamesInFront) => void;
   /**
    * Applies a change at once and saves it. A `gradual` change, like a slider
    * being dragged, is saved once it stops.

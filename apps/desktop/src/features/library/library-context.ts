@@ -67,6 +67,8 @@ interface LibraryState {
   /** The local day at the last poll, so pages that say today or yesterday turn over at midnight. */
   today: string;
   loaded: boolean;
+  /** Whether the colors of the covers are read. Until then every game has the color of its title. */
+  artRead: boolean;
   /** Why the last load failed, null when it worked. */
   error: string | null;
   refresh: () => Promise<void>;

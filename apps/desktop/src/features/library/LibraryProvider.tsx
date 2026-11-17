@@ -64,6 +64,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const idleThresholdSeconds =
     Number.isFinite(savedThreshold) && savedThreshold > 0 ? savedThreshold : DEFAULT_IDLE_THRESHOLD_SECS;
   const [artTints, setArtTints] = useState<Record<string, GameTint>>({});
+  const [artReadFor, setArtReadFor] = useState<Record<string, string> | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Ids of the running sessions at the last poll. Null until the first poll.
@@ -177,11 +178,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           keys.length === Object.keys(current).length && keys.every((gameId) => current[gameId] === next[gameId]);
         return same ? current : next;
       });
+      setArtReadFor(covers);
     });
     return () => {
       cancelled = true;
     };
   }, [covers]);
+  const artRead = loaded && artReadFor === covers;
 
   const summaries = useMemo(() => {
     const totalsByGame = new Map(totals.map((total) => [total.game_id, total]));
@@ -289,6 +292,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       links,
       today,
       loaded,
+      artRead,
       error,
       refresh,
       setStatus,
@@ -309,6 +313,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       links,
       today,
       loaded,
+      artRead,
       error,
       refresh,
       setStatus,
