@@ -24,7 +24,7 @@ Vaultime is a free app for Windows and Linux that watches which game runs and co
 - Every game in one library with its runtime, its active time and its idle time. Active time is the time you actually played, idle time is the rest. See [How playtime is counted](counting.md).
 - A journal of your days, with every session written as a sentence and a 24 hour strip for each day.
 - A page for each launcher with its own hours, so you still see what came from Steam and what from GOG.
-- A game you own in two launchers can count as one game, while each launcher keeps the hours its copy recorded.
+- A game you own in two launchers can count as one game, while each launcher keeps the time played through its copy.
 - Your year told in chapters in **Year in games**, from your game of the year to the games you finished.
 
 ## What it cannot see
@@ -32,6 +32,21 @@ Vaultime is a free app for Windows and Linux that watches which game runs and co
 - Play on a console, a phone or another device without Vaultime. You can add such a session by hand, and it is labeled Manual.
 - Hours from before you installed it, except the totals Steam reports.
 - Your launcher accounts. Vaultime never signs in to a launcher and reads only what is on your PC.
+
+## Launcher by launcher
+
+How each launcher shows your playtime and what it counts:
+
+- [Steam](steam-playtime.md)
+- [The Steam Deck](steam-deck-playtime.md)
+- [Epic Games](epic-games-playtime.md)
+- [GOG Galaxy](gog-galaxy-playtime.md)
+- [The Xbox app](xbox-app-playtime.md)
+- [The EA app](ea-app-playtime.md)
+- [Ubisoft Connect](ubisoft-connect-playtime.md)
+- [Battle.net](battle-net-playtime.md)
+- [League of Legends and VALORANT](riot-games-playtime.md)
+- [Heroic and Lutris on Linux](linux-playtime.md)
 
 ## Your data stays on your PC
 

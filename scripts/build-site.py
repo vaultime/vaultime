@@ -107,6 +107,9 @@ GUIDES_NAV = [
         ("gog-galaxy-playtime.md", "GOG Galaxy"),
         ("xbox-app-playtime.md", "Xbox app"),
         ("ea-app-playtime.md", "EA app"),
+        ("ubisoft-connect-playtime.md", "Ubisoft Connect"),
+        ("battle-net-playtime.md", "Battle.net"),
+        ("riot-games-playtime.md", "League of Legends and VALORANT"),
         ("linux-playtime.md", "Heroic and Lutris on Linux"),
     ]),
 ]
