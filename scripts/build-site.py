@@ -43,10 +43,13 @@ TAURI_CONFIG = ROOT / "apps/desktop/src-tauri/tauri.conf.json"
 FONT_FILES = {
     "mona-sans-normal.woff2": FONTS / "mona-sans/files/mona-sans-latin-standard-normal.woff2",
     "mona-sans-italic.woff2": FONTS / "mona-sans/files/mona-sans-latin-standard-italic.woff2",
+    "newsreader-normal.woff2": FONTS / "newsreader/files/newsreader-latin-standard-normal.woff2",
+    "newsreader-italic.woff2": FONTS / "newsreader/files/newsreader-latin-standard-italic.woff2",
     "geist.woff2": FONTS / "geist/files/geist-latin-wght-normal.woff2",
     "geist-mono.woff2": FONTS / "geist-mono/files/geist-mono-latin-wght-normal.woff2",
     # The Open Font License asks for its text next to every copy of the fonts.
     "mona-sans-LICENSE.txt": FONTS / "mona-sans/LICENSE",
+    "newsreader-LICENSE.txt": FONTS / "newsreader/LICENSE",
     "geist-LICENSE.txt": FONTS / "geist/LICENSE",
     "geist-mono-LICENSE.txt": FONTS / "geist-mono/LICENSE",
 }
