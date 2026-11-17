@@ -15,6 +15,8 @@ Everything below stays on your device unless you choose to back it up to a cloud
 - **What you write down.** The status you give each game, notes on sessions, sessions you add by hand and the reasons you give for corrections.
 - **Earlier playtime.** If you import it, the playtime Steam counted for the games in your library and when you last played them there.
 - **Artwork.** Images found in your game folders or imported by you, plus cached thumbnails.
+- **Programs seen running.** For a program from your game folders that runs in front without being in your library: its path, a title made from its folder or file name, how long it ran in front and when it was first and last seen, so Discover can offer it. This stays on your device and is left out of backups.
+- **Programs Discover offered.** The paths of the programs Discover showed you, so it offers each one only once.
 - **Settings.** Tracking preferences such as the idle threshold.
 - **Device identity.** A random ID created on the first start, used to tell your devices apart in your history.
 - **Logs.** Technical log files in the app's log folder, used for troubleshooting.
@@ -40,7 +42,7 @@ The server does not store IP addresses in its database. To slow down password gu
 - No crash reports.
 - No advertising identifiers or behavioral profiling.
 - No cookies and no tracking on the website. It loads nothing from other services, its fonts come from the same server.
-- No data from other programs. To detect games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It keeps only that input happened, never which key or button, and stores nothing from it but the resulting active and idle time. To find games it reads the install lists of game launchers, and when you import earlier playtime it reads Steam's playtime file once. It keeps only what belongs to games in your library.
+- No data from other programs. To detect games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It keeps only that input happened, never which key or button, and stores nothing from it but the resulting active and idle time. To find games it reads the install lists of game launchers, and when you import earlier playtime it reads Steam's playtime file once. It keeps only what belongs to games in your library and the programs seen running listed in section 1, and it notes no program outside your game folders.
 
 ## 4. Third Parties
 

@@ -52,7 +52,7 @@ The [privacy policy](../../legal/privacy-policy.md) has the full details.
 
 ## What Vaultime reads on your PC
 
-To find games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It keeps only that input happened, never which key or button. To find games it reads the install lists of your launchers, and for the Steam import it reads Steam's playtime file. For the journal it reads Steam's list of your screenshots and their small copies, and copies none of them.
+To find games and tell active from idle time, Vaultime reads which programs run, which window is in front and when you last used the keyboard, mouse or a controller. It keeps only that input happened, never which key or button. Of a program from your game folders that runs in front without being in your library, it notes the path, a title made from its folder or file name and how long it ran in front, so Discover can offer it. It notes no program outside those folders, and these notes stay on this PC, out of backups. To find games it reads the install lists of your launchers, and for the Steam import it reads Steam's playtime file. For the journal it reads Steam's list of your screenshots and their small copies, and copies none of them.
 
 ## Remove your data
 
