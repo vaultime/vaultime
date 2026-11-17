@@ -1184,6 +1184,7 @@ mod tests {
         });
         let live = LiveSessions::default();
         let mut active = HashMap::new();
+        let mut seen = SeenPrograms::default();
         time("whole tick", &mut || {
             poll_tick(
                 &db,
@@ -1191,7 +1192,7 @@ mod tests {
                 &live,
                 &mut system,
                 &mut folders,
-                &mut SeenPrograms::default(),
+                &mut seen,
                 &mut active,
             )
             .unwrap();

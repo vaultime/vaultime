@@ -64,9 +64,18 @@ pub fn scan_folders(db: &Database, paths: &[String]) -> Result<Vec<DiscoveredGam
 
 /// Default folders to scan on this platform. Only existing folders are returned.
 ///
-/// Steam libraries are left out because Steam discovery covers them.
+/// Steam libraries are left out because Steam discovery covers them. Tests
+/// never look at the drives of the PC they run on.
 pub fn default_scan_paths() -> Vec<String> {
-    candidate_paths()
+    if cfg!(test) {
+        return Vec::new();
+    }
+    existing_folders(candidate_paths())
+}
+
+/// The folders among `paths` that exist.
+fn existing_folders(paths: Vec<PathBuf>) -> Vec<String> {
+    paths
         .into_iter()
         .filter(|path| path.is_dir())
         .map(|path| path.to_string_lossy().into_owned())
@@ -147,11 +156,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_paths_exist() {
-        assert!(
-            default_scan_paths()
-                .iter()
-                .all(|path| Path::new(path).is_dir())
+    fn keeps_only_the_folders_that_exist() {
+        let here = std::env::temp_dir();
+        let gone = here.join(format!("vaultime-gone-{}", uuid::Uuid::new_v4()));
+        assert_eq!(
+            existing_folders(vec![here.clone(), gone]),
+            [here.to_string_lossy().into_owned()]
         );
     }
 
