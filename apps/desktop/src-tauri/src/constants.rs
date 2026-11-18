@@ -57,6 +57,12 @@ pub const FOREGROUND_GRACE: Duration = Duration::from_secs(15);
 /// How long the tracker reuses install folders with their links resolved
 /// before it asks the file system again.
 pub const INSTALL_FOLDER_REFRESH: Duration = Duration::from_mins(10);
+/// Process ids the process list of Windows makes room for at first, doubled
+/// while more run.
+pub const PROCESS_IDS_FIRST: usize = 1024;
+/// UTF-16 units a process path on Windows gets room for at first, more when
+/// it needs them.
+pub const PROCESS_PATH_UNITS_FIRST: usize = 1024;
 /// Idle threshold when the `idle_threshold_seconds` setting is missing or invalid.
 /// Same as `DEFAULT_IDLE_THRESHOLD_SECS` in `lib/constants.ts`.
 pub const DEFAULT_IDLE_THRESHOLD_SECS: u64 = 300;

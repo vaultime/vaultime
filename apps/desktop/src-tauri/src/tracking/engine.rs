@@ -13,7 +13,6 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use serde::Serialize;
-use sysinfo::System;
 
 use crate::constants::{
     BACKGROUND_ACTIVE_SETTING, CHECKPOINT_INTERVAL, CLOCK_BACKWARDS_TOLERANCE_MS,
@@ -31,10 +30,7 @@ use crate::error::VaultimeError;
 use crate::integrity;
 use crate::platform;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
-use crate::platform::process::{
-    InstallFolder, RunningProcess, cpu_usage, matches_executable, new_system,
-    refresh_running_processes,
-};
+use crate::platform::process::{InstallFolder, ProcessList, RunningProcess, matches_executable};
 use crate::tracking::live::{LiveCounters, LiveSessions};
 use crate::tracking::seen::SeenPrograms;
 
@@ -323,7 +319,7 @@ fn poll_loop(
     tick_lock: &Mutex<()>,
 ) {
     let mut active: HashMap<String, ActiveSession> = HashMap::new();
-    let mut system = new_system();
+    let mut processes = ProcessList::default();
     let mut folders = FolderCache::default();
     let mut seen = SeenPrograms::default();
 
@@ -342,7 +338,7 @@ fn poll_loop(
                         db,
                         device_id,
                         live,
-                        &mut system,
+                        &mut processes,
                         &mut folders,
                         &mut seen,
                         &mut active,
@@ -350,7 +346,7 @@ fn poll_loop(
                 }) == Guarded::Panicked
             {
                 // The process list may be half refreshed, so it starts over.
-                system = new_system();
+                processes = ProcessList::default();
                 folders = FolderCache::default();
             }
         }
@@ -402,7 +398,7 @@ fn poll_tick(
     db: &Database,
     device_id: &str,
     live: &LiveSessions,
-    system: &mut System,
+    list: &mut ProcessList,
     folders: &mut FolderCache,
     seen: &mut SeenPrograms,
     active: &mut HashMap<String, ActiveSession>,
@@ -412,7 +408,7 @@ fn poll_tick(
     // Programs the player said are no game never count, whatever matches
     // them. They are recognized the way games are, through links and Wine.
     let ignored = ignored::paths(db).unwrap_or_default();
-    let processes = refresh_running_processes(system);
+    let processes = list.refresh();
     // Vaultime itself always runs, so an empty list failed to load. Ending
     // every session on it would split them all.
     if processes.is_empty() {
@@ -431,7 +427,7 @@ fn poll_tick(
         &tracked_games,
         &processes,
         &activity_snapshot,
-        system,
+        list,
         folders,
     );
 
@@ -683,7 +679,7 @@ fn observe_games(
     games: &[Game],
     processes: &[RunningProcess],
     activity_snapshot: &ActivitySnapshot,
-    system: &mut System,
+    list: &mut ProcessList,
     folders: &mut FolderCache,
 ) -> HashMap<String, GameObservation> {
     let matched: Vec<(&str, Vec<&RunningProcess>)> = games
@@ -700,7 +696,7 @@ fn observe_games(
             .iter()
             .flat_map(|(_, found)| found.iter().map(|process| process.pid))
             .collect();
-        cpu_usage(system, &pids)
+        list.cpu_usage(&pids)
     };
 
     matched
@@ -1187,8 +1183,9 @@ mod tests {
         // End every process of the game, it may have restarted itself through Steam.
         let _ = child.kill();
         let _ = child.wait();
-        let mut system = new_system();
-        for process in refresh_running_processes(&mut system) {
+        let mut system = sysinfo::System::new().unwrap();
+        system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        for process in ProcessList::default().refresh() {
             if crate::platform::process::runs_from_folder(&process, &folder)
                 && let Some(running) = system.process(sysinfo::Pid::from_u32(process.pid))
             {
@@ -1238,7 +1235,7 @@ mod tests {
             )
             .unwrap();
         }
-        let mut system = new_system();
+        let mut list = ProcessList::default();
         let mut folders = FolderCache::default();
         let time = |label: &str, run: &mut dyn FnMut()| {
             run();
@@ -1258,17 +1255,17 @@ mod tests {
             ignored::paths(&db).unwrap();
         });
         time("processes", &mut || {
-            refresh_running_processes(&mut system);
+            list.refresh();
         });
         time("activity", &mut || {
             capture_activity_snapshot();
         });
         let tracked = games::list_local_games(&db).unwrap();
-        let processes = refresh_running_processes(&mut system);
+        let processes = list.refresh();
         let snapshot = capture_activity_snapshot();
         println!("{} processes", processes.len());
         time("observe", &mut || {
-            observe_games(&tracked, &processes, &snapshot, &mut system, &mut folders);
+            observe_games(&tracked, &processes, &snapshot, &mut list, &mut folders);
         });
         let live = LiveSessions::default();
         let mut active = HashMap::new();
@@ -1278,7 +1275,7 @@ mod tests {
                 &db,
                 "device",
                 &live,
-                &mut system,
+                &mut list,
                 &mut folders,
                 &mut seen,
                 &mut active,

@@ -116,24 +116,43 @@ impl SeenPrograms {
     }
 }
 
-/// `path_key` of each folder with a separator at its end, so a folder never
-/// matches another one that only starts with its name.
+/// `path_key` of each folder, as given and with links resolved as process
+/// paths come, with a separator at its end, so a folder never matches
+/// another one that only starts with its name.
 fn keys_of(folders: &[PathBuf]) -> Vec<String> {
-    folders
-        .iter()
-        .map(|folder| {
-            let mut key = path_key(&folder.to_string_lossy());
+    let mut keys: Vec<String> = Vec::new();
+    for folder in folders {
+        let resolved = std::fs::canonicalize(folder).ok();
+        for path in std::iter::once(folder).chain(resolved.as_ref()) {
+            let mut key = path_key(&path.to_string_lossy());
             if !key.ends_with(['/', '\\']) {
                 key.push(std::path::MAIN_SEPARATOR);
             }
-            key
-        })
-        .collect()
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+    }
+    keys
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_game_folder_behind_a_link_counts_where_it_leads() {
+        let dir = std::env::temp_dir().join(format!("vaultime-seen-{}", uuid::Uuid::new_v4()));
+        let real = dir.join("real");
+        std::fs::create_dir_all(&real).unwrap();
+        let link = dir.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let program = std::fs::canonicalize(&real).unwrap().join("game.x86_64");
+        let program = path_key(&program.to_string_lossy());
+        assert!(keys_of(&[link]).iter().any(|key| program.starts_with(key)));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
     use crate::constants::SEEN_RUNNING_MIN;
     use crate::playtime::testing::database;
 

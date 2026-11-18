@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Component, Path};
 
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+#[cfg(not(windows))]
+use sysinfo::UpdateKind;
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 /// A snapshot of a running process relevant for game matching.
 #[derive(Debug, Clone)]
@@ -39,52 +41,294 @@ impl RunningProcess {
     }
 }
 
-/// An empty process list to refresh. sysinfo fails only on systems it does
-/// not support, and Windows and Linux never do.
-pub fn new_system() -> System {
-    System::new().expect("sysinfo supports this system")
+/// The running processes, read once per tick.
+///
+/// On Windows each tick takes the list of process ids and the program of
+/// each id, read without opening the process, which any process allows. An
+/// id that still names the program it named before is the same process, so
+/// only new processes are opened, once, for the path Windows shows for their
+/// program. Elsewhere sysinfo reads the list, with each path and command line
+/// read once per process.
+pub struct ProcessList {
+    /// Measures the CPU usage of game processes, where it stands in for
+    /// input, and lists the processes outside Windows.
+    system: System,
+    #[cfg(windows)]
+    known: HashMap<u32, Known>,
+    /// Takes the paths read, kept between ticks.
+    #[cfg(windows)]
+    buffer: Vec<u16>,
 }
 
-/// Refreshes a long-lived `sysinfo::System` instance and returns the snapshot.
-pub fn refresh_running_processes(sys: &mut System) -> Vec<RunningProcess> {
-    // Paths and command lines do not change while a process runs, so they are
-    // read once per process. CPU usage is left out, reading it for every
-    // process costs twice as much as the whole list.
-    sys.refresh_processes_specifics(
-        ProcessesToUpdate::All,
-        true,
-        ProcessRefreshKind::nothing()
-            .with_exe(UpdateKind::OnlyIfNotSet)
-            .with_cmd(UpdateKind::OnlyIfNotSet),
-    );
-
-    sys.processes()
-        .values()
-        .map(|p| {
-            RunningProcess::new(
-                p.pid().as_u32(),
-                p.name().to_string_lossy().into_owned(),
-                p.exe().map(|e| e.to_string_lossy().into_owned()),
-                p.cmd()
-                    .first()
-                    .map(|arg| arg.to_string_lossy().into_owned()),
-            )
-        })
-        .collect()
+/// A process seen in an earlier tick.
+#[cfg(any(windows, test))]
+#[derive(Debug, Clone, PartialEq)]
+struct Known {
+    /// The program as the id names it, in the form of the kernel.
+    image: String,
+    name: String,
+    exe_path: Option<String>,
 }
 
-/// CPU usage in percent of the given processes since their previous
-/// measurement. A process measured for the first time reads 0.
-pub fn cpu_usage(sys: &mut System, pids: &[u32]) -> HashMap<u32, f32> {
-    let pids: Vec<Pid> = pids.iter().copied().map(Pid::from_u32).collect();
-    sys.refresh_processes_specifics(
-        ProcessesToUpdate::Some(&pids),
-        false,
-        ProcessRefreshKind::nothing().with_cpu(),
-    );
-    pids.iter()
-        .filter_map(|pid| Some((pid.as_u32(), sys.process(*pid)?.cpu_usage())))
-        .collect()
+impl Default for ProcessList {
+    fn default() -> Self {
+        Self {
+            // sysinfo fails only on systems it does not support, and Windows
+            // and Linux never do.
+            system: System::new().expect("sysinfo supports this system"),
+            #[cfg(windows)]
+            known: HashMap::new(),
+            #[cfg(windows)]
+            buffer: Vec::new(),
+        }
+    }
+}
+
+impl ProcessList {
+    /// The processes running now. Empty only when the list failed to load.
+    #[cfg(windows)]
+    pub fn refresh(&mut self) -> Vec<RunningProcess> {
+        let Some(ids) = windows_list::process_ids() else {
+            return Vec::new();
+        };
+        let buffer = &mut self.buffer;
+        self.known = carry_over(
+            std::mem::take(&mut self.known),
+            ids,
+            |pid| windows_list::image_by_id(pid, buffer),
+            windows_list::shown_path,
+        );
+        self.known
+            .iter()
+            .map(|(&pid, process)| {
+                RunningProcess::new(pid, process.name.clone(), process.exe_path.clone(), None)
+            })
+            .collect()
+    }
+
+    /// The processes running now. Empty only when the list failed to load.
+    #[cfg(not(windows))]
+    pub fn refresh(&mut self) -> Vec<RunningProcess> {
+        // Paths and command lines do not change while a process runs, so they
+        // are read once per process. CPU usage is left out, reading it for
+        // every process costs twice as much as the whole list.
+        self.system.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing()
+                .with_exe(UpdateKind::OnlyIfNotSet)
+                .with_cmd(UpdateKind::OnlyIfNotSet),
+        );
+        self.system
+            .processes()
+            .values()
+            .map(|p| {
+                RunningProcess::new(
+                    p.pid().as_u32(),
+                    p.name().to_string_lossy().into_owned(),
+                    p.exe().map(|e| e.to_string_lossy().into_owned()),
+                    p.cmd()
+                        .first()
+                        .map(|arg| arg.to_string_lossy().into_owned()),
+                )
+            })
+            .collect()
+    }
+
+    /// CPU usage in percent of the given processes since their previous
+    /// measurement. A process measured for the first time reads 0.
+    pub fn cpu_usage(&mut self, pids: &[u32]) -> HashMap<u32, f32> {
+        let pids: Vec<Pid> = pids.iter().copied().map(Pid::from_u32).collect();
+        self.system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&pids),
+            false,
+            ProcessRefreshKind::nothing().with_cpu(),
+        );
+        pids.iter()
+            .filter_map(|pid| Some((pid.as_u32(), self.system.process(*pid)?.cpu_usage())))
+            .collect()
+    }
+}
+
+/// The processes of `ids`, those of `known` kept where their id still names
+/// the same program. Processes that ended since the list was taken, and those
+/// that run no program file, like the system's own, are left out. The path of
+/// a new process is read once, through `shown_path`.
+#[cfg(any(windows, test))]
+fn carry_over(
+    mut known: HashMap<u32, Known>,
+    ids: Vec<u32>,
+    mut image_of: impl FnMut(u32) -> Option<String>,
+    mut shown_path: impl FnMut(u32) -> Option<String>,
+) -> HashMap<u32, Known> {
+    let mut current = HashMap::with_capacity(ids.len());
+    for pid in ids {
+        let Some(image) = image_of(pid) else {
+            continue;
+        };
+        let process = match known.remove(&pid) {
+            Some(process) if process.image == image => process,
+            _ => {
+                let Some(name) = file_name(&image).map(str::to_owned) else {
+                    continue;
+                };
+                Known {
+                    exe_path: shown_path(pid),
+                    image,
+                    name,
+                }
+            }
+        };
+        current.insert(pid, process);
+    }
+    current
+}
+
+#[cfg(windows)]
+mod windows_list {
+    use windows_sys::Wdk::System::SystemInformation::{
+        NtQuerySystemInformation, SYSTEM_INFORMATION_CLASS,
+    };
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, ERROR_INSUFFICIENT_BUFFER, GetLastError, HANDLE, STATUS_INFO_LENGTH_MISMATCH,
+        UNICODE_STRING,
+    };
+    use windows_sys::Win32::System::ProcessStatus::EnumProcesses;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        QueryFullProcessImageNameW,
+    };
+
+    use crate::constants::{PROCESS_IDS_FIRST, PROCESS_PATH_UNITS_FIRST};
+
+    /// The class of `NtQuerySystemInformation` that names the program of
+    /// one process by its id. Windows has kept it since Vista without
+    /// documenting it.
+    const SYSTEM_PROCESS_ID_INFORMATION: SYSTEM_INFORMATION_CLASS = 88;
+
+    /// The longest path Windows knows, in UTF-16 units.
+    const LONG_PATH_UNITS: usize = 32_768;
+
+    /// The most UTF-16 units a kernel string holds, its length being 16 bits
+    /// of bytes.
+    const NAME_UNITS_MAX: usize = 32_767;
+
+    #[repr(C)]
+    struct ProcessIdInformation {
+        process_id: usize,
+        image_name: UNICODE_STRING,
+    }
+
+    /// The ids of the running processes. Processes that ended are left out,
+    /// also while something still holds them open.
+    pub fn process_ids() -> Option<Vec<u32>> {
+        let mut ids = vec![0_u32; PROCESS_IDS_FIRST];
+        loop {
+            let bytes = u32::try_from(size_of_val(ids.as_slice())).ok()?;
+            let mut used = 0;
+            // SAFETY: `ids` holds `bytes` bytes and outlives the call, which
+            // writes how many it filled into `used`.
+            if unsafe { EnumProcesses(ids.as_mut_ptr(), bytes, &raw mut used) } == 0 {
+                return None;
+            }
+            // A list that fills the room may have been cut short.
+            if used < bytes {
+                ids.truncate(used as usize / size_of::<u32>());
+                return Some(ids);
+            }
+            ids.resize(ids.len() * 2, 0);
+        }
+    }
+
+    /// The program of a process, as the kernel names it, read without
+    /// opening the process. None once the process ended, and empty for one
+    /// that runs no program file.
+    pub fn image_by_id(pid: u32, buffer: &mut Vec<u16>) -> Option<String> {
+        if buffer.len() < PROCESS_PATH_UNITS_FIRST {
+            buffer.resize(PROCESS_PATH_UNITS_FIRST, 0);
+        }
+        loop {
+            let room = u16::try_from(buffer.len() * 2).unwrap_or(u16::MAX - 1);
+            let mut info = ProcessIdInformation {
+                process_id: usize::try_from(pid).ok()?,
+                image_name: UNICODE_STRING {
+                    Length: 0,
+                    MaximumLength: room,
+                    Buffer: buffer.as_mut_ptr(),
+                },
+            };
+            let size = u32::try_from(size_of::<ProcessIdInformation>()).ok()?;
+            // SAFETY: `info` points at `buffer`, which holds `room` bytes,
+            // and both outlive the call.
+            let status = unsafe {
+                NtQuerySystemInformation(
+                    SYSTEM_PROCESS_ID_INFORMATION,
+                    (&raw mut info).cast(),
+                    size,
+                    std::ptr::null_mut(),
+                )
+            };
+            // The call names the room the path needs when it lacked it, and
+            // where it names none the path gets all the room there is.
+            let needed = usize::from(info.image_name.MaximumLength).div_ceil(2);
+            let room_after = if needed > buffer.len() {
+                needed
+            } else {
+                NAME_UNITS_MAX
+            };
+            if status == STATUS_INFO_LENGTH_MISMATCH && room_after > buffer.len() {
+                buffer.resize(room_after, 0);
+                continue;
+            }
+            if status < 0 {
+                return None;
+            }
+            let units = usize::from(info.image_name.Length) / 2;
+            return Some(String::from_utf16_lossy(&buffer[..units]));
+        }
+    }
+
+    /// The path of the program a process runs, as Windows shows it. Reading
+    /// it opens the process, which elevated processes allow too, but not
+    /// those of other users or protected ones.
+    pub fn shown_path(pid: u32) -> Option<String> {
+        // SAFETY: plain call, a failure returns null.
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle.is_null() {
+            return None;
+        }
+        let path = path_of(handle);
+        // SAFETY: the handle came from OpenProcess and is closed once.
+        unsafe { CloseHandle(handle) };
+        path
+    }
+
+    fn path_of(handle: HANDLE) -> Option<String> {
+        let mut path = vec![0_u16; PROCESS_PATH_UNITS_FIRST];
+        loop {
+            let mut units = u32::try_from(path.len()).ok()?;
+            // SAFETY: `path` holds `units` units and outlives the call, which
+            // writes how many it used back into `units`.
+            let read = unsafe {
+                QueryFullProcessImageNameW(
+                    handle,
+                    PROCESS_NAME_WIN32,
+                    path.as_mut_ptr(),
+                    &raw mut units,
+                )
+            };
+            if read != 0 {
+                return Some(String::from_utf16_lossy(&path[..units as usize]));
+            }
+            // SAFETY: plain call, about the call above on this thread.
+            if unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+                || path.len() >= LONG_PATH_UNITS
+            {
+                return None;
+            }
+            path.resize(LONG_PATH_UNITS, 0);
+        }
+    }
 }
 
 /// Checks whether a running process matches a game's registered executable.
@@ -93,8 +337,8 @@ pub fn cpu_usage(sys: &mut System, pids: &[u32]) -> HashMap<u32, f32> {
 /// file name like `Game.exe` stay apart. A different path still matches when
 /// both lead to the same file, for example through a junction or a symlinked
 /// library folder. The file name alone decides when the path is hidden, as for
-/// elevated processes on Windows, or when it belongs to a loader such as Wine,
-/// which keeps the game's name but reports its own path.
+/// processes of other users or protected ones, or when it belongs to a loader
+/// such as Wine, which keeps the game's name but reports its own path.
 pub fn matches_executable(process: &RunningProcess, game_executable: &str) -> bool {
     let Some(game_name) = file_name(game_executable) else {
         return false;
@@ -339,10 +583,16 @@ fn paths_equal(a: &str, b: &str) -> bool {
     path_key(a) == path_key(b)
 }
 
-/// Comparison key for executable paths. On Windows it ignores case and
-/// collapses separators, so `C:/Games//x.exe` equals `c:\games\X.EXE`.
+/// Comparison key for executable paths. On Windows it ignores case and the
+/// `\\?\` resolved paths start with, and collapses separators, so
+/// `C:/Games//x.exe` equals `c:\games\X.EXE`, and `\\?\UNC\nas\games\x.exe`
+/// the `\\nas\games\x.exe` a program on a mapped drive runs as.
 #[cfg(windows)]
 pub fn path_key(path: &str) -> String {
+    let path = path
+        .strip_prefix(r"\\?\UNC\")
+        .or_else(|| path.strip_prefix(r"\\?\"))
+        .unwrap_or(path);
     path.split(['/', '\\'])
         .filter(|segment| !segment.is_empty())
         .collect::<Vec<_>>()
@@ -535,6 +785,21 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn a_resolved_path_has_the_key_of_the_path_it_names() {
+        assert_eq!(path_key(r"\\?\C:\Games\Foo"), path_key(r"C:\Games\Foo"));
+        assert_eq!(
+            path_key(r"\\?\UNC\nas\games\Foo"),
+            path_key(r"\\nas\games\Foo")
+        );
+        // A game on a mapped drive runs from the share the drive stands for.
+        assert!(is_inside(
+            &path_key(r"\\nas\games\Foo\Binaries\Foo.exe"),
+            &path_key(r"\\?\UNC\nas\games\Foo")
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn the_root_of_a_volume_is_a_mount_point_and_a_folder_on_it_is_not() {
         let drive = std::env::var("SystemDrive").unwrap();
         assert!(is_mount_point(&format!(r"{drive}\")));
@@ -634,8 +899,110 @@ mod tests {
     }
 
     #[test]
+    fn an_id_keeps_its_process_while_it_names_the_same_program() {
+        let game = r"\Device\HarddiskVolume3\Games\game.exe";
+        let tool = r"\Device\HarddiskVolume3\Tools\tool.exe";
+        let other = r"\Device\HarddiskVolume3\Tools\other.exe";
+        let image = |images: &[(u32, &str)], pid: u32| {
+            images
+                .iter()
+                .find(|(id, _)| *id == pid)
+                .map(|(_, image)| (*image).to_owned())
+        };
+        let mut opened = Vec::new();
+        // 2 runs no program file, 3 ended since the list was taken.
+        let first = carry_over(
+            HashMap::new(),
+            vec![1, 2, 3, 4],
+            |pid| image(&[(1, game), (2, ""), (4, tool)], pid),
+            |pid| {
+                opened.push(pid);
+                Some(format!("C:\\shown\\{pid}"))
+            },
+        );
+        let mut ids: Vec<u32> = first.keys().copied().collect();
+        ids.sort_unstable();
+        assert_eq!(ids, [1, 4]);
+        assert_eq!(first[&1].name, "game.exe");
+        assert_eq!(first[&1].exe_path.as_deref(), Some("C:\\shown\\1"));
+        opened.sort_unstable();
+        assert_eq!(opened, [1, 4]);
+
+        // The id of the tool passed on to another program.
+        let mut opened = Vec::new();
+        let second = carry_over(
+            first.clone(),
+            vec![1, 4],
+            |pid| image(&[(1, game), (4, other)], pid),
+            |pid| {
+                opened.push(pid);
+                None
+            },
+        );
+        assert_eq!(opened, [4]);
+        assert_eq!(second[&1], first[&1]);
+        assert_eq!(second[&4].name, "other.exe");
+        assert!(second[&4].exe_path.is_none());
+
+        let third = carry_over(second, vec![4], |pid| image(&[(4, other)], pid), |_| None);
+        assert_eq!(third.keys().copied().collect::<Vec<_>>(), [4]);
+    }
+
+    /// A process that waits half a minute, for a test to see.
+    fn sleeper() -> std::process::Child {
+        let mut command = if cfg!(windows) {
+            let mut command = std::process::Command::new("ping");
+            command.args(["-n", "30", "127.0.0.1"]);
+            command
+        } else {
+            let mut command = std::process::Command::new("sleep");
+            command.arg("30");
+            command
+        };
+        command.stdout(std::process::Stdio::null()).spawn().unwrap()
+    }
+
+    #[test]
+    fn the_list_shows_a_process_from_its_start_to_its_end() {
+        let mut list = ProcessList::default();
+        list.refresh();
+        let mut child = sleeper();
+        let pid = child.id();
+        let name = if cfg!(windows) { "ping.exe" } else { "sleep" };
+        // Linux may list the child before it runs its program, under the
+        // name of the thread that started it.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let listed = loop {
+            let listed = list
+                .refresh()
+                .into_iter()
+                .find(|process| process.pid == pid)
+                .expect("the new process is listed");
+            if names_equal(&listed.name.to_lowercase(), name)
+                || std::time::Instant::now() > deadline
+            {
+                break listed;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        assert!(names_equal(&listed.name.to_lowercase(), name), "{listed:?}");
+        assert!(listed.exe_path.is_some(), "{listed:?}");
+        child.kill().unwrap();
+        child.wait().unwrap();
+        // Windows may list a process for a moment after it ended.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while list.refresh().iter().any(|process| process.pid == pid) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the ended process is gone"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    #[test]
     fn list_processes_runs() {
-        let procs = refresh_running_processes(&mut new_system());
+        let procs = ProcessList::default().refresh();
         // Should at least find the current test process.
         assert!(!procs.is_empty());
     }
