@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json
 PackageIdentifier: Vaultime.Vaultime
 PackageVersion: 0.7.0
 PackageLocale: en-US
@@ -30,4 +30,4 @@ Documentations:
   - DocumentLabel: Documentation
     DocumentUrl: https://vaultime.codfishcloud.de/docs/
 ManifestType: defaultLocale
-ManifestVersion: 1.10.0
+ManifestVersion: 1.28.0
