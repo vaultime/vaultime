@@ -29,7 +29,7 @@ export function IntegrityBadge({
   const normalized = normalizeIntegrityStatus(status);
   if (checking && normalized !== "suspicious") {
     return (
-      <Badge variant="outline" title="Vaultime checks the record of every session after it starts." className={className}>
+      <Badge variant="outline" title="After each start Vaultime checks the record of every session, once its window opens." className={className}>
         Checking
       </Badge>
     );
