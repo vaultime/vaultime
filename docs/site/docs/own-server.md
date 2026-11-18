@@ -13,9 +13,9 @@ Cloud backup runs on a Vaultime server that you set up, for yourself or for you 
 ## Set it up
 
 1. Download [compose.yaml](https://github.com/vaultime/vaultime/blob/main/deploy/server/compose.yaml) and [.env.example](https://github.com/vaultime/vaultime/blob/main/deploy/server/.env.example) into a folder of their own on the machine.
-2. Copy `.env.example` to `.env`. Set `VAULTIME_DOMAIN` to the address, and fill in each of the three secrets with a random value of its own, made with `openssl rand -hex 32`.
+2. Copy `.env.example` to `.env`. Set `VAULTIME_DOMAIN` to the address, fill in each of the three secrets with a random value of its own, made with `openssl rand -hex 32`, and pick a sign-up code for `VAULTIME_SIGNUP_CODE`, at least 8 characters, such as three words of your choice.
 3. Start the server in one of the two ways below.
-4. In Vaultime, turn on **Use cloud backup** under Settings, Cloud backup. On the Cloud page, type the address under **Your server**, pick **Connect** and create your account.
+4. In Vaultime, turn on **Use cloud backup** under Settings, Cloud backup. On the Cloud page, type the address under **Your server**, pick **Connect** and create your account with the sign-up code.
 
 ### On a machine of its own
 
@@ -27,7 +27,11 @@ Behind a reverse proxy you already run, such as the one of your NAS, run `docker
 
 ## Accounts for friends
 
-While `VAULTIME_OPEN_SIGNUPS` is `true`, anyone who reaches the server can create an account. Once you and your friends have one, set it to `false` and run `docker compose up -d` again. The Cloud page then says that the server takes no new accounts, and everyone who has one keeps signing in. Open it again whenever a friend joins.
+Send a friend the address of the server and the sign-up code. While `VAULTIME_OPEN_SIGNUPS` is `true`, anyone with the code can create an account, so sign-ups can stay open. If the code reaches the wrong people, change it and run `docker compose up -d` again. Accounts that exist keep working, and the code never signs anyone in.
+
+The code has to match exactly, capitals included. Use letters, digits, dashes and spaces, as Docker Compose reads `$` and `#` in `.env` itself. The server reads the code only from `.env`, never logs it and tells the Cloud page only that it needs one. Wrong codes count toward the limit of sign-up and sign-in requests per address, which keeps guessing slow, so pick words that are not easy to guess.
+
+Without a code, anyone who reaches the server can create an account, and the server warns about that when it starts. Addresses with https are listed publicly as soon as they get a certificate, so a server is found even if you never share its address. Set `VAULTIME_OPEN_SIGNUPS` to `false` and run `docker compose up -d` again to take no new accounts at all. The Cloud page then says that the server takes no new accounts, and everyone who has one keeps signing in.
 
 Each account encrypts its backups with its own passphrase. You cannot read your friends' backups, and they cannot read yours.
 

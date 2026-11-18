@@ -5,6 +5,12 @@ All notable changes to Vaultime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Backups
+
+- **Sign-up codes.** A server can now ask new accounts for a sign-up code that whoever runs it picks and shares with friends, so sign-ups can stay open without strangers creating accounts. The Cloud page asks for the code when a server needs one. A server with open sign-ups and no code warns when it starts that anyone can create an account. Update the server with `docker compose pull` and `docker compose up -d`, and set the code in `.env`.
+
 ## [0.7.0] - 2026-11-18
 
 ### Backups

@@ -132,7 +132,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
 - No paywalls, subscriptions, tiers or billing. The project runs no cloud
   service. A server a player runs treats every account the same, and its
   limits only keep one account from filling it. Its operator opens sign-ups
-  with `VAULTIME_OPEN_SIGNUPS`. There are no invites, roles or admins.
+  with `VAULTIME_OPEN_SIGNUPS` and may ask new accounts for one shared code,
+  `VAULTIME_SIGNUP_CODE`. There are no invites, roles or admins.
 - The app reaches a cloud server only through the core, over https or over
   plain http to a server on the same PC, so the window's content security
   policy names no outside address.

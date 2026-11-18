@@ -69,7 +69,7 @@ Cloud backup is off on a new install, and the menu has no Cloud page. Turn on **
 
 ### Signing up
 
-On the Cloud page, type the address of the server under **Your server** and pick **Connect**. Vaultime checks that a Vaultime server answers there, remembers it for this PC and says whether it takes new accounts. **Create an account** asks for your email, a password and a backup passphrase. The password signs you in. The passphrase encrypts your backups and is at least 12 characters long.
+On the Cloud page, type the address of the server under **Your server** and pick **Connect**. Vaultime checks that a Vaultime server answers there, remembers it for this PC and says whether it takes new accounts and whether they need a sign-up code. **Create an account** asks for your email, a password and a backup passphrase, and for the sign-up code on a server that has one. Whoever runs the server gives you the code. The password signs you in. The passphrase encrypts your backups and is at least 12 characters long.
 
 > [!CAUTION]
 > Keep the backup passphrase safe. Nobody can recover it for you, and without it a cloud backup cannot be restored. Your local backups do not depend on it.
