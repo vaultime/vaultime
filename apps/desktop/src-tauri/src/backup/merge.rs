@@ -1272,10 +1272,15 @@ fn copy_artwork(staged: &Staged, asset_manager: &AssetManager, copied: &[(String
             continue;
         }
         let target_dir = asset_manager.cache_dir().join(game_id);
-        let copied = fs::create_dir_all(&target_dir).and_then(|()| {
-            fs::copy(staged.backup_dir.join(&relative), target_dir.join(name)).map(|_| ())
-        });
+        let target = target_dir.join(name);
+        // Its row is in already, so a cover read meanwhile must never find
+        // half the image and keep a thumbnail and colors made from it.
+        let passing = target.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+        let copied = fs::create_dir_all(&target_dir)
+            .and_then(|()| fs::copy(staged.backup_dir.join(&relative), &passing))
+            .and_then(|_| fs::rename(&passing, &target));
         if let Err(error) = copied {
+            let _ = fs::remove_file(&passing);
             warn!("artwork {relative} not merged: {error}");
         }
     }

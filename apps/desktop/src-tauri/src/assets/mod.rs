@@ -953,20 +953,19 @@ fn write_cached_image(
         "{asset_id}.{}",
         if as_jpeg { "jpg" } else { "png" }
     ));
-    let written = if as_jpeg {
-        fs::File::create(&cache_path)
-            .map_err(image::ImageError::IoError)
-            .and_then(|file| {
-                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
-                    std::io::BufWriter::new(file),
-                    CACHED_JPEG_QUALITY,
-                );
-                encoder.encode_image(&image.to_rgb8())
-            })
+    // Encoded first, so a write cut short, as on a full disk, fails. Saving
+    // straight to the file drops the errors of its last write.
+    let mut bytes = Vec::new();
+    let encoded = if as_jpeg {
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, CACHED_JPEG_QUALITY)
+            .encode_image(&image.to_rgb8())
     } else {
-        image.save_with_format(&cache_path, ImageFormat::Png)
+        image.write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
     };
+    let written =
+        encoded.and_then(|()| fs::write(&cache_path, &bytes).map_err(image::ImageError::IoError));
     written.map_err(|error| {
+        let _ = fs::remove_file(&cache_path);
         VaultimeError::Asset(format!(
             "failed to write cached image {}: {error}",
             cache_path.display()
@@ -1228,6 +1227,21 @@ mod tests {
         assert!(delete_game(&db, &asset_manager, &other.id).unwrap());
 
         fs::remove_dir_all(asset_manager.cache_dir()).unwrap();
+    }
+
+    #[test]
+    fn an_icon_is_cached_as_a_whole_png_with_its_transparency() {
+        let db = Database::open_in_memory().unwrap();
+        let asset_manager = test_cache();
+        let game = create_game(&db);
+        let icon = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(32, 32, |x, _| {
+            image::Rgba([220, 30, 30, if x < 16 { 0 } else { 255 }])
+        }));
+        let cache_path = write_cached_image(&asset_manager, &game, &icon, false).unwrap();
+        assert_eq!(cache_path.extension().unwrap(), "png");
+        let read = image::open(&cache_path).unwrap().to_rgba8();
+        assert_eq!(read, icon.to_rgba8());
+        fs::remove_dir_all(asset_manager.cache_dir()).ok();
     }
 
     #[test]

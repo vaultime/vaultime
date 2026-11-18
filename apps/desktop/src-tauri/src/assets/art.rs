@@ -167,18 +167,26 @@ pub fn cover_art(cache_dir: &Path, cache_path: &str) -> Result<Art> {
     Ok(cached.art(Some(tint)))
 }
 
-/// The thumbnail of a JPEG larger than one. Other images are icons, small
-/// and see-through, and are shown as they are.
+/// The thumbnail of a JPEG that covers more than a tile, as small as it can
+/// be while it still covers one, as tiles crop it to their shape. Other
+/// images are icons, small and see-through, and are shown as they are.
 fn thumbnail_of(cached: &Cached, image: &DynamicImage) -> Option<DynamicImage> {
-    (cached.is_jpeg()
-        && (image.width() > THUMBNAIL_WIDTH_PX || image.height() > THUMBNAIL_HEIGHT_PX))
-        .then(|| {
-            image.resize(
-                THUMBNAIL_WIDTH_PX,
-                THUMBNAIL_HEIGHT_PX,
-                FilterType::Lanczos3,
-            )
-        })
+    let (width, height) = (u64::from(image.width()), u64::from(image.height()));
+    let (tile_width, tile_height) = (
+        u64::from(THUMBNAIL_WIDTH_PX),
+        u64::from(THUMBNAIL_HEIGHT_PX),
+    );
+    if !cached.is_jpeg() || width <= tile_width || height <= tile_height {
+        return None;
+    }
+    // Scaled by the side that reaches the edge of the tile last.
+    let (to_width, to_height) = if height * tile_width >= width * tile_height {
+        (tile_width, (height * tile_width).div_ceil(width))
+    } else {
+        ((width * tile_height).div_ceil(height), tile_height)
+    };
+    let side = |value: u64| u32::try_from(value).unwrap_or(u32::MAX);
+    Some(image.resize_exact(side(to_width), side(to_height), FilterType::Lanczos3))
 }
 
 /// Writes the thumbnail, then the colors, which vouch for it.
@@ -282,13 +290,14 @@ fn read_tint(path: &Path) -> Option<ArtTint> {
 
 /// Writes under a passing name first, so a reader never finds half a file.
 /// Two writers of the same file write the same bytes, so the second one may
-/// find it taken.
+/// find it taken by those bytes, and only by those, never by a thumbnail of
+/// older rules that could not be replaced.
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
     let passing = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
     let written = fs::write(&passing, bytes).and_then(|()| fs::rename(&passing, path));
     if let Err(error) = written {
         let _ = fs::remove_file(&passing);
-        if !path.is_file() {
+        if fs::read(path).ok().as_deref() != Some(bytes) {
             return Err(VaultimeError::Asset(format!(
                 "failed to write {}: {error}",
                 path.display()
@@ -387,10 +396,24 @@ mod tests {
     }
 
     #[test]
+    fn a_wide_or_tall_cover_gets_a_thumbnail_that_covers_a_tile() {
+        let dir = cache_dir();
+        for (width, height, thumbnail) in [(1280, 720, (854, 480)), (600, 1200, (360, 720))] {
+            let cover = write_cover(&dir, width, height, "jpg");
+            cover_art(&dir, &cover.to_string_lossy()).unwrap();
+            let small = image::open(&derived_files(&cover)[0]).unwrap();
+            assert_eq!((small.width(), small.height()), thumbnail);
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn small_images_and_icons_are_their_own_thumbnail() {
         let dir = cache_dir();
         for cover in [
             write_cover(&dir, 60, 80, "jpg"),
+            // Too low to cover a tile, so a thumbnail would only be blurrier.
+            write_cover(&dir, 1000, 400, "jpg"),
             write_cover(&dir, 720, 960, "png"),
         ] {
             let art = cover_art(&dir, &cover.to_string_lossy()).unwrap();
@@ -414,6 +437,27 @@ mod tests {
         fs::remove_file(colors).unwrap();
         let unread = image_art(&dir, &stored).unwrap();
         assert_eq!(unread.thumb_url, unread.image_url);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_file_another_writer_holds_counts_only_with_the_same_bytes() {
+        use std::os::windows::fs::OpenOptionsExt;
+        /// Shared for reading only, so it cannot be replaced.
+        const FILE_SHARE_READ: u32 = 1;
+        let dir = cache_dir();
+        let path = dir.join("game-1").join("held.thumb.jpg");
+        fs::write(&path, b"older rules").unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&path)
+            .unwrap();
+        assert!(write_atomically(&path, b"newer rules").is_err());
+        assert!(write_atomically(&path, b"older rules").is_ok());
+        drop(held);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -426,6 +470,7 @@ mod tests {
         let art = cover_art(&dir, &cover.to_string_lossy()).unwrap();
         assert!(art.tint.is_some());
         assert_eq!(art.thumb_url, art.image_url);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
