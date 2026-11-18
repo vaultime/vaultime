@@ -40,6 +40,9 @@ import {
   MinuteContext,
   PlayedTodayContext,
   PlayingContext,
+  RunningContext,
+  RunningStore,
+  RunningStoreContext,
   type GameSummary,
 } from "./library-context";
 
@@ -95,6 +98,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [arts, setArts] = useState<Record<string, string>>({});
   const [active, setActive] = useState<Session[]>([]);
+  const [running, setRunning] = useState<Session[]>([]);
+  const [runningStore] = useState(() => new RunningStore());
   const [countedAt, setCountedAt] = useState<Record<string, number>>({});
   const [playedToday, setPlayedToday] = useState(0);
   const [today, setToday] = useState(() => toDayKey(new Date()));
@@ -110,8 +115,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   // from, so a poll or a change event reloads only what moved.
   const loadedRevision = useRef<number | null>(null);
   const loadedDay = useRef<string | null>(null);
-  // The running sessions at the last poll, to keep the list while they stay the same.
+  // The running sessions and their counting times at the last poll, to keep
+  // the lists while they stay the same.
   const activeJson = useRef("[]");
+  const runningKey = useRef("");
+  const countedJson = useRef("{}");
   const pageVisible = usePageVisible();
 
   const refresh = useCallback(async () => {
@@ -196,11 +204,21 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           if (json !== activeJson.current) {
             activeJson.current = json;
             setActive(next);
+            runningStore.set(next);
+          }
+          const key = next.map((session) => `${session.id}/${session.integrity_status}`).join(",");
+          if (key !== runningKey.current) {
+            runningKey.current = key;
+            setRunning(next);
           }
           setPlayedToday(played_today_ms);
           // Each clock runs on from the tick its session's times are of. A poll
           // before the next tick brings the same times, so no clock jumps back.
-          setCountedAt(counted_at_ms);
+          const counted = JSON.stringify(counted_at_ms);
+          if (counted !== countedJson.current) {
+            countedJson.current = counted;
+            setCountedAt(counted_at_ms);
+          }
           setMinute(Math.floor(Date.now() / MINUTE_MS));
           setToday(toDayKey(new Date()));
           const shownAgain = first;
@@ -230,7 +248,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [refresh, pageVisible]);
+  }, [refresh, pageVisible, runningStore]);
 
   // The core reports changes it makes on its own, like covers found at
   // startup. A poll may have loaded them already, as when a game starts.
@@ -339,7 +357,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const visible = useMemo(() => summaries.filter((summary) => !summary.game.is_hidden), [summaries]);
 
-  const playingKey = [...new Set(active.map((session) => session.game_id))].sort().join(",");
+  const playingKey = [...new Set(running.map((session) => session.game_id))].sort().join(",");
   const playing = useMemo(() => new Set(playingKey ? playingKey.split(",") : []), [playingKey]);
 
   const value = useMemo(
@@ -392,13 +410,17 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   return (
     <LibraryContext.Provider value={value}>
       <ActiveContext.Provider value={active}>
-        <PlayingContext.Provider value={playing}>
-          <CountedAtContext.Provider value={countedAt}>
-            <MinuteContext.Provider value={minute}>
-              <PlayedTodayContext.Provider value={playedToday}>{children}</PlayedTodayContext.Provider>
-            </MinuteContext.Provider>
-          </CountedAtContext.Provider>
-        </PlayingContext.Provider>
+        <RunningContext.Provider value={running}>
+          <RunningStoreContext.Provider value={runningStore}>
+            <PlayingContext.Provider value={playing}>
+              <CountedAtContext.Provider value={countedAt}>
+                <MinuteContext.Provider value={minute}>
+                  <PlayedTodayContext.Provider value={playedToday}>{children}</PlayedTodayContext.Provider>
+                </MinuteContext.Provider>
+              </CountedAtContext.Provider>
+            </PlayingContext.Provider>
+          </RunningStoreContext.Provider>
+        </RunningContext.Provider>
       </ActiveContext.Provider>
     </LibraryContext.Provider>
   );

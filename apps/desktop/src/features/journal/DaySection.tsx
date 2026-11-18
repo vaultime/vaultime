@@ -6,7 +6,7 @@ import { CARD_WIDTH_PX, cardPosition } from "@/components/charts/play-card";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
 import { GameStatusIcon } from "@/components/status/GameStatusIcon";
-import type { GameSummary } from "@/features/library/library-context";
+import { useRunningSession, type GameSummary } from "@/features/library/library-context";
 import { SessionLine } from "@/features/sessions/components/SessionLine";
 import { DAYS_PER_WEEK } from "@/lib/constants";
 import { sideBySideSentence, statusSentence } from "@/lib/sentences";
@@ -45,7 +45,7 @@ const dayOf = (share: DayShare) => parseVaultimeDate(share.day);
  * and with play past midnight each day's part and the whole.
  */
 function SessionCard({
-  session,
+  session: stored,
   shares,
   day,
   title,
@@ -59,6 +59,7 @@ function SessionCard({
   mark: string;
   style: CSSProperties;
 }) {
+  const session = useRunningSession(stored.id) ?? stored;
   const started = parseVaultimeDate(session.started_at_wall);
   const ended = session.ended_at_wall ? parseVaultimeDate(session.ended_at_wall) : null;
   const dayName = (share: DayShare) =>
@@ -99,6 +100,12 @@ function SessionCard({
       )}
     </div>
   );
+}
+
+/** The part of a session on a day after its first, of all of it so far while it runs. */
+function ContinuedAmounts({ share, stored }: { share: DayShare; stored: Session }) {
+  const session = useRunningSession(stored.id) ?? stored;
+  return <>{continuedAmounts(share.runtime_ms, session.runtime_ms, !session.ended_at_wall)}</>;
 }
 
 /** A game's cover in the column between an entry's time and its sentence. */
@@ -390,7 +397,7 @@ export const DaySection = memo(function DaySection({
                   {phrase.after && `${phrase.after}.`}
                 </p>
                 <div className="mt-1 text-[13px] text-faint">
-                  {continuedAmounts(share.runtime_ms, session.runtime_ms, !session.ended_at_wall)}
+                  <ContinuedAmounts share={share} stored={session} />
                 </div>
               </div>
             </article>

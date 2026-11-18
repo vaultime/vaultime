@@ -9,7 +9,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Cover } from "@/components/media/Cover";
 import { useCloudSession } from "@/features/cloud/cloud-context";
 import { LastPlayed } from "@/features/library/components/LastPlayed";
-import { useCurrentSession, useLibrary, usePlaying } from "@/features/library/library-context";
+import { useLibrary, usePlaying, useTrackedGameId } from "@/features/library/library-context";
 import { useSeenGamesCount } from "@/features/library/use-seen-games";
 import { RAIL_RECENT_GAMES } from "@/lib/constants";
 import { launcherCounts, launcherTitle } from "@/lib/launchers";
@@ -36,8 +36,8 @@ export function Rail() {
   const { games, visible: summaries } = useLibrary();
   const seenGames = useSeenGamesCount();
   const playing = usePlaying();
-  const currentSession = useCurrentSession();
-  const current = currentSession ? (games.find((game) => game.id === currentSession.game_id) ?? null) : null;
+  const trackedGameId = useTrackedGameId();
+  const current = trackedGameId ? (games.find((game) => game.id === trackedGameId) ?? null) : null;
   const { enabled: cloudEnabled } = useCloudSession();
   const location = useLocation();
   // The library comes most recently played first.

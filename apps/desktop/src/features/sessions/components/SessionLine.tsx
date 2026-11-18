@@ -7,7 +7,7 @@ import { PhraseText } from "@/components/media/PhraseText";
 import { IntegrityBadge } from "@/components/status/IntegrityBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useLibrary } from "@/features/library/library-context";
+import { useLibrary, useRunningSession } from "@/features/library/library-context";
 import { CorrectSessionDialog } from "@/features/sessions/components/CorrectSessionDialog";
 import { MINUTE_MS, SESSION_NOTE_MAX_CHARS } from "@/lib/constants";
 import { isMergedPc, recordedElsewhere } from "@/lib/devices";
@@ -19,7 +19,7 @@ import { cn, describeError } from "@/lib/utils";
 
 /** One session as a sentence, with its numbers, a note of its own and the trust label. */
 export function SessionLine({
-  session,
+  session: stored,
   events,
   gameTitle,
   titleColor,
@@ -69,8 +69,12 @@ export function SessionLine({
   /** Lets the player correct a finished session, then reloads. */
   onCorrected?: () => void;
 }) {
+  // A running session takes its times from the last poll, the stored list
+  // only reloads when one starts or ends.
+  const session = useRunningSession(stored.id) ?? stored;
   const trustNote = sessionTrustNote(session, events);
-  // The game's history can be long, and the page re-renders on every poll.
+  // The game's history can be long, and a running session's line draws
+  // again with every poll.
   const line = useMemo(
     () => describeSession(session, { gameTitle, gameSessions, earlierMs }),
     [session, gameTitle, gameSessions, earlierMs],

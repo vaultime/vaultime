@@ -7,7 +7,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Notice, PageHeader, StepButton } from "@/components/layout/Page";
 import { PhraseText } from "@/components/media/PhraseText";
 import { useAppearance } from "@/features/appearance/appearance-context";
-import { useActiveSessions, useLibrary } from "@/features/library/library-context";
+import { useLibrary, usePlaying } from "@/features/library/library-context";
 import { useSettings } from "@/features/settings/settings-context";
 import { JOURNAL_LINK_FLASH_MS, LIVE_TOTALS_REFRESH_MS, SETTING_KEYS } from "@/lib/constants";
 import { markColors, tintForTitle } from "@/lib/game-tint";
@@ -38,15 +38,10 @@ const NO_SHARES: DayShare[] = [];
 
 /** Play history week by week, one sentence per session. */
 export function JournalPage() {
-  const { sessions: stored, summaries, statusChanges, notes, saveNote, refresh, today, loaded } = useLibrary();
-  const active = useActiveSessions();
+  // A running session's line takes its times from the poll on its own.
+  const { sessions, summaries, statusChanges, notes, saveNote, refresh, today, loaded } = useLibrary();
+  const playing = usePlaying().size > 0;
   const { values: settingValues } = useSettings();
-  // Running sessions as of the last poll, a few seconds old at most. The
-  // full list only reloads when a session starts or ends.
-  const sessions = useMemo(() => {
-    const running = new Map(active.map((session) => [session.id, session]));
-    return stored.map((session) => running.get(session.id) ?? session);
-  }, [stored, active]);
   const { accentHues, mode } = useAppearance();
   // 0 is this week, -1 the week before and so on. `?day=2026-09-28` opens
   // the week of that day and goes to the day, as the stats page asks for.
@@ -65,7 +60,7 @@ export function JournalPage() {
   // Read again when a session starts or ends, when a status changes, on a
   // new day, and while a game runs and this week is on the page, as its time
   // grows.
-  const refreshed = useRefreshWhile(active.length > 0 && offset === 0, LIVE_TOTALS_REFRESH_MS);
+  const refreshed = useRefreshWhile(playing && offset === 0, LIVE_TOTALS_REFRESH_MS);
   useEffect(() => {
     let cancelled = false;
     const start = weekStart(offset, new Date());
@@ -82,7 +77,7 @@ export function JournalPage() {
     return () => {
       cancelled = true;
     };
-  }, [offset, stored, statusChanges, today, refreshed]);
+  }, [offset, sessions, statusChanges, today, refreshed]);
 
   const byGame = useMemo(() => new Map(summaries.map((summary) => [summary.game.id, summary])), [summaries]);
   // Kept between polls, so session lines can reuse their sentences.
@@ -180,7 +175,7 @@ export function JournalPage() {
     return () => {
       cancelled = true;
     };
-  }, [gameIds, stored]);
+  }, [gameIds, sessions]);
 
   // Steam screenshots of the sessions that began in the week, read from Steam's folder each time.
   const [screenshots, setScreenshots] = useState<Map<string, SessionScreenshots>>(() => new Map());
@@ -204,17 +199,17 @@ export function JournalPage() {
     return () => {
       cancelled = true;
     };
-  }, [startedIds, showScreenshots, stored]);
+  }, [startedIds, showScreenshots, sessions]);
   const screenshotsOf = useCallback((sessionId: string) => screenshots.get(sessionId), [screenshots]);
   const openScreenshot = useCallback((sessionId: string, index: number) => setViewing({ sessionId, index }), []);
 
   const earliest = useMemo(
     () =>
-      stored.reduce<Date | null>((min, session) => {
+      sessions.reduce<Date | null>((min, session) => {
         const started = parseVaultimeDate(session.started_at_wall);
         return !min || started < min ? started : min;
       }, null),
-    [stored],
+    [sessions],
   );
 
   if (!loaded) return null;
