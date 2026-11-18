@@ -26,9 +26,11 @@ small_account_bytes=3145728
 small_backup_bytes=4194304
 # Its grace for a retried refresh, short so the test can wait it out.
 small_grace_secs=2
-# A third API that leaves sign-ups closed, as they are by default.
+# A third API that leaves sign-ups closed, as they are by default, then
+# takes accounts only with a sign-up code.
 closed_api=vaultime-e2e-api-closed
 closed_port=19007
+signup_code=e2e-sign-up-code
 # The port the server listens on in its image.
 api_port=8080
 # Random bytes in each test secret, as deploy/server/.env.example asks for.
@@ -95,6 +97,21 @@ closed_url="http://127.0.0.1:$closed_port"
   || { echo "an API with sign-ups closed took a new account"; exit 1; }
 [ "$(curl -fsS "$closed_url/healthz" | field signups_open)" = False ] \
   || { echo "the health check of a closed API said sign-ups were open"; exit 1; }
+docker rm -f -v "$closed_api" >/dev/null
+
+echo "== sign-ups with a code"
+start_api "$closed_api" "$closed_port" -e VAULTIME_OPEN_SIGNUPS=true -e VAULTIME_SIGNUP_CODE="$signup_code"
+[ "$(curl -fsS "$closed_url/healthz" | field signup_code_required)" = True ] \
+  || { echo "the health check of an API with a code did not ask for it"; exit 1; }
+sign_up_with() {
+  curl -s -o /dev/null -w '%{http_code}' -X POST "$closed_url/v1/auth/signup" -H "content-type: application/json" \
+    -d "{\"email\":\"$1@example.com\",\"password\":\"e2e-password-1234\"$2}"
+}
+[ "$(sign_up_with nocode "")" = 403 ] || { echo "an API with a code took an account without one"; exit 1; }
+[ "$(sign_up_with wrong ',"signup_code":"wrong-code-1234"')" = 403 ] \
+  || { echo "an API with a code took a wrong one"; exit 1; }
+[ "$(sign_up_with coded ",\"signup_code\":\"$signup_code\"")" = 201 ] \
+  || { echo "an API with a code refused the right one"; exit 1; }
 docker rm -f -v "$closed_api" >/dev/null
 
 # The round trip needs two kept backups. A reused refresh token ends its

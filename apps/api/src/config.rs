@@ -5,11 +5,12 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use crate::auth::signup_code_digest;
 use crate::constants::{
     DEFAULT_MAX_ACCOUNT_BYTES, DEFAULT_MAX_BACKUP_BYTES, DEFAULT_MAX_COMPLETE_BACKUPS_PER_ACCOUNT,
     DEFAULT_MAX_PENDING_BACKUPS_PER_ACCOUNT, DEFAULT_MIN_BACKUP_INTERVAL_SECS,
     DEFAULT_OPEN_SIGNUPS, DEFAULT_REFRESH_REUSE_GRACE_SECS, DEFAULT_STALE_PENDING_BACKUP_SECS,
-    MIN_SECRET_CHARS,
+    MIN_SECRET_CHARS, MIN_SIGNUP_CODE_CHARS,
 };
 use crate::error::AppError;
 
@@ -21,8 +22,10 @@ pub struct Config {
     pub backup_root: PathBuf,
     pub access_token_secret: String,
     pub refresh_token_pepper: String,
-    /// Whether anyone who reaches the server may create an account.
+    /// Whether the server takes new accounts at all.
     pub open_signups: bool,
+    /// The digest of the code new accounts need, when the operator set one.
+    pub signup_code_digest: Option<[u8; 32]>,
     pub max_backup_bytes: i64,
     /// Backups and artwork of one account together.
     pub max_account_bytes: i64,
@@ -45,6 +48,7 @@ impl Config {
             access_token_secret: env_secret("VAULTIME_ACCESS_TOKEN_SECRET")?,
             refresh_token_pepper: env_secret("VAULTIME_REFRESH_TOKEN_PEPPER")?,
             open_signups: env_bool("VAULTIME_OPEN_SIGNUPS", DEFAULT_OPEN_SIGNUPS)?,
+            signup_code_digest: env_signup_code("VAULTIME_SIGNUP_CODE")?,
             max_backup_bytes: env_i64("VAULTIME_MAX_BACKUP_BYTES", DEFAULT_MAX_BACKUP_BYTES, 1)?,
             max_account_bytes: env_i64("VAULTIME_MAX_ACCOUNT_BYTES", DEFAULT_MAX_ACCOUNT_BYTES, 1)?,
             max_pending_backups_per_account: env_i64(
@@ -92,6 +96,31 @@ fn check_secret(name: &str, value: String) -> Result<String, AppError> {
         )));
     }
     Ok(value)
+}
+
+fn env_signup_code(name: &str) -> Result<Option<[u8; 32]>, AppError> {
+    match env::var(name) {
+        Ok(code) => parse_signup_code(name, &code),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(env::VarError::NotUnicode(_)) => {
+            Err(AppError::configuration(format!("invalid env var {name}")))
+        }
+    }
+}
+
+/// An empty value means no code, as `.env.example` ships it. A short code
+/// could be guessed.
+fn parse_signup_code(name: &str, code: &str) -> Result<Option<[u8; 32]>, AppError> {
+    let code = code.trim();
+    if code.is_empty() {
+        return Ok(None);
+    }
+    if code.chars().count() < MIN_SIGNUP_CODE_CHARS {
+        return Err(AppError::configuration(format!(
+            "{name} must be at least {MIN_SIGNUP_CODE_CHARS} characters long"
+        )));
+    }
+    Ok(Some(signup_code_digest(code)))
 }
 
 fn env_i64(name: &str, default: i64, min: i64) -> Result<i64, AppError> {
@@ -147,6 +176,7 @@ impl Config {
             access_token_secret: "test-access-secret".into(),
             refresh_token_pepper: "test-pepper".into(),
             open_signups: false,
+            signup_code_digest: None,
             max_backup_bytes: 1024,
             max_account_bytes: 4096,
             max_pending_backups_per_account: 1,
@@ -180,6 +210,22 @@ mod tests {
                 "{invalid:?} was taken"
             );
         }
+    }
+
+    #[test]
+    fn a_sign_up_code_is_optional_but_never_short() {
+        let name = "VAULTIME_SIGNUP_CODE";
+        assert_eq!(parse_signup_code(name, "").unwrap(), None);
+        assert_eq!(parse_signup_code(name, "   ").unwrap(), None);
+        let code = "c".repeat(MIN_SIGNUP_CODE_CHARS);
+        assert_eq!(
+            parse_signup_code(name, &format!(" {code} ")).unwrap(),
+            Some(signup_code_digest(&code))
+        );
+        assert!(matches!(
+            parse_signup_code(name, &"c".repeat(MIN_SIGNUP_CODE_CHARS - 1)),
+            Err(AppError::Configuration(message)) if message.starts_with(name)
+        ));
     }
 
     #[test]

@@ -11,6 +11,8 @@ use uuid::Uuid;
 pub struct SignUpRequest {
     pub email: String,
     pub password: String,
+    /// Apps before 0.7.1 send none.
+    pub signup_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +138,7 @@ pub struct HealthResponse {
     pub status: &'static str,
     pub service: &'static str,
     pub signups_open: bool,
+    pub signup_code_required: bool,
 }
 
 #[derive(Debug, FromRow)]

@@ -36,6 +36,9 @@ pub const DEFAULT_OPEN_SIGNUPS: bool = false;
 /// Shortest access token secret and refresh token pepper, in characters.
 /// Operators fill them in by hand, `openssl rand -hex 32` gives 64.
 pub const MIN_SECRET_CHARS: usize = 32;
+/// Shortest sign-up code, in characters. The limit of requests per address
+/// keeps guessing a code this long slow, and it still fits a message.
+pub const MIN_SIGNUP_CODE_CHARS: usize = 8;
 
 // Abuse limits
 //

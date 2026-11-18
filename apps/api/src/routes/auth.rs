@@ -12,9 +12,9 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::{
-    AuthenticatedAccount, check_password_length, create_access_token, generate_refresh_token,
-    hash_password, hash_refresh_token, normalize_email, refresh_token_expiry, run_hash,
-    verify_against_dummy, verify_password,
+    AuthenticatedAccount, check_password_length, check_signup_code, create_access_token,
+    generate_refresh_token, hash_password, hash_refresh_token, normalize_email,
+    refresh_token_expiry, run_hash, verify_against_dummy, verify_password,
 };
 use crate::error::{AppError, AppResult};
 use crate::limits::client_key;
@@ -37,6 +37,9 @@ pub async fn sign_up(
     // accounts and spends no work.
     if !state.config.open_signups {
         return Err(AppError::forbidden("this server takes no new accounts"));
+    }
+    if let Some(digest) = &state.config.signup_code_digest {
+        check_signup_code(digest, payload.signup_code.as_deref())?;
     }
     let email = normalize_email(&payload.email)?;
     check_password_length(&payload.password)?;

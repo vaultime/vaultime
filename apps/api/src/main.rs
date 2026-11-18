@@ -19,7 +19,7 @@ use limits::Limits;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
@@ -52,15 +52,21 @@ async fn main() -> Result<(), AppError> {
     limits::spawn_pruning(Arc::clone(&state.limits));
     routes::spawn_maintenance(state.clone());
 
+    let code_set = state.config.signup_code_digest.is_some();
     info!(
         "vaultime-api listening on {}, sign-ups {}",
         listener.local_addr()?,
-        if state.config.open_signups {
-            "open"
-        } else {
-            "closed"
+        match (state.config.open_signups, code_set) {
+            (false, _) => "closed",
+            (true, true) => "open with a sign-up code",
+            (true, false) => "open to anyone",
         }
     );
+    if state.config.open_signups && !code_set {
+        warn!(
+            "anyone who reaches this server can create an account, set VAULTIME_SIGNUP_CODE to let in only people who know it"
+        );
+    }
 
     axum::serve(listener, routes::service(state))
         .with_graceful_shutdown(shutdown)

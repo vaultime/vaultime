@@ -110,6 +110,24 @@ pub fn verify_password(password: &str, stored_hash: &str) -> AppResult<bool> {
     }
 }
 
+/// Surrounding spaces from `.env` or a pasted message do not count.
+pub fn signup_code_digest(code: &str) -> [u8; 32] {
+    Sha256::digest(code.trim().as_bytes()).into()
+}
+
+/// Compares digests, so how long it takes tells nothing about the code.
+pub fn check_signup_code(expected: &[u8; 32], sent: Option<&str>) -> AppResult<()> {
+    let Some(sent) = sent else {
+        return Err(AppError::forbidden(
+            "this server needs a sign-up code, which Vaultime asks for from version 0.7.1 on",
+        ));
+    };
+    if signup_code_digest(sent) != *expected {
+        return Err(AppError::forbidden("the sign-up code is not right"));
+    }
+    Ok(())
+}
+
 pub fn hash_refresh_token(token: &str, pepper: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(pepper.as_bytes());
@@ -329,5 +347,22 @@ mod tests {
         let first = generate_refresh_token().unwrap();
         assert_eq!(first.len(), 43);
         assert_ne!(first, generate_refresh_token().unwrap());
+    }
+
+    #[test]
+    fn only_the_set_sign_up_code_passes() {
+        let expected = signup_code_digest("river-lantern-42");
+        assert!(check_signup_code(&expected, Some("river-lantern-42")).is_ok());
+        assert!(check_signup_code(&expected, Some(" river-lantern-42\n")).is_ok());
+        let refused = |sent| match check_signup_code(&expected, sent) {
+            Err(AppError::Forbidden(message)) => message,
+            other => panic!("{sent:?} gave {other:?}"),
+        };
+        assert_eq!(
+            refused(Some("River-Lantern-42")),
+            "the sign-up code is not right"
+        );
+        assert_eq!(refused(Some("")), "the sign-up code is not right");
+        assert!(refused(None).contains("from version 0.7.1 on"));
     }
 }

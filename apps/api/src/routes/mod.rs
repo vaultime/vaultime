@@ -74,6 +74,7 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
         status: "ok",
         service: "vaultime-api",
         signups_open: state.config.open_signups,
+        signup_code_required: state.config.signup_code_digest.is_some(),
     })
 }
 
@@ -112,7 +113,9 @@ mod tests {
 
         let health = send(address, "GET /healthz", "").await;
         assert!(
-            health.ends_with(r#"{"status":"ok","service":"vaultime-api","signups_open":false}"#),
+            health.ends_with(
+                r#"{"status":"ok","service":"vaultime-api","signups_open":false,"signup_code_required":false}"#
+            ),
             "{health}"
         );
         let body = r#"{"email":"player@example.com","password":"correct horse battery"}"#;
@@ -122,6 +125,73 @@ mod tests {
             sign_up.ends_with(
                 r#"{"error":{"code":"forbidden","message":"this server takes no new accounts"}}"#
             ),
+            "{sign_up}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_sign_up_without_the_code_answers_403_without_the_database() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let config = Config {
+            open_signups: true,
+            signup_code_digest: Some(crate::auth::signup_code_digest("river-lantern-42")),
+            ..Config::for_tests()
+        };
+        let app = service(AppState::for_tests(config));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+
+        let health = send(address, "GET /healthz", "").await;
+        assert!(
+            health.ends_with(r#""signups_open":true,"signup_code_required":true}"#),
+            "{health}"
+        );
+        for (body, message) in [
+            (
+                r#"{"email":"player@example.com","password":"correct horse battery"}"#,
+                "this server needs a sign-up code, which Vaultime asks for from version 0.7.1 on",
+            ),
+            (
+                r#"{"email":"player@example.com","password":"correct horse battery","signup_code":"guess-1234"}"#,
+                "the sign-up code is not right",
+            ),
+        ] {
+            let sign_up = send(address, "POST /v1/auth/signup", body).await;
+            assert!(sign_up.starts_with("HTTP/1.1 403 "), "{sign_up}");
+            assert!(
+                sign_up.ends_with(&format!(
+                    r#"{{"error":{{"code":"forbidden","message":"{message}"}}}}"#
+                )),
+                "{sign_up}"
+            );
+        }
+        // The right code gets on to the email, still before the database.
+        let body = r#"{"email":"no address","password":"correct horse battery","signup_code":" river-lantern-42 "}"#;
+        let sign_up = send(address, "POST /v1/auth/signup", body).await;
+        assert!(sign_up.starts_with("HTTP/1.1 400 "), "{sign_up}");
+        assert!(
+            sign_up.contains("a valid email address is required"),
+            "{sign_up}"
+        );
+    }
+
+    #[tokio::test]
+    async fn closed_sign_ups_stay_closed_with_a_code_set() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let config = Config {
+            open_signups: false,
+            signup_code_digest: Some(crate::auth::signup_code_digest("river-lantern-42")),
+            ..Config::for_tests()
+        };
+        let app = service(AppState::for_tests(config));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+
+        let body = r#"{"email":"player@example.com","password":"correct horse battery","signup_code":"river-lantern-42"}"#;
+        let sign_up = send(address, "POST /v1/auth/signup", body).await;
+        assert!(sign_up.starts_with("HTTP/1.1 403 "), "{sign_up}");
+        assert!(
+            sign_up.contains("this server takes no new accounts"),
             "{sign_up}"
         );
     }
