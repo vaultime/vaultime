@@ -1624,7 +1624,7 @@ mockIPC((cmd, payload) => {
   if (appearanceAnswer !== undefined) return appearanceAnswer;
   switch (cmd) {
     case "get_app_version":
-      return "0.7.0";
+      return "0.6.0";
     case "is_development_build":
       return false;
     case "get_device_id":
@@ -1879,7 +1879,7 @@ mockIPC((cmd, payload) => {
       return [
         { key: "idle_threshold_seconds", value: "300", updated_at: iso(now) },
         // ?whatsnew=1: just updated from an older version.
-        { key: "whats_new_seen", value: params.has("whatsnew") ? "0.6.0" : "0.7.0", updated_at: iso(now) },
+        { key: "whats_new_seen", value: params.has("whatsnew") ? "0.5.0" : "0.6.0", updated_at: iso(now) },
         ...(cloudBackupSetting === null ? [] : [{ key: "cloud_backup", value: cloudBackupSetting, updated_at: iso(now) }]),
         ...(cloudServerSetting === null ? [] : [{ key: "cloud_server", value: cloudServerSetting, updated_at: iso(now) }]),
         ...[...appearanceValues].map(([key, value]) => ({ key, value, updated_at: iso(now) })),
