@@ -1435,8 +1435,9 @@ mod tests {
         // Other tests forget remembered checks at any time.
         let generation = integrity::check_generation();
         sessions::list_all_sessions(&db).unwrap();
+        let remembered = all_remembered(&db);
         if integrity::check_generation() == generation {
-            assert!(all_remembered(&db));
+            assert!(remembered);
         }
 
         // The same rows again, under the numbers they had.

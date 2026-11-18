@@ -1230,12 +1230,12 @@ mod tests {
         // Other tests forget remembered checks at any time.
         let generation = integrity::check_generation();
         list_all_sessions(&db).unwrap();
+        let left = unchecked(&db);
         if integrity::check_generation() == generation {
-            assert!(unchecked(&db).is_empty());
+            assert!(left.is_empty());
         }
 
         // A ledger entry naming the session, as vouching for it adds.
-        let generation = integrity::check_generation();
         db.with_conn(|conn| {
             let (sequence, hash): (i64, String) = conn
                 .query_row(

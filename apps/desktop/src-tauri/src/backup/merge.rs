@@ -2648,6 +2648,7 @@ mod tests {
 
         // Other tests forget remembered checks at any time.
         let generation = integrity::check_generation();
+        sessions::list_all_sessions(&desktop.db).unwrap();
         desktop.act();
         apply(
             &desktop.db,
