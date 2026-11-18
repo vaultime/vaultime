@@ -20,6 +20,7 @@ import type { CloudServerInfo } from "@/lib/types";
 import { useCloudSession } from "./cloud-context";
 import { CloudSessionProvider } from "./CloudSessionProvider";
 import { ServerForm } from "./ServerForm";
+import { getDeviceName } from "./session-store";
 
 vi.mock("@tauri-apps/plugin-log", () => ({ info: vi.fn(async () => {}), warn: vi.fn(async () => {}) }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
@@ -290,7 +291,8 @@ describe("the names of registered PCs", () => {
     expect(await screen.findByText("Registered as Desk")).toBeTruthy();
     expect(sealPcName).toHaveBeenCalledWith("account-1");
     const registration = vi.mocked(cloudRequest).mock.calls.find(([, , path]) => path === "/v1/devices/register");
-    expect(registration?.[3]).toMatchObject({ device_name: "Vaultime Windows Desktop", sealed_name: SEALED_DESK });
+    // The plain label names the system the test runs on.
+    expect(registration?.[3]).toMatchObject({ device_name: getDeviceName(), sealed_name: SEALED_DESK });
     // Another PC's name that this PC's key does not open keeps its label.
     fireEvent.click(screen.getByRole("button", { name: "List" }));
     expect(await screen.findByText("Desk, Vaultime Linux Desktop")).toBeTruthy();
