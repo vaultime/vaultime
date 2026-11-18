@@ -6,12 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsContext } from "@/features/settings/settings-context";
 import { ACTIVE_POLL_MS, LIBRARY_CHANGED_EVENT } from "@/lib/constants";
 import { listGames, listSessions } from "@/lib/tauri";
+import type { Session } from "@/lib/types";
 import { LibraryProvider } from "./LibraryProvider";
 
 /** The revision of the library the core reports. */
 let revision = 1;
 /** The sessions a list without the chain checks leaves unchecked. */
 let unchecked: string[] = [];
+/** The sessions running now. */
+let running: Session[] = [];
 const events = new Map<string, () => void>();
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -21,7 +24,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 vi.mock("@/lib/tauri", () => ({
-  getActiveSessions: vi.fn(async () => ({ sessions: [], played_today_ms: 0, counted_at_ms: {}, revision })),
+  getActiveSessions: vi.fn(async () => ({ sessions: running, played_today_ms: 0, counted_at_ms: {}, revision })),
   getLibraryRevision: vi.fn(async () => revision),
   listGames: vi.fn(async () => []),
   listSessions: vi.fn(async (_days: number, checked: boolean) => ({
@@ -71,6 +74,7 @@ describe("the library", () => {
     vi.setSystemTime(new Date(2026, 10, 17, 21, 0));
     revision = 1;
     unchecked = [];
+    running = [];
     vi.mocked(listGames).mockClear();
     vi.mocked(listSessions).mockClear();
   });
@@ -97,6 +101,21 @@ describe("the library", () => {
     setVisibility("visible");
     await wait();
     expect(listGames).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloads when a session ends, also before the revision the core read shows it", async () => {
+    start();
+    await wait();
+    running = [{ id: "evening", integrity_status: "local" } as Session];
+    revision = 2;
+    await wait(ACTIVE_POLL_MS);
+    expect(listGames).toHaveBeenCalledTimes(2);
+
+    // The session ended between the core's look at the revision and its list
+    // of running sessions.
+    running = [];
+    await wait(ACTIVE_POLL_MS);
+    expect(listGames).toHaveBeenCalledTimes(3);
   });
 
   it("takes a change event the poll already loaded as done", async () => {

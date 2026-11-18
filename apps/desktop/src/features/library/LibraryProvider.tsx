@@ -207,7 +207,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             runningStore.set(next);
           }
           const key = next.map((session) => `${session.id}/${session.integrity_status}`).join(",");
-          if (key !== runningKey.current) {
+          const runningMoved = key !== runningKey.current;
+          if (runningMoved) {
             runningKey.current = key;
             setRunning(next);
           }
@@ -225,9 +226,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           first = false;
           // The library changed, like a session that started or ended, or a
           // day began, which moves the recent counts. A window shown while a
-          // game runs takes in the totals it counted meanwhile.
+          // game runs takes in the totals it counted meanwhile. A session that
+          // ended after the core read the revision shows in the running list
+          // first, and its line would show it as just started until then.
           if (
             revision !== loadedRevision.current ||
+            runningMoved ||
             toDayKey(new Date()) !== loadedDay.current ||
             (shownAgain && next.length > 0)
           ) {
