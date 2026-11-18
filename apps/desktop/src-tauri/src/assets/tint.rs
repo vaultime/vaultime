@@ -34,10 +34,53 @@ pub struct ArtTint {
     pub lightness: Option<f64>,
 }
 
-/// The tint of an image, read from a small copy of it.
+/// The tint of an image, read from a small copy of it. A see-through image
+/// is scaled with its colors weighted by their alpha, as a canvas does, so
+/// the edges of a logo keep their color instead of fading toward black.
 pub fn tint_of_image(image: &DynamicImage) -> ArtTint {
-    let sample = image.resize_exact(TINT_SAMPLE_PX, TINT_SAMPLE_PX, FilterType::Triangle);
-    tint_of_pixels(sample.to_rgba8().as_raw())
+    if !image.color().has_alpha() {
+        let sample = image.resize_exact(TINT_SAMPLE_PX, TINT_SAMPLE_PX, FilterType::Triangle);
+        return tint_of_pixels(sample.to_rgba8().as_raw());
+    }
+    let mut weighted = image.to_rgba32f();
+    for pixel in weighted.pixels_mut() {
+        let alpha = pixel[3];
+        for channel in &mut pixel.0[..3] {
+            *channel *= alpha;
+        }
+    }
+    let sample = image::imageops::resize(
+        &weighted,
+        TINT_SAMPLE_PX,
+        TINT_SAMPLE_PX,
+        FilterType::Triangle,
+    );
+    let mut rgba = Vec::with_capacity(sample.len());
+    for pixel in sample.pixels() {
+        let alpha = pixel[3];
+        let color = |channel: f32| {
+            if alpha > 0.0 {
+                unit_byte(channel / alpha)
+            } else {
+                0
+            }
+        };
+        rgba.extend([
+            color(pixel[0]),
+            color(pixel[1]),
+            color(pixel[2]),
+            unit_byte(alpha),
+        ]);
+    }
+    tint_of_pixels(&rgba)
+}
+
+/// A value from 0 to 1 as a byte.
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn unit_byte(value: f32) -> u8 {
+    (value * f32::from(u8::MAX))
+        .round()
+        .clamp(0.0, f32::from(u8::MAX)) as u8
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -297,5 +340,31 @@ mod tests {
             }
         }));
         assert_eq!(tint_of_image(&image).colors.len(), 2);
+    }
+
+    #[test]
+    fn the_see_through_edges_of_a_logo_keep_its_color() {
+        // Red with every fourth pixel see-through, as at a logo's edge, so
+        // each pixel of the small copy is three quarters covered.
+        let image = DynamicImage::ImageRgba8(image::RgbaImage::from_fn(256, 256, |x, y| {
+            if x % 2 == 0 && y % 2 == 0 {
+                image::Rgba([0, 0, 0, 0])
+            } else {
+                image::Rgba([220, 30, 30, 255])
+            }
+        }));
+        let red = tint_of_pixels(&pixels(&[(16, 220, 30, 30, 255)]));
+        let edges = tint_of_image(&image);
+        let (Some(red_lightness), Some(edge_lightness)) = (red.lightness, edges.lightness) else {
+            panic!("both are opaque enough to read: {red:?} {edges:?}");
+        };
+        assert!(
+            (red_lightness - edge_lightness).abs() < 0.01,
+            "{red:?} {edges:?}"
+        );
+        assert!(
+            (red.strength - edges.strength).abs() < 0.05,
+            "{red:?} {edges:?}"
+        );
     }
 }
