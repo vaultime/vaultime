@@ -146,8 +146,9 @@ impl Database {
         result
     }
 
-    /// The revision of the library. It moves with every write the pages load
-    /// and stays while only the counters of running sessions move.
+    /// The revision of the library. It moves with every write the library
+    /// loads and stays while only the counters of running sessions or a
+    /// setting change.
     pub fn revision(&self) -> u64 {
         self.revision.load(Ordering::Acquire)
     }
@@ -159,8 +160,8 @@ impl Database {
     }
 
     /// Runs `f` with the writes of this thread left out of the revision, for
-    /// what only the live views show, like the checkpoints of running
-    /// sessions.
+    /// what the library does not load, like the checkpoints of running
+    /// sessions or a setting.
     pub fn live_writes<T>(f: impl FnOnce() -> T) -> T {
         struct Restore(bool);
         impl Drop for Restore {
@@ -236,6 +237,19 @@ mod tests {
         }));
         write();
         assert_eq!(db.revision(), start + 3);
+    }
+
+    #[test]
+    fn a_stored_setting_leaves_the_revision() {
+        let db = Database::open_in_memory().unwrap();
+        let start = db.revision();
+        crate::db::repo::settings::set_setting(&db, "probe", "a").unwrap();
+        crate::db::repo::settings::set_setting(&db, "probe", "b").unwrap();
+        assert_eq!(db.revision(), start);
+        // A setting written with other rows, like by a merge, moves it with them.
+        db.with_transaction(|conn| crate::db::repo::settings::put_setting(conn, "probe", "c"))
+            .unwrap();
+        assert_eq!(db.revision(), start + 1);
     }
 
     #[test]

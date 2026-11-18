@@ -1331,6 +1331,23 @@ mod tests {
     }
 
     #[test]
+    fn a_changed_tracking_setting_reaches_the_kept_library() {
+        let db = Database::open_in_memory().unwrap();
+        let library = Library::current(&db, None).unwrap();
+        let revision = library.revision;
+        settings::set_setting(&db, crate::constants::LIBRARY_SORT_SETTING, "title").unwrap();
+        let library = Library::current(&db, Some(library)).unwrap();
+        assert_eq!(library.revision, revision, "kept for another setting");
+
+        settings::set_setting(&db, IDLE_THRESHOLD_SETTING, "60").unwrap();
+        let library = Library::current(&db, Some(library)).unwrap();
+        assert_eq!(library.settings.idle_threshold, Duration::from_secs(60));
+        settings::set_setting(&db, BACKGROUND_ACTIVE_SETTING, "true").unwrap();
+        let library = Library::current(&db, Some(library)).unwrap();
+        assert!(library.settings.treat_background_as_active);
+    }
+
+    #[test]
     fn a_failed_read_of_the_settings_fails_the_tick() {
         let db = Database::open_in_memory().unwrap();
         db.with_conn(|conn| {

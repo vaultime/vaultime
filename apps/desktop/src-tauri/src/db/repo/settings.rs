@@ -5,6 +5,7 @@
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
+use crate::constants::{BACKGROUND_ACTIVE_SETTING, IDLE_THRESHOLD_SETTING};
 use crate::db::connection::Database;
 use crate::db::models::Setting;
 use crate::db::repo::map_db;
@@ -40,8 +41,19 @@ pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>> {
     })
 }
 
+/// Settings the tracker keeps with the library until the revision moves.
+const TRACKER_SETTINGS: [&str; 2] = [IDLE_THRESHOLD_SETTING, BACKGROUND_ACTIVE_SETTING];
+
+/// Leaves the library revision, as the pages load the settings on their own
+/// and no list of the library depends on one. Only the settings the tracker
+/// keeps move it.
 pub fn set_setting(db: &Database, key: &str, value: &str) -> Result<()> {
-    db.with_conn(|conn| put_setting(conn, key, value))
+    let write = || db.with_conn(|conn| put_setting(conn, key, value));
+    if TRACKER_SETTINGS.contains(&key) {
+        write()
+    } else {
+        Database::live_writes(write)
+    }
 }
 
 /// `set_setting` on an open connection, inside the caller's transaction.
