@@ -174,6 +174,7 @@ fn command_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         commands::games::set_preferred_game_asset,
         commands::sessions::list_sessions,
         commands::sessions::get_active_sessions,
+        commands::sessions::get_library_revision,
         commands::playtime::get_play_totals,
         commands::playtime::get_journal_week,
         commands::playtime::get_year_play,

@@ -3,8 +3,10 @@
 
 //! `SQLite` connection management.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use log::warn;
 use rusqlite::{Connection, OpenFlags};
@@ -15,11 +17,19 @@ use crate::error::{Result, VaultimeError};
 
 use super::migrate;
 
+thread_local! {
+    /// Set while this thread writes what only the live views show.
+    static LIVE_WRITES: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Thread-safe wrapper around a `SQLite` connection.
 pub struct Database {
     conn: Mutex<Connection>,
     /// The file, none for a database in memory.
     path: Option<PathBuf>,
+    /// Moves with every write the library loads, so the page reloads only
+    /// when it did.
+    revision: AtomicU64,
 }
 
 impl Database {
@@ -59,6 +69,7 @@ impl Database {
         let db = Self {
             conn: Mutex::new(conn),
             path: Some(path.to_path_buf()),
+            revision: AtomicU64::new(0),
         };
 
         migrate::run_migrations(&db)?;
@@ -78,6 +89,7 @@ impl Database {
         let db = Self {
             conn: Mutex::new(conn),
             path: None,
+            revision: AtomicU64::new(0),
         };
 
         migrate::run_migrations(&db)?;
@@ -126,7 +138,38 @@ impl Database {
             warn!("the database connection was in use during a panic and carries on");
             conn
         });
-        f(&conn)
+        let before = conn.total_changes();
+        let result = f(&conn);
+        if conn.total_changes() != before && !LIVE_WRITES.get() {
+            self.bump_revision();
+        }
+        result
+    }
+
+    /// The revision of the library. It moves with every write the pages load
+    /// and stays while only the counters of running sessions move.
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Acquire)
+    }
+
+    /// Moves the revision for a change in `live_writes` that the library
+    /// shows, like a running session found suspicious.
+    pub fn bump_revision(&self) {
+        self.revision.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Runs `f` with the writes of this thread left out of the revision, for
+    /// what only the live views show, like the checkpoints of running
+    /// sessions.
+    pub fn live_writes<T>(f: impl FnOnce() -> T) -> T {
+        struct Restore(bool);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                LIVE_WRITES.set(self.0);
+            }
+        }
+        let _restore = Restore(LIVE_WRITES.replace(true));
+        f()
     }
 
     /// Like `with_conn`, in one transaction, so a session row and the event
@@ -151,6 +194,49 @@ impl Database {
 mod tests {
     use super::*;
     use crate::db::repo::map_db;
+
+    #[test]
+    fn the_revision_moves_with_writes_and_not_with_reads_or_live_writes() {
+        let db = Database::open_in_memory().unwrap();
+        let write = || {
+            db.with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('probe', 'x')
+                     ON CONFLICT(key) DO UPDATE SET value = value || 'x'",
+                    [],
+                )
+                .map_err(map_db)
+            })
+            .unwrap();
+        };
+        let start = db.revision();
+        db.with_conn(|conn| {
+            conn.query_row("SELECT COUNT(*) FROM settings", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map_err(map_db)
+        })
+        .unwrap();
+        assert_eq!(db.revision(), start);
+
+        write();
+        assert_eq!(db.revision(), start + 1);
+        db.with_transaction(|conn| {
+            conn.execute("DELETE FROM settings WHERE key = 'probe'", [])
+                .map_err(map_db)
+        })
+        .unwrap();
+        assert_eq!(db.revision(), start + 2);
+
+        Database::live_writes(write);
+        assert_eq!(db.revision(), start + 2);
+        // A panic in live writes leaves the thread counting again.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            Database::live_writes(|| panic!("a tick that fails"))
+        }));
+        write();
+        assert_eq!(db.revision(), start + 3);
+    }
 
     #[test]
     fn a_panic_inside_a_transaction_leaves_the_connection_usable() {

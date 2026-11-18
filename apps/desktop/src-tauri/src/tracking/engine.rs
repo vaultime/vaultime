@@ -527,6 +527,29 @@ fn count_running_sessions(
     activity_snapshot: &ActivitySnapshot,
     clocks: &Clocks,
 ) {
+    // The counters show in the live views, so the library stays loaded.
+    Database::live_writes(|| {
+        count_each(
+            db,
+            live,
+            active,
+            observed_games,
+            tracking_settings,
+            activity_snapshot,
+            clocks,
+        );
+    });
+}
+
+fn count_each(
+    db: &Database,
+    live: &LiveSessions,
+    active: &mut HashMap<String, ActiveSession>,
+    observed_games: &HashMap<String, GameObservation>,
+    tracking_settings: &TrackingSettings,
+    activity_snapshot: &ActivitySnapshot,
+    clocks: &Clocks,
+) {
     for session in active.values_mut() {
         if let Some(observation) = observed_games.get(&session.game_id) {
             if !observation.is_running {
@@ -944,6 +967,8 @@ fn apply_observation(
             reason,
         )?;
         session.integrity_status = integrity::STATUS_SUSPICIOUS.into();
+        // Its trust label shows in the library too.
+        db.bump_revision();
         flagged = true;
     }
 
@@ -1623,6 +1648,68 @@ mod tests {
             live.counted_at_ms(&open[0].id),
             Some(parse_wall_timestamp(&open[0].started_at_wall).timestamp_millis())
         );
+    }
+
+    #[test]
+    fn checkpoints_leave_the_library_revision_and_a_start_and_an_end_move_it() {
+        let (db, game_id) = library_with("Long Game");
+        let live = LiveSessions::default();
+        let mut active = HashMap::new();
+        let running = HashMap::from([(game_id.clone(), PLAYING)]);
+        let before = db.revision();
+        start_sessions(&db, "device", &live, &mut active, &running);
+        let started = db.revision();
+        assert!(started > before);
+
+        let session = &active[&game_id];
+        let session_id = session.session_id.clone();
+        let (now, wall) = (session.last_tick_at, session.last_wall_at);
+        let step = chrono::Duration::from_std(POLL_INTERVAL).unwrap();
+        let tick = |count: u32| Clocks {
+            now: now + POLL_INTERVAL * count,
+            wall: wall + step * i32::try_from(count).unwrap(),
+            asleep_ms: None,
+        };
+        let events = || {
+            db.with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COUNT(*) FROM session_events WHERE session_id = ?1",
+                    [&session_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(crate::db::repo::map_db)
+            })
+            .unwrap()
+        };
+        let events_at_start = events();
+        let past_a_checkpoint =
+            u32::try_from(CHECKPOINT_INTERVAL.as_secs() / POLL_INTERVAL.as_secs()).unwrap() + 2;
+        for count in 1..=past_a_checkpoint {
+            count_running_sessions(
+                &db,
+                &live,
+                &mut active,
+                &running,
+                &settings(),
+                &desktop(Duration::ZERO),
+                &tick(count),
+            );
+        }
+        assert!(events() > events_at_start, "a checkpoint was written");
+        assert_eq!(db.revision(), started);
+
+        let missing = HashMap::from([(game_id.clone(), GameObservation::default())]);
+        for count in 1..=MISSED_TICKS_BEFORE_END {
+            end_finished_sessions(
+                &db,
+                &live,
+                &mut active,
+                &missing,
+                &tick(past_a_checkpoint + count),
+            );
+        }
+        assert!(active.is_empty());
+        assert!(db.revision() > started);
     }
 
     #[test]

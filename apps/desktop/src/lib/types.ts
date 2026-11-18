@@ -425,6 +425,8 @@ export interface ActiveSessions {
   played_today_ms: number;
   /** When the tracker counted each session's times, in Unix milliseconds, by session id. */
   counted_at_ms: Record<string, number>;
+  /** The revision of the library, which the page reloads when it moved. */
+  revision: number;
 }
 
 /** Why a game's page suggests stepping aside. Mirrors the Rust `StepsAsideHint` struct. */

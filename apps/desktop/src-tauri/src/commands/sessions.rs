@@ -78,6 +78,8 @@ pub struct ActiveSessions {
     /// When the tracker counted each session's times, in Unix milliseconds,
     /// so its clock can run on from there.
     pub counted_at_ms: HashMap<String, i64>,
+    /// The revision of the library, which the page reloads when it moved.
+    pub revision: u64,
 }
 
 /// The running sessions as of the tracker's latest tick, and today's play.
@@ -87,6 +89,8 @@ pub fn get_active_sessions(
     live: State<'_, Arc<LiveSessions>>,
     app_context: State<'_, AppContext>,
 ) -> Result<ActiveSessions, VaultimeError> {
+    // Read first, so a change that lands meanwhile moves it again.
+    let revision = db.revision();
     // One copy of the counters, so the times, the sessions and today's play
     // all come from the same ticks.
     let live = live.snapshot();
@@ -112,7 +116,14 @@ pub fn get_active_sessions(
         sessions: active,
         played_today_ms,
         counted_at_ms,
+        revision,
     })
+}
+
+/// The revision of the library, which moves with every change the pages load.
+#[tauri::command]
+pub fn get_library_revision(db: State<'_, Arc<Database>>) -> u64 {
+    db.revision()
 }
 
 /// The events of a game's sessions and those of the games linked to it,

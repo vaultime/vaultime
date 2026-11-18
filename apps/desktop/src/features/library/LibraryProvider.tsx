@@ -106,14 +106,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [artTints, setArtTints] = useState<Record<string, ArtTintOf>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Ids of the running sessions at the last poll. Null until the first poll.
-  const activeIds = useRef<string | null>(null);
+  // The revision of the library and the local day the last load started
+  // from, so a poll or a change event reloads only what moved.
+  const loadedRevision = useRef<number | null>(null);
+  const loadedDay = useRef<string | null>(null);
   // The running sessions at the last poll, to keep the list while they stay the same.
   const activeJson = useRef("[]");
   const pageVisible = usePageVisible();
 
   const refresh = useCallback(async () => {
     const load = ++loads.current;
+    // Read before the lists, so a change that lands meanwhile moves it again.
+    loadedDay.current = toDayKey(new Date());
+    loadedRevision.current = await api.getLibraryRevision().catch(() => null);
     const showHistory = (history: SessionList) => {
       setSessions(history.sessions);
       setTotals(history.games);
@@ -136,6 +141,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           api.listGameLinks(),
           api.getDeviceId(),
         ]);
+      // A newer load brings newer lists.
+      if (load !== loads.current) return;
       history = quick;
       setDevices(nextDevices);
       setLinks(nextLinks);
@@ -150,14 +157,22 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setArtTints((current) => tintsOfCovers(assets, current));
       setError(null);
     } catch (loadError) {
+      if (load !== loads.current) return;
       setError(describeError(loadError));
+      // The next poll tries again.
+      loadedRevision.current = null;
       return;
     } finally {
       setLoaded(true);
     }
+    if (history.unchecked.length === 0) return;
     // Hidden, only the window look reads the library, which needs no trust
-    // labels. A load after this one brings newer sessions, so it wins.
-    if (history.unchecked.length === 0 || document.visibilityState !== "visible") return;
+    // labels. The first poll once the window shows loads it with them.
+    if (document.visibilityState !== "visible") {
+      loadedRevision.current = null;
+      return;
+    }
+    // A load after this one brings newer sessions, so it wins.
     try {
       const checked = await api.listSessions(TRUST_BADGE_RECENT_DAYS, true);
       if (load === loads.current) showHistory(checked);
@@ -171,10 +186,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     if (!pageVisible) return;
     let cancelled = false;
 
+    let first = true;
     function poll() {
       api
         .getActiveSessions()
-        .then(({ sessions: next, played_today_ms, counted_at_ms }) => {
+        .then(({ sessions: next, played_today_ms, counted_at_ms, revision }) => {
           if (cancelled) return;
           const json = JSON.stringify(next);
           if (json !== activeJson.current) {
@@ -187,16 +203,22 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           setCountedAt(counted_at_ms);
           setMinute(Math.floor(Date.now() / MINUTE_MS));
           setToday(toDayKey(new Date()));
-          // The first poll, or a session started or ended: totals changed.
-          const ids = next.map((s) => s.id).sort().join(",");
-          if (ids !== activeIds.current) {
-            activeIds.current = ids;
+          const shownAgain = first;
+          first = false;
+          // The library changed, like a session that started or ended, or a
+          // day began, which moves the recent counts. A window shown while a
+          // game runs takes in the totals it counted meanwhile.
+          if (
+            revision !== loadedRevision.current ||
+            toDayKey(new Date()) !== loadedDay.current ||
+            (shownAgain && next.length > 0)
+          ) {
             refresh().catch(() => {});
           }
         })
         .catch(() => {
-          if (!cancelled && activeIds.current === null) {
-            activeIds.current = "";
+          if (!cancelled && first) {
+            first = false;
             refresh().catch(() => {});
           }
         });
@@ -207,15 +229,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       clearInterval(timer);
-      // Sessions may start and end unseen, so the next poll reloads the totals.
-      activeIds.current = null;
     };
   }, [refresh, pageVisible]);
 
-  // The core reports changes it makes on its own, like covers found at startup.
+  // The core reports changes it makes on its own, like covers found at
+  // startup. A poll may have loaded them already, as when a game starts.
   useEffect(() => {
     const stop = listen(LIBRARY_CHANGED_EVENT, () => {
-      refresh().catch(() => {});
+      api.getLibraryRevision().then(
+        (revision) => {
+          if (revision !== loadedRevision.current) refresh().catch(() => {});
+        },
+        () => refresh().catch(() => {}),
+      );
     });
     return () => {
       stop.then((unlisten) => unlisten()).catch(() => {});

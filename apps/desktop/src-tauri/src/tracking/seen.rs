@@ -106,7 +106,11 @@ impl SeenPrograms {
         }
         let seconds = std::mem::take(&mut entry.1);
         let seconds = i64::try_from(seconds).unwrap_or(i64::MAX);
-        if let Err(error) = seen::add_front_time(db, &entry.0, &infer_title(&entry.0), seconds) {
+        // Discover reads seen programs on its own, so the library stays loaded.
+        let added = Database::live_writes(|| {
+            seen::add_front_time(db, &entry.0, &infer_title(&entry.0), seconds)
+        });
+        if let Err(error) = added {
             warn!("could not note a program seen running: {error}");
         }
     }

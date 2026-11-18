@@ -1537,6 +1537,24 @@ if (deleteStep || params.get("focus") === "delete") {
   }
 }
 
+/**
+ * The revision of the sample library, which moves when a session starts or
+ * ends. Pages reload after their own changes.
+ */
+let revision = 0;
+let runningKey = "";
+function libraryRevision(): number {
+  const key = runningNow()
+    .map((session) => session.id)
+    .sort()
+    .join(",");
+  if (key !== runningKey) {
+    runningKey = key;
+    revision += 1;
+  }
+  return revision;
+}
+
 /** A sample image as the core sends it, the thumbnail the image itself. */
 function shownAt(src: string) {
   return { image_url: src, thumb_url: src };
@@ -1835,8 +1853,11 @@ mockIPC((cmd, payload) => {
         sessions: running,
         played_today_ms: estimatePlayedToday(sessionsNow()),
         counted_at_ms: Object.fromEntries(running.map((session) => [session.id, countedAt])),
+        revision: libraryRevision(),
       };
     }
+    case "get_library_revision":
+      return libraryRevision();
     case "get_journal_week":
       return estimateJournalWeek(
         sessionsNow(),
