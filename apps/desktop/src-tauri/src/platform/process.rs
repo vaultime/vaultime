@@ -420,6 +420,107 @@ impl InstallFolder {
     }
 }
 
+/// Executables by file name, so a process is checked only against the ones
+/// it could be: those named like its program, its process or, for a loader
+/// such as Wine, the program at the start of its command line.
+pub struct ExecutableIndex<'a> {
+    paths: Vec<&'a str>,
+    by_name: HashMap<String, Vec<usize>>,
+}
+
+impl<'a> ExecutableIndex<'a> {
+    /// Indexes each executable under its position in `paths`. An empty path
+    /// keeps its position and matches nothing.
+    pub fn new(paths: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut index = Self {
+            paths: Vec::new(),
+            by_name: HashMap::new(),
+        };
+        for path in paths {
+            if let Some(name) = file_name(path) {
+                index
+                    .by_name
+                    .entry(name_key(name))
+                    .or_default()
+                    .push(index.paths.len());
+            }
+            index.paths.push(path);
+        }
+        index
+    }
+
+    /// The positions of the executables the process matches, as
+    /// `matches_executable` decides, in the order they were given.
+    pub fn matches(&self, process: &RunningProcess) -> Vec<usize> {
+        let names = [
+            Some(process.name.as_str()),
+            process.exe_path.as_deref().and_then(file_name),
+            process.command.as_deref().and_then(file_name),
+        ];
+        let mut found: Vec<usize> = names
+            .into_iter()
+            .flatten()
+            .filter_map(|name| self.by_name.get(&name_key(name)))
+            .flatten()
+            .copied()
+            .collect();
+        found.sort_unstable();
+        found.dedup();
+        found.retain(|&position| matches_executable(process, self.paths[position]));
+        found
+    }
+
+    /// Whether the process matches any of the executables.
+    pub fn any(&self, process: &RunningProcess) -> bool {
+        !self.matches(process).is_empty()
+    }
+}
+
+/// Install folders by their keys, so a process is checked only against the
+/// folders its program lies in.
+#[derive(Default)]
+pub struct FolderIndex {
+    by_key: HashMap<String, Vec<usize>>,
+}
+
+impl FolderIndex {
+    /// Indexes the folder under `position`.
+    pub fn add(&mut self, position: usize, folder: &InstallFolder) {
+        for key in &folder.keys {
+            self.by_key.entry(key.clone()).or_default().push(position);
+        }
+    }
+
+    /// The positions of the folders the process runs a program from, at any
+    /// depth, as `InstallFolder::contains` decides.
+    pub fn containing(&self, process: &RunningProcess) -> Vec<usize> {
+        let Some(exe) = &process.exe_key else {
+            return Vec::new();
+        };
+        let mut found: Vec<usize> = exe
+            .match_indices(['/', '\\'])
+            .filter(|&(at, _)| at > 0)
+            .filter_map(|(at, _)| self.by_key.get(&exe[..at]))
+            .flatten()
+            .copied()
+            .collect();
+        found.sort_unstable();
+        found.dedup();
+        found
+    }
+}
+
+/// The key `names_equal` compares names by.
+#[cfg(windows)]
+fn name_key(name: &str) -> String {
+    name.chars().flat_map(char::to_lowercase).collect()
+}
+
+#[cfg(not(windows))]
+fn name_key(name: &str) -> String {
+    name.to_owned()
+}
+
 /// Whether `path` names a folder below the root of a drive, a share or the
 /// file system.
 fn below_a_root(path: &str) -> bool {
@@ -896,6 +997,114 @@ mod tests {
         ));
         assert!(names_equal("Ärger.exe", "äRGER.EXE"));
         assert!(!names_equal("Ärger.exe", "Arger.exe"));
+    }
+
+    fn process(pid: u32, name: &str, exe: Option<&str>, command: Option<&str>) -> RunningProcess {
+        RunningProcess::new(
+            pid,
+            name.into(),
+            exe.map(Into::into),
+            command.map(Into::into),
+        )
+    }
+
+    /// Files under a fresh temp folder, made so links and names resolve.
+    fn files(names: &[&str]) -> (std::path::PathBuf, Vec<String>) {
+        let root =
+            std::env::temp_dir().join(format!("vaultime-index-test-{}", uuid::Uuid::new_v4()));
+        let paths = names
+            .iter()
+            .map(|name| {
+                let path = root.join(name);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(&path, b"").unwrap();
+                path.to_string_lossy().into_owned()
+            })
+            .collect();
+        (root, paths)
+    }
+
+    #[test]
+    fn the_executable_index_matches_as_one_by_one() {
+        let (root, files) = files(&["first/game.exe", "second/game.exe", "Other/Tool.exe"]);
+        let executables = [
+            files[0].as_str(),
+            files[1].as_str(),
+            files[2].as_str(),
+            "",
+            r"C:\Games\Cool\Cool.exe",
+            r"C:\Games\Launcher\Launcher.exe",
+        ];
+        let shouted = files[2].replace("Tool.exe", "TOOL.EXE");
+        let processes = [
+            process(1, "game.exe", Some(&files[0]), None),
+            process(2, "game.exe", Some(&files[1]), None),
+            process(3, "game.exe", None, None),
+            process(4, "TOOL.EXE", Some(&shouted), None),
+            process(5, "Cool.exe", Some("/usr/bin/wine64-preloader"), None),
+            process(
+                6,
+                "Launcher.ex",
+                Some("/usr/bin/wine"),
+                Some(r"C:\Games\Launcher\Launcher.exe"),
+            ),
+            process(
+                7,
+                "wine64-preloader",
+                Some("/usr/bin/wine64-preloader"),
+                None,
+            ),
+            process(8, "firefox", Some("/usr/bin/firefox"), None),
+        ];
+        let index = ExecutableIndex::new(executables);
+        for process in &processes {
+            let one_by_one: Vec<usize> = (0..executables.len())
+                .filter(|&position| matches_executable(process, executables[position]))
+                .collect();
+            assert_eq!(index.matches(process), one_by_one, "{process:?}");
+        }
+        assert_eq!(index.matches(&processes[1]), [1]);
+        assert_eq!(index.matches(&processes[2]), [0, 1]);
+        assert_eq!(index.matches(&processes[4]), [4]);
+        assert_eq!(index.matches(&processes[5]), [5]);
+        assert!(!index.any(&processes[7]));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_folder_index_finds_the_folders_a_program_lies_in() {
+        let (root, files) = files(&[
+            "Games/Foo/bin/a.exe",
+            "Games/FooBar/b.exe",
+            "Games/Foo/Sub/c.exe",
+            "Games/Foo.exe",
+            "Other/d.exe",
+        ]);
+        let folders: Vec<InstallFolder> = ["Games/Foo", "Games/FooBar", "Games/Foo/Sub", "Other"]
+            .iter()
+            .map(|folder| InstallFolder::new(&root.join(folder).to_string_lossy()))
+            .collect();
+        let mut index = FolderIndex::default();
+        for (position, folder) in folders.iter().enumerate() {
+            index.add(position, folder);
+        }
+        let mut processes: Vec<RunningProcess> = files
+            .iter()
+            .enumerate()
+            .map(|(pid, path)| process(u32::try_from(pid).unwrap(), "x.exe", Some(path), None))
+            .collect();
+        processes.push(process(90, "x.exe", None, None));
+        processes.push(process(91, "x.exe", Some(&files[0].to_uppercase()), None));
+        for process in &processes {
+            let one_by_one: Vec<usize> = (0..folders.len())
+                .filter(|&position| folders[position].contains(process))
+                .collect();
+            assert_eq!(index.containing(process), one_by_one, "{process:?}");
+        }
+        assert_eq!(index.containing(&processes[0]), [0]);
+        assert_eq!(index.containing(&processes[2]), [0, 2]);
+        assert!(index.containing(&processes[3]).is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -30,7 +30,9 @@ use crate::error::VaultimeError;
 use crate::integrity;
 use crate::platform;
 use crate::platform::activity::{ActivitySnapshot, capture_activity_snapshot};
-use crate::platform::process::{InstallFolder, ProcessList, RunningProcess, matches_executable};
+use crate::platform::process::{
+    ExecutableIndex, FolderIndex, InstallFolder, ProcessList, RunningProcess,
+};
 use crate::tracking::live::{LiveCounters, LiveSessions};
 use crate::tracking::seen::SeenPrograms;
 
@@ -416,9 +418,10 @@ fn poll_tick(
             "the list of running processes came back empty".into(),
         ));
     }
+    let ignored = ExecutableIndex::new(ignored.iter().map(String::as_str));
     let processes: Vec<RunningProcess> = processes
         .into_iter()
-        .filter(|process| !ignored.iter().any(|path| matches_executable(process, path)))
+        .filter(|process| !ignored.any(process))
         .collect();
     let activity_snapshot = capture_activity_snapshot();
 
@@ -684,7 +687,9 @@ fn observe_games(
 ) -> HashMap<String, GameObservation> {
     let matched: Vec<(&str, Vec<&RunningProcess>)> = games
         .iter()
-        .filter_map(|game| Some((game.id.as_str(), game_processes(game, processes, folders)?)))
+        .zip(game_processes(games, processes, folders))
+        .filter(|(game, _)| game.executable_path.is_some())
+        .map(|(game, found)| (game.id.as_str(), found))
         .collect();
 
     // CPU usage only stands in where the foreground window or input cannot be
@@ -710,26 +715,41 @@ fn observe_games(
         .collect()
 }
 
-/// The running processes of a game, or `None` for a game without an
-/// executable.
+/// The running processes of each game, in the order of `games`: those that
+/// run its executable and, where its launcher gives it a folder of its own,
+/// the game programs in that folder. A game without an executable has none.
 fn game_processes<'a>(
-    game: &Game,
+    games: &[Game],
     processes: &'a [RunningProcess],
     folders: &mut FolderCache,
-) -> Option<Vec<&'a RunningProcess>> {
-    let exe_path = game.executable_path.as_deref()?;
-    let own_folder = own_folder(game).map(|folder| folders.get(folder));
-    Some(
-        processes
+) -> Vec<Vec<&'a RunningProcess>> {
+    let executables = ExecutableIndex::new(
+        games
             .iter()
-            .filter(|process| {
-                matches_executable(process, exe_path)
-                    || own_folder.as_ref().is_some_and(|folder| {
-                        folder.contains(process) && is_likely_game_executable(&process.name)
-                    })
-            })
-            .collect(),
-    )
+            .map(|game| game.executable_path.as_deref().unwrap_or_default()),
+    );
+    let mut own_folders = FolderIndex::default();
+    for (position, game) in games.iter().enumerate() {
+        if game.executable_path.is_some()
+            && let Some(folder) = own_folder(game)
+        {
+            own_folders.add(position, folders.get(folder));
+        }
+    }
+    let mut found = vec![Vec::new(); games.len()];
+    for process in processes {
+        let mut positions = executables.matches(process);
+        let in_own_folders = own_folders.containing(process);
+        if !in_own_folders.is_empty() && is_likely_game_executable(&process.name) {
+            positions.extend(in_own_folders);
+            positions.sort_unstable();
+            positions.dedup();
+        }
+        for position in positions {
+            found[position].push(process);
+        }
+    }
+    found
 }
 
 /// The install folder whose game programs count for the game too, as its
@@ -1141,6 +1161,113 @@ mod tests {
         )
         .unwrap();
         (db, game.id)
+    }
+
+    /// The processes of a game the way a tick matched them before the
+    /// indexes: every process checked against the game.
+    fn processes_one_by_one<'a>(
+        game: &Game,
+        processes: &'a [RunningProcess],
+        folders: &mut FolderCache,
+    ) -> Vec<&'a RunningProcess> {
+        let Some(exe_path) = game.executable_path.as_deref() else {
+            return Vec::new();
+        };
+        let own_folder = own_folder(game).map(|folder| folders.get(folder));
+        processes
+            .iter()
+            .filter(|process| {
+                crate::platform::process::matches_executable(process, exe_path)
+                    || own_folder.as_ref().is_some_and(|folder| {
+                        folder.contains(process) && is_likely_game_executable(&process.name)
+                    })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn games_are_matched_as_one_by_one() {
+        let db = Database::open_in_memory().unwrap();
+        let root =
+            std::env::temp_dir().join(format!("vaultime-match-test-{}", uuid::Uuid::new_v4()));
+        // Files that exist, so paths that differ tell games of the same name apart.
+        let file = |rest: &str| {
+            let path = root.join(rest);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"").unwrap();
+            path.to_string_lossy().into_owned()
+        };
+        let folder = |rest: &str| root.join(rest).to_string_lossy().into_owned();
+        for (title, exe, install, launcher) in [
+            (
+                "Steam game",
+                Some("Steam/Ember/bin/ember.exe"),
+                Some("Steam/Ember"),
+                Some("steam"),
+            ),
+            (
+                "Steam neighbor",
+                Some("Steam/EmberTwo/ember.exe"),
+                Some("Steam/EmberTwo"),
+                Some("steam"),
+            ),
+            ("Loose game", Some("Loose/run.exe"), Some("Loose"), None),
+            ("Same name", Some("Elsewhere/run.exe"), None, None),
+            ("No program", None, Some("Steam/Nothing"), Some("steam")),
+        ] {
+            games::create_game(
+                &db,
+                &CreateGame {
+                    title: title.into(),
+                    executable_path: exe.map(file),
+                    install_folder: install.map(folder),
+                    launcher_source: launcher.map(Into::into),
+                },
+            )
+            .unwrap();
+        }
+        let library = games::list_local_games(&db).unwrap();
+        let running = |pid: u32, name: &str, exe: Option<String>| {
+            RunningProcess::new(pid, name.into(), exe, None)
+        };
+        let processes = vec![
+            running(1, "ember.exe", Some(file("Steam/Ember/bin/ember.exe"))),
+            running(
+                2,
+                "ember-dx12.exe",
+                Some(file("Steam/Ember/bin/ember-dx12.exe")),
+            ),
+            running(
+                3,
+                "UnityCrashHandler64.exe",
+                Some(file("Steam/Ember/UnityCrashHandler64.exe")),
+            ),
+            running(4, "ember.exe", Some(file("Steam/EmberTwo/ember.exe"))),
+            running(5, "run.exe", None),
+            running(6, "run.exe", Some(file("Loose/run.exe"))),
+            running(7, "other.exe", Some(file("Loose/other.exe"))),
+            running(8, "game.exe", Some(file("Steam/Nothing/game.exe"))),
+            running(9, "explorer.exe", Some(file("Windows/explorer.exe"))),
+        ];
+        let mut folders = FolderCache::default();
+        let found = game_processes(&library, &processes, &mut folders);
+        let pids =
+            |list: &[&RunningProcess]| list.iter().map(|process| process.pid).collect::<Vec<_>>();
+        for (game, found) in library.iter().zip(&found) {
+            let one_by_one = processes_one_by_one(game, &processes, &mut folders);
+            assert_eq!(pids(found), pids(&one_by_one), "{}", game.title);
+        }
+        let pids_of = |title: &str| {
+            pids(&found[library.iter().position(|game| game.title == title).unwrap()])
+        };
+        // The folder counts for Steam games, a crash handler never does.
+        assert_eq!(pids_of("Steam game"), [1, 2]);
+        assert_eq!(pids_of("Steam neighbor"), [4]);
+        // A hidden path matches by name alone.
+        assert_eq!(pids_of("Loose game"), [5, 6]);
+        assert_eq!(pids_of("Same name"), [5]);
+        assert!(pids_of("No program").is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     /// Starts a real installed game and checks that a session opens and closes.
