@@ -41,7 +41,7 @@ export function gameArt(summary: GameSummary | null): GameInFront | null {
   return { cover: summary.art, colors: lightness === undefined ? [] : colors, lightness: lightness ?? null };
 }
 
-/** Tells games and their art apart without spelling out the cover, a long data URL. */
+/** One string per game and its art, so the look moves only when one of them changes. */
 function artKey(summary: GameSummary | null): string {
   const art = gameArt(summary);
   if (!summary || !art) return "";

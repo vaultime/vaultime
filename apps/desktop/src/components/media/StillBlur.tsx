@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BACKGROUND_BLUR_BLEED, STILL_BLUR_BOX_PASSES } from "@/lib/constants";
 import { coverRect, stillBlurSize } from "@/lib/still-blur";
 
@@ -27,25 +27,40 @@ export function StillBlur({
   className?: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  // Decoded once per picture, so a move of the blur slider only draws again.
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    const target = canvas.current;
-    if (!target) return;
-    let image: HTMLImageElement | null = null;
     let cancelled = false;
-    const paint = () => {
-      if (image && !cancelled) draw(target, image, blur, saturation);
-    };
     const loading = new Image();
     loading.decoding = "async";
     loading.src = src;
     loading.decode().then(
       () => {
-        image = loading;
-        paint();
+        if (!cancelled) setImage(loading);
       },
-      () => {},
+      () => {
+        // A picture that does not load shows none, not the one before it.
+        if (!cancelled) setImage(null);
+      },
     );
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  useEffect(() => {
+    const target = canvas.current;
+    if (!target) return;
+    if (!image) {
+      target.width = 0;
+      return;
+    }
+    let cancelled = false;
+    const paint = () => {
+      if (!cancelled) draw(target, image, blur, saturation);
+    };
+    // Its first call comes with the size the canvas has now.
     const resized = new ResizeObserver(paint);
     resized.observe(target);
     // Without a blur the canvas has the screen's pixels, which moving the
@@ -66,7 +81,7 @@ export function StillBlur({
       resized.disconnect();
       scale?.removeEventListener("change", rescaled);
     };
-  }, [src, blur, saturation]);
+  }, [image, blur, saturation]);
 
   return (
     <canvas

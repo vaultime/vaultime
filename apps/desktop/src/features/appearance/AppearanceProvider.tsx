@@ -180,7 +180,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     }
   }, [appearance, homeAccent, mode, tokens]);
 
-  // Written only when the game changes, as its cover is a long data URL.
+  // Written apart from the look, only when the game changes.
   useEffect(() => {
     if (!gamesKnown) return;
     try {
