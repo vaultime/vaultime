@@ -44,7 +44,7 @@ const dayOf = (share: DayShare) => parseVaultimeDate(share.day);
  * What a session on the strip is, for the pointer: its game, when it ran,
  * and with play past midnight each day's part and the whole.
  */
-function SessionCard({
+export function SessionCard({
   session: stored,
   shares,
   day,
@@ -103,7 +103,7 @@ function SessionCard({
 }
 
 /** The part of a session on a day after its first, of all of it so far while it runs. */
-function ContinuedAmounts({ share, stored }: { share: DayShare; stored: Session }) {
+export function ContinuedAmounts({ share, stored }: { share: DayShare; stored: Session }) {
   const session = useRunningSession(stored.id) ?? stored;
   return <>{continuedAmounts(share.runtime_ms, session.runtime_ms, !session.ended_at_wall)}</>;
 }
