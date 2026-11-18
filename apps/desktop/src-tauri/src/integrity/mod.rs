@@ -488,9 +488,10 @@ struct Remembered {
     reason: Option<String>,
 }
 
-/// The results of checks of closed sessions, by session. Forgetting them
-/// starts a new generation, so a check that read the history before cannot
-/// bring its result back.
+/// The results of checks of closed sessions, by session. Only the app's own
+/// database is listed with them, so the session alone names one. Forgetting
+/// them starts a new generation, so a check that read the history before
+/// cannot bring its result back.
 #[derive(Default)]
 struct CheckCache {
     generation: u64,

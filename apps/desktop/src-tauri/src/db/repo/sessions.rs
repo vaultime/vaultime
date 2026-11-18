@@ -1275,7 +1275,9 @@ mod tests {
         let db = test_db();
         let game_id = seed_game(&db);
         let session = closed_session(&db, &game_id).id;
+        let generation = integrity::check_generation();
         list_all_sessions(&db).unwrap();
+        let remembered = !unchecked(&db).contains(&session);
         db.with_conn(|conn| {
             conn.execute(
                 "UPDATE sessions SET elapsed_monotonic_ms = elapsed_monotonic_ms + 1 WHERE id = ?1",
@@ -1284,7 +1286,12 @@ mod tests {
             .map_err(map_db)
         })
         .unwrap();
-        assert!(unchecked(&db).contains(&session));
+        let left = unchecked(&db).contains(&session);
+        // Other tests forget remembered checks at any time.
+        if integrity::check_generation() == generation {
+            assert!(remembered, "the check was remembered before the change");
+        }
+        assert!(left);
     }
 
     #[test]
@@ -1294,8 +1301,15 @@ mod tests {
         let gone = seed_game(&db);
         let session = closed_session(&db, &kept).id;
         closed_session(&db, &gone);
+        let generation = integrity::check_generation();
         list_all_sessions(&db).unwrap();
+        let remembered = !unchecked(&db).contains(&session);
+        // Other tests forget remembered checks at any time.
+        if integrity::check_generation() == generation {
+            assert!(remembered);
+        }
         games::delete_game(&db, &gone).unwrap();
+        assert!(integrity::check_generation() > generation);
         assert!(unchecked(&db).contains(&session));
     }
 

@@ -72,6 +72,8 @@ mod tests {
             .unwrap();
         let before = crate::integrity::check_generation();
         assert!(reclaim_space(&db).unwrap() >= VACUUM_MIN_FREE_BYTES);
+        // Other tests forget too, so a VACUUM that forgets nothing fails here
+        // whenever none of them does meanwhile.
         assert!(crate::integrity::check_generation() > before);
         assert_eq!(db.with_conn(free_bytes).unwrap(), 0);
         optimize(&db).unwrap();
