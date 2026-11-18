@@ -51,6 +51,8 @@ export interface CloudSessionContextValue {
     email: string,
     password: string,
     backupPassphrase: string,
+    /** Only for a server that asks for one. */
+    signupCode?: string | null,
   ) => Promise<CloudAuthSession>;
   setBackupPassphrase: (passphrase: string) => Promise<void>;
   forgetBackupPassphrase: () => Promise<void>;

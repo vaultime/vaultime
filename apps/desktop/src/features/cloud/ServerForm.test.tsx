@@ -12,7 +12,7 @@ import { ServerForm } from "./ServerForm";
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 vi.mock("@tauri-apps/plugin-log", () => ({ warn: vi.fn(async () => {}) }));
 
-const OPEN: CloudServerInfo = { address: "https://vaultime.example.com", signups_open: true };
+const OPEN: CloudServerInfo = { address: "https://vaultime.example.com", signups_open: true, signup_code_required: false };
 
 /** The form with a provider that keeps the server it connects to. */
 function renderForm(check: (address: string) => Promise<CloudServerInfo>, saved?: string) {
@@ -60,6 +60,12 @@ describe("ServerForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     expect(screen.getByLabelText("Server address")).toBeTruthy();
+  });
+
+  it("says when new accounts need a sign-up code", async () => {
+    renderForm(async () => ({ ...OPEN, signup_code_required: true }));
+    connectTo("vaultime.example.com");
+    expect(await screen.findByText("It takes new accounts with a sign-up code.")).toBeTruthy();
   });
 
   it("says why it did not take a server", async () => {

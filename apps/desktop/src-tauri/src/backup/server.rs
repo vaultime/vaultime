@@ -22,6 +22,8 @@ pub struct ServerInfo {
     pub address: String,
     /// Whether the server takes new accounts.
     pub signups_open: bool,
+    /// Whether a new account needs the code the operator set.
+    pub signup_code_required: bool,
 }
 
 #[derive(Deserialize)]
@@ -29,6 +31,9 @@ struct Health {
     service: String,
     #[serde(default)]
     signups_open: bool,
+    /// Servers before 0.7.1 send none.
+    #[serde(default)]
+    signup_code_required: bool,
 }
 
 /// What came back for a request of the page.
@@ -69,6 +74,7 @@ pub fn check(address: &str) -> Result<ServerInfo> {
     Ok(ServerInfo {
         address,
         signups_open: health.signups_open,
+        signup_code_required: health.signup_code_required,
     })
 }
 
@@ -195,7 +201,21 @@ mod tests {
         let info = check(&format!("{address}/")).unwrap();
         assert_eq!(info.address, address, "the trailing slash goes");
         assert!(info.signups_open);
+        assert!(
+            !info.signup_code_required,
+            "a server before codes needs none"
+        );
         assert!(served.join().unwrap().starts_with("GET /healthz "));
+    }
+
+    #[test]
+    fn a_server_says_whether_new_accounts_need_a_code() {
+        let (address, _served) = answer_once(
+            "200 OK",
+            "",
+            r#"{"status":"ok","service":"vaultime-api","signups_open":true,"signup_code_required":true}"#,
+        );
+        assert!(check(&address).unwrap().signup_code_required);
     }
 
     #[test]

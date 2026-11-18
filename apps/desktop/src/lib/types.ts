@@ -697,6 +697,8 @@ export interface CloudServerInfo {
   /** The address requests go to, without a trailing slash. */
   address: string;
   signups_open: boolean;
+  /** Whether a new account needs the code the operator set. */
+  signup_code_required: boolean;
 }
 
 /** What came back for a cloud request the core sent. */

@@ -18,6 +18,7 @@ import {
   enteredPasswordProblem,
   newPasswordProblem,
   repeatProblem,
+  signupCodeProblem,
 } from "@/features/cloud/credentials";
 
 const FORM_CLASS = "grid max-w-[520px] gap-4";
@@ -63,13 +64,23 @@ export function SignInForm({ server, onDone }: { server: string; onDone: (messag
   );
 }
 
-export function SignUpForm({ server, onDone }: { server: string; onDone: (message: string) => void }) {
+export function SignUpForm({
+  server,
+  codeRequired,
+  onDone,
+}: {
+  server: string;
+  codeRequired: boolean;
+  onDone: (message: string) => void;
+}) {
   const { signUp } = useCloudSession();
+  const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [passphraseAgain, setPassphraseAgain] = useState("");
   const form = useCheckedForm({
+    "cloud-signup-code": codeRequired ? signupCodeProblem(code) : null,
     "cloud-signup-email": emailProblem(email),
     "cloud-signup-password": newPasswordProblem(password),
     "cloud-signup-backup-passphrase": backupPassphraseProblem(passphrase),
@@ -81,11 +92,27 @@ export function SignUpForm({ server, onDone }: { server: string; onDone: (messag
       className={FORM_CLASS}
       onSubmit={(event) =>
         form.submit(event, async () => {
-          const session = await signUp(server, email, password, passphrase);
+          const session = await signUp(server, email, password, passphrase, codeRequired ? code : null);
           onDone(`Cloud account created for ${session.user.email}.`);
         })
       }
     >
+      {codeRequired && (
+        <Field
+          id="cloud-signup-code"
+          label="Sign-up code"
+          hint="Ask whoever runs the server."
+          problem={form.problem("cloud-signup-code")}
+        >
+          <Input
+            id="cloud-signup-code"
+            autoComplete="off"
+            spellCheck={false}
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+          />
+        </Field>
+      )}
       <Field id="cloud-signup-email" label="Email" problem={form.problem("cloud-signup-email")}>
         <Input id="cloud-signup-email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
       </Field>

@@ -11,6 +11,16 @@ function countChars(value: string) {
 export const PASSWORD_HINT = `At least ${MIN_CLOUD_PASSWORD_CHARS} characters.`;
 export const BACKUP_PASSPHRASE_HINT = `At least ${MIN_BACKUP_PASSPHRASE_CHARS} characters. Vaultime cannot recover it for you.`;
 
+export function signupCodeProblem(code: string): string | null {
+  return code.trim() ? null : "Enter the sign-up code.";
+}
+
+/** The body of a sign-up, with the code only for a server that asks for one. */
+export function signUpRequest(email: string, password: string, signupCode?: string | null) {
+  const code = signupCode?.trim();
+  return { email, password, ...(code ? { signup_code: code } : {}) };
+}
+
 export function emailProblem(email: string): string | null {
   const trimmed = email.trim();
   if (!trimmed) {

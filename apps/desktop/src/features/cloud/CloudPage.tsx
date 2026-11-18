@@ -357,7 +357,7 @@ export function CloudPage() {
                 title="Create an account"
                 description="The backup passphrase encrypts your backups and never leaves this PC, so keep it somewhere safe."
               >
-                <SignUpForm server={server.address} onDone={showDone} />
+                <SignUpForm server={server.address} codeRequired={server.signup_code_required} onDone={showDone} />
               </PageSection>
             )}
           </>

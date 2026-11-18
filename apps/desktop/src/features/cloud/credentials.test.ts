@@ -9,7 +9,24 @@ import {
   firstProblem,
   newPasswordProblem,
   repeatProblem,
+  signUpRequest,
+  signupCodeProblem,
 } from "@/features/cloud/credentials";
+
+describe("sign-up codes", () => {
+  it("asks for a code that is missing and sends one only when given", () => {
+    expect(signupCodeProblem("  ")).toBe("Enter the sign-up code.");
+    expect(signupCodeProblem("river-lantern-42")).toBeNull();
+    expect(signUpRequest("a@b.c", "pw", " river-lantern-42 ")).toEqual({
+      email: "a@b.c",
+      password: "pw",
+      signup_code: "river-lantern-42",
+    });
+    // An older server ignores the field, but a server without codes never gets it.
+    expect(signUpRequest("a@b.c", "pw", null)).toEqual({ email: "a@b.c", password: "pw" });
+    expect(signUpRequest("a@b.c", "pw", "  ")).toEqual({ email: "a@b.c", password: "pw" });
+  });
+});
 
 describe("emailProblem", () => {
   it("asks for an address that is missing or has no @", () => {

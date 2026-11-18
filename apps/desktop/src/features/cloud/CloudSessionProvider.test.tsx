@@ -123,8 +123,8 @@ describe("the daily cloud backup", () => {
 });
 
 describe("the server of the Cloud page", () => {
-  const first: CloudServerInfo = { address: "https://first.example.com", signups_open: true };
-  const second: CloudServerInfo = { address: "https://second.example.com", signups_open: true };
+  const first: CloudServerInfo = { address: "https://first.example.com", signups_open: true, signup_code_required: false };
+  const second: CloudServerInfo = { address: "https://second.example.com", signups_open: true, signup_code_required: false };
 
   /** A signed out PC that connected to `first` before. */
   function startSignedOut() {
@@ -173,6 +173,45 @@ describe("the server of the Cloud page", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByText("first.example.com")).toBeNull();
     expect(save).not.toHaveBeenCalledWith("cloud_server", first.address);
+  });
+
+  it("checks the server again when it refuses a sign-up, so a code it asks for since shows", async () => {
+    vi.mocked(checkCloudServer)
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce({ ...first, signup_code_required: true });
+    vi.mocked(cloudRequest).mockResolvedValue({
+      kind: "answer",
+      status: 403,
+      body: { error: { code: "forbidden", message: "this server needs a sign-up code" } },
+    });
+    function SignUp() {
+      const { signUp } = useCloudSession();
+      const [error, setError] = useState("");
+      return (
+        <>
+          <button onClick={() => signUp(first.address, "friend@example.com", "password", "passphrase").catch(setError)}>
+            Sign up
+          </button>
+          {error && <p>Refused</p>}
+        </>
+      );
+    }
+    vi.mocked(loadCloudSessionSecure).mockResolvedValue(null);
+    render(
+      <SettingsContext.Provider
+        value={{ values: { cloud_backup: "true", cloud_server: first.address }, read: true, save: vi.fn(async () => {}), reload: vi.fn(async () => {}), reloads: 0 }}
+      >
+        <CloudSessionProvider>
+          <ServerForm />
+          <SignUp />
+        </CloudSessionProvider>
+      </SettingsContext.Provider>,
+    );
+    expect(await screen.findByText("It takes new accounts.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
+    expect(await screen.findByText("Refused")).toBeTruthy();
+    expect(await screen.findByText("It takes new accounts with a sign-up code.")).toBeTruthy();
+    expect(checkCloudServer).toHaveBeenCalledTimes(2);
   });
 });
 

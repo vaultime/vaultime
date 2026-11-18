@@ -14,7 +14,8 @@
 // library. ?cloud=1 signs in to a fake cloud
 // account, and ?password=open|wrong|short|mismatch|ok drives the change
 // password dialog on the cloud page. Signed out, ?signin=empty|wrong|ok and
-// ?signup=empty|short|closed|ok fill and send the forms of the cloud page.
+// ?signup=empty|short|closed|code|wrongcode|ok fill and send the forms of the
+// cloud page, code and wrongcode on a server that asks for a sign-up code.
 // ?server=1 remembers the mock server, so a signed out page connects to it,
 // and ?server=missing makes every address fail its check.
 // ?cover=add|adjust opens the cover crop dialog on a game page. ?sidebyside=1
@@ -786,6 +787,9 @@ let ignoredPrograms: IgnoredProgram[] =
     : [];
 
 const MOCK_CLOUD_PASSWORD = "correct horse battery";
+const MOCK_SIGNUP_CODE = "river-lantern-42";
+/** Whether the mock server asks for a sign-up code. */
+const mockCodeRequired = ["code", "wrongcode"].includes(params.get("signup") ?? "");
 /** The server of the mock account. */
 const MOCK_CLOUD_SERVER = "https://vaultime.example.com";
 
@@ -872,6 +876,9 @@ function mockCloud(method: string, path: string, body: Record<string, string>): 
       if (params.get("signup") === "closed") {
         return cloudReply(403, { error: { code: "forbidden", message: "this server takes no new accounts" } });
       }
+      if (mockCodeRequired && body.signup_code !== MOCK_SIGNUP_CODE) {
+        return cloudReply(403, { error: { code: "forbidden", message: "the sign-up code is not right" } });
+      }
       return cloudReply(201, cloudSession());
     case "/v1/auth/password":
       if (body.current_password !== MOCK_CLOUD_PASSWORD) {
@@ -943,6 +950,9 @@ if (signUpStep) {
   setTimeout(() => {
     document.getElementById("cloud-signup-email")?.scrollIntoView();
     if (signUpStep !== "empty") {
+      if (mockCodeRequired) {
+        typeInto("cloud-signup-code", signUpStep === "code" ? MOCK_SIGNUP_CODE : "guess-1234");
+      }
       typeInto("cloud-signup-email", "player@example.com");
       typeInto("cloud-signup-password", signUpStep === "short" ? "short" : MOCK_CLOUD_PASSWORD);
       typeInto("cloud-signup-backup-passphrase", "a long backup passphrase");
@@ -1897,7 +1907,11 @@ mockIPC((cmd, payload) => {
     case "check_cloud_server": {
       if (params.get("server") === "missing") throw { kind: "cloud", message: "no Vaultime server answers at that address." };
       const typed = String(args.address).trim().replace(/\/+$/, "");
-      return { address: typed.includes("://") ? typed : `https://${typed}`, signups_open: params.get("signup") !== "closed" };
+      return {
+        address: typed.includes("://") ? typed : `https://${typed}`,
+        signups_open: params.get("signup") !== "closed",
+        signup_code_required: mockCodeRequired,
+      };
     }
     case "cloud_request":
       return params.get("offline") === "1"

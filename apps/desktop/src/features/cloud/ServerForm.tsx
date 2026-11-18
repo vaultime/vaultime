@@ -27,7 +27,13 @@ export function ServerForm() {
     return (
       <PageRow
         label="Server"
-        hint={server.signups_open ? "It takes new accounts." : "It takes no new accounts. Sign in with one you have there."}
+        hint={
+          !server.signups_open
+            ? "It takes no new accounts. Sign in with one you have there."
+            : server.signup_code_required
+              ? "It takes new accounts with a sign-up code."
+              : "It takes new accounts."
+        }
       >
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm">{formatServerAddress(server.address)}</span>

@@ -53,6 +53,7 @@ import { createTokenRefresher } from "@/lib/token-refresh";
 import { describeError, logFailure } from "@/lib/utils";
 import { useSettings } from "@/features/settings/settings-context";
 import { CloudSessionContext, type CloudSessionContextValue } from "./cloud-context";
+import { signUpRequest } from "./credentials";
 import {
   backupsForKeyCheck,
   clearPersistedSessionStorage,
@@ -331,8 +332,17 @@ export function CloudSessionProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     backupPassphrase: string,
+    signupCode?: string | null,
   ) {
-    const next = await sessionFrom(server, "/v1/auth/signup", { email, password });
+    const next = await sessionFrom(server, "/v1/auth/signup", signUpRequest(email, password, signupCode)).catch(
+      async (error: unknown) => {
+        // A server that started asking for a code since its check gets the field shown now.
+        if (error instanceof CloudApiError && error.status === 403) {
+          await connectServer(server).catch(logFailure("checking the server again"));
+        }
+        throw error;
+      },
+    );
     await persistCloudSession(next);
     await persistBackupPassphrase(next, backupPassphrase, []);
     setBackupKeyReady(true);
