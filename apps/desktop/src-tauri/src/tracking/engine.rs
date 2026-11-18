@@ -2384,7 +2384,11 @@ mod tests {
     #[test]
     fn a_folder_counts_only_for_launchers_with_folders_of_their_own_and_below_a_drive() {
         let db = Database::open_in_memory().unwrap();
-        let folder = std::env::temp_dir().to_string_lossy().into_owned();
+        // A folder of its own, as the temp folder itself is a mount point on
+        // systems that keep it in memory.
+        let made = std::env::temp_dir().join(format!("vaultime-folder-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&made).unwrap();
+        let folder = made.to_string_lossy().into_owned();
         let drive = if cfg!(windows) { r"C:\" } else { "/" };
         let game = |launcher: Option<&str>, program: Option<&str>, folder: &str| {
             games::create_game(
@@ -2418,5 +2422,6 @@ mod tests {
             ..theirs
         };
         assert_eq!(folder_match(&ours), FolderMatch::Counts);
+        std::fs::remove_dir_all(&made).unwrap();
     }
 }
