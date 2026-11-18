@@ -183,6 +183,9 @@ impl Library {
     /// The library as of now: `kept` while the database has not changed
     /// since it was read, else read again.
     fn current(db: &Database, kept: Option<Self>) -> crate::error::Result<Self> {
+        // While the window is closed only the tracker looks for the writes of
+        // a database tool.
+        db.notice_outside_writes()?;
         // Read first, so a change that lands meanwhile moves it past this one.
         let revision = db.revision();
         if let Some(kept) = kept.filter(|kept| kept.revision == revision) {
@@ -1345,6 +1348,27 @@ mod tests {
         settings::set_setting(&db, BACKGROUND_ACTIVE_SETTING, "true").unwrap();
         let library = Library::current(&db, Some(library)).unwrap();
         assert!(library.settings.treat_background_as_active);
+    }
+
+    #[test]
+    fn the_tracker_reads_what_a_database_tool_wrote() {
+        let folder =
+            std::env::temp_dir().join(format!("vaultime-tracker-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let path = folder.join("vaultime.db");
+        let db = Database::open(&path).unwrap();
+        let library = Library::current(&db, None).unwrap();
+        let tool = rusqlite::Connection::open(&path).unwrap();
+        tool.execute(
+            "UPDATE settings SET value = '60' WHERE key = ?1",
+            [IDLE_THRESHOLD_SETTING],
+        )
+        .unwrap();
+        drop(tool);
+        let library = Library::current(&db, Some(library)).unwrap();
+        assert_eq!(library.settings.idle_threshold, Duration::from_secs(60));
+        drop(db);
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 
     #[test]

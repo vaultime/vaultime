@@ -6,7 +6,7 @@
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use log::warn;
 use rusqlite::{Connection, OpenFlags};
@@ -30,6 +30,9 @@ pub struct Database {
     /// Moves with every write the library loads, so the page reloads only
     /// when it did.
     revision: AtomicU64,
+    /// The data version `notice_outside_writes` saw last, `i64::MIN` before
+    /// the first look.
+    data_version: AtomicI64,
 }
 
 impl Database {
@@ -70,6 +73,7 @@ impl Database {
             conn: Mutex::new(conn),
             path: Some(path.to_path_buf()),
             revision: AtomicU64::new(0),
+            data_version: AtomicI64::new(i64::MIN),
         };
 
         migrate::run_migrations(&db)?;
@@ -90,6 +94,7 @@ impl Database {
             conn: Mutex::new(conn),
             path: None,
             revision: AtomicU64::new(0),
+            data_version: AtomicI64::new(i64::MIN),
         };
 
         migrate::run_migrations(&db)?;
@@ -151,6 +156,24 @@ impl Database {
     /// setting change.
     pub fn revision(&self) -> u64 {
         self.revision.load(Ordering::Acquire)
+    }
+
+    /// Moves the revision when another program wrote to the database since
+    /// the last look, like a database tool, which the app's own writes do not
+    /// count. `PRAGMA data_version` moves only with commits of other
+    /// connections.
+    pub fn notice_outside_writes(&self) -> Result<()> {
+        let version: i64 = self.with_conn(|conn| {
+            conn.query_row("PRAGMA data_version", [], |row| row.get(0))
+                .map_err(|error| {
+                    VaultimeError::Database(format!("failed to read the data version: {error}"))
+                })
+        })?;
+        let seen = self.data_version.swap(version, Ordering::AcqRel);
+        if seen != i64::MIN && seen != version {
+            self.bump_revision();
+        }
+        Ok(())
     }
 
     /// Moves the revision for a change in `live_writes` that the library
@@ -237,6 +260,35 @@ mod tests {
         }));
         write();
         assert_eq!(db.revision(), start + 3);
+    }
+
+    #[test]
+    fn a_write_of_another_program_moves_the_revision_at_the_next_look() {
+        let folder =
+            std::env::temp_dir().join(format!("vaultime-outside-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let path = folder.join("vaultime.db");
+        let db = Database::open(&path).unwrap();
+        db.notice_outside_writes().unwrap();
+        let start = db.revision();
+        db.notice_outside_writes().unwrap();
+        crate::db::repo::settings::put_setting(&db.conn.lock().unwrap(), "own", "x").unwrap();
+        db.notice_outside_writes().unwrap();
+        assert_eq!(db.revision(), start);
+
+        let tool = Connection::open(&path).unwrap();
+        tool.execute(
+            "INSERT INTO settings (key, value) VALUES ('edited', 'x')",
+            [],
+        )
+        .unwrap();
+        drop(tool);
+        db.notice_outside_writes().unwrap();
+        assert_eq!(db.revision(), start + 1);
+        db.notice_outside_writes().unwrap();
+        assert_eq!(db.revision(), start + 1);
+        drop(db);
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 
     #[test]

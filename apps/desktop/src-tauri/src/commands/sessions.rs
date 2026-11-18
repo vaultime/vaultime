@@ -90,6 +90,7 @@ pub fn get_active_sessions(
     app_context: State<'_, AppContext>,
 ) -> Result<ActiveSessions, VaultimeError> {
     // Read first, so a change that lands meanwhile moves it again.
+    db.notice_outside_writes()?;
     let revision = db.revision();
     // One copy of the counters, so the times, the sessions and today's play
     // all come from the same ticks.
