@@ -363,7 +363,7 @@ pub const THUMBNAIL_WIDTH_PX: u32 = 360;
 pub const THUMBNAIL_HEIGHT_PX: u32 = 480;
 /// Version of how the thumbnail and the colors of a cover are made. Raising
 /// it makes them again for every cover.
-pub const ART_RULES_VERSION: u32 = 1;
+pub const ART_RULES_VERSION: u32 = 2;
 /// How long the window may keep an image of the art scheme. A cached image
 /// never changes under its name, so a year.
 pub const ART_CACHE_MAX_AGE_SECS: u64 = 365 * 24 * 60 * 60;

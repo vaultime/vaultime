@@ -189,7 +189,8 @@ fn thumbnail_of(cached: &Cached, image: &DynamicImage) -> Option<DynamicImage> {
     Some(image.resize_exact(side(to_width), side(to_height), FilterType::Lanczos3))
 }
 
-/// Writes the thumbnail, then the colors, which vouch for it.
+/// Writes the thumbnail, then the colors, which vouch for it. Without one a
+/// thumbnail of older rules goes first, as the colors would vouch for it.
 fn keep(cached: &Cached, thumbnail: Option<&DynamicImage>, tint: &ArtTint) -> Result<()> {
     if let Some(thumbnail) = thumbnail {
         let mut bytes = Vec::new();
@@ -197,6 +198,12 @@ fn keep(cached: &Cached, thumbnail: Option<&DynamicImage>, tint: &ArtTint) -> Re
             .encode_image(&thumbnail.to_rgb8())
             .map_err(|error| VaultimeError::Asset(format!("thumbnail not made: {error}")))?;
         write_atomically(&cached.derived(THUMBNAIL_FILE), &bytes)?;
+    } else if let Err(error) = fs::remove_file(cached.derived(THUMBNAIL_FILE))
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(VaultimeError::Asset(format!(
+            "thumbnail of older rules not removed: {error}"
+        )));
     }
     let file = TintFile {
         rules: ART_RULES_VERSION,
@@ -404,6 +411,27 @@ mod tests {
             let small = image::open(&derived_files(&cover)[0]).unwrap();
             assert_eq!((small.width(), small.height()), thumbnail);
         }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_thumbnail_of_older_rules_goes_when_the_new_ones_make_none() {
+        let dir = cache_dir();
+        // Too low to cover a tile, which older rules made a thumbnail of.
+        let cover = write_cover(&dir, 1000, 400, "jpg");
+        let [thumbnail, colors] = &derived_files(&cover)[..] else {
+            panic!("a thumbnail and colors");
+        };
+        fs::write(thumbnail, b"made by older rules").unwrap();
+        fs::write(
+            colors,
+            br#"{"rules":1,"tint":{"colors":[],"strength":0,"lightness":null}}"#,
+        )
+        .unwrap();
+        let art = cover_art(&dir, &cover.to_string_lossy()).unwrap();
+        assert_eq!(art.thumb_url, art.image_url);
+        assert!(!thumbnail.exists());
+        assert_eq!(image_art(&dir, &cover.to_string_lossy()), Some(art));
         fs::remove_dir_all(dir).unwrap();
     }
 
