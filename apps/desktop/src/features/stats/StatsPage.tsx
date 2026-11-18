@@ -22,7 +22,7 @@ import {
   SESSION_SHORT_MAX_MS,
   STATS_IDLE_GAMES,
   STATS_IDLE_MIN_RUNTIME_MS,
-  LIVE_TOTALS_REFRESH_MS,
+  STATS_REFRESH_MS,
   STATS_IDLE_MIN_SHARE,
   STATS_TOP_GAMES,
 } from "@/lib/constants";
@@ -118,7 +118,7 @@ export function StatsPage() {
   const year = now.getFullYear() + offset;
   const key = view === "all" ? "all" : String(year);
   // Reads again while a game runs and the window is seen, and when it shows again.
-  const refreshed = useRefreshWhile(playing, LIVE_TOTALS_REFRESH_MS);
+  const refreshed = useRefreshWhile(playing, STATS_REFRESH_MS);
 
   // Read again whenever a session starts or ends.
   useEffect(() => {

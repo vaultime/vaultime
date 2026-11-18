@@ -193,6 +193,8 @@ export const CHART_MIN_BAR_PERCENT = 3;
 
 /** How often charts read the totals again while a game runs. */
 export const LIVE_TOTALS_REFRESH_MS = MINUTE_MS;
+/** How often Stats reads its year again while a game runs, as a year moves little in a minute. */
+export const STATS_REFRESH_MS = 5 * MINUTE_MS;
 
 /** Games a chart's hover card names before it sums up the rest. */
 export const PLAY_CARD_GAMES = 5;
