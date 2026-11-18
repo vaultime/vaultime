@@ -1059,13 +1059,17 @@ fn validate_manifest_files(
     Ok(artwork)
 }
 
-/// `asset-cache/<game id>/<file>`, the only shape cached artwork has.
+/// `asset-cache/<game id>/<file>`, the only shape cached artwork has. A
+/// thumbnail or colors made from an image never count, even in a backup that
+/// lists them, as the app makes them again from the image.
 fn is_artwork_path(relative_path: &str) -> bool {
     let mut parts = relative_path.split('/');
     matches!(
         (parts.next(), parts.next(), parts.next(), parts.next()),
         (Some(ASSET_CACHE_DIR), Some(game_id), Some(name), None)
-            if is_plain_name(game_id) && is_plain_name(name)
+            if is_plain_name(game_id)
+                && is_plain_name(name)
+                && !crate::assets::art::is_derived(Path::new(name))
     )
 }
 
@@ -2030,5 +2034,7 @@ mod tests {
         assert!(!is_artwork_path("asset-cache/cover.png"));
         assert!(!is_artwork_path("asset-cache/a/b/cover.png"));
         assert!(!is_artwork_path("elsewhere/game/cover.png"));
+        assert!(!is_artwork_path("asset-cache/game/cover.thumb.jpg"));
+        assert!(!is_artwork_path("asset-cache/game/cover.tint.json"));
     }
 }
