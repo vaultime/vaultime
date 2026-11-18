@@ -194,6 +194,11 @@ pub const CHAIN_CHECKS_PER_THREAD_MIN: usize = 32;
 /// Longest name a PC can have. Same as `DEVICE_NAME_MAX_CHARS` in
 /// `lib/constants.ts`.
 pub const DEVICE_NAME_MAX_CHARS: usize = 40;
+/// Bytes a PC name is padded to with spaces before it is sealed, the most
+/// its longest form takes in UTF-8, so the server cannot tell names apart by
+/// their length. Sealed it comes to 400 hex characters, under the server's
+/// `MAX_SEALED_NAME_CHARS`.
+pub const SEALED_NAME_BYTES: usize = DEVICE_NAME_MAX_CHARS * 4;
 
 // Window
 

@@ -124,7 +124,7 @@ fn cloud_pcs(
             CloudPc {
                 device_id: device.to_owned(),
                 name: metadata_text(backup, PC_NAME_FIELD)
-                    .and_then(|sealed| crypto::open_text(sealed, key))
+                    .and_then(|sealed| crypto::open_pc_name(sealed, key))
                     .or_else(|| here.and_then(|device| device.name.clone())),
                 backup_id: backup.id.clone(),
                 backup_created_at: backup.backup_created_at.clone(),
@@ -505,7 +505,7 @@ mod tests {
             metadata[SOURCE_PC_FIELD] = json!(pc);
         }
         if let Some(name) = name {
-            metadata[PC_NAME_FIELD] = json!(crypto::seal_text(name, &KEY).unwrap());
+            metadata[PC_NAME_FIELD] = json!(crypto::seal_pc_name(name, &KEY).unwrap());
         }
         RemoteBackupRecord {
             id: id.into(),

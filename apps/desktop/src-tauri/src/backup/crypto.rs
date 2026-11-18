@@ -19,7 +19,7 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use crate::constants::{
-    BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, HASH_BUFFER_BYTES, KEY_CHECK_BYTES,
+    BACKUP_KEY_BYTES, ENCRYPTION_CHUNK_BYTES, HASH_BUFFER_BYTES, KEY_CHECK_BYTES, SEALED_NAME_BYTES,
 };
 use crate::error::{Result, VaultimeError};
 
@@ -179,6 +179,21 @@ pub fn seal_text(text: &str, key: &[u8; BACKUP_KEY_BYTES]) -> Result<String> {
 }
 
 /// The text `seal_text` sealed. `None` with another key or when it was changed.
+/// Seals a PC name padded with spaces to `SEALED_NAME_BYTES`, so the server
+/// cannot tell names apart by their length.
+pub fn seal_pc_name(name: &str, key: &[u8; BACKUP_KEY_BYTES]) -> Result<String> {
+    let padding = " ".repeat(SEALED_NAME_BYTES.saturating_sub(name.len()));
+    seal_text(&format!("{name}{padding}"), key)
+}
+
+/// A PC name `seal_pc_name` sealed, or one sealed without padding before,
+/// cleaned like a rename. None where `key` does not open it or nothing of it
+/// is left.
+pub fn open_pc_name(sealed: &str, key: &[u8; BACKUP_KEY_BYTES]) -> Option<String> {
+    let name = crate::db::repo::devices::clean_name(&open_text(sealed, key)?);
+    (!name.is_empty()).then_some(name)
+}
+
 pub fn open_text(sealed: &str, key: &[u8; BACKUP_KEY_BYTES]) -> Option<String> {
     let bytes = crate::hex::decode(sealed)?;
     let (nonce, ciphertext) = bytes.split_at_checked(V2_NONCE_BYTES)?;
@@ -460,5 +475,31 @@ mod tests {
         let other_key = ArtworkNamer::new(&[8_u8; BACKUP_KEY_BYTES]).unwrap();
         assert_ne!(id, other_key.id(&dir.join("a")).unwrap());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn sealed_pc_names_are_all_as_long_and_open_trimmed() {
+        let key = [7_u8; BACKUP_KEY_BYTES];
+        let longest = "\u{1F3AE}".repeat(crate::constants::DEVICE_NAME_MAX_CHARS);
+        let sealed: Vec<String> = ["PC", "Living room", &longest]
+            .iter()
+            .map(|name| seal_pc_name(name, &key).unwrap())
+            .collect();
+        assert!(sealed.iter().all(|text| text.len() == sealed[0].len()));
+        assert!(sealed[0].len() <= 512, "under the server's cap");
+        let opened: Vec<Option<String>> =
+            sealed.iter().map(|text| open_pc_name(text, &key)).collect();
+        assert_eq!(
+            opened,
+            [Some("PC".into()), Some("Living room".into()), Some(longest)]
+        );
+        // Names sealed before padding still open, cleaned.
+        let older = seal_text(" Deck\u{7}", &key).unwrap();
+        assert_eq!(open_pc_name(&older, &key).as_deref(), Some("Deck"));
+        assert_eq!(
+            open_pc_name(&seal_text("\u{1b}", &key).unwrap(), &key),
+            None
+        );
+        assert_eq!(open_pc_name(&sealed[0], &[8_u8; BACKUP_KEY_BYTES]), None);
     }
 }

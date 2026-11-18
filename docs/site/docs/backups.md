@@ -81,7 +81,7 @@ On the Cloud page, type the address of the server under **Your server** and pick
 - **Back up every day** uploads a backup of this PC once a day while you are signed in, whatever your other PCs upload. **Back up now** uploads one right away.
 - Artwork is stored once per account, so unchanged covers are not uploaded again.
 - **Restore** on a backup works like a local restore, after you confirm.
-- **Registered PCs** lists every PC that signed in with your account, by the name you gave it. A PC that has no backup passphrase yet, or runs a version before 0.7, shows as Vaultime Windows Desktop or Vaultime Linux Desktop. **Remove** frees the place of a PC you no longer use, and its backups stay. A PC still in use registers again when it next signs in.
+- **Registered PCs** lists every PC that signed in with your account, by the name you gave it. A PC whose name this PC cannot open shows as Vaultime Windows Desktop or Vaultime Linux Desktop: one without a backup passphrase or with another one, one on a version or a server before 0.7, and every PC while this one has no passphrase yet. **Remove** frees the place of a PC you no longer use, and its backups stay. A PC still in use registers again when it next signs in.
 
 ### Space and rotation
 
@@ -89,4 +89,4 @@ Every account on a server gets the same space, by default 1 GiB for backups and 
 
 ### What the server sees
 
-Your email address, the platform and app version of each PC you back up from, and for each backup when it was made, how large it is and how many games, sessions and images it holds. It also sees the encrypted size of each image, and the public keys each PC signs its [ledger](ledger.md) with, so a merge from the cloud can check them. The name you gave a PC goes with its registration and its backups, encrypted with your passphrase. The server cannot read your games, sessions, artwork or PC names. The [privacy policy](../../legal/privacy-policy.md) has the details.
+Your email address, the platform and app version of each PC you back up from and when it registered and last signed in, and for each backup when it was made, how large it is and how many games, sessions and images it holds. It also sees the encrypted size of each image, and the public keys each PC signs its [ledger](ledger.md) with, so a merge from the cloud can check them. The name you gave a PC goes with its registration and its backups, encrypted with your passphrase. The server cannot read your games, sessions, artwork or PC names. The [privacy policy](../../legal/privacy-policy.md) has the details.

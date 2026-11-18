@@ -84,7 +84,7 @@ pub async fn seal_pc_name(
         let this_pc = crate::integrity::ledger::this_device()
             .unwrap_or_else(|_| app.state::<AppContext>().device_id.clone());
         let name = devices::get_device(&app.state::<Arc<Database>>(), &this_pc)?.name;
-        name.map(|name| backup::crypto::seal_text(&name, &key))
+        name.map(|name| backup::crypto::seal_pc_name(&name, &key))
             .transpose()
     })
     .await
@@ -110,10 +110,7 @@ fn open_names(
 ) -> Vec<Option<String>> {
     sealed
         .into_iter()
-        .map(|text| {
-            let name = backup::crypto::open_text(&text?, key?)?;
-            Some(devices::clean_name(&name)).filter(|name| !name.is_empty())
-        })
+        .map(|text| backup::crypto::open_pc_name(&text?, key?))
         .collect()
 }
 

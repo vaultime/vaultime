@@ -232,7 +232,7 @@ pub(crate) fn upload_with_key(
         let pc_name = devices::get_device(db, &payload_summary.source_device_id)
             .ok()
             .and_then(|device| device.name)
-            .map(|name| crypto::seal_text(&name, backup_key))
+            .map(|name| crypto::seal_pc_name(&name, backup_key))
             .transpose()?;
         let request = UploadRequest {
             client_device_id,

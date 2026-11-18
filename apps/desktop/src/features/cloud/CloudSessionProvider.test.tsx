@@ -260,6 +260,9 @@ describe("the names of registered PCs", () => {
   }
 
   it("registers this PC's name sealed and shows the names this PC's key opens", async () => {
+    // Earlier tests register too, so only the calls of this one count.
+    vi.mocked(cloudRequest).mockClear();
+    vi.mocked(sealPcName).mockClear();
     vi.mocked(loadCloudSessionSecure).mockResolvedValue(SESSION);
     const thisPc = { id: "desk", client_device_id: "client", device_name: "Vaultime Windows Desktop", platform: "windows", app_version: "0.7.0" };
     const others = { ...thisPc, id: "deck", device_name: "Vaultime Linux Desktop", platform: "linux", sealed_name: "0ther" };
