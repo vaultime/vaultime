@@ -47,8 +47,8 @@ impl RunningProcess {
 /// each id, read without opening the process, which any process allows. An
 /// id that still names the program it named before is the same process, so
 /// only new processes are opened, once, for the path Windows shows for their
-/// program. Elsewhere sysinfo reads the list, with each path and command line
-/// read once per process.
+/// program. Elsewhere sysinfo reads the list and each path, with each name
+/// and command line read again only when the path changed.
 pub struct ProcessList {
     /// Measures the CPU usage of game processes, where it stands in for
     /// input, and lists the processes outside Windows.
@@ -58,6 +58,20 @@ pub struct ProcessList {
     /// Takes the paths read, kept between ticks.
     #[cfg(windows)]
     buffer: Vec<u16>,
+    /// What each process ran at the last tick.
+    #[cfg(not(windows))]
+    programs: HashMap<u32, Program>,
+}
+
+/// What a process runs, as a tick saw it.
+#[cfg(not(windows))]
+struct Program {
+    /// When the process started, so an id taken over by a new process with
+    /// the same program, as every Wine process has, is not taken for it.
+    started: u64,
+    name: String,
+    exe_path: Option<String>,
+    command: Option<String>,
 }
 
 /// A process seen in an earlier tick.
@@ -80,6 +94,8 @@ impl Default for ProcessList {
             known: HashMap::new(),
             #[cfg(windows)]
             buffer: Vec::new(),
+            #[cfg(not(windows))]
+            programs: HashMap::new(),
         }
     }
 }
@@ -109,27 +125,64 @@ impl ProcessList {
     /// The processes running now. Empty only when the list failed to load.
     #[cfg(not(windows))]
     pub fn refresh(&mut self) -> Vec<RunningProcess> {
-        // Paths and command lines do not change while a process runs, so they
-        // are read once per process. CPU usage is left out, reading it for
-        // every process costs twice as much as the whole list.
+        // A launcher script that ends in `exec` hands its id and start time
+        // to the game, which sysinfo takes for the same process, so the path
+        // is read at every tick. sysinfo reads the name and command line only
+        // for a new process. CPU usage is left out, reading it for every
+        // process costs twice as much as the whole list.
         self.system.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
             ProcessRefreshKind::nothing()
-                .with_exe(UpdateKind::OnlyIfNotSet)
+                .with_exe(UpdateKind::Always)
                 .with_cmd(UpdateKind::OnlyIfNotSet),
         );
-        self.system
-            .processes()
-            .values()
-            .map(|p| {
-                RunningProcess::new(
-                    p.pid().as_u32(),
-                    p.name().to_string_lossy().into_owned(),
-                    p.exe().map(|e| e.to_string_lossy().into_owned()),
-                    p.cmd()
+        let mut before = std::mem::take(&mut self.programs);
+        for process in self.system.processes().values() {
+            let pid = process.pid().as_u32();
+            let exe_path = process.exe().map(|exe| exe.to_string_lossy().into_owned());
+            let started = process.start_time();
+            let program = match before.remove(&pid) {
+                Some(program) if program.started == started && program.exe_path == exe_path => {
+                    program
+                }
+                // The same process runs another program now, or the id names
+                // a new process. Read from `/proc`, as a start time that moved
+                // with the clock leaves sysinfo's own copy as it was.
+                Some(_) => Program {
+                    started,
+                    name: proc_file(pid, "comm").map_or_else(
+                        || process.name().to_string_lossy().into_owned(),
+                        |comm| comm.trim_end().to_owned(),
+                    ),
+                    exe_path,
+                    command: proc_file(pid, "cmdline").and_then(|line| {
+                        line.split('\0')
+                            .next()
+                            .filter(|arg| !arg.is_empty())
+                            .map(str::to_owned)
+                    }),
+                },
+                None => Program {
+                    started,
+                    name: process.name().to_string_lossy().into_owned(),
+                    exe_path,
+                    command: process
+                        .cmd()
                         .first()
                         .map(|arg| arg.to_string_lossy().into_owned()),
+                },
+            };
+            self.programs.insert(pid, program);
+        }
+        self.programs
+            .iter()
+            .map(|(&pid, program)| {
+                RunningProcess::new(
+                    pid,
+                    program.name.clone(),
+                    program.exe_path.clone(),
+                    program.command.clone(),
                 )
             })
             .collect()
@@ -148,6 +201,13 @@ impl ProcessList {
             .filter_map(|pid| Some((pid.as_u32(), self.system.process(*pid)?.cpu_usage())))
             .collect()
     }
+}
+
+/// A file of a process in `/proc`, none once the process ended.
+#[cfg(not(windows))]
+fn proc_file(pid: u32, file: &str) -> Option<String> {
+    let bytes = std::fs::read(format!("/proc/{pid}/{file}")).ok()?;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// The processes of `ids`, those of `known` kept where their id still names
@@ -1207,6 +1267,50 @@ mod tests {
             );
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_program_run_through_exec_is_listed_as_itself() {
+        use std::io::Write;
+        let mut list = ProcessList::default();
+        // A launcher script that waits for a line, then runs the game in its
+        // own process.
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "read line; exec sleep 30"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let mut listed = || {
+            list.refresh()
+                .into_iter()
+                .find(|process| process.pid == pid)
+                .expect("the process is listed")
+        };
+        let runs_sleep = |process: &RunningProcess| {
+            process
+                .exe_path
+                .as_deref()
+                .is_some_and(|exe| exe.ends_with("/sleep"))
+        };
+        let script = listed();
+        assert!(!runs_sleep(&script), "{script:?}");
+
+        child.stdin.take().unwrap().write_all(b"go\n").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let game = loop {
+            let game = listed();
+            if runs_sleep(&game) || std::time::Instant::now() > deadline {
+                break game;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        assert!(runs_sleep(&game), "{game:?}");
+        assert_eq!(game.name, "sleep");
+        assert_eq!(game.command.as_deref(), Some("sleep"));
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 
     #[test]
