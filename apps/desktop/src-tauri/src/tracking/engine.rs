@@ -153,24 +153,59 @@ struct TrackingSettings {
 }
 
 impl TrackingSettings {
-    fn load(db: &Database) -> Self {
-        let idle_threshold_seconds = settings::get_setting(db, IDLE_THRESHOLD_SETTING)
-            .ok()
-            .flatten()
+    fn load(db: &Database) -> crate::error::Result<Self> {
+        let idle_threshold_seconds = settings::get_setting(db, IDLE_THRESHOLD_SETTING)?
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(DEFAULT_IDLE_THRESHOLD_SECS)
             .max(MIN_IDLE_THRESHOLD_SECS);
 
-        let treat_background_as_active = settings::get_setting(db, BACKGROUND_ACTIVE_SETTING)
-            .ok()
-            .flatten()
+        let treat_background_as_active = settings::get_setting(db, BACKGROUND_ACTIVE_SETTING)?
             .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"));
 
-        Self {
+        Ok(Self {
             idle_threshold: Duration::from_secs(idle_threshold_seconds),
             treat_background_as_active,
-        }
+        })
     }
+}
+
+/// What a tick reads of the library, kept until the database changes.
+struct Library {
+    /// The revision of the database it was read at.
+    revision: u64,
+    settings: TrackingSettings,
+    games: Vec<Game>,
+    /// Programs the player said are no game.
+    ignored: Vec<String>,
+}
+
+impl Library {
+    /// The library as of now: `kept` while the database has not changed
+    /// since it was read, else read again.
+    fn current(db: &Database, kept: Option<Self>) -> crate::error::Result<Self> {
+        // Read first, so a change that lands meanwhile moves it past this one.
+        let revision = db.revision();
+        if let Some(kept) = kept.filter(|kept| kept.revision == revision) {
+            return Ok(kept);
+        }
+        // A read that fails fails the tick, as defaults or a list kept empty
+        // until the next change would count time by other rules than the
+        // player chose.
+        Ok(Self {
+            revision,
+            settings: TrackingSettings::load(db)?,
+            games: games::list_local_games(db)?,
+            ignored: ignored::paths(db)?,
+        })
+    }
+}
+
+/// What the tracker keeps between ticks, so a tick reads only what changed.
+#[derive(Default)]
+struct Kept {
+    processes: ProcessList,
+    folders: FolderCache,
+    library: Option<Library>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -321,8 +356,7 @@ fn poll_loop(
     tick_lock: &Mutex<()>,
 ) {
     let mut active: HashMap<String, ActiveSession> = HashMap::new();
-    let mut processes = ProcessList::default();
-    let mut folders = FolderCache::default();
+    let mut kept = Kept::default();
     let mut seen = SeenPrograms::default();
 
     run_guarded("closing the sessions left open", || {
@@ -336,20 +370,11 @@ fn poll_loop(
             // Checked again because `pause` may have won the race for the lock.
             if !paused.load(Ordering::SeqCst)
                 && run_guarded("tracking poll", || {
-                    poll_tick(
-                        db,
-                        device_id,
-                        live,
-                        &mut processes,
-                        &mut folders,
-                        &mut seen,
-                        &mut active,
-                    )
+                    poll_tick(db, device_id, live, &mut kept, &mut seen, &mut active)
                 }) == Guarded::Panicked
             {
                 // The process list may be half refreshed, so it starts over.
-                processes = ProcessList::default();
-                folders = FolderCache::default();
+                kept = Kept::default();
             }
         }
 
@@ -400,17 +425,12 @@ fn poll_tick(
     db: &Database,
     device_id: &str,
     live: &LiveSessions,
-    list: &mut ProcessList,
-    folders: &mut FolderCache,
+    kept: &mut Kept,
     seen: &mut SeenPrograms,
     active: &mut HashMap<String, ActiveSession>,
 ) -> crate::error::Result<()> {
-    let tracking_settings = TrackingSettings::load(db);
-    let tracked_games = games::list_local_games(db)?;
-    // Programs the player said are no game never count, whatever matches
-    // them. They are recognized the way games are, through links and Wine.
-    let ignored = ignored::paths(db).unwrap_or_default();
-    let processes = list.refresh();
+    let library = Library::current(db, kept.library.take())?;
+    let processes = kept.processes.refresh();
     // Vaultime itself always runs, so an empty list failed to load. Ending
     // every session on it would split them all.
     if processes.is_empty() {
@@ -418,20 +438,22 @@ fn poll_tick(
             "the list of running processes came back empty".into(),
         ));
     }
-    let ignored = ExecutableIndex::new(ignored.iter().map(String::as_str));
+    // Programs the player said are no game never count, whatever matches
+    // them. They are recognized the way games are, through links and Wine.
+    let ignored = ExecutableIndex::new(library.ignored.iter().map(String::as_str));
     let processes: Vec<RunningProcess> = processes
         .into_iter()
         .filter(|process| !ignored.any(process))
         .collect();
     let activity_snapshot = capture_activity_snapshot();
 
-    folders.expire();
+    kept.folders.expire();
     let observed_games = observe_games(
-        &tracked_games,
+        &library.games,
         &processes,
         &activity_snapshot,
-        list,
-        folders,
+        &mut kept.processes,
+        &mut kept.folders,
     );
 
     let game_in_front = observed_games
@@ -442,7 +464,7 @@ fn poll_tick(
         &processes,
         &activity_snapshot,
         game_in_front,
-        &tracked_games,
+        &library.games,
     );
 
     start_sessions(db, device_id, live, active, &observed_games);
@@ -456,7 +478,7 @@ fn poll_tick(
         live,
         active,
         &observed_games,
-        &tracking_settings,
+        &library.settings,
         &activity_snapshot,
         &clocks,
     );
@@ -464,7 +486,7 @@ fn poll_tick(
 
     debug!(
         "poll tick: {} tracked, {} running, {} active sessions",
-        tracked_games.len(),
+        library.games.len(),
         observed_games
             .values()
             .filter(|state| state.is_running)
@@ -472,6 +494,7 @@ fn poll_tick(
         active.len(),
     );
 
+    kept.library = Some(library);
     Ok(())
 }
 
@@ -1270,6 +1293,54 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn a_game_added_while_tracking_counts_from_the_next_tick() {
+        let db = Database::open_in_memory().unwrap();
+        devices::ensure_device(&db, "device", "test", "0.1.0").unwrap();
+        let live = LiveSessions::default();
+        let mut kept = Kept::default();
+        let mut seen = SeenPrograms::default();
+        let mut active = HashMap::new();
+        poll_tick(&db, "device", &live, &mut kept, &mut seen, &mut active).unwrap();
+        assert!(active.is_empty());
+
+        // This test's own program stands in for a game.
+        let exe = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        games::create_game(
+            &db,
+            &CreateGame {
+                title: "This test".into(),
+                executable_path: Some(exe),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        poll_tick(&db, "device", &live, &mut kept, &mut seen, &mut active).unwrap();
+        assert_eq!(active.len(), 1);
+        // The start moved the library, the ticks of the running session do not.
+        poll_tick(&db, "device", &live, &mut kept, &mut seen, &mut active).unwrap();
+        let revision = kept.library.as_ref().unwrap().revision;
+        assert_eq!(revision, db.revision());
+        poll_tick(&db, "device", &live, &mut kept, &mut seen, &mut active).unwrap();
+        assert_eq!(kept.library.as_ref().unwrap().revision, revision);
+        end_all_sessions(&db, &live, active);
+    }
+
+    #[test]
+    fn a_failed_read_of_the_settings_fails_the_tick() {
+        let db = Database::open_in_memory().unwrap();
+        db.with_conn(|conn| {
+            conn.execute_batch("DROP TABLE settings").unwrap();
+            Ok(())
+        })
+        .unwrap();
+        assert!(Library::current(&db, None).is_err());
+    }
+
     /// Starts a real installed game and checks that a session opens and closes.
     /// Set `VAULTIME_GAME_EXE` and `VAULTIME_GAME_FOLDER` (the Steam install
     /// folder) and run `cargo test -- --ignored --nocapture real_game`.
@@ -1373,13 +1444,18 @@ mod tests {
             println!("{label}: {:?}", started.elapsed() / ROUNDS);
         };
         time("settings", &mut || {
-            TrackingSettings::load(&db);
+            TrackingSettings::load(&db).unwrap();
         });
         time("local games", &mut || {
             games::list_local_games(&db).unwrap();
         });
         time("ignored", &mut || {
             ignored::paths(&db).unwrap();
+        });
+        let kept_library = Library::current(&db, None).unwrap();
+        let mut kept_library = Some(kept_library);
+        time("library kept", &mut || {
+            kept_library = Some(Library::current(&db, kept_library.take()).unwrap());
         });
         time("processes", &mut || {
             list.refresh();
@@ -1397,17 +1473,9 @@ mod tests {
         let live = LiveSessions::default();
         let mut active = HashMap::new();
         let mut seen = SeenPrograms::default();
+        let mut kept = Kept::default();
         time("whole tick", &mut || {
-            poll_tick(
-                &db,
-                "device",
-                &live,
-                &mut list,
-                &mut folders,
-                &mut seen,
-                &mut active,
-            )
-            .unwrap();
+            poll_tick(&db, "device", &live, &mut kept, &mut seen, &mut active).unwrap();
         });
     }
 
