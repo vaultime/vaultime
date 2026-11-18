@@ -26,7 +26,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use log::warn;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, MAIN_DB, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -1036,91 +1036,182 @@ struct LedgerRow {
 
 /// What all ledgers together say: which fail their check, and which PC each
 /// key belongs to, as its first entry names it.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 struct LedgerState {
     broken: HashSet<String>,
     devices: HashMap<String, String>,
 }
 
-/// Checks every ledger. A sound chain whose newest entry carries a good
-/// signature is sound as a whole, since each hash covers the one before it.
-fn check_ledgers(conn: &Connection) -> Result<LedgerState> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT key_id, sequence, entry_type, session_id, recorded_at, payload_json,
-                    hash_prev, hash_self, signature
-             FROM ledger_entries ORDER BY key_id, sequence",
-        )
-        .map_err(ledger_error)?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(LedgerRow {
-                key_id: row.get(0)?,
-                sequence: row.get(1)?,
-                entry_type: row.get(2)?,
-                session_id: row.get(3)?,
-                recorded_at: row.get(4)?,
-                payload_json: row.get(5)?,
-                hash_prev: row.get(6)?,
-                hash_self: row.get(7)?,
-                signature: row.get(8)?,
-            })
-        })
-        .map_err(ledger_error)?;
-    let mut state = LedgerState::default();
-    let mut current: Option<(String, i64, String, String)> = None;
-    let finish = |key_id: &str, hash: &str, signature: &str, state: &mut LedgerState| {
-        if !signed_by(key_id, hash, signature) {
-            state.broken.insert(key_id.to_owned());
-        }
-    };
-    for row in rows {
-        let entry = row.map_err(ledger_error)?;
-        let (expected_sequence, previous) = match &current {
-            Some((key_id, sequence, hash, _)) if *key_id == entry.key_id => {
-                (sequence + 1, Some(hash.clone()))
+/// One key's ledger as checked up to its newest entry.
+#[derive(Debug, Clone)]
+struct KeyChain {
+    sequence: i64,
+    hash: String,
+    /// Whether every entry follows the one before it.
+    linked: bool,
+    /// Whether the newest entry carries a good signature, which vouches for a
+    /// linked chain as a whole, since each hash covers the one before it.
+    signed: bool,
+    /// The PC its first entry names.
+    device: Option<String>,
+}
+
+/// `chain` with one more entry, whose signature is checked once it is known
+/// to be the newest.
+fn step(chain: Option<KeyChain>, entry: &LedgerRow) -> KeyChain {
+    let (expected_sequence, previous) = chain.as_ref().map_or((1, None), |chain| {
+        (chain.sequence + 1, Some(chain.hash.as_str()))
+    });
+    let expected_hash = entry_hash(
+        &entry.key_id,
+        entry.sequence,
+        &entry.entry_type,
+        entry.session_id.as_deref(),
+        &entry.recorded_at,
+        &entry.payload_json,
+        previous,
+    );
+    let follows = entry.sequence == expected_sequence
+        && entry.hash_prev.as_deref() == previous
+        && entry.hash_self == expected_hash;
+    let named = (entry.sequence == 1 && entry.entry_type == ENTRY_BEGAN)
+        .then(|| serde_json::from_str::<Value>(&entry.payload_json).ok())
+        .flatten()
+        .and_then(|payload| Some(payload.get("device_id")?.as_str()?.to_owned()));
+    let linked = follows && chain.as_ref().is_none_or(|chain| chain.linked);
+    KeyChain {
+        sequence: entry.sequence,
+        hash: entry.hash_self.clone(),
+        linked,
+        signed: false,
+        device: named.or_else(|| chain.and_then(|chain| chain.device)),
+    }
+}
+
+/// Carries the chains on with `rows`, ordered by key and sequence, and
+/// begins one for each key that has none.
+fn fold_entries(
+    rows: impl IntoIterator<Item = Result<LedgerRow>>,
+    mut chains: HashMap<String, KeyChain>,
+) -> Result<HashMap<String, KeyChain>> {
+    // The chain being carried on, with its key and newest signature.
+    let mut current: Option<(KeyChain, String, String)> = None;
+    for entry in rows {
+        let entry = entry?;
+        let before = match current.take() {
+            Some((chain, key_id, _)) if key_id == entry.key_id => Some(chain),
+            done => {
+                if let Some(done) = done {
+                    seal(done, &mut chains);
+                }
+                chains.remove(&entry.key_id)
             }
-            Some((key_id, _, hash, signature)) => {
-                finish(key_id, hash, signature, &mut state);
-                (1, None)
-            }
-            None => (1, None),
         };
-        let expected_hash = entry_hash(
-            &entry.key_id,
-            entry.sequence,
-            &entry.entry_type,
-            entry.session_id.as_deref(),
-            &entry.recorded_at,
-            &entry.payload_json,
-            previous.as_deref(),
-        );
-        if entry.sequence != expected_sequence
-            || entry.hash_prev != previous
-            || entry.hash_self != expected_hash
-        {
-            state.broken.insert(entry.key_id.clone());
-        }
-        if entry.sequence == 1 && entry.entry_type == ENTRY_BEGAN {
-            let payload: Value = serde_json::from_str(&entry.payload_json).unwrap_or(Value::Null);
-            if let Some(device) = payload.get("device_id").and_then(Value::as_str) {
-                state
-                    .devices
-                    .insert(entry.key_id.clone(), device.to_owned());
-            }
-        }
-        current = Some((
-            entry.key_id,
-            entry.sequence,
-            entry.hash_self,
-            entry.signature,
-        ));
+        current = Some((step(before, &entry), entry.key_id, entry.signature));
     }
-    if let Some((key_id, _, hash, signature)) = &current {
-        finish(key_id, hash, signature, &mut state);
+    if let Some(done) = current {
+        seal(done, &mut chains);
     }
-    // Ledgers begun before their first entry named the PC are known by the
-    // key the PC's row records. Both are claims of the same kind.
+    Ok(chains)
+}
+
+/// Keeps a chain carried on up to its newest entry, with the signature of
+/// that entry checked.
+fn seal(
+    (mut chain, key_id, signature): (KeyChain, String, String),
+    chains: &mut HashMap<String, KeyChain>,
+) {
+    chain.signed = signed_by(&key_id, &chain.hash, &signature);
+    chains.insert(key_id, chain);
+}
+
+/// The columns `ledger_row` reads.
+const ENTRY_COLUMNS: &str = "key_id, sequence, entry_type, session_id, recorded_at, payload_json,
+     hash_prev, hash_self, signature";
+
+fn ledger_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LedgerRow> {
+    Ok(LedgerRow {
+        key_id: row.get(0)?,
+        sequence: row.get(1)?,
+        entry_type: row.get(2)?,
+        session_id: row.get(3)?,
+        recorded_at: row.get(4)?,
+        payload_json: row.get(5)?,
+        hash_prev: row.get(6)?,
+        hash_self: row.get(7)?,
+        signature: row.get(8)?,
+    })
+}
+
+/// Checks every ledger from its first entry.
+fn check_ledgers(conn: &Connection) -> Result<HashMap<String, KeyChain>> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {ENTRY_COLUMNS} FROM ledger_entries ORDER BY key_id, sequence"
+        ))
+        .map_err(ledger_error)?;
+    let rows = stmt.query_map([], ledger_row).map_err(ledger_error)?;
+    fold_entries(rows.map(|row| row.map_err(ledger_error)), HashMap::new())
+}
+
+/// Carries `chains` on with the entries stored after row `after`. A key that
+/// gained an entry below its newest one, as when a gap is filled later, is
+/// checked again from its first.
+fn check_ledgers_after(
+    conn: &Connection,
+    mut chains: HashMap<String, KeyChain>,
+    after: i64,
+) -> Result<HashMap<String, KeyChain>> {
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT {ENTRY_COLUMNS} FROM ledger_entries WHERE rowid > ?1"
+        ))
+        .map_err(ledger_error)?;
+    let mut added: Vec<LedgerRow> = stmt
+        .query_map([after], ledger_row)
+        .map_err(ledger_error)?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(ledger_error)?;
+    added.sort_by(|a, b| (&a.key_id, a.sequence).cmp(&(&b.key_id, b.sequence)));
+    let again: HashSet<String> = added
+        .iter()
+        .filter(|entry| {
+            chains
+                .get(&entry.key_id)
+                .is_some_and(|chain| entry.sequence <= chain.sequence)
+        })
+        .map(|entry| entry.key_id.clone())
+        .collect();
+    chains.retain(|key_id, _| !again.contains(key_id));
+    let carried = added
+        .into_iter()
+        .filter(|entry| !again.contains(&entry.key_id));
+    let mut chains = fold_entries(carried.map(Ok), chains)?;
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT {ENTRY_COLUMNS} FROM ledger_entries WHERE key_id = ?1 ORDER BY sequence"
+        ))
+        .map_err(ledger_error)?;
+    for key_id in &again {
+        let rows = stmt.query_map([key_id], ledger_row).map_err(ledger_error)?;
+        chains = fold_entries(rows.map(|row| row.map_err(ledger_error)), chains)?;
+    }
+    Ok(chains)
+}
+
+/// What the chains say together. Ledgers begun before their first entry
+/// named the PC are known by the key the PC's row records. Both are claims of
+/// the same kind.
+fn state_of(conn: &Connection, chains: &HashMap<String, KeyChain>) -> Result<LedgerState> {
+    let mut state = LedgerState::default();
+    for (key_id, chain) in chains {
+        if !(chain.linked && chain.signed) {
+            state.broken.insert(key_id.clone());
+        }
+        if let Some(device) = &chain.device {
+            state.devices.insert(key_id.clone(), device.clone());
+        }
+    }
     let mut stmt = conn
         .prepare("SELECT id, key_id FROM devices WHERE key_id IS NOT NULL")
         .map_err(ledger_error)?;
@@ -1129,19 +1220,10 @@ fn check_ledgers(conn: &Connection) -> Result<LedgerState> {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(ledger_error)?;
-    let begun: HashSet<String> = {
-        let mut stmt = conn
-            .prepare("SELECT DISTINCT key_id FROM ledger_entries")
-            .map_err(ledger_error)?;
-        stmt.query_map([], |row| row.get::<_, String>(0))
-            .map_err(ledger_error)?
-            .collect::<rusqlite::Result<_>>()
-            .map_err(ledger_error)?
-    };
     for row in rows {
         let (device, key) = row.map_err(ledger_error)?;
-        if begun.contains(&key) && !state.devices.contains_key(&key) {
-            state.devices.insert(key, device);
+        if chains.contains_key(&key) {
+            state.devices.entry(key).or_insert(device);
         }
     }
     Ok(state)
@@ -1157,45 +1239,103 @@ fn signed_by(key_id: &str, hash: &str, signature: &str) -> bool {
     matches!((key, signature), (Some(key), Some(signature)) if key.verify(hash.as_bytes(), &signature).is_ok())
 }
 
-/// The ledger check as last done for each database, by its path, with the
-/// newest row then.
-type StateCache = Mutex<HashMap<String, (Option<(i64, String)>, LedgerState)>>;
+/// The ledger check as last done for a database: its newest row then, the
+/// chain of each key and what they say together.
+struct Checked {
+    newest: Option<(i64, String)>,
+    chains: HashMap<String, KeyChain>,
+    state: LedgerState,
+}
+
+/// The ledger checks of each database, by its path.
+type StateCache = Mutex<HashMap<String, Checked>>;
 
 fn state_cache() -> &'static StateCache {
     static CACHE: OnceLock<StateCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// `check_ledgers`, reused while no ledger gained an entry. The app only
-/// ever appends, so the newest row tells whether anything changed, in one
-/// step down the index. Changes made by other programs, and a restore, clear
-/// it through `forget`.
+/// What the ledgers say, carried on from the last check of the database. The
+/// app only ever appends, so the newest row tells whether anything changed,
+/// in one step down the index, and while the row a check ended with is
+/// stored as it was, the rows after it are all that came since. Writes of
+/// other programs, which the app's own connection notices, a restore and a
+/// vacuum, which may number the rows anew, clear it through `forget`.
 fn ledger_state(conn: &Connection) -> Result<LedgerState> {
-    let newest: Option<(i64, String)> = conn
-        .prepare_cached("SELECT rowid, hash_self FROM ledger_entries ORDER BY rowid DESC LIMIT 1")
+    // A reader takes the app's own writes for others', and its snapshot may
+    // come from before a `forget`, so only a connection that writes keeps
+    // what it found.
+    let writes = !conn.is_readonly(MAIN_DB).map_err(ledger_error)?;
+    if writes {
+        super::forget_checks_after_outside_writes(conn)?;
+    }
+    let newest = newest_entry(conn)?;
+    let database = conn.path().unwrap_or_default().to_owned();
+    let earlier = {
+        let cache = state_cache().lock().unwrap_or_else(PoisonError::into_inner);
+        match cache.get(&database) {
+            Some(checked) if checked.newest == newest => return Ok(checked.state.clone()),
+            Some(checked) => checked
+                .newest
+                .clone()
+                .map(|newest| (newest, checked.chains.clone())),
+            None => None,
+        }
+    };
+    // Checked without holding the cache, so checks of other databases go on.
+    let chains = chains_now(conn, earlier)?;
+    let state = state_of(conn, &chains)?;
+    if writes {
+        let mut cache = state_cache().lock().unwrap_or_else(PoisonError::into_inner);
+        // Staged backups come and go, so only a few databases are remembered.
+        if cache.len() >= LEDGER_CHECKS_REMEMBERED {
+            cache.clear();
+        }
+        cache.insert(
+            database,
+            Checked {
+                newest,
+                chains,
+                state: state.clone(),
+            },
+        );
+    }
+    Ok(state)
+}
+
+/// The newest ledger row by number, with its hash.
+fn newest_entry(conn: &Connection) -> Result<Option<(i64, String)>> {
+    conn.prepare_cached("SELECT rowid, hash_self FROM ledger_entries ORDER BY rowid DESC LIMIT 1")
         .and_then(|mut stmt| {
             stmt.query_row([], |row| Ok((row.get(0)?, row.get(1)?)))
                 .optional()
         })
-        .map_err(ledger_error)?;
-    let database = conn.path().unwrap_or_default().to_owned();
-    if let Some((checked, state)) = state_cache()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(&database)
-        && *checked == newest
-    {
-        return Ok(state.clone());
+        .map_err(ledger_error)
+}
+
+/// A check to carry on from: the newest row it read, with its hash, and the
+/// chain of each key then.
+type Earlier = ((i64, String), HashMap<String, KeyChain>);
+
+/// The chains as they stand: those of `earlier`, carried on while the row it
+/// ended with is stored as it was, or else every ledger checked from its
+/// first entry.
+fn chains_now(conn: &Connection, earlier: Option<Earlier>) -> Result<HashMap<String, KeyChain>> {
+    match earlier {
+        Some(((rowid, hash), chains))
+            if hash_at_row(conn, rowid)?.as_deref() == Some(hash.as_str()) =>
+        {
+            check_ledgers_after(conn, chains, rowid)
+        }
+        _ => check_ledgers(conn),
     }
-    // Checked without holding the cache, so checks of other databases go on.
-    let state = check_ledgers(conn)?;
-    let mut cache = state_cache().lock().unwrap_or_else(PoisonError::into_inner);
-    // Staged backups come and go, so only a few databases are remembered.
-    if cache.len() >= LEDGER_CHECKS_REMEMBERED {
-        cache.clear();
-    }
-    cache.insert(database, (newest, state.clone()));
-    Ok(state)
+}
+
+/// The hash of the entry stored in row `rowid`, if one is.
+fn hash_at_row(conn: &Connection, rowid: i64) -> Result<Option<String>> {
+    conn.prepare_cached("SELECT hash_self FROM ledger_entries WHERE rowid = ?1")
+        .and_then(|mut stmt| stmt.query_row([rowid], |row| row.get(0)).optional())
+        .map_err(ledger_error)
 }
 
 /// Forgets the remembered ledger check.
@@ -2223,5 +2363,181 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    /// The ledgers as a check from every first entry sees them.
+    fn checked_in_full(db: &Database) -> LedgerState {
+        db.with_conn(|conn| state_of(conn, &check_ledgers(conn)?))
+            .unwrap()
+    }
+
+    /// A check from every first entry, to carry on from.
+    fn checked_now(db: &Database) -> Earlier {
+        db.with_conn(|conn| Ok((newest_entry(conn)?.unwrap(), check_ledgers(conn)?)))
+            .unwrap()
+    }
+
+    fn carried_on_from(db: &Database, earlier: Earlier) -> LedgerState {
+        db.with_conn(|conn| state_of(conn, &chains_now(conn, Some(earlier))?))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_check_carried_on_with_new_entries_agrees_with_a_full_one() {
+        let (db, game) = setup();
+        played(&db, &game);
+        let earlier = checked_now(&db);
+
+        // More play here, and the ledger of another PC begun in this file.
+        played(&db, &game);
+        let other = test_pc("other");
+        act_as(Some(&other));
+        played(&db, &game);
+        act_as(None);
+        let state = carried_on_from(&db, earlier);
+        assert_eq!(state, checked_in_full(&db));
+        assert!(state.broken.is_empty());
+        let other_key = hex::encode(other.0.verifying_key().as_bytes());
+        assert_eq!(
+            state.devices.get(&other_key).map(String::as_str),
+            Some("other")
+        );
+
+        // An entry signed with another key breaks the ledger while it is the
+        // newest, and a good one after it vouches for the chain again.
+        let key_id = key_id().unwrap();
+        let earlier = checked_now(&db);
+        db.with_conn(|conn| {
+            let last = tail(conn, &key_id)?;
+            write_entry(
+                conn,
+                &other.0,
+                &key_id,
+                last,
+                ENTRY_PINNED,
+                None,
+                &json!({}),
+            )
+        })
+        .unwrap();
+        let state = carried_on_from(&db, earlier);
+        assert_eq!(state.broken, HashSet::from([key_id.clone()]));
+        assert_eq!(state, checked_in_full(&db));
+        let earlier = checked_now(&db);
+        played(&db, &game);
+        let state = carried_on_from(&db, earlier);
+        assert!(state.broken.is_empty());
+        assert_eq!(state, checked_in_full(&db));
+    }
+
+    #[test]
+    fn a_gap_filled_later_checks_that_ledger_again() {
+        let (db, game) = setup();
+        played(&db, &game);
+        let key_id = key_id().unwrap();
+        let taken = db
+            .with_conn(|conn| {
+                let entry = conn
+                    .query_row(
+                        &format!(
+                            "SELECT {ENTRY_COLUMNS} FROM ledger_entries
+                             WHERE key_id = ?1 AND sequence = 2"
+                        ),
+                        [&key_id],
+                        ledger_row,
+                    )
+                    .map_err(map_db)?;
+                conn.execute(
+                    "DELETE FROM ledger_entries WHERE key_id = ?1 AND sequence = 2",
+                    [&key_id],
+                )
+                .map_err(map_db)?;
+                Ok(entry)
+            })
+            .unwrap();
+        assert!(checked_in_full(&db).broken.contains(&key_id));
+        let earlier = checked_now(&db);
+
+        // Put back, the entry lies past the newest row checked.
+        db.with_conn(|conn| {
+            conn.execute(
+                &format!(
+                    "INSERT INTO ledger_entries ({ENTRY_COLUMNS})
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+                ),
+                rusqlite::params![
+                    taken.key_id,
+                    taken.sequence,
+                    taken.entry_type,
+                    taken.session_id,
+                    taken.recorded_at,
+                    taken.payload_json,
+                    taken.hash_prev,
+                    taken.hash_self,
+                    taken.signature
+                ],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        let state = carried_on_from(&db, earlier);
+        assert!(state.broken.is_empty());
+        assert_eq!(state, checked_in_full(&db));
+    }
+
+    #[test]
+    fn a_check_is_not_carried_on_from_a_row_that_changed() {
+        let (db, game) = setup();
+        played(&db, &game);
+        let earlier = checked_now(&db);
+        // The newest row checked gives way to one that does not follow, under
+        // the same row number.
+        db.with_conn(|conn| {
+            conn.execute_batch(
+                "CREATE TEMP TABLE newest AS
+                     SELECT * FROM ledger_entries ORDER BY rowid DESC LIMIT 1;
+                 DELETE FROM ledger_entries
+                     WHERE rowid = (SELECT MAX(rowid) FROM ledger_entries);
+                 INSERT INTO ledger_entries
+                     SELECT key_id, sequence, entry_type, session_id, recorded_at,
+                            payload_json, hash_prev, 'changed', signature
+                     FROM newest;
+                 DROP TABLE newest;",
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        let state = carried_on_from(&db, earlier);
+        assert!(state.broken.contains(&key_id().unwrap()));
+        assert_eq!(state, checked_in_full(&db));
+    }
+
+    #[test]
+    fn an_old_entry_another_program_changed_shows_at_the_next_look() {
+        let dir =
+            std::env::temp_dir().join(format!("vaultime-ledger-outside-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("vaultime.db");
+        let db = Database::open(&path).unwrap();
+        devices::ensure_device(&db, DEVICE, "linux", "0.0.0").unwrap();
+        db.with_transaction(|conn| begin_if_empty(conn, "first_start"))
+            .unwrap();
+        let game = add_game(&db, "Game");
+        played(&db, &game);
+        assert!(db.with_conn(ledger_state).unwrap().broken.is_empty());
+
+        // Its hash left as it was, so only hashing the entry again finds it.
+        Connection::open(&path)
+            .unwrap()
+            .execute(
+                "UPDATE ledger_entries SET payload_json = '{}' WHERE sequence = 1",
+                [],
+            )
+            .unwrap();
+        played(&db, &game);
+        let state = db.with_conn(ledger_state).unwrap();
+        assert!(state.broken.contains(&key_id().unwrap()));
+        drop(db);
+        fs::remove_dir_all(&dir).ok();
     }
 }

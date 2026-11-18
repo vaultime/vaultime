@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, MAIN_DB, OptionalExtension, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -589,9 +589,10 @@ fn checked_state(conn: &Connection, session: &Session) -> Result<CheckedState> {
 }
 
 /// Forgets every remembered check, for when the app itself replaced the
-/// history, as a restore does, so each chain is checked again. A merge
-/// forgets them all too: its `trusted` and `adopted` entries can change the
-/// result for sessions that were here before.
+/// history, as a restore does, or numbered its rows anew, as a vacuum may,
+/// so each chain is checked again. A merge forgets them all too: its
+/// `trusted` and `adopted` entries can change the result for sessions that
+/// were here before.
 pub fn forget_checks() {
     {
         let mut cache = check_cache().lock().unwrap_or_else(PoisonError::into_inner);
@@ -601,21 +602,30 @@ pub fn forget_checks() {
     ledger::forget();
 }
 
-/// Clears the cache when another program wrote to the database, such as a
-/// database tool, so its changes are checked again right away.
-fn forget_checks_after_outside_writes(conn: &Connection) -> Result<()> {
-    static SEEN_VERSION: Mutex<Option<i64>> = Mutex::new(None);
+/// Clears the caches when another program wrote to the database, such as a
+/// database tool, so its changes are checked again right away. Only a
+/// connection that writes can tell its own writes from those of others, so
+/// a read-only one tells nothing.
+pub(crate) fn forget_checks_after_outside_writes(conn: &Connection) -> Result<()> {
+    static SEEN_VERSIONS: LazyLock<Mutex<HashMap<String, i64>>> = LazyLock::new(Mutex::default);
+    let failed = |error: rusqlite::Error| {
+        VaultimeError::Integrity(format!("failed to read the data version: {error}"))
+    };
+    if conn.is_readonly(MAIN_DB).map_err(failed)? {
+        return Ok(());
+    }
     let version: i64 = conn
         .prepare_cached("PRAGMA data_version")
         .and_then(|mut stmt| stmt.query_row([], |row| row.get(0)))
-        .map_err(|error| {
-            VaultimeError::Integrity(format!("failed to read the data version: {error}"))
-        })?;
-    let mut seen = SEEN_VERSION.lock().unwrap_or_else(PoisonError::into_inner);
-    if seen.is_some_and(|seen| seen != version) {
+        .map_err(failed)?;
+    let database = conn.path().unwrap_or_default().to_owned();
+    let mut seen = SEEN_VERSIONS.lock().unwrap_or_else(PoisonError::into_inner);
+    if seen
+        .insert(database, version)
+        .is_some_and(|seen| seen != version)
+    {
         forget_checks();
     }
-    *seen = Some(version);
     Ok(())
 }
 

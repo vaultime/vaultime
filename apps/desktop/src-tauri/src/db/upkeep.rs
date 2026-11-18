@@ -30,6 +30,8 @@ pub fn reclaim_space(db: &Database) -> Result<i64> {
             return Ok(0);
         }
         conn.execute_batch("VACUUM;").map_err(map_db)?;
+        // Rows may be numbered anew, and remembered checks go by their numbers.
+        crate::integrity::forget_checks();
         let reclaimed = total - pragma(conn, "page_count")? * pragma(conn, "page_size")?;
         info!("gave {reclaimed} bytes of the database back to the disk");
         Ok(reclaimed)
@@ -68,7 +70,9 @@ mod tests {
 
         db.with_conn(|conn| conn.execute_batch("DELETE FROM filler;").map_err(map_db))
             .unwrap();
+        let before = crate::integrity::check_generation();
         assert!(reclaim_space(&db).unwrap() >= VACUUM_MIN_FREE_BYTES);
+        assert!(crate::integrity::check_generation() > before);
         assert_eq!(db.with_conn(free_bytes).unwrap(), 0);
         optimize(&db).unwrap();
         drop(db);
