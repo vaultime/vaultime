@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
 PackageIdentifier: Vaultime.Vaultime
-PackageVersion: 0.6.0
+PackageVersion: 0.7.0
 InstallerType: nullsoft
 Scope: user
 InstallModes:
@@ -8,10 +8,10 @@ InstallModes:
   - silent
 UpgradeBehavior: install
 ProductCode: Vaultime
-ReleaseDate: 2026-10-20
+ReleaseDate: 2026-11-18
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/vaultime/vaultime/releases/download/v0.6.0/Vaultime_0.6.0_x64-setup.exe
-    InstallerSha256: F5FDFAC35154DA69024C74875026E80D71DD28F266348BBE47997FA005B6AFC1
+    InstallerUrl: https://github.com/vaultime/vaultime/releases/download/v0.7.0/Vaultime_0.7.0_x64-setup.exe
+    InstallerSha256: 20B28FC500C3DC8FB4582B3338E13BBC14A4F2D27507FBE32A289B3D722242AB
 ManifestType: installer
 ManifestVersion: 1.10.0
