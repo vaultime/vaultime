@@ -274,6 +274,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const summaries = useMemo(() => {
     const totalsByGame = new Map(totals.map((total) => [total.game_id, total]));
+    // The core shows a linked install's sessions as the game it counts as.
+    const checkingGames = new Set(
+      sessions.filter((session) => unchecked.has(session.id)).map((session) => session.game_id),
+    );
     const byGame = new Map<string, GameSummary>();
     for (const game of games) {
       // The core adds up the sessions, two installs running at once counted once.
@@ -301,6 +305,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         recoveredCount: total?.recovered_count ?? 0,
         recentSuspiciousCount: total?.recent_suspicious_count ?? 0,
         recentRecoveredCount: total?.recent_recovered_count ?? 0,
+        checking: checkingGames.has(game.id),
         lastPlayedAt: total?.last_played_at ?? null,
       });
     }
@@ -334,7 +339,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (b.lastPlayedAt) return 1;
       return compareTitles(a.game.title, b.game.title);
     });
-  }, [games, totals, launcherTimes, covers, arts, artTints, earlier, statusChanges, links]);
+  }, [games, totals, launcherTimes, covers, arts, artTints, earlier, statusChanges, links, sessions, unchecked]);
 
   const setStatus = useCallback(
     async (gameId: string, status: GameStatus | "none") => {

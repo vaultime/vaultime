@@ -43,6 +43,11 @@ export interface GameSummary {
   recentSuspiciousCount: number;
   /** Recovered sessions of the last `TRUST_BADGE_RECENT_DAYS` days. */
   recentRecoveredCount: number;
+  /**
+   * Whether a session of the game waits for its check, so a stored Recovered
+   * may still turn Suspicious. One already Suspicious stays so.
+   */
+  checking: boolean;
   /** When the newest play ended, now while the game runs here. */
   lastPlayedAt: string | null;
 }

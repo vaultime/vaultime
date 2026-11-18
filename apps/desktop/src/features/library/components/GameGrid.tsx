@@ -322,7 +322,9 @@ function GameTile({
   onEdit: (game: Game) => void;
   onDelete: (game: Game) => void;
 }) {
-  const { game, cover, totalMs, lastPlayedAt, recentSuspiciousCount, recentRecoveredCount, status, favorite } = summary;
+  const { game, cover, totalMs, lastPlayedAt, recentSuspiciousCount, status, favorite } = summary;
+  // A stored Recovered waits for the check, which may find the session Suspicious.
+  const recentRecoveredCount = summary.checking ? 0 : summary.recentRecoveredCount;
   const { setFavorite } = useLibrary();
 
   return (

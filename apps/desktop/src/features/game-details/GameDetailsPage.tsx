@@ -56,7 +56,6 @@ function GamePage({ gameId }: { gameId: string }) {
   const {
     summaries,
     sessions: allSessions,
-    unchecked,
     loaded,
     refresh,
     notes,
@@ -170,7 +169,7 @@ function GamePage({ gameId }: { gameId: string }) {
     );
   }
 
-  const { game, art, tint } = summary;
+  const { game, art, tint, checking } = summary;
   const shown = showAll ? sessions : sessions.slice(0, GAME_RECENT_SESSIONS);
 
   function onAssetsChanged(next: GameAssetView[]) {
@@ -360,11 +359,8 @@ function GamePage({ gameId }: { gameId: string }) {
             <TotalRow label="Active" value={formatHoursMinutes(summary.activeMs)} accent />
             <TotalRow label="Idle" value={formatHoursMinutes(summary.idleMs)} />
             <TotalRow label="Sessions" value={String(summary.sessionsCount)} />
-            <TotalRow
-              label="Suspicious"
-              value={sessions.some((session) => unchecked.has(session.id)) ? "Checking" : String(summary.suspiciousCount)}
-            />
-            <TotalRow label="Recovered" value={String(summary.recoveredCount)} />
+            <TotalRow label="Suspicious" value={checking ? "Checking" : String(summary.suspiciousCount)} />
+            <TotalRow label="Recovered" value={checking ? "Checking" : String(summary.recoveredCount)} />
             <TotalRow label="Longest" value={formatHoursMinutes(summary.longestSessionMs)} />
             <TotalRow
               label="First played"
