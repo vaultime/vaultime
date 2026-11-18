@@ -232,7 +232,10 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   and "40m". Labels are small and in sentence case (`label-small`), never
   spaced capitals.
 - Surfaces: panels (`panel`) and cards with a faint 1px inner line, hairline
-  rules inside them, no glows. Controls share one system: buttons 34px high
+  rules inside them, no glows. No live blurs in the app: art is blurred once
+  into a canvas (`StillBlur`) and controls over the page take a fuller
+  see-through fill, as a PC without a graphics chip works out a live blur
+  again with every repaint. Controls share one system: buttons 34px high
   with 8px corners and a faint fill, segmented choices (`segmented`,
   `segment`) and square step buttons. Colors come from the tokens in
   `index.css`, which `lib/theme.ts` derives for the chosen look, never loose

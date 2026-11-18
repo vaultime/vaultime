@@ -7,12 +7,14 @@ import { LogoMark } from "@/components/brand/Logo";
 import { Figures } from "@/components/layout/StatTiles";
 import { Cover } from "@/components/media/Cover";
 import { PhraseText } from "@/components/media/PhraseText";
+import { StillBlur } from "@/components/media/StillBlur";
 import type { GameSummary } from "@/features/library/library-context";
 import {
   CHART_MIN_BAR_PERCENT,
   DAYS_PER_WEEK,
   HOURS_PER_DAY,
   JOURNAL_TICK_HOURS,
+  YEAR_STORY_ART_BLUR_PX,
   YEAR_STORY_COUNT_UP_MS,
   YEAR_STORY_FINISHED_COVERS,
 } from "@/lib/constants";
@@ -81,16 +83,20 @@ export function StoryCard({
       aria-label={`${chapterTitle(chapter, props.story)}, chapter ${position + 1} of ${count}`}
       className="@container relative isolate flex aspect-[9/16] h-[clamp(380px,calc(100dvh-250px),640px)] shrink-0 flex-col overflow-hidden rounded-[18px] bg-surface shadow-2xl ring-1 shadow-scrim/40 ring-glint/8"
     >
-      {art ? (
+      {art && subject?.sharp ? (
         <img
           key={art}
           src={art}
           alt=""
           aria-hidden="true"
-          className={cn(
-            "absolute inset-0 -z-10 size-full object-cover duration-700 animate-in fade-in motion-reduce:animate-none",
-            !subject?.sharp && "scale-125 opacity-45 blur-2xl",
-          )}
+          className="absolute inset-0 -z-10 size-full object-cover duration-700 animate-in fade-in motion-reduce:animate-none"
+        />
+      ) : art ? (
+        <StillBlur
+          key={art}
+          src={art}
+          blur={YEAR_STORY_ART_BLUR_PX}
+          className="absolute inset-0 -z-10 size-full opacity-45 duration-700 animate-in fade-in motion-reduce:animate-none"
         />
       ) : (
         <div

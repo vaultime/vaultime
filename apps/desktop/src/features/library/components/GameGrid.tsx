@@ -344,7 +344,7 @@ function GameTile({
           {(recentSuspiciousCount > 0 || recentRecoveredCount > 0) && (
             <Badge
               variant={recentSuspiciousCount > 0 ? "amber" : "sky"}
-              className="absolute top-2 left-2 bg-ink/75 backdrop-blur-sm still:bg-ink/85 still:backdrop-blur-none"
+              className="absolute top-2 left-2 bg-ink/85"
               title={
                 recentSuspiciousCount > 0
                   ? `${plural(recentSuspiciousCount, "session")} with a clock jump or a record changed outside Vaultime in the last ${TRUST_BADGE_RECENT_DAYS} days`
@@ -397,7 +397,7 @@ function GameTile({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Options for ${game.title}`}
-          className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-ink/70 text-soft opacity-0 backdrop-blur-sm transition-opacity still:bg-ink/80 still:backdrop-blur-none group-hover:opacity-100 hover:text-text focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:outline-none data-popup-open:opacity-100"
+          className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-ink/80 text-soft opacity-0 transition-opacity group-hover:opacity-100 hover:text-text focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-violet/70 focus-visible:outline-none data-popup-open:opacity-100"
         >
           <MoreHorizontal className="size-4" strokeWidth={1.8} />
         </DropdownMenuTrigger>

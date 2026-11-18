@@ -426,6 +426,8 @@ export const YEAR_STORY_LAUNCHERS = 5;
 export const YEAR_STORY_FINISHED_COVERS = 6;
 /** How long a chapter's big number counts up the first time it shows. */
 export const YEAR_STORY_COUNT_UP_MS = 900;
+/** Blur of the game art behind a chapter of Year in games about more than that game, in pixels. */
+export const YEAR_STORY_ART_BLUR_PX = 40;
 /** From this share on, prose calls a part of the hours nearly all of them. */
 export const SHARE_WORDS_NEARLY_ALL = 0.9;
 /** From this share on, prose calls a part of the hours most of them. */
@@ -631,7 +633,7 @@ export const BACKGROUND_HEADER_OPACITY_PERCENT = 30;
 export const BACKGROUND_PANEL_OPACITY_PERCENT = 62;
 /** Wait after the last move of a slider or the color picker before the value is saved. */
 export const APPEARANCE_SAVE_DELAY_MS = 400;
-/** The background picture reaches this many blur radii past each edge, so the blur does not fade there. */
+/** A blurred picture reaches this many blur radii past each edge, so the blur does not fade there. */
 export const BACKGROUND_BLUR_BLEED = 2;
 /** Blur of the art behind a tinted header, in pixels. */
 export const HEADER_ART_BLUR_PX = 22;
@@ -641,11 +643,6 @@ export const HEADER_ART_SATURATION = 1.4;
 export const STILL_BLUR_SMALL_RADIUS_PX = 2;
 /** Box blur passes a still blur makes where canvas filters are missing. Two come close to the Gaussian blur of CSS. */
 export const STILL_BLUR_BOX_PASSES = 2;
-/**
- * Local storage key of the switch to still blurs, drawn once into a canvas,
- * while the look is compared with the live blur. `still` turns them on.
- */
-export const STILL_BLUR_STORAGE_KEY = "vaultime.blur";
 /** Hues around the wheel on the swatch that opens the color picker. */
 export const ACCENT_WHEEL_STEPS = 6;
 /** The look of a new install, lit by the game in front on a graphite ground. */

@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { STILL_BLUR_STORAGE_KEY } from "@/lib/constants";
+import { describe, expect, it } from "vitest";
 import { coverRect, stillBlurSize } from "./still-blur";
 
 describe("stillBlurSize", () => {
@@ -50,34 +49,5 @@ describe("coverRect", () => {
       width: 2880,
       height: 1800,
     });
-  });
-});
-
-describe("stillBlur", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  async function switchWith(getItem: (key: string) => string | null) {
-    vi.stubGlobal("localStorage", { getItem });
-    vi.resetModules();
-    return (await import("./still-blur")).stillBlur;
-  }
-
-  it("is on only when the switch says still, and read once", async () => {
-    expect((await switchWith(() => null))()).toBe(false);
-    expect((await switchWith(() => "live"))()).toBe(false);
-    let saved: string | null = "still";
-    const stillBlur = await switchWith((key) => (key === STILL_BLUR_STORAGE_KEY ? saved : null));
-    expect(stillBlur()).toBe(true);
-    saved = null;
-    expect(stillBlur()).toBe(true);
-  });
-
-  it("is off where storage cannot be read", async () => {
-    const stillBlur = await switchWith(() => {
-      throw new Error("blocked");
-    });
-    expect(stillBlur()).toBe(false);
   });
 });

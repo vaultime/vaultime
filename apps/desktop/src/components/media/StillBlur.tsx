@@ -16,13 +16,14 @@ const canFilter = typeof CanvasRenderingContext2D !== "undefined" && "filter" in
 export function StillBlur({
   src,
   blur,
-  saturation,
+  saturation = 1,
   className,
 }: {
   src: string;
   /** In CSS pixels of the box. */
   blur: number;
-  saturation: number;
+  /** How much more colorful the image is drawn, 1 as it is. */
+  saturation?: number;
   className?: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -73,7 +74,7 @@ export function StillBlur({
       aria-hidden="true"
       className={className}
       // A color matrix only, cheap compared with a live blur.
-      style={canFilter ? undefined : { filter: `saturate(${saturation})` }}
+      style={canFilter || saturation === 1 ? undefined : { filter: `saturate(${saturation})` }}
     />
   );
 }

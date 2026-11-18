@@ -8,7 +8,6 @@ import { Link } from "react-router";
 import { StillBlur } from "@/components/media/StillBlur";
 import { HEADER_ART_BLUR_PX, HEADER_ART_SATURATION, HERO_TITLE_MIN_FONT_PX } from "@/lib/constants";
 import type { GameTint } from "@/lib/game-tint";
-import { stillBlur } from "@/lib/still-blur";
 import { cn } from "@/lib/utils";
 
 export function TintedHeader({
@@ -38,21 +37,12 @@ export function TintedHeader({
     >
       {backdrop && (
         <>
-          {stillBlur() ? (
-            <StillBlur
-              src={backdrop}
-              blur={HEADER_ART_BLUR_PX}
-              saturation={HEADER_ART_SATURATION}
-              className="absolute inset-0 -z-10 size-full opacity-50"
-            />
-          ) : (
-            <img
-              src={backdrop}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 -z-10 size-full scale-115 object-cover opacity-50 blur-[22px] saturate-[1.4]"
-            />
-          )}
+          <StillBlur
+            src={backdrop}
+            blur={HEADER_ART_BLUR_PX}
+            saturation={HEADER_ART_SATURATION}
+            className="absolute inset-0 -z-10 size-full opacity-50"
+          />
           {/* Keeps the title and the sentence readable on any art. */}
           <span
             aria-hidden="true"

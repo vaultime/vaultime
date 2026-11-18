@@ -37,15 +37,7 @@
 // a local one or one in the cloud, asks whether this PC is the Laptop set up again.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
-import {
-  DAY_MS,
-  DEVICE_NAME_MAX_CHARS,
-  FOLDER_MATCH_LAUNCHERS,
-  HOUR_MS,
-  MINUTE_MS,
-  SECOND_MS,
-  STILL_BLUR_STORAGE_KEY,
-} from "@/lib/constants";
+import { DAY_MS, DEVICE_NAME_MAX_CHARS, FOLDER_MATCH_LAUNCHERS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@/lib/constants";
 import { fillView, toCrop } from "@/lib/crop";
 import { artOfImage } from "@/dev/mock-art";
 import {
@@ -93,13 +85,6 @@ const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 
 const params = new URLSearchParams(window.location.search);
-// ?blur=still shows blurs drawn once, to compare them with the live blur.
-try {
-  if (params.get("blur") === "still") localStorage.setItem(STILL_BLUR_STORAGE_KEY, "still");
-  else localStorage.removeItem(STILL_BLUR_STORAGE_KEY);
-} catch {
-  // A preview without storage shows the live blur.
-}
 const scenario = params.get("mock");
 const signedIn = params.get("cloud") === "1" || params.has("password");
 /** The server of the last sign-in, which the forms of ?signin and ?signup need. */

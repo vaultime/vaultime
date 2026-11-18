@@ -1,25 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { STILL_BLUR_SMALL_RADIUS_PX, STILL_BLUR_STORAGE_KEY } from "@/lib/constants";
-
-let still: boolean | undefined;
-
-/**
- * Whether blurs are drawn once into a canvas instead of worked out live, which
- * a computer without a graphics chip does with every repaint. A switch until
- * the look is agreed, read once.
- */
-export function stillBlur(): boolean {
-  if (still === undefined) {
-    try {
-      still = localStorage.getItem(STILL_BLUR_STORAGE_KEY) === "still";
-    } catch {
-      still = false;
-    }
-  }
-  return still;
-}
+import { STILL_BLUR_SMALL_RADIUS_PX } from "@/lib/constants";
 
 type Size = { width: number; height: number };
 
