@@ -12,11 +12,14 @@ import { SettingsProvider } from "@/features/settings/SettingsProvider";
 import { SyncFolderProvider } from "@/features/settings/SyncFolderProvider";
 import { UpdateProvider } from "@/features/updates/UpdateProvider";
 import { App } from "@/App";
+import { stillBlur } from "@/lib/still-blur";
 import "./index.css";
 
 if (import.meta.env.VITE_MOCK_IPC === "1") {
   await import("./dev/mock-ipc");
 }
+// Small controls take a see-through fill instead of a live blur behind them.
+if (stillBlur()) document.documentElement.dataset.blur = "still";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

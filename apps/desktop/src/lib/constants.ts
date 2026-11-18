@@ -633,6 +633,19 @@ export const BACKGROUND_PANEL_OPACITY_PERCENT = 62;
 export const APPEARANCE_SAVE_DELAY_MS = 400;
 /** The background picture reaches this many blur radii past each edge, so the blur does not fade there. */
 export const BACKGROUND_BLUR_BLEED = 2;
+/** Blur of the art behind a tinted header, in pixels. */
+export const HEADER_ART_BLUR_PX = 22;
+/** How much more colorful the art behind a header is drawn, 1 as it is. */
+export const HEADER_ART_SATURATION = 1.4;
+/** Blur in pixels of the small canvas a still blur is drawn into, which the window then scales up. */
+export const STILL_BLUR_SMALL_RADIUS_PX = 2;
+/** Box blur passes a still blur makes where canvas filters are missing. Two come close to the Gaussian blur of CSS. */
+export const STILL_BLUR_BOX_PASSES = 2;
+/**
+ * Local storage key of the switch to still blurs, drawn once into a canvas,
+ * while the look is compared with the live blur. `still` turns them on.
+ */
+export const STILL_BLUR_STORAGE_KEY = "vaultime.blur";
 /** Hues around the wheel on the swatch that opens the color picker. */
 export const ACCENT_WHEEL_STEPS = 6;
 /** The look of a new install, lit by the game in front on a graphite ground. */

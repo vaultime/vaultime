@@ -14,7 +14,7 @@ export function TopBar({ scrolled, onSearch }: { scrolled: boolean; onSearch: ()
     <div
       className={cn(
         "sticky top-0 z-20 flex h-(--top-bar) items-center gap-1.5 px-3.5 transition-colors",
-        scrolled && "bg-ink/85 backdrop-blur-md",
+        scrolled && "bg-ink/85 backdrop-blur-md still:bg-ink/95 still:backdrop-blur-none",
       )}
     >
       <StepButton label="Back" disabled={!back} onClick={() => void navigate(-1)}>
@@ -26,7 +26,7 @@ export function TopBar({ scrolled, onSearch }: { scrolled: boolean; onSearch: ()
       <button
         type="button"
         onClick={onSearch}
-        className="mx-auto flex h-[34px] min-w-0 flex-1 basis-0 items-center gap-2 rounded-[9px] bg-glint/6 px-2.5 text-left text-[13px] text-faint ring-1 ring-glint/7 backdrop-blur-md transition-colors ring-inset hover:bg-glint/9 hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none sm:max-w-[400px]"
+        className="mx-auto flex h-[34px] min-w-0 flex-1 basis-0 items-center gap-2 rounded-[9px] bg-glint/6 px-2.5 text-left text-[13px] text-faint ring-1 ring-glint/7 backdrop-blur-md transition-colors still:backdrop-blur-none ring-inset hover:bg-glint/9 hover:text-soft focus-visible:ring-2 focus-visible:ring-violet/60 focus-visible:outline-none sm:max-w-[400px]"
       >
         <Search className="size-[15px] shrink-0" strokeWidth={1.8} />
         <span className="min-w-0 flex-1 truncate">Search games, pages and settings</span>

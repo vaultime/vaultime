@@ -12,6 +12,10 @@
 @import "@fontsource-variable/newsreader/standard-italic.css";
 
 @custom-variant dark (&:is(.dark *));
+/* While blurs are drawn once: small controls take a fuller fill instead of a
+   live blur, which a computer without a graphics chip redraws with every
+   repaint behind them. */
+@custom-variant still (&:is([data-blur="still"] *));
 
 /* Windows lower than the standard size, like the compact one. */
 @custom-variant short (@media (max-height: 760px));
