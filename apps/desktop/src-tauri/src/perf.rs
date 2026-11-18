@@ -650,6 +650,10 @@ fn large_history() {
         format!("{} sessions covered", report.covered_sessions)
     });
     let listed = listing_timings(&db, &timed);
+    timed("backup fingerprint", &mut || {
+        let artwork = std::env::temp_dir().join("vaultime-perf-no-artwork");
+        crate::backup::fingerprint::fingerprint(&db, &artwork).unwrap()[..8].to_owned()
+    });
     timed("session list as JSON", &mut || {
         format!("{} bytes", serde_json::to_string(&listed).unwrap().len())
     });

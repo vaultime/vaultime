@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime};
 use chrono::{NaiveDateTime, Utc};
 use log::{info, warn};
 
-use super::{BACKUP_MANIFEST_FILE, LocalBackupSummary, export_backup_to};
+use super::{BACKUP_MANIFEST_FILE, DATABASE_FILE, LocalBackupSummary, export_backup_to};
 use crate::AppContext;
 use crate::assets::AssetManager;
 use crate::constants::{
@@ -71,9 +71,9 @@ pub fn enabled(db: &Database) -> bool {
 /// which would take a backup the others are still writing.
 static RUNNING: Mutex<()> = Mutex::new(());
 
-/// Makes an automatic backup when the newest one is at least `min_age` old,
-/// then deletes all but the newest few, and copies it into the sync folder.
-/// Returns the new backup, if any.
+/// Makes an automatic backup when the newest one is at least `min_age` old
+/// and holds less than this one would, then deletes all but the newest few,
+/// and copies it into the sync folder. Returns the new backup, if any.
 pub fn back_up_if_due(
     db: &Database,
     asset_manager: &AssetManager,
@@ -117,6 +117,17 @@ fn back_up(
     if newest_age(&folder, &device).is_some_and(|age| age < min_age) {
         // A sync folder that was away gets the newest backup once it is back.
         if to_sync_folder && let Some(newest) = newest_of(&folder, &device, &DAILY) {
+            copy_to_sync_folder(db, &newest);
+        }
+        return Ok(None);
+    }
+    // A copy of what the newest backup holds already would add nothing.
+    let fingerprint = super::fingerprint::fingerprint(db, asset_manager.cache_dir())?;
+    if let Some(newest) = newest_of(&folder, &device, &DAILY)
+        && fingerprint_of(&newest).is_some_and(|noted| noted == fingerprint)
+    {
+        info!("nothing changed since the backup {}", newest.display());
+        if to_sync_folder {
             copy_to_sync_folder(db, &newest);
         }
         return Ok(None);
@@ -267,6 +278,27 @@ fn made_by(backup: &Path, device: &str) -> bool {
         .is_some_and(|source| source.source_device_id == device)
 }
 
+/// What `backup` holds, as its manifest notes it. Older versions noted
+/// nothing.
+fn fingerprint_of(backup: &Path) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Noted {
+        fingerprint: Option<String>,
+        files: Vec<NotedFile>,
+    }
+    #[derive(serde::Deserialize)]
+    struct NotedFile {
+        path: String,
+        bytes: u64,
+    }
+    let manifest = fs::read_to_string(backup.join(BACKUP_MANIFEST_FILE)).ok()?;
+    let noted: Noted = serde_json::from_str(&manifest).ok()?;
+    // A backup whose database went missing or changed size since is made again.
+    let database = noted.files.iter().find(|file| file.path == DATABASE_FILE)?;
+    let size = fs::metadata(backup.join(DATABASE_FILE)).ok()?.len();
+    noted.fingerprint.filter(|_| size == database.bytes)
+}
+
 /// When an automatic backup started, from the timestamp its name ends in.
 fn started_at(backup: &Path) -> Option<NaiveDateTime> {
     let name = backup.file_name()?.to_str()?;
@@ -379,6 +411,72 @@ mod tests {
             back_up_if_due(&db, &assets, &context, Duration::ZERO)
                 .unwrap()
                 .is_none()
+        );
+        drop(db);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_day_without_changes_adds_no_backup() {
+        let root =
+            std::env::temp_dir().join(format!("vaultime-auto-same-{}", uuid::Uuid::new_v4()));
+        let cache = root.join("asset-cache");
+        fs::create_dir_all(&cache).unwrap();
+        let context = AppContext {
+            app_dir: root.clone(),
+            device_id: "test-device".into(),
+            app_version: "0.1.0".into(),
+        };
+        let db = Database::open(&root.join("vaultime.db")).unwrap();
+        let assets = AssetManager::new(cache.clone());
+        let daily = || backups_of(&root.join(AUTO_BACKUP_DIR), &DAILY);
+
+        assert!(
+            back_up_if_due(&db, &assets, &context, Duration::ZERO)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            back_up_if_due(&db, &assets, &context, Duration::ZERO)
+                .unwrap()
+                .is_none(),
+            "nothing changed"
+        );
+        assert_eq!(daily().len(), 1);
+        let newest = daily().into_iter().next().unwrap();
+        let database = fs::read(newest.join(DATABASE_FILE)).unwrap();
+        fs::write(newest.join(DATABASE_FILE), &database[..database.len() / 2]).unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(
+            back_up_if_due(&db, &assets, &context, Duration::ZERO)
+                .unwrap()
+                .is_some(),
+            "the newest backup lost half its database"
+        );
+        fs::remove_dir_all(&newest).unwrap();
+        assert_eq!(daily().len(), 1);
+
+        settings::set_setting(&db, AUTO_BACKUP_ENABLED_SETTING, "true").unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(
+            back_up_if_due(&db, &assets, &context, Duration::ZERO)
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(daily().len(), 2);
+
+        // A newest backup that notes nothing, as older versions wrote them.
+        let newest = daily().pop().unwrap();
+        let manifest = newest.join(BACKUP_MANIFEST_FILE);
+        let mut noted: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&manifest).unwrap()).unwrap();
+        noted.as_object_mut().unwrap().remove("fingerprint");
+        fs::write(&manifest, noted.to_string()).unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(
+            back_up_if_due(&db, &assets, &context, Duration::ZERO)
+                .unwrap()
+                .is_some()
         );
         drop(db);
         fs::remove_dir_all(root).unwrap();

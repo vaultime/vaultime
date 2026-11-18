@@ -6,6 +6,7 @@
 pub mod auto;
 pub mod cloud_merge;
 pub(crate) mod crypto;
+pub(crate) mod fingerprint;
 pub mod folder;
 pub mod merge;
 pub mod remote;
@@ -118,6 +119,10 @@ struct LocalBackupManifest {
     sessions_count: i64,
     assets_count: i64,
     files: Vec<BackupFileEntry>,
+    /// What the backup holds, as `fingerprint::fingerprint` reads it before
+    /// the copy. Older versions wrote none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,6 +186,7 @@ pub(crate) fn export_backup_to(
         ))
     })?;
 
+    let fingerprint = fingerprint::fingerprint(db, asset_manager.cache_dir())?;
     let backup_db_path = backup_dir.join(DATABASE_FILE);
     export_database_snapshot(db, &backup_db_path)?;
     copy_directory_contents(
@@ -215,6 +221,7 @@ pub(crate) fn export_backup_to(
         sessions_count,
         assets_count,
         files,
+        fingerprint: Some(fingerprint),
     };
 
     write_manifest(&backup_dir, &manifest)?;

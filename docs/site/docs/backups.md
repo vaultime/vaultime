@@ -7,7 +7,7 @@ Vaultime backs up your library and history to a folder by itself every day. A sy
 Local backups are plain folders you can keep anywhere. Settings, Local backups holds everything about them.
 
 Back up automatically
-: On from the start. Vaultime makes a backup once a day and when it quits, unless the last one is less than an hour old, and keeps the newest seven. Backups you save by hand are never deleted.
+: On from the start. Vaultime makes a backup once a day and when it quits, unless the last one is less than an hour old or nothing changed since, and keeps the newest seven. Backups you save by hand are never deleted.
 
 Automatic backups go to
 : The `backups` folder inside the data folder to begin with. **Change** picks another one. A folder on another drive keeps your history safe when the drive fails. Several PCs may share one folder, each keeps and deletes only its own backups. To keep your backups on your other PCs, use a [sync folder](#sync-folder).
