@@ -31,7 +31,7 @@ There is no Verified label. Vaultime saves it for a check done by a server, and 
 - The session names another game or another PC than when it started.
 - Something was added to the session after it ended, other than a correction.
 - A correction would have added time.
-- The PC's [ledger](ledger.md) does not know the session, or holds a different record of it.
+- The PC's [ledger](ledger.md) does not know the session, holds a different record of it, or was changed outside Vaultime.
 - The session's time runs more than five minutes past the last note the ledger holds, as when the last note was raised before a restart.
 - The session holds a time below zero or longer than ten years.
 - The session came from [another PC](several-pcs.md) and did not pass its check with the keys this PC trusts for that PC.

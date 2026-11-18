@@ -373,7 +373,26 @@ fn append(
         )?;
         last = tail(conn, &key_id)?;
     }
+    // The check reads only the newest signature of a chain, so signing over
+    // an entry written outside Vaultime would vouch for it. A link that
+    // matches no entry keeps that ledger broken instead.
+    if let Some((sequence, hash)) = &last
+        && !tail_signed(conn, &key_id, *sequence, hash)?
+    {
+        warn!("the newest entry of this PC's ledger carries no signature of its key");
+        last = Some((*sequence, String::new()));
+    }
     write_entry(conn, &key, &key_id, last, entry_type, session_id, payload)
+}
+
+/// Whether the entry at `sequence` of a key's ledger carries that key's
+/// signature of `hash`.
+fn tail_signed(conn: &Connection, key_id: &str, sequence: i64, hash: &str) -> Result<bool> {
+    let signature: String = conn
+        .prepare_cached("SELECT signature FROM ledger_entries WHERE key_id = ?1 AND sequence = ?2")
+        .and_then(|mut stmt| stmt.query_row(params![key_id, sequence], |row| row.get(0)))
+        .map_err(ledger_error)?;
+    Ok(signed_by(key_id, hash, &signature))
 }
 
 fn write_entry(
@@ -2403,8 +2422,8 @@ mod tests {
             Some("other")
         );
 
-        // An entry signed with another key breaks the ledger while it is the
-        // newest, and a good one after it vouches for the chain again.
+        // An entry signed with another key breaks the ledger, and the entries
+        // this PC writes after it never sign over it, so it stays broken.
         let key_id = key_id().unwrap();
         let earlier = checked_now(&db);
         db.with_conn(|conn| {
@@ -2426,8 +2445,29 @@ mod tests {
         let earlier = checked_now(&db);
         played(&db, &game);
         let state = carried_on_from(&db, earlier);
-        assert!(state.broken.is_empty());
+        assert_eq!(state.broken, HashSet::from([key_id.clone()]));
         assert_eq!(state, checked_in_full(&db));
+    }
+
+    #[test]
+    fn an_entry_written_outside_vaultime_is_never_signed_over() {
+        let (db, game) = setup();
+        played(&db, &game);
+        let key_id = key_id().unwrap();
+        // A pin made up in the database, linked right, with a signature that
+        // is not this PC's.
+        let (forged, _) = test_pc("forger");
+        db.with_conn(|conn| {
+            let last = tail(conn, &key_id)?;
+            write_entry(conn, &forged, &key_id, last, ENTRY_PINNED, None, &json!({}))
+        })
+        .unwrap();
+        assert_eq!(checked_in_full(&db).broken, HashSet::from([key_id.clone()]));
+
+        // More play pins again, and the ledger still shows the change.
+        played(&db, &game);
+        played(&db, &game);
+        assert_eq!(checked_in_full(&db).broken, HashSet::from([key_id]));
     }
 
     #[test]

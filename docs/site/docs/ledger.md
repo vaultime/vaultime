@@ -36,7 +36,7 @@ Sessions missing
 : Sessions in the ledger are gone from the history without a note that you removed them.
 
 Changed
-: The ledger itself was changed outside Vaultime, so the sessions it covers are marked Suspicious.
+: The ledger itself was changed outside Vaultime, so the sessions it covers are marked Suspicious, also those recorded after the change. It stays Changed, as Vaultime never signs over an entry it did not sign. The PCs it trusted can no longer be read from it either, so every merge of another PC asks you to confirm its keys, and newer backups of your other PCs no longer come in by themselves.
 
 ## What the checks catch
 
