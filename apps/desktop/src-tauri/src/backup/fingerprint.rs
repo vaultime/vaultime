@@ -169,7 +169,10 @@ mod tests {
 
     use super::*;
     use crate::db::models::CreateGame;
-    use crate::db::repo::{backup_snapshots, devices, games, map_db, seen, sessions, settings};
+    use crate::db::repo::{
+        annotations, backup_snapshots, devices, game_assets, games, map_db, seen, sessions,
+        settings,
+    };
     use crate::integrity::STATUS_LOCAL;
 
     #[test]
@@ -218,6 +221,36 @@ mod tests {
         let session = sessions::create_session(&db, &game.id, "pc").unwrap();
         prints.push(print());
         sessions::end_session(&db, &session.id, 60_000, 60_000, 0, STATUS_LOCAL).unwrap();
+        prints.push(print());
+        annotations::set_session_note(&db, &session.id, "A long evening").unwrap();
+        prints.push(print());
+        annotations::set_game_status(&db, &game.id, "finished").unwrap();
+        prints.push(print());
+        let copy = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Hades, second copy".into(),
+                executable_path: Some("/games/copy/hades.exe".into()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        prints.push(print());
+        games::link_game(&db, &copy.id, Some(&game.id)).unwrap();
+        prints.push(print());
+        game_assets::create_asset(&db, &game.id, "cover", "scan", "/art/cover.jpg", None, None)
+            .unwrap();
+        prints.push(print());
+        // Only a ledger entry, as when the key of another PC is trusted.
+        db.with_conn(|conn| {
+            crate::integrity::ledger::trust_keys(
+                conn,
+                "laptop",
+                &std::collections::HashSet::from(["ab".repeat(32)]),
+            )
+        })
+        .unwrap();
         prints.push(print());
         fs::write(artwork.join("cover.jpg"), b"cover").unwrap();
         prints.push(print());
