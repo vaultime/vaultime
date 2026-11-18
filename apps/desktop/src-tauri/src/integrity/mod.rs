@@ -667,9 +667,9 @@ pub fn check_and_remember(
 
 /// Forgets every remembered check, for when the app itself replaced the
 /// history, as a restore does, or numbered its rows anew, as a vacuum may,
-/// so each chain is checked again. A merge forgets them all too: its
-/// `trusted` and `adopted` entries can change the result for sessions that
-/// were here before.
+/// so each chain is checked again. A merge needs none of it: the sessions it
+/// extends or vouches for gain events or ledger entries, and the keys it
+/// trusts count only when sessions are taken in.
 pub fn forget_checks() {
     {
         let mut cache = check_cache().lock().unwrap_or_else(PoisonError::into_inner);

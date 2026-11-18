@@ -362,7 +362,8 @@ fn apply_checked(
             asset_manager,
         )
     })?;
-    integrity::forget_checks();
+    // Checks remembered for the sessions that grew or were vouched for go by
+    // themselves, as these gained events or ledger entries.
     remember_merged(db, &source, &staged.manifest.created_at);
     copy_artwork(&staged, asset_manager, &copied_assets);
     // Quarter hours are a cache, worked out in small batches after the copy.
@@ -2622,6 +2623,53 @@ mod tests {
             settings::get_setting(&desktop.db, PLAY_SLICES_VERSION_SETTING).unwrap(),
             Some(built)
         );
+    }
+
+    #[test]
+    fn a_merge_drops_only_the_remembered_checks_of_the_sessions_it_vouches_for() {
+        let desktop = Pc::new("desktop");
+        let laptop = Pc::new("laptop");
+        let game = laptop.game("Hades", None);
+        let first = laptop.play(&game, 20);
+        desktop.merge(&laptop.back_up(), &[]);
+        let renewed = ledger::test_pc("laptop");
+        ledger::act_as(Some(&renewed));
+        let later = sessions::create_session(&laptop.db, &game, "laptop").unwrap();
+        sessions::end_session(&laptop.db, &later.id, 600_000, 600_000, 0, STATUS_LOCAL).unwrap();
+        let backup = laptop.back_up();
+        desktop.merge(&backup, &[]);
+        // Checked as it came in, unvouched, and remembered so.
+        assert_eq!(desktop.status(&later.id), integrity::STATUS_SUSPICIOUS);
+
+        // Other tests forget remembered checks at any time.
+        let generation = integrity::check_generation();
+        desktop.act();
+        apply(
+            &desktop.db,
+            &desktop.assets,
+            &desktop.context,
+            &backup,
+            &[],
+            true,
+        )
+        .unwrap();
+        let (_, unchecked) =
+            sessions::list_sessions_checked(&desktop.db, sessions::Checks::Remembered).unwrap();
+        assert!(unchecked.contains(&later.id));
+        if integrity::check_generation() == generation {
+            assert!(!unchecked.contains(&first));
+        }
+        let listed = sessions::list_all_sessions(&desktop.db).unwrap();
+        let status = |id: &str| {
+            listed
+                .iter()
+                .find(|session| session.id == id)
+                .unwrap()
+                .integrity_status
+                .clone()
+        };
+        assert_eq!(status(&later.id), STATUS_LOCAL);
+        assert_eq!(status(&first), STATUS_LOCAL);
     }
 
     #[test]
