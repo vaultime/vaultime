@@ -1,6 +1,6 @@
 pkgbase = vaultime-bin
 	pkgdesc = Game library and playtime tracker that keeps active and idle time apart
-	pkgver = 0.6.0
+	pkgver = 0.7.0
 	pkgrel = 1
 	url = https://vaultime.codfishcloud.de
 	arch = x86_64
@@ -20,7 +20,7 @@ pkgbase = vaultime-bin
 	conflicts = vaultime
 	options = !strip
 	options = !debug
-	source = https://github.com/vaultime/vaultime/releases/download/v0.6.0/Vaultime_0.6.0_amd64.deb
-	sha256sums = 02fb25d3475b186c3d50ebaa3037cf7f853e795d3cf5764004a698c4c6b3f595
+	source = https://github.com/vaultime/vaultime/releases/download/v0.7.0/Vaultime_0.7.0_amd64.deb
+	sha256sums = 1dae5b27395637a70cbdf9e3c614d89c4c70df29c94cfef96325339b2025d102
 
 pkgname = vaultime-bin

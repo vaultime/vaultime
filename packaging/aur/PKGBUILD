@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 pkgname=vaultime-bin
-pkgver=0.6.0
+pkgver=0.7.0
 pkgrel=1
 pkgdesc="Game library and playtime tracker that keeps active and idle time apart"
 arch=('x86_64')
@@ -17,7 +17,7 @@ options=('!strip' '!debug')
 provides=('vaultime')
 conflicts=('vaultime')
 source=("https://github.com/vaultime/vaultime/releases/download/v${pkgver}/Vaultime_${pkgver}_amd64.deb")
-sha256sums=('02fb25d3475b186c3d50ebaa3037cf7f853e795d3cf5764004a698c4c6b3f595')
+sha256sums=('1dae5b27395637a70cbdf9e3c614d89c4c70df29c94cfef96325339b2025d102')
 
 package() {
   bsdtar -xf data.tar.gz -C "$pkgdir"
