@@ -11,7 +11,7 @@ use rusqlite::params;
 use serde_json::json;
 
 use crate::db::connection::Database;
-use crate::db::models::CreateGame;
+use crate::db::models::{CreateGame, Session};
 use crate::db::repo::{devices, games, map_db, sessions};
 use crate::integrity;
 use crate::playtime::{slices, totals};
@@ -563,6 +563,54 @@ fn launcher_and_open_elsewhere_timings(
     });
 }
 
+/// The session listings: quick, cold, warm, and warm after a checkpoint
+/// pinned while playing, which adds to the ledger. Returns the sessions.
+fn listing_timings(
+    db: &Database,
+    timed: &dyn Fn(&str, &mut dyn FnMut() -> String),
+) -> Vec<Session> {
+    timed("list sessions, quick, nothing checked", &mut || {
+        let (listed, unchecked) =
+            sessions::list_sessions_checked(db, sessions::Checks::Remembered).unwrap();
+        format!("{} sessions, {} unchecked", listed.len(), unchecked.len())
+    });
+    let mut listed = Vec::new();
+    timed("list sessions, cold", &mut || {
+        listed = sessions::list_all_sessions(db).unwrap();
+        format!("{} sessions", listed.len())
+    });
+    timed("list sessions, warm", &mut || {
+        format!(
+            "{} sessions",
+            sessions::list_all_sessions(db).unwrap().len()
+        )
+    });
+    db.with_conn(|conn| {
+        let (session, hash): (String, String) = conn
+            .query_row(
+                "SELECT session_id, hash_self FROM session_events WHERE sequence = 1 LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(map_db)?;
+        integrity::ledger::pin(conn, &session, 1, &hash, "started")
+    })
+    .unwrap();
+    timed("ledger state after a new pin", &mut || {
+        let claimed = db
+            .with_conn(|conn| integrity::ledger::claimed_keys(conn, "test-pc"))
+            .unwrap();
+        format!("{} keys", claimed.len())
+    });
+    timed("list sessions, warm, after a new pin", &mut || {
+        format!(
+            "{} sessions",
+            sessions::list_all_sessions(db).unwrap().len()
+        )
+    });
+    listed
+}
+
 #[test]
 #[ignore = "builds a large history and prints timings"]
 fn large_history() {
@@ -601,22 +649,7 @@ fn large_history() {
         let report = db.with_conn(integrity::ledger::report).unwrap();
         format!("{} sessions covered", report.covered_sessions)
     });
-    timed("list sessions, quick, nothing checked", &mut || {
-        let (listed, unchecked) =
-            sessions::list_sessions_checked(&db, sessions::Checks::Remembered).unwrap();
-        format!("{} sessions, {} unchecked", listed.len(), unchecked.len())
-    });
-    let mut listed = Vec::new();
-    timed("list sessions, cold", &mut || {
-        listed = sessions::list_all_sessions(&db).unwrap();
-        format!("{} sessions", listed.len())
-    });
-    timed("list sessions, warm", &mut || {
-        format!(
-            "{} sessions",
-            sessions::list_all_sessions(&db).unwrap().len()
-        )
-    });
+    let listed = listing_timings(&db, &timed);
     timed("session list as JSON", &mut || {
         format!("{} bytes", serde_json::to_string(&listed).unwrap().len())
     });
