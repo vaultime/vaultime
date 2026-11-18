@@ -335,6 +335,11 @@ pub fn delete_game(db: &Database, id: &str) -> Result<bool> {
                 .map_err(map_db)?
                 > 0;
         }
+        // The events go with the sessions, and the row numbers of the newest
+        // can come back, which remembered checks go by.
+        if deleted {
+            integrity::forget_checks();
+        }
         Ok(deleted)
     })
 }

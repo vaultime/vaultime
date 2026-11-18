@@ -638,44 +638,37 @@ pub fn list_sessions_checked(db: &Database, checks: Checks) -> Result<(Vec<Sessi
     static FULL_LISTING: Mutex<()> = Mutex::new(());
     let _full = (checks == Checks::All)
         .then(|| FULL_LISTING.lock().unwrap_or_else(PoisonError::into_inner));
-    let ids: Vec<String> = db.with_conn(|conn| {
+    // Every row in one read with the checks remembered for them, so a row and
+    // its check are compared as of the same moment. The tracker waits for
+    // this read, tens of milliseconds even for a history of years. An open
+    // session's chain grows with every checkpoint, so it is checked every
+    // time.
+    let (mut listed, reasons, generation) = db.with_conn(|conn| {
         let mut stmt = conn
-            .prepare("SELECT id FROM sessions ORDER BY started_at_wall DESC")
+            .prepare_cached("SELECT * FROM sessions ORDER BY started_at_wall DESC")
             .map_err(map_db)?;
-        let rows = stmt.query_map([], |row| row.get(0)).map_err(map_db)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_db)
+        let sessions = stmt
+            .query_map([], row_to_session)
+            .map_err(map_db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_db)?;
+        let mut reasons = integrity::remembered_checks(conn, &sessions)?;
+        for (session, reason) in sessions.iter().zip(&mut reasons) {
+            if session.ended_at_wall.is_none() {
+                *reason = Some(integrity::validate_session_history(conn, session)?);
+            }
+        }
+        Ok((sessions, reasons, integrity::check_generation()))
     })?;
-    let generation = integrity::check_generation();
-    // Each session is read under a lock of its own, so the first listing
-    // after a start never holds up the tracker for long, and a write in
-    // between never meets a stale row. A session removed in between is left
-    // out. An open session's chain grows with every checkpoint, so it is
-    // checked every time.
-    let mut listed = Vec::with_capacity(ids.len());
     let mut unchecked = Vec::new();
-    for id in ids {
-        let read = db.with_conn(|conn| {
-            let Some(session) = stored_session(conn, &id).optional().map_err(map_db)? else {
-                return Ok(None);
-            };
-            let reason = if session.ended_at_wall.is_none() {
-                Some(integrity::validate_session_history(conn, &session)?)
-            } else {
-                integrity::remembered_check(conn, &session)?
-            };
-            Ok(Some((session, reason)))
-        })?;
-        let Some((mut session, reason)) = read else {
-            continue;
-        };
+    for (index, (session, reason)) in listed.iter_mut().zip(reasons).enumerate() {
         match reason {
             Some(reason) => {
                 let checked_now = session.ended_at_wall.is_none();
-                show_check(&mut session, reason, checked_now);
+                show_check(session, reason, checked_now);
             }
-            None => unchecked.push(listed.len()),
+            None => unchecked.push(index),
         }
-        listed.push(session);
     }
     if checks == Checks::Remembered || unchecked.is_empty() {
         let unchecked = unchecked
@@ -1194,10 +1187,144 @@ mod tests {
         integrity::forget_checks();
         db.with_conn(|conn| {
             integrity::check_and_remember(conn, &closed, before)?;
-            assert_eq!(integrity::remembered_check(conn, &closed)?, None);
+            assert_eq!(
+                integrity::remembered_checks(conn, std::slice::from_ref(&closed))?,
+                vec![None]
+            );
             Ok(())
         })
         .unwrap();
+    }
+
+    fn closed_session(db: &Database, game_id: &str) -> Session {
+        let session = create_session(db, game_id, DEV_ID).unwrap();
+        end_session(db, &session.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL).unwrap()
+    }
+
+    /// The sessions a quick listing has no remembered check for.
+    fn unchecked(db: &Database) -> Vec<String> {
+        list_sessions_checked(db, Checks::Remembered).unwrap().1
+    }
+
+    /// A heartbeat after the end, which the check of a closed session fails.
+    fn beat_after_the_end(db: &Database, session_id: &str) {
+        db.with_conn(|conn| {
+            integrity::append_session_event(
+                conn,
+                session_id,
+                "heartbeat",
+                &integrity::now_timestamp(),
+                Some(60_000),
+                &json!({ "runtime_ms": 60_000, "active_ms": 60_000, "idle_ms": 0 }).to_string(),
+            )
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_remembered_check_holds_until_its_session_gains_an_event_or_entry() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = closed_session(&db, &game_id).id;
+        let other = closed_session(&db, &game_id).id;
+        // Other tests forget remembered checks at any time.
+        let generation = integrity::check_generation();
+        list_all_sessions(&db).unwrap();
+        if integrity::check_generation() == generation {
+            assert!(unchecked(&db).is_empty());
+        }
+
+        // A ledger entry naming the session, as vouching for it adds.
+        let generation = integrity::check_generation();
+        db.with_conn(|conn| {
+            let (sequence, hash): (i64, String) = conn
+                .query_row(
+                    "SELECT sequence, hash_self FROM session_events
+                     WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
+                    [&session],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .map_err(map_db)?;
+            integrity::ledger::adopt(conn, &session, sequence, &hash, DEV_ID, "merge", "backup")
+        })
+        .unwrap();
+        let left = unchecked(&db);
+        assert!(left.contains(&session));
+        if integrity::check_generation() == generation {
+            assert!(!left.contains(&other));
+        }
+
+        list_all_sessions(&db).unwrap();
+        beat_after_the_end(&db, &session);
+        assert!(unchecked(&db).contains(&session));
+        let listed = list_all_sessions(&db).unwrap();
+        let status = |id: &str| {
+            listed
+                .iter()
+                .find(|listed| listed.id == id)
+                .unwrap()
+                .integrity_status
+                .clone()
+        };
+        assert_eq!(status(&session), integrity::STATUS_SUSPICIOUS);
+        assert_eq!(status(&other), integrity::STATUS_LOCAL);
+    }
+
+    #[test]
+    fn a_remembered_check_goes_with_any_field_of_the_row_it_read() {
+        let db = test_db();
+        let game_id = seed_game(&db);
+        let session = closed_session(&db, &game_id).id;
+        list_all_sessions(&db).unwrap();
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE sessions SET elapsed_monotonic_ms = elapsed_monotonic_ms + 1 WHERE id = ?1",
+                [&session],
+            )
+            .map_err(map_db)
+        })
+        .unwrap();
+        assert!(unchecked(&db).contains(&session));
+    }
+
+    #[test]
+    fn deleting_a_game_forgets_the_remembered_checks() {
+        let db = test_db();
+        let kept = seed_game(&db);
+        let gone = seed_game(&db);
+        let session = closed_session(&db, &kept).id;
+        closed_session(&db, &gone);
+        list_all_sessions(&db).unwrap();
+        games::delete_game(&db, &gone).unwrap();
+        assert!(unchecked(&db).contains(&session));
+    }
+
+    #[test]
+    fn a_check_read_before_a_new_event_is_not_taken_for_after_it() {
+        let path =
+            std::env::temp_dir().join(format!("vaultime-snapshot-{}.db", uuid::Uuid::new_v4()));
+        let db = Database::open(&path).unwrap();
+        devices::ensure_device(&db, DEV_ID, "linux", "0.1.0").unwrap();
+        let game_id = seed_game(&db);
+        let session = closed_session(&db, &game_id);
+        let reader = db.reader().unwrap().expect("a reader of the database file");
+        let read = reader.unchecked_transaction().unwrap();
+        let before = stored_session(&read, &session.id).unwrap();
+        // Stored after the reader's snapshot began, so its check passes.
+        beat_after_the_end(&db, &session.id);
+        let generation = integrity::check_generation();
+        assert_eq!(
+            integrity::check_and_remember(&read, &before, generation).unwrap(),
+            None
+        );
+        drop(read);
+        assert!(unchecked(&db).contains(&session.id));
+
+        drop(reader);
+        drop(db);
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
     }
 
     #[test]

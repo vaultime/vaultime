@@ -435,7 +435,7 @@ fn restore_from_staging(
     if let Some(change) = taking_over {
         change.keep();
     }
-    // Checks remembered from the old history must not vouch for the new one.
+    // Checks made before the keys taken over counted must not vouch either.
     integrity::forget_checks();
     // The restored history gets its slices now, so the stats are right before
     // the restart. Should that fail, the next start builds them.
@@ -776,6 +776,9 @@ fn restore_database_snapshot(db: &Database, backup_db_path: &Path) -> Result<()>
         let detach_result = conn.execute_batch("DETACH DATABASE backup_restore;");
 
         restore_result?;
+        // Remembered checks go by row numbers, which the new rows take over,
+        // so they go before anything can read the new history.
+        integrity::forget_checks();
         // The restore is committed by now, so it stands.
         if let Err(error) = detach_result {
             warn!("could not detach the restored backup database: {error}");
@@ -1388,6 +1391,46 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+        drop(db);
+        fs::remove_dir_all(&context.app_dir).ok();
+    }
+
+    #[test]
+    fn a_restore_forgets_the_checks_before_the_new_rows_can_be_read() {
+        let context = test_paths();
+        let db = Database::open(&context.app_dir.join("vaultime.db")).unwrap();
+        devices::ensure_device(&db, &context.device_id, "linux", "0.1.0").unwrap();
+        let game = games::create_game(
+            &db,
+            &CreateGame {
+                title: "Game".into(),
+                executable_path: Some("/games/game.exe".into()),
+                install_folder: None,
+                launcher_source: None,
+            },
+        )
+        .unwrap();
+        let session = sessions::create_session(&db, &game.id, &context.device_id).unwrap();
+        sessions::end_session(&db, &session.id, 60_000, 60_000, 0, integrity::STATUS_LOCAL)
+            .unwrap();
+        let copy = context.app_dir.join("copy.db");
+        export_database_snapshot(&db, &copy).unwrap();
+        let all_remembered = |db: &Database| {
+            sessions::list_sessions_checked(db, sessions::Checks::Remembered)
+                .unwrap()
+                .1
+                .is_empty()
+        };
+        // Other tests forget remembered checks at any time.
+        let generation = integrity::check_generation();
+        sessions::list_all_sessions(&db).unwrap();
+        if integrity::check_generation() == generation {
+            assert!(all_remembered(&db));
+        }
+
+        // The same rows again, under the numbers they had.
+        restore_database_snapshot(&db, &copy).unwrap();
+        assert!(!all_remembered(&db));
         drop(db);
         fs::remove_dir_all(&context.app_dir).ok();
     }

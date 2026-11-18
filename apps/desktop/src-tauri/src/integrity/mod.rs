@@ -479,13 +479,13 @@ fn check_status_history(
     None
 }
 
-/// What a closed session was last checked against: the tail of its chain and
-/// the row values the check compares.
-#[derive(PartialEq)]
-struct CheckedState {
-    events: i64,
-    last_hash: Option<String>,
-    row: String,
+/// A closed session's check as remembered: the row it checked, the newest
+/// session event and ledger entry stored then, and its result.
+struct Remembered {
+    session: Session,
+    events_seen: i64,
+    ledger_seen: i64,
+    reason: Option<String>,
 }
 
 /// The results of checks of closed sessions, by session. Forgetting them
@@ -494,7 +494,7 @@ struct CheckedState {
 #[derive(Default)]
 struct CheckCache {
     generation: u64,
-    checks: HashMap<String, (CheckedState, Option<String>)>,
+    checks: HashMap<String, Remembered>,
 }
 
 fn check_cache() -> &'static Mutex<CheckCache> {
@@ -511,24 +511,129 @@ pub fn check_generation() -> u64 {
         .generation
 }
 
-/// The remembered result of a closed session's check, the reason it failed
-/// or `None` when it passed, as long as its chain tail and row did not
-/// change since. `None` without one, and always for an open session, whose
-/// chain grows with every checkpoint. The results live in memory, so every
-/// start of the app checks each chain in full again.
-pub fn remembered_check(conn: &Connection, session: &Session) -> Result<Option<Option<String>>> {
-    if session.ended_at_wall.is_none() {
-        return Ok(None);
-    }
+/// The fields of a session row its check reads.
+type CheckedFields<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    Option<&'a str>,
+    i64,
+    i64,
+    i64,
+    i64,
+    &'a str,
+    bool,
+);
+
+fn checked_fields(session: &Session) -> CheckedFields<'_> {
+    (
+        &session.game_id,
+        &session.device_id,
+        &session.started_at_wall,
+        session.ended_at_wall.as_deref(),
+        session.elapsed_monotonic_ms,
+        session.runtime_ms,
+        session.active_ms,
+        session.idle_ms,
+        &session.integrity_status,
+        session.closed_cleanly,
+    )
+}
+
+/// The newest session event and ledger entry by row number. Both tables only
+/// grow, and deleting a game, which takes events with it, forgets the checks,
+/// so a row past these is one stored since.
+fn newest_rows(conn: &Connection) -> Result<(i64, i64)> {
+    let newest = |table: &str| -> Result<i64> {
+        conn.prepare_cached(&format!("SELECT COALESCE(MAX(rowid), 0) FROM {table}"))
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get(0)))
+            .map_err(|error| {
+                VaultimeError::Integrity(format!("failed to read the newest rows: {error}"))
+            })
+    };
+    Ok((newest("session_events")?, newest("ledger_entries")?))
+}
+
+/// The newest row past `after` of each session among the rows `query` reads.
+fn newest_by_session(conn: &Connection, query: &str, after: i64) -> Result<HashMap<String, i64>> {
+    let failed = |error: rusqlite::Error| {
+        VaultimeError::Integrity(format!("failed to read the newer rows: {error}"))
+    };
+    let mut stmt = conn.prepare_cached(query).map_err(failed)?;
+    let rows = stmt
+        .query_map([after], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(failed)?;
+    rows.collect::<rusqlite::Result<_>>().map_err(failed)
+}
+
+/// The remembered results of the checks of `sessions`, read on the app's own
+/// connection: for each closed session whose row reads the same and that
+/// gained no event and no ledger entry since its check, the reason it failed
+/// or `None` when it passed. Open sessions, whose chains grow with every
+/// checkpoint, and sessions without one get `None`. The results live in
+/// memory, so every start of the app checks each chain in full again.
+pub fn remembered_checks(
+    conn: &Connection,
+    sessions: &[Session],
+) -> Result<Vec<Option<Option<String>>>> {
     forget_checks_after_outside_writes(conn)?;
-    let state = checked_state(conn, session)?;
-    Ok(check_cache()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .checks
-        .get(&session.id)
-        .filter(|(checked, _)| *checked == state)
-        .map(|(_, reason)| reason.clone()))
+    let mut cache = check_cache().lock().unwrap_or_else(PoisonError::into_inner);
+    let mut seen = Vec::with_capacity(sessions.len());
+    for session in sessions {
+        let found = cache.checks.get(&session.id).map(|remembered| {
+            (checked_fields(&remembered.session) == checked_fields(session))
+                .then_some((remembered.events_seen, remembered.ledger_seen))
+        });
+        // Checked with a row that reads differently now.
+        if found == Some(None) {
+            cache.checks.remove(&session.id);
+        }
+        seen.push(found.flatten());
+    }
+    let (Some(events_from), Some(ledger_from)) = (
+        seen.iter().flatten().map(|seen| seen.0).min(),
+        seen.iter().flatten().map(|seen| seen.1).min(),
+    ) else {
+        return Ok(vec![None; sessions.len()]);
+    };
+    // Read first, so a row stored meanwhile counts as newer.
+    let (events_now, ledger_now) = newest_rows(conn)?;
+    // By row number, as the planner would rather walk an index by session
+    // through every row.
+    let newer_events = newest_by_session(
+        conn,
+        "SELECT session_id, MAX(rowid) FROM session_events NOT INDEXED
+         WHERE rowid > ?1 GROUP BY session_id",
+        events_from,
+    )?;
+    let newer_entries = newest_by_session(
+        conn,
+        "SELECT session_id, MAX(rowid) FROM ledger_entries NOT INDEXED
+         WHERE rowid > ?1 AND session_id IS NOT NULL GROUP BY session_id",
+        ledger_from,
+    )?;
+    Ok(sessions
+        .iter()
+        .zip(seen)
+        .map(|(session, seen)| {
+            let (events_seen, ledger_seen) = seen?;
+            let current = newer_events
+                .get(&session.id)
+                .is_none_or(|&newest| newest <= events_seen)
+                && newer_entries
+                    .get(&session.id)
+                    .is_none_or(|&newest| newest <= ledger_seen);
+            if !current {
+                cache.checks.remove(&session.id);
+                return None;
+            }
+            // Current up to now, so the next look starts from here.
+            let remembered = cache.checks.get_mut(&session.id)?;
+            remembered.events_seen = events_now;
+            remembered.ledger_seen = ledger_now;
+            Some(remembered.reason.clone())
+        })
+        .collect())
 }
 
 /// Validates a session like `validate_session_history` and remembers the
@@ -540,52 +645,24 @@ pub fn check_and_remember(
     session: &Session,
     generation: u64,
 ) -> Result<Option<String>> {
+    // Read first, so the check saw every row up to these.
+    let (events_seen, ledger_seen) = newest_rows(conn)?;
     let reason = validate_session_history(conn, session)?;
     if session.ended_at_wall.is_some() {
-        let state = checked_state(conn, session)?;
         let mut cache = check_cache().lock().unwrap_or_else(PoisonError::into_inner);
         if cache.generation == generation {
-            cache
-                .checks
-                .insert(session.id.clone(), (state, reason.clone()));
+            cache.checks.insert(
+                session.id.clone(),
+                Remembered {
+                    session: session.clone(),
+                    events_seen,
+                    ledger_seen,
+                    reason: reason.clone(),
+                },
+            );
         }
     }
     Ok(reason)
-}
-
-/// The chain tail and row values a check of `session` is remembered by.
-fn checked_state(conn: &Connection, session: &Session) -> Result<CheckedState> {
-    // The newest event, found through the index. A check passes only when
-    // the sequence runs from 1 without gaps, so its number is the count.
-    let (events, last_hash) = conn
-        .prepare_cached(
-            "SELECT sequence, hash_self FROM session_events
-             WHERE session_id = ?1 ORDER BY sequence DESC LIMIT 1",
-        )
-        .and_then(|mut stmt| {
-            stmt.query_row([&session.id], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
-            })
-            .optional()
-        })
-        .map_err(|error| {
-            VaultimeError::Integrity(format!("failed to read the event chain: {error}"))
-        })?
-        .unwrap_or((0, None));
-    Ok(CheckedState {
-        events,
-        last_hash,
-        row: format!(
-            "{}|{:?}|{}|{}|{}|{}|{}",
-            session.started_at_wall,
-            session.ended_at_wall,
-            session.runtime_ms,
-            session.active_ms,
-            session.idle_ms,
-            session.integrity_status,
-            session.closed_cleanly
-        ),
-    })
 }
 
 /// Forgets every remembered check, for when the app itself replaced the
