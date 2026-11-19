@@ -1,2 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 edition = "2024"
 use_field_init_shorthand = true

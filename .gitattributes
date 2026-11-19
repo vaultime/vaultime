@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Shell scripts run on Linux, so they keep LF even in Windows checkouts.
 *.sh text eol=lf
 Dockerfile text eol=lf

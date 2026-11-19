@@ -14,7 +14,8 @@
   <a href="https://github.com/vaultime/vaultime/actions/workflows/ci.yml"><img src="https://github.com/vaultime/vaultime/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/vaultime/vaultime/actions/workflows/release.yml"><img src="https://github.com/vaultime/vaultime/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <a href="https://github.com/vaultime/vaultime/releases"><img src="https://img.shields.io/github/downloads/vaultime/vaultime/total?label=downloads&color=17181a" alt="Downloads from GitHub releases"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-17181a" alt="GPL-3.0 license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-17181a" alt="GPL-3.0-or-later license"></a>
+  <a href="https://api.reuse.software/info/github.com/vaultime/vaultime"><img src="https://api.reuse.software/badge/github.com/vaultime/vaultime" alt="REUSE compliance"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-555" alt="Windows and Linux">
 </p>
 

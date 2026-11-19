@@ -1,0 +1,7 @@
+Vaultime name and logo
+
+Copyright 2026 Dominik Schwimmbeck
+
+The name Vaultime and the Vaultime logo are not covered by the free software
+licenses of this repository. You may share Vaultime unchanged with them. A
+modified version you share needs its own name and logo.

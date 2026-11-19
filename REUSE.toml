@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 Dominik Schwimmbeck
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Copyright and license of the files that cannot carry the SPDX lines
+# themselves. Every other file starts with them.
+version = 1
+
+[[annotations]]
+path = [
+  "*.md",
+  "docs/**/*.md",
+  "docs/site/art/*.jpg",
+  # Google verifies the site with this file as it is.
+  "docs/site/google*.html",
+  "apps/desktop/*.json",
+  "apps/desktop/src-tauri/*.json",
+  "apps/desktop/src-tauri/capabilities/*.json",
+  "apps/desktop/src-tauri/Cargo.lock",
+  "assets/mock-covers/*.jpg",
+  "assets/mock-screenshots/*.jpg",
+  "assets/screenshots/*.png",
+  "packaging/aur/.SRCINFO",
+  "packaging/winget/*.yaml",
+]
+SPDX-FileCopyrightText = "2026 Dominik Schwimmbeck"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# The server. Databases recorded the checksums of its first four migrations,
+# so they never change.
+[[annotations]]
+path = [
+  "apps/api/Cargo.lock",
+  "apps/api/migrations/0001_initial_schema.sql",
+  "apps/api/migrations/0002_drop_ip_columns.sql",
+  "apps/api/migrations/0003_cloud_blobs.sql",
+  "apps/api/migrations/0004_beta_applications.sql",
+]
+SPDX-FileCopyrightText = "2026 Dominik Schwimmbeck"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# The free software licenses do not cover the name and the logo.
+[[annotations]]
+path = [
+  "assets/vaultime-*",
+  "apps/desktop/src-tauri/icons/*",
+]
+SPDX-FileCopyrightText = "2026 Dominik Schwimmbeck"
+SPDX-License-Identifier = "LicenseRef-Vaultime-Brand"
+
+# The logo over a screenshot of the app.
+[[annotations]]
+path = "assets/social-preview.png"
+SPDX-FileCopyrightText = "2026 Dominik Schwimmbeck"
+SPDX-License-Identifier = "GPL-3.0-or-later AND LicenseRef-Vaultime-Brand"

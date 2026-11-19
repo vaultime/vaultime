@@ -49,6 +49,8 @@ packaging/winget/ winget manifests of the latest release
 scripts/          Dev helpers: Linux checks, packaging, cloud round trip, site
                   deploy, release upload, logo, UI screenshots, social preview
 assets/           Brand assets, the README screenshots and the social preview
+LICENSES/         The text of every license in use
+REUSE.toml        Licenses of the files without SPDX lines
 ```
 
 ## Commands
@@ -206,8 +208,8 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   session.
 - Every schema change is a new migration. Never edit a shipped migration.
 - The API migrations 0001 to 0004 carry no SPDX lines and never change,
-  because databases recorded their checksums. New migrations carry the
-  lines.
+  because databases recorded their checksums. `REUSE.toml` names their
+  license. New migrations carry the lines.
 - Keep enough metadata to recalculate totals when tracking rules change.
 
 ## Tracking
@@ -315,6 +317,13 @@ App logs: `%LOCALAPPDATA%\com.vaultime.app\logs` on Windows and
   server, the files in `apps/api` and `deploy/server`, is `AGPL-3.0-or-later`,
   everything else, the install script of the website in `deploy/vps`
   included, `GPL-3.0-or-later`. Outside code needs a license that fits both.
+  Files that cannot carry the lines, such as JSON, Markdown, images and lock
+  files, are listed in `REUSE.toml`, the logo files and the app icons under
+  `LicenseRef-Vaultime-Brand`, as the licenses do not cover the name and the
+  logo. The AppStream metadata is `CC0-1.0`. `LICENSES/` holds the text of
+  every license in use. CI checks it all with `reuse lint`, locally
+  `uvx --from "reuse[charset-normalizer]" reuse lint`, as reuse needs that
+  extra on Windows.
 - Match the style of the surrounding code.
 - Keep dependencies on current stable versions and drop unused ones.
 
